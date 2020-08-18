@@ -20,10 +20,10 @@ SEED = 42
 BATCH_SIZE = 32
 KERNEL_SIZE = 5
 NET_NAME = 'BasicNet'
-GPU = 1
+GPU = 0
 
 class Training:
-    def __init__(self, FILEPATH, EPOCHS = 60, SEED = 42, BATCH_SIZE = 32, KERNEL_SIZE = 5, NET_NAME = 'BasicNet', GPU = 1):
+    def __init__(self, FILEPATH, EPOCHS = 60, SEED = 42, BATCH_SIZE = 32, KERNEL_SIZE = 5, NET_NAME = 'BasicNet', GPU = 0):
         #handle seed
         if SEED is not None:
             self.set_seed(SEED)
@@ -46,12 +46,12 @@ class Training:
 
 
     def getNet(NET_NAME, BATCH_SIZE, KERNEL_SIZE):
-        if (NET_NAME = 'BasicNet'):
+        if (NET_NAME == 'BasicNet'):
             return BasicNet(BATCH_SIZE, KERNEL_SIZE)
-        if (NET_NAME = 'Resnet18'):  #change this to use Andreas's Resnet
+        if (NET_NAME == 'Resnet18'):  #change this to use Andreas's Resnet
             return torch.hub.load('pytorch/vision:v0.6.0', 'resnet18', pretrained = False)
         #default to basic net
-        else
+        else:
             return BasicNet(BATCH_SIZE, KERNEL_SIZE) 
 
 
@@ -69,7 +69,7 @@ class Training:
         #define the transform to be done on all images
         transform_img = transforms.Compose([
             transforms.Resize((400, 400)),   #should actually be 1:3 but broke the system
-            transforms.ToTensor().to('cuda') if str(self.device)[:3] == 'cuda' else transforms.ToTensor()])
+            transforms.ToTensor().to('cuda') if self.device != 'cpu' else transforms.ToTensor()])
 
         train_data = torchvision.datasets.ImageFolder(root = filepath + "train/", transform = transform_img)
         train_data_loader = data.DataLoader(train_data, batch_size = self.BATCH_SIZE, shuffle = True, num_workers = 4, pin_memory = True)
@@ -143,7 +143,25 @@ class Training:
                             quotechar='"', quoting=csv.QUOTE_MINIMAL)
             writer.writerow(['epoch', 'loss', 'training_accuracy', 'testing_accuracy', 'confusion_matrix'])
 
+    def test_bed():
+        kernel_upper = 11
+        kernel_lower = 1
+        batch_upper = 256
+        batch_lower = 1
 
+        ks = kernel_upper
+        while ks <= kernel_upper:
+            bs = batch_lower
+            while bs <= batch_upper:
+                logging.info("testing initialized")
+                logging.info("batch size: " + str(bs))
+                logging.info("kernel size: " + str(ks))
+                birdsong = Training(FILEPATH, EPOCHS, SEED, bs, ks, NET_NAME. GPU)
+                birdsong.train()
+                bs *= 2
+            ks += 2
+        loggging.info("all configurations tested")
+                
 if __name__ == '__main__':
     birdsong = Training(FILEPATH, EPOCHS, SEED, BATCH_SIZE, KERNEL_SIZE, NET_NAME, GPU)
     birdsong.train()
