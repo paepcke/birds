@@ -13,27 +13,34 @@ import logging
 from datetime import datetime, date, time
 
 class BasicNet(nn.Module):
-    def __init__(self, BATCH_SIZE = 32, KERNEL_SIZE = 5):
-        super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(3, 6, KERNEL_SIZE)
+    def __init__(self, BATCH_SIZE = 32, KERNEL_SIZE = 5, GPU = 0):
+        super(BasicNet, self).__init__()
+        self.gpu = GPU
+        self.bs = BATCH_SIZE
+        self.ks = KERNEL_SIZE
+        self.num_class = 10
+        self.conv1 = nn.Conv2d(3, 6, self.ks)
         self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(6, BATCH_SIZE, KERNEL_SIZE)
-        self.fc1 = nn.Linear(BATCH_SIZE * int((99 - (KERNEL_SIZE - 1)/2)**2), 120)
+        self.conv2 = nn.Conv2d(6, self.bs, self.ks)
+        print("batch size: " + str(self.bs))
+        print("kernel size: " + str(self.ks))
+        self.fc1 = nn.Linear(self.bs * int((99 - (self.ks - 1)/2)**2), 120)
         self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, 12)
+        self.fc3 = nn.Linear(84, self.num_class)
 
     def forward(self, x):
-        x.cuda()
+        x.cuda(self.gpu)
         x = self.pool(F.relu(self.conv1(x)))
         x = self.pool(F.relu(self.conv2(x)))
-        x = x.view(x.size(0), BATCH_SIZE * 97 * 97)  # square root of error divided by batch size * 16
+        x = x.view(x.size(0), self.bs * int((99 - (self.ks - 1)/2)**2)) 
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
         return x
 
 
-class Resnet18Grayscale(ResNet):
+# class Resnet18Grayscale(ResNet):
+class Resnet18Grayscale(nn.Module):
     '''
     A Resnet18 variant that accepts single-channel
     grayscale images instead of RGB.
@@ -95,3 +102,4 @@ class Resnet18Grayscale(ResNet):
 
         '''
         return next(self.parameters()).device
+

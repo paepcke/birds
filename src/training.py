@@ -18,9 +18,10 @@ from nets import BasicNet
 FILEPATH = "/home/data/birds/Birdsong_Spectrograms/"
 EPOCHS = 60
 SEED = 42
-BATCH_SIZE = 32
+BATCH_SIZE = 16
 KERNEL_SIZE = 5
 NET_NAME = 'BasicNet'
+# NET_NAME = 'Resnet18'
 GPU = 0
 
 class Training:
@@ -92,7 +93,8 @@ class Training:
         accuracy = []
         epoch = 0
         diff_avg = 100
-        while diff_avg >= 0.75 or epoch <= 15:
+        loss = 0
+        while diff_avg >= 0.05 or epoch <= 15:
         # for epoch in range(self.EPOCHS):
             epoch +=1
             loss_out = 0
@@ -100,8 +102,8 @@ class Training:
                 self.optimizer.zero_grad()  
                 outputs = self.model(image)
                 loss = self.loss_func(outputs, label)   
-                loss_out += loss   
-                loss.backward() 
+                loss_out += loss
+                loss.backward()
                 self.optimizer.step()
             
             # log every 3 epochs
@@ -115,12 +117,13 @@ class Training:
                     writer.writerow([epoch, loss, training_accuracy, testing_accuracy, confusion_matrix])
                 if len(accuracy) == 5:
                     accuracy.pop(0)
-                accuracy.append(testing_accuracy)
+                #accuracy.append(testing_accuracy)
+                accuracy.append(loss.item())
                 if len(accuracy) >= 2:
                     diff_sum = 0
                     for i in range(1, len(accuracy)):
-                        diff_sum += accuracy[i] - accuracy[i-1]
-                    diff_avg = diff_sum / (len(accuracy) -1)
+                        diff_sum += abs(accuracy[i] - accuracy[i-1])
+                    diff_avg = abs(diff_sum / (len(accuracy) -1))
                     print("accuracy[] is: " + str(accuracy))
                     print("epoch is: " + str(epoch))
                     print("accuracy is: " + str(testing_accuracy))
@@ -185,9 +188,9 @@ def test_bed():
     loggging.info("all configurations tested")
                 
 if __name__ == '__main__':
-    test_bed()
-    #birdsong = Training(FILEPATH, EPOCHS, SEED, BATCH_SIZE, KERNEL_SIZE, NET_NAME, GPU)
-    #birdsong.train()
+    # test_bed()
+    birdsong = Training(FILEPATH, EPOCHS, SEED, BATCH_SIZE, KERNEL_SIZE, NET_NAME, GPU)
+    birdsong.train()
 
 
 
