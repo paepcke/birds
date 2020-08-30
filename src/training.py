@@ -91,7 +91,7 @@ class Training:
 
     def train(self):
         # Training
-        accuracy = []
+        loss_arr = []
         epoch = 0
         diff_avg = 100
         loss = 0
@@ -115,21 +115,19 @@ class Training:
                 with open(self.LOG_FILEPATH, 'w', newline='') as csvfile:
                     csvfile.write(json.dumps([epoch, loss, training_accuracy, testing_accuracy, confusion_matrix.tolist()]) +"\n")
                 
-                """
-                if len(accuracy) == 5:
-                    accuracy.pop(0)
-                #accuracy.append(testing_accuracy)
-                accuracy.append(loss.item())
-                if len(accuracy) >= 2:
+                if len(loss_arr) == 5:
+                    loss_arr.pop(0)
+                loss_arr.append(loss.item())
+                if len(loss_arr) >= 2:
                     diff_sum = 0
-                    for i in range(1, len(accuracy)):
-                        diff_sum += abs(accuracy[i] - accuracy[i-1])
-                    diff_avg = abs(diff_sum / (len(accuracy) -1))
-                    print("accuracy[] is: " + str(accuracy))
+                    for i in range(1, len(loss_arr)):
+                        diff_sum += abs(loss_arr[i] - loss_arr[i-1])
+                    diff_avg = abs(diff_sum / (len(loss_arr) -1))
+                    print("loss_arr[] is: " + str(loss_arr))
                     print("epoch is: " + str(epoch))
                     print("accuracy is: " + str(testing_accuracy))
                     print("diff_avg is: " + str(diff_avg))
-                """
+              
     
     #return percent accuracy
     def test(self, data_loader):
