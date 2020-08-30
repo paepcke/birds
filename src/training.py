@@ -15,7 +15,8 @@ from datetime import datetime, date, time
 import nvidia_smi
 from nets import BasicNet
 
-FILEPATH = "/home/data/birds/Birdsong_Spectrograms/"
+FILEPATH = "/Users/amyd/Desktop/Projects/birds/First_Test/"
+#FILEPATH = "/home/data/birds/Birdsong_Spectrograms/"
 EPOCHS = 60
 SEED = 42
 BATCH_SIZE = 16
@@ -112,9 +113,9 @@ class Training:
                 testing_accuracy = self.test(self.test_data_loader)
                 confusion_matrix = self.cf_matrix(self.test_data_loader)
                 with open(self.LOG_FILEPATH, 'w', newline='') as csvfile:
-                    writer = csv.writer(csvfile, delimiter=',',
-                                    quotechar='"', quoting=csv.QUOTE_MINIMAL)
-                    writer.writerow([epoch, loss, training_accuracy, testing_accuracy, confusion_matrix])
+                    csvfile.write(json.dumps([epoch, loss, training_accuracy, testing_accuracy, confusion_matrix.tolist()]) +"\n")
+                
+                """
                 if len(accuracy) == 5:
                     accuracy.pop(0)
                 #accuracy.append(testing_accuracy)
@@ -128,6 +129,7 @@ class Training:
                     print("epoch is: " + str(epoch))
                     print("accuracy is: " + str(testing_accuracy))
                     print("diff_avg is: " + str(diff_avg))
+                """
     
     #return percent accuracy
     def test(self, data_loader):
@@ -191,9 +193,3 @@ if __name__ == '__main__':
     # test_bed()
     birdsong = Training(FILEPATH, EPOCHS, SEED, BATCH_SIZE, KERNEL_SIZE, NET_NAME, GPU)
     birdsong.train()
-
-
-
-    
-    
-    
