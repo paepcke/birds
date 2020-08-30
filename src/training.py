@@ -23,16 +23,15 @@ BATCH_SIZE = 16
 KERNEL_SIZE = 5
 NET_NAME = 'BasicNet'
 # NET_NAME = 'Resnet18'
-GPU = 0
 
 class Training:
-    def __init__(self, FILEPATH, EPOCHS = 60, SEED = 42, BATCH_SIZE = 32, KERNEL_SIZE = 5, NET_NAME = 'BasicNet', GPU = 0):
+    def __init__(self, FILEPATH, EPOCHS = 60, SEED = 42, BATCH_SIZE = 32, KERNEL_SIZE = 5, NET_NAME = 'BasicNet'):
         #handle seed
         if SEED is not None:
             self.set_seed(SEED)
 
         #define device used
-        self.device = torch.device("cuda:"+str(GPU) if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cpu")
         print(self.device)
 
         #variables
@@ -44,7 +43,7 @@ class Training:
         self.configure_log()
 
         #configure net
-        self.model = self.getNet(NET_NAME, self.BATCH_SIZE, self.KERNEL_SIZE, GPU)
+        self.model = self.getNet(NET_NAME, self.BATCH_SIZE, self.KERNEL_SIZE)
         self.train_data_loader, self.test_data_loader = self.importData()        
         self.optimizer = optim.SGD(self.model.parameters(), lr = 0.001, momentum = 0.9)
         self.loss_func = nn.CrossEntropyLoss()
@@ -52,14 +51,14 @@ class Training:
         logging.info("kernel size: " + str(self.KERNEL_SIZE))
 
 
-    def getNet(self, NET_NAME, BATCH_SIZE, KERNEL_SIZE, GPU):
+    def getNet(self, NET_NAME, BATCH_SIZE, KERNEL_SIZE):
         if (NET_NAME == 'BasicNet'):
-            return BasicNet(BATCH_SIZE, KERNEL_SIZE, GPU)
+            return BasicNet(BATCH_SIZE, KERNEL_SIZE)
         if (NET_NAME == 'Resnet18'):  #change this to use Andreas's Resnet
             return torch.hub.load('pytorch/vision:v0.6.0', 'resnet18', pretrained = False)
         #default to basic net
         else:
-            return BasicNet(BATCH_SIZE, KERNEL_SIZE, GPU) 
+            return BasicNet(BATCH_SIZE, KERNEL_SIZE) 
 
 
     #set the seed across all different necessary platforms
@@ -112,8 +111,6 @@ class Training:
                 training_accuracy = self.test(self.train_data_loader)
                 testing_accuracy = self.test(self.test_data_loader)
                 confusion_matrix = self.cf_matrix(self.test_data_loader)
-                with open(self.LOG_FILEPATH, 'w', newline='') as csvfile:
-                    csvfile.write(json.dumps([epoch, loss, training_accuracy, testing_accuracy, confusion_matrix.tolist()]) +"\n")
                 
                 if len(loss_arr) == 5:
                     loss_arr.pop(0)
@@ -181,7 +178,7 @@ def test_bed():
             logging.info("testing initialized")
             logging.info("batch size: " + str(bs))
             logging.info("kernel size: " + str(ks))
-            birdsong = Training(FILEPATH, EPOCHS, SEED, bs, ks, NET_NAME, GPU)
+            birdsong = Training(FILEPATH, EPOCHS, SEED, bs, ks, NET_NAME)
             birdsong.train()
             bs *= 2
         ks += 2
@@ -189,5 +186,5 @@ def test_bed():
                 
 if __name__ == '__main__':
     # test_bed()
-    birdsong = Training(FILEPATH, EPOCHS, SEED, BATCH_SIZE, KERNEL_SIZE, NET_NAME, GPU)
+    birdsong = Training(FILEPATH, EPOCHS, SEED, BATCH_SIZE, KERNEL_SIZE, NET_NAME)
     birdsong.train()
