@@ -13,9 +13,8 @@ import logging
 from datetime import datetime, date, time
 
 class BasicNet(nn.Module):
-    def __init__(self, BATCH_SIZE = 32, KERNEL_SIZE = 5, GPU = 0):
+    def __init__(self, BATCH_SIZE = 32, KERNEL_SIZE = 5):
         super(BasicNet, self).__init__()
-        self.gpu = GPU
         self.bs = BATCH_SIZE
         self.ks = KERNEL_SIZE
         self.num_class = 10
@@ -29,7 +28,6 @@ class BasicNet(nn.Module):
         self.fc3 = nn.Linear(84, self.num_class)
 
     def forward(self, x):
-        x.cuda(self.gpu)
         x = self.pool(F.relu(self.conv1(x)))
         x = self.pool(F.relu(self.conv2(x)))
         x = x.view(x.size(0), self.bs * int((99 - (self.ks - 1)/2)**2)) 
