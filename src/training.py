@@ -12,11 +12,12 @@ import torch.optim as optim
 import torch.multiprocessing
 import logging
 from datetime import datetime, date, time
-import nvidia_smi
+#import nvidia_smi
 from nets import BasicNet
+import json
 
-FILEPATH = "/Users/amyd/Desktop/Projects/birds/First_Test/"
-#FILEPATH = "/home/data/birds/Birdsong_Spectrograms/"
+#FILEPATH = "/Users/amyd/Desktop/Projects/birds/First_Test/"
+FILEPATH = "/home/data/birds/Birdsong_Spectrograms/"
 EPOCHS = 60
 SEED = 42
 BATCH_SIZE = 16
@@ -91,7 +92,7 @@ class Training:
 
     def train(self):
         # Training
-        loss_arr = []
+        accuracy = []
         epoch = 0
         diff_avg = 100
         loss = 0
@@ -107,27 +108,28 @@ class Training:
                 loss.backward()
                 self.optimizer.step()
             
-            # log every 3 epochs
-            if (epoch%3 == 0):
-                training_accuracy = self.test(self.train_data_loader)
-                testing_accuracy = self.test(self.test_data_loader)
-                confusion_matrix = self.cf_matrix(self.test_data_loader)
-                with open(self.LOG_FILEPATH, 'w', newline='') as csvfile:
-                    csvfile.write(json.dumps([epoch, loss, training_accuracy, testing_accuracy, confusion_matrix.tolist()]) +"\n")
+            training_accuracy = self.test(self.train_data_loader)
+            testing_accuracy = self.test(self.test_data_loader)
+            confusion_matrix = self.cf_matrix(self.test_data_loader)
+            with open(self.LOG_FILEPATH, 'a') as f:
+                print("epoch", epoch)
+                f.write(json.dumps([epoch, loss.item(), training_accuracy, testing_accuracy, confusion_matrix.tolist()]) +"\n")
                 
-                if len(loss_arr) == 5:
-                    loss_arr.pop(0)
-                loss_arr.append(loss.item())
-                if len(loss_arr) >= 2:
+                """
+                if len(accuracy) == 5:
+                    accuracy.pop(0)
+                #accuracy.append(testing_accuracy)
+                accuracy.append(loss.item())
+                if len(accuracy) >= 2:
                     diff_sum = 0
-                    for i in range(1, len(loss_arr)):
-                        diff_sum += abs(loss_arr[i] - loss_arr[i-1])
-                    diff_avg = abs(diff_sum / (len(loss_arr) -1))
-                    print("loss_arr[] is: " + str(loss_arr))
+                    for i in range(1, len(accuracy)):
+                        diff_sum += abs(accuracy[i] - accuracy[i-1])
+                    diff_avg = abs(diff_sum / (len(accuracy) -1))
+                    print("accuracy[] is: " + str(accuracy))
                     print("epoch is: " + str(epoch))
                     print("accuracy is: " + str(testing_accuracy))
                     print("diff_avg is: " + str(diff_avg))
-              
+                """
     
     #return percent accuracy
     def test(self, data_loader):
@@ -162,11 +164,9 @@ class Training:
 
     def configure_log(self):
         now = datetime.now()
-        self.LOG_FILEPATH = now.strftime("%d-%m-%Y") + '_' + now.strftime("%H-%M") + '.csv'
-        with open(self.LOG_FILEPATH, 'w', newline='') as csvfile:
-            writer = csv.writer(csvfile, delimiter=',',
-                            quotechar='"', quoting=csv.QUOTE_MINIMAL)
-            writer.writerow(['epoch', 'loss', 'training_accuracy', 'testing_accuracy', 'confusion_matrix'])
+        self.LOG_FILEPATH = now.strftime("%d-%m-%Y") + '_' + now.strftime("%H-%M") + '.jsonl'
+        with open(self.LOG_FILEPATH, 'w') as f:
+            f.write(json.dumps(['epoch', 'loss', 'training_accuracy', 'testing_accuracy', 'confusion_matrix']) +"\n")
 
 def test_bed():
     kernel_upper = 11
