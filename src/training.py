@@ -164,7 +164,7 @@ class Training:
 
     def configure_log(self):
         now = datetime.now()
-        self.LOG_FILEPATH = now.strftime("%d-%m-%Y") + '_' + now.strftime("%H-%M") + '.jsonl'
+        self.LOG_FILEPATH = now.strftime("%d-%m-%Y") + '_' + now.strftime("%H-%M") + self.KERNEL_SIZE + '_' + self.BATCH_SIZE '.jsonl'
         with open(self.LOG_FILEPATH, 'w') as f:
             f.write(json.dumps(['epoch', 'loss', 'training_accuracy', 'testing_accuracy', 'confusion_matrix']) +"\n")
 
