@@ -24,10 +24,10 @@ BATCH_SIZE = 16
 KERNEL_SIZE = 5
 NET_NAME = 'BasicNet'
 # NET_NAME = 'Resnet18'
-GPU = 0
+GPU = 1
 
 class Training:
-    def __init__(self, FILEPATH, EPOCHS = 60, SEED = 42, BATCH_SIZE = 32, KERNEL_SIZE = 5, NET_NAME = 'BasicNet', GPU = 0):
+    def __init__(self, FILEPATH, EPOCHS, batch_size, kernel_size, SEED = 42, NET_NAME = 'BasicNet', GPU = 0):
         #handle seed
         if SEED is not None:
             self.set_seed(SEED)
@@ -39,8 +39,8 @@ class Training:
         #variables
         self.EPOCHS = EPOCHS
         self.FILEPATH = FILEPATH
-        self.BATCH_SIZE = BATCH_SIZE
-        self.KERNEL_SIZE = KERNEL_SIZE
+        self.BATCH_SIZE = batch_size
+        self.KERNEL_SIZE = kernel_size
         self.filepath = FILEPATH
         self.configure_log()
 
@@ -96,7 +96,7 @@ class Training:
         epoch = 0
         diff_avg = 100
         loss = 0
-        while diff_avg >= 0.05 or epoch <= 15:
+        while (diff_avg >= 0.05 or epoch <= 15) and epoch <= 100:
         # for epoch in range(self.EPOCHS):
             epoch +=1
             loss_out = 0
@@ -114,8 +114,7 @@ class Training:
             with open(self.LOG_FILEPATH, 'a') as f:
                 print("epoch", epoch)
                 f.write(json.dumps([epoch, loss.item(), training_accuracy, testing_accuracy, confusion_matrix.tolist()]) +"\n")
-                
-                """
+                        
                 if len(accuracy) == 5:
                     accuracy.pop(0)
                 #accuracy.append(testing_accuracy)
@@ -125,11 +124,6 @@ class Training:
                     for i in range(1, len(accuracy)):
                         diff_sum += abs(accuracy[i] - accuracy[i-1])
                     diff_avg = abs(diff_sum / (len(accuracy) -1))
-                    print("accuracy[] is: " + str(accuracy))
-                    print("epoch is: " + str(epoch))
-                    print("accuracy is: " + str(testing_accuracy))
-                    print("diff_avg is: " + str(diff_avg))
-                """
     
     #return percent accuracy
     def test(self, data_loader):
@@ -164,14 +158,14 @@ class Training:
 
     def configure_log(self):
         now = datetime.now()
-        self.LOG_FILEPATH = now.strftime("%d-%m-%Y") + '_' + now.strftime("%H-%M") + self.KERNEL_SIZE + '_' + self.BATCH_SIZE '.jsonl'
+        self.LOG_FILEPATH = now.strftime("%d-%m-%Y") + '_' + now.strftime("%H-%M") + "_K" + str(self.KERNEL_SIZE) + '_B' + str(self.BATCH_SIZE) + '.jsonl'
         with open(self.LOG_FILEPATH, 'w') as f:
             f.write(json.dumps(['epoch', 'loss', 'training_accuracy', 'testing_accuracy', 'confusion_matrix']) +"\n")
 
 def test_bed():
-    kernel_upper = 11
-    kernel_lower = 3
-    batch_upper = 256
+    kernel_upper = 9
+    kernel_lower = 7
+    batch_upper = 128
     batch_lower = 1
 
     ks = kernel_lower
@@ -181,13 +175,13 @@ def test_bed():
             logging.info("testing initialized")
             logging.info("batch size: " + str(bs))
             logging.info("kernel size: " + str(ks))
-            birdsong = Training(FILEPATH, EPOCHS, SEED, bs, ks, NET_NAME, GPU)
+            birdsong = Training(FILEPATH, EPOCHS, bs, ks, SEED, NET_NAME, GPU)
             birdsong.train()
             bs *= 2
         ks += 2
     loggging.info("all configurations tested")
                 
 if __name__ == '__main__':
-    # test_bed()
-    birdsong = Training(FILEPATH, EPOCHS, SEED, BATCH_SIZE, KERNEL_SIZE, NET_NAME, GPU)
-    birdsong.train()
+    test_bed()
+    # birdsong = Training(FILEPATH, EPOCHS, BATCH_SIZE, KERNEL_SIZE, SEED, NET_NAME, GPU)
+    # birdsong.train()
