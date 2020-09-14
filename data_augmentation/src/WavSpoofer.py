@@ -2,10 +2,10 @@ import librosa
 import random
 import os
 
-BACKGROUND_NOISE_PATH = "/Users/LeoGl/PycharmProjects/bird/wav_test/experimental/background"
-DESTINATION_PATH = "/Users/LeoGl/PycharmProjects/bird/wav_test/experimental/dest"
-SOURCE_FOLDER_PATH = "/Users/LeoGl/PycharmProjects/bird/wav_test/experimental/source"
-SPECIES = "test_bird"
+BACKGROUND_NOISE_PATH = "/home/lglik/Code/birds/data_augmentation/lib/default_background"
+DESTINATION_PATH = "/home/data/birds/Birdsong_Filtered_Augmented/"
+SOURCE_FOLDER_PATH = "/home/data/birds/Birdsong_Filtered/"
+SPECIES = "Corapipoaltera"
 
 
 # this does not work that well

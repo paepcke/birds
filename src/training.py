@@ -14,7 +14,7 @@ from nets import BasicNet
 import json
 
 # FILEPATH = "/Users/amyd/Desktop/Projects/birds/First_Test/"
-FILEPATH = "/home/data/birds/Birdsong_Spectrograms/"
+FILEPATH = "/home/data/birds/Birdsong_Spectrograms_Augmented/"
 # FILEPATH = "/Users/LeoGl/PycharmProjects/bird/First_Test/"
 EPOCHS = 60
 SEED = 42
@@ -22,7 +22,7 @@ BATCH_SIZE = 16
 KERNEL_SIZE = 5
 NET_NAME = 'BasicNet'
 # NET_NAME = 'Resnet18'
-GPU = None
+GPU = 0
 
 
 class Training:
@@ -32,7 +32,7 @@ class Training:
             self.set_seed(seed)
 
         # define device used
-        self.device = torch.device("cuda:" + str(gpu) if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda:" + str(gpu) if (torch.cuda.is_available() and gpu is not None) else "cpu")
         print(self.device)
 
         # variables
@@ -40,17 +40,19 @@ class Training:
         self.BATCH_SIZE = batch_size
         self.KERNEL_SIZE = kernel_size
         self.filepath = file_path
+
+        # configure log file
+        now = datetime.now()
+        self.log_filepath = now.strftime("%d-%m-%Y") + '_' + now.strftime("%H-%M") + "_K" + str(
+            self.KERNEL_SIZE) + '_B' + str(self.BATCH_SIZE) + '.jsonl'
         self.configure_log()
+
 
         # configure net
         self.model = self.get_net(net_name, self.BATCH_SIZE, self.KERNEL_SIZE, GPU)
         self.train_data_loader, self.test_data_loader = self.import_data()
         self.optimizer = optim.SGD(self.model.parameters(), lr=0.001, momentum=0.9)
         self.loss_func = nn.CrossEntropyLoss()
-
-        now = datetime.now()
-        self.log_filepath = now.strftime("%d-%m-%Y") + '_' + now.strftime("%H-%M") + "_K" + str(
-            self.KERNEL_SIZE) + '_B' + str(self.BATCH_SIZE) + '.jsonl'
 
     def get_net(self, net_name, batch_size, kernel_size, gpu):
         if net_name == 'BasicNet':
@@ -179,6 +181,6 @@ def test_bed():
 
 
 if __name__ == '__main__':
-    test_bed()
-    # birdsong = Training(FILEPATH, EPOCHS, BATCH_SIZE, KERNEL_SIZE, SEED, NET_NAME, GPU)
-    # birdsong.train()
+    # test_bed()
+    birdsong = Training(FILEPATH, EPOCHS, BATCH_SIZE, KERNEL_SIZE, SEED, NET_NAME, GPU)
+    birdsong.train()
