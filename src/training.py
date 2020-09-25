@@ -14,12 +14,14 @@ from nets import BasicNet
 import json
 
 # FILEPATH = "/Users/amyd/Desktop/Projects/birds/First_Test/"
-FILEPATH = "/home/data/birds/Birdsong_Spectrograms_Augmented/"
+# FILEPATH = "/home/data/birds/Birdsong_Spectrograms_Augmented/"
+# FILEPATH = "/home/data/birds/Birdsong_Spectrograms/"
+FILEPATH = "/home/data/birds/NEW_BIRDSONG/"
 # FILEPATH = "/Users/LeoGl/PycharmProjects/bird/First_Test/"
 EPOCHS = 60
 SEED = 42
-BATCH_SIZE = 16
-KERNEL_SIZE = 5
+BATCH_SIZE = 32
+KERNEL_SIZE = 7
 NET_NAME = 'BasicNet'
 # NET_NAME = 'Resnet18'
 GPU = 0
@@ -80,6 +82,7 @@ class Training:
             transforms.Resize((400, 400)),  # should actually be 1:3 but broke the system
             transforms.ToTensor()])
 
+        print(os.listdir(self.filepath+"train/"))
         train_data = torchvision.datasets.ImageFolder(root=self.filepath + "train/", transform=transform_img)
         train_data_loader = data.DataLoader(train_data, batch_size=self.BATCH_SIZE, shuffle=True, num_workers=4,
                                             pin_memory=True)
