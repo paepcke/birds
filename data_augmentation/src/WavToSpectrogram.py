@@ -6,7 +6,7 @@ import os
 
 
 def create_spectrogram(file, dir, n_mels=128):
-    spectrogramfile = '/home/data/birds/Birdsong_Spectrograms_Augmented/' + file[:len(file) - 4] + '.png'
+    spectrogramfile = '/home/data/birds/NEW_BIRDSONG/CALL_SPECTROGRAMS/CALL_' + file[:len(file) - 4] + '.png'
     audio, sr = librosa.load(dir + file)
     mel = librosa.feature.melspectrogram(audio, sr=sr, n_mels=n_mels)
     log_mel = librosa.power_to_db(mel, ref=np.max)
@@ -20,7 +20,7 @@ def create_spectrogram(file, dir, n_mels=128):
 
 
 if __name__ == "__main__":
-    wav_dir = "/home/data/birds/Birdsong_Filtered_Augmented/"
+    wav_dir = "/home/data/birds/NEW_BIRDSONG/CALL_FILTERED_AUGMENTED/"
     for wav in os.listdir(wav_dir):
         create_spectrogram(wav, wav_dir)
 

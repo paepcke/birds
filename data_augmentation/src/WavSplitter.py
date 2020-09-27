@@ -33,14 +33,14 @@ def download_bird(bird):
 
 def get_data(birdname):
     # read back from file
-    filepath = os.fspath('./Birdsong/' + birdname + '.wav')
+    filepath = os.fspath('/home/data/birds/NEW_BIRDSONG/CALL/' + birdname + '.wav')
 
     audiotest, sr = librosa.load(filepath, sr=None)  # fix this
     dur = librosa.get_duration(audiotest, sr)
 
     for i in range(0, int(dur / 5)):
 
-        rand = random.randrange(0.0, 5.0, 0.1)
+        rand = random.randrange(0, 5, 1)
         audio, sr = librosa.load(filepath, offset=5.0 * i + rand, duration=5.0, sr=None)
         # filter the bird audio
         audio = filter_bird(birdname, str(i), audio, sr)
@@ -54,7 +54,7 @@ def filter_bird(birdname, instance, audio, sr):
     # output = output - np.mean(output)
 
     # write filtered file
-    outfile = './Birdsong_Filtered/' + birdname + instance + '.wav'
+    outfile = '/home/data/birds/NEW_BIRDSONG/CALL_FILTERED/' + birdname + instance + '.wav'
     librosa.output.write_wav(outfile, output, sr)
     return output
 
@@ -68,11 +68,15 @@ def define_bandpass(lowcut, highcut, sr, order=2):
     return b, a
 
 
-for i in range(0, 10):
-    birdname = birds[i]
-    response = requests.get("https://www.xeno-canto.org/api/2/recordings?query=" + birdname + "+len:5-60+q_gt:C")
-    data = response.json()
+#for i in range(0, 10):
+#    birdname = birds[i]
+#    response = requests.get("https://www.xeno-canto.org/api/2/recordings?query=" + birdname + "+len:5-60+q_gt:C")
+#    data = response.json()
 
-    for bird in data['recordings']:
-        birdname = download_bird(bird)  # downloads the bird and returns the important part of filename
-        get_data(birdname)
+#    for bird in data['recordings']:
+#        birdname = download_bird(bird)  # downloads the bird and returns the important part of filename
+#        get_data(birdname)
+
+for recording in os.listdir('/home/data/birds/NEW_BIRDSONG/CALL'):
+    if "Euphoniaimitans" in recording:
+        get_data(recording[:len(recording)-4])
