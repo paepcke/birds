@@ -6,6 +6,7 @@ from torch.autograd import Variable
 import torch.utils.data as data
 import torchvision
 from torchvision import transforms
+from torchvision import datasets
 import torch.optim as optim
 import torch.multiprocessing
 import logging
@@ -13,6 +14,7 @@ from datetime import datetime, date, time
 from nets import BasicNet
 import json
 
+IMG_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif', '.tiff', '.webp')
 # FILEPATH = "/Users/amyd/Desktop/Projects/birds/First_Test/"
 # FILEPATH = "/home/data/birds/Birdsong_Spectrograms_Augmented/"
 # FILEPATH = "/home/data/birds/Birdsong_Spectrograms/"
@@ -26,7 +28,30 @@ NET_NAME = 'BasicNet'
 # NET_NAME = 'Resnet18'
 GPU = 0
 
+class ImageFolderWithPaths(datasets.ImageFolder):
+    """Custom dataset that includes image file paths. Extends
+    torchvision.datasets.ImageFolder
+    """
 
+    def __init__(self, root, transform=None, target_transform=None,
+                 loader=datasets.folder.default_loader, is_valid_file=None):
+        super(datasets.ImageFolder, self).__init__(root, loader, IMG_EXTENSIONS if is_valid_file is None else None,
+                                                   transform=transform, target_transform=target_transform,
+                                                   is_valid_file=is_valid_file)
+
+        self.imgs = self.samples
+
+    # override the __getitem__ method. this is the method that dataloader calls
+    def __getitem__(self, index):
+        # this is what ImageFolder normally returns
+        original_tuple = super(ImageFolderWithPaths, self).__getitem__(index)
+        # the image file path
+        path = self.imgs[index][0]
+        # make a new tuple that includes original and the path
+        tuple_with_path = (original_tuple + (path,))
+        return tuple_with_path
+
+    
 class Training:
     def __init__(self, file_path, epochs, batch_size, kernel_size, seed=42, net_name='BasicNet', gpu=0):
         # handle seed
@@ -83,11 +108,11 @@ class Training:
             transforms.ToTensor()])
 
         print(os.listdir(self.filepath+"train/"))
-        train_data = torchvision.datasets.ImageFolder(root=self.filepath + "train/", transform=transform_img)
+        train_data = ImageFolderWithPaths(root=self.filepath + "train/", transform=transform_img)
         train_data_loader = data.DataLoader(train_data, batch_size=self.BATCH_SIZE, shuffle=True, num_workers=4,
                                             pin_memory=True)
 
-        test_data = torchvision.datasets.ImageFolder(root=self.filepath + "validation/", transform=transform_img)
+        test_data = ImageFolderWithPaths(root=self.filepath + "validation/", transform=transform_img)
         test_data_loader = data.DataLoader(test_data, batch_size=self.BATCH_SIZE, shuffle=True, num_workers=4,
                                            pin_memory=True)
 
@@ -106,7 +131,7 @@ class Training:
             # for epoch in range(self.EPOCHS):
             epoch += 1
             loss_out = 0
-            for i, (image, label) in enumerate(self.train_data_loader):
+            for i, (image, label, path) in enumerate(self.train_data_loader):
                 self.optimizer.zero_grad()
                 outputs = self.model(image)
                 loss = self.loss_func(outputs, label)
@@ -116,11 +141,11 @@ class Training:
 
             training_accuracy = self.test(self.train_data_loader)
             testing_accuracy = self.test(self.test_data_loader)
-            confusion_matrix = self.cf_matrix(self.test_data_loader)
+            confusion_matrix, incorrect_paths = self.cf_matrix(self.test_data_loader)
             with open(self.log_filepath, 'a') as f:
                 print("epoch", epoch)
                 f.write(json.dumps(
-                    [epoch, loss.item(), training_accuracy, testing_accuracy, confusion_matrix.tolist()]) + "\n")
+                    [epoch, loss.item(), training_accuracy, testing_accuracy, confusion_matrix.tolist(), incorrect_paths]) + "\n")
 
                 if len(accuracy) == 5:
                     accuracy.pop(0)
@@ -137,30 +162,42 @@ class Training:
         correct = 0
         total = 0
         with torch.no_grad():
-            for test_step, data in enumerate(data_loader):
-                test_images, labels = data
-                outputs = self.model(test_images)
-                _, predicted = torch.max(outputs.data, 1)
-                total += labels.size(0)
-                correct += (predicted == labels).sum().item()
+            if len(list(enumerate(data_loader))) == 3:
+                for test_step, data in enumerate(data_loader):
+                    test_images, labels = data
+                    outputs = self.model(test_images)
+                    _, predicted = torch.max(outputs.data, 1)
+                    total += labels.size(0)
+                    correct += (predicted == labels).sum().item()
+            else:
+                for test_step, data in enumerate(data_loader):
+                    test_images, labels, path = data
+                    outputs = self.model(test_images)
+                    _, predicted = torch.max(outputs.data, 1)
+                    total += labels.size(0)
+                    correct += (predicted == labels).sum().item()
         return 100 * correct / total
 
     # return the confusion matrix
     def cf_matrix(self, data_loader):
         list_predicted = []
         list_labels = []
+        incorrect_paths = []
         with torch.no_grad():
             for test_step, data in enumerate(data_loader):
-                test_images, labels = data
+                test_images, labels, path = data
                 model_output = self.model(test_images)
                 _, predicted = torch.max(model_output.data, 1)
                 list_predicted.extend(list(predicted.numpy()))
                 list_labels.extend(list(labels.numpy()))
-
+                is_correct = (predicted == labels).sum().item()
+                if is_correct != 0:
+                    incorrect_paths.append(path)
+        
         confusion = np.zeros((self.model.num_class, self.model.num_class))
         for pred, truth in zip(list_predicted, list_labels):
             confusion[pred][truth] += 1
-        return confusion
+        return confusion, incorrect_paths
 
     def configure_log(self):
         with open(self.log_filepath, 'w') as f:
