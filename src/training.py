@@ -141,11 +141,11 @@ class Training:
 
             training_accuracy = self.test(self.train_data_loader)
             testing_accuracy = self.test(self.test_data_loader)
-            confusion_matrix, precision, recall = self.cf_matrix(self.test_data_loader)
+            confusion_matrix, precision, recall, incorrect_paths = self.cf_matrix(self.test_data_loader)
             with open(self.log_filepath, 'a') as f:
                 print("epoch", epoch)
                 f.write(json.dumps(
-                    [epoch, loss.item(), training_accuracy, testing_accuracy, precision, recall, confusion_matrix.tolist()]) + "\n")
+                    [epoch, loss.item(), training_accuracy, testing_accuracy, precision, recall, incorrect_paths, confusion_matrix.tolist()]) + "\n")
 
                 if len(accuracy) == 5:
                     accuracy.pop(0)
@@ -206,11 +206,11 @@ class Training:
             precision.append(confusion[i][i] / sum(confusion[i]))
             recall.append(confusion[i][i] / sum(confusion[:,i]))
         
-        return confusion, precision, recall
+        return confusion, precision, recall, incorrect_paths
 
     def configure_log(self):
         with open(self.log_filepath, 'w') as f:
-            f.write(json.dumps(['epoch', 'loss', 'training_accuracy', 'testing_accuracy', 'precision', 'recall', 'confusion_matrix']) + "\n")
+            f.write(json.dumps(['epoch', 'loss', 'training_accuracy', 'testing_accuracy', 'precision', 'recall', 'incorrect_paths', 'confusion_matrix']) + "\n")
 
 
 def test_bed():
