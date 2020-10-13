@@ -141,11 +141,11 @@ class Training:
 
             training_accuracy = self.test(self.train_data_loader)
             testing_accuracy = self.test(self.test_data_loader)
-            confusion_matrix, incorrect_paths = self.cf_matrix(self.test_data_loader)
+            confusion_matrix, precision, recall = self.cf_matrix(self.test_data_loader)
             with open(self.log_filepath, 'a') as f:
                 print("epoch", epoch)
                 f.write(json.dumps(
-                    [epoch, loss.item(), training_accuracy, testing_accuracy, confusion_matrix.tolist(), incorrect_paths]) + "\n")
+                    [epoch, loss.item(), training_accuracy, testing_accuracy, precision, recall, confusion_matrix.tolist()]) + "\n")
 
                 if len(accuracy) == 5:
                     accuracy.pop(0)
@@ -178,11 +178,15 @@ class Training:
                     correct += (predicted == labels).sum().item()
         return 100 * correct / total
 
-    # return the confusion matrix
+    # return the confusion matrix, followed by precision and recall
     def cf_matrix(self, data_loader):
         list_predicted = []
         list_labels = []
         incorrect_paths = []
+        
+        precision = []
+        recall = []
+        
         with torch.no_grad():
             for test_step, data in enumerate(data_loader):
                 test_images, labels, path = data
@@ -197,11 +201,16 @@ class Training:
         confusion = np.zeros((self.model.num_class, self.model.num_class))
         for pred, truth in zip(list_predicted, list_labels):
             confusion[pred][truth] += 1
-        return confusion, incorrect_paths
+            
+        for i in range (0, len(confusion)):
+            precision.append(confusion[i][i] / sum(confusion[i]))
+            recall.append(confusion[i][i] / sum(confusion[:,i]))
+        
+        return confusion, precision, recall
 
     def configure_log(self):
         with open(self.log_filepath, 'w') as f:
-            f.write(json.dumps(['epoch', 'loss', 'training_accuracy', 'testing_accuracy', 'confusion_matrix']) + "\n")
+            f.write(json.dumps(['epoch', 'loss', 'training_accuracy', 'testing_accuracy', 'precision', 'recall', 'confusion_matrix']) + "\n")
 
 
 def test_bed():
