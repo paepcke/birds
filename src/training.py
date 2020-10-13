@@ -182,7 +182,7 @@ class Training:
     def cf_matrix(self, data_loader):
         list_predicted = []
         list_labels = []
-        incorrect_paths = []
+        incorrect_paths = [[""]*20]*20
         
         precision = []
         recall = []
@@ -195,8 +195,10 @@ class Training:
                 list_predicted.extend(list(predicted.numpy()))
                 list_labels.extend(list(labels.numpy()))
                 is_correct = (predicted == labels).sum().item()
-                if is_correct != 0:
-                    incorrect_paths.append(path)
+                for x in range(len(labels) - 1):
+                    if predicted[x] != labels[x]:
+                        path[x] = path[x].split('/')[len(path[x].split('/')) - 1]
+                        incorrect_paths[predicted[x]][labels[x]] += (path[x] + ",")
         
         confusion = np.zeros((self.model.num_class, self.model.num_class))
         for pred, truth in zip(list_predicted, list_labels):
