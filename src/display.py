@@ -16,10 +16,12 @@ import seaborn as sns
 import json
 import math
 
-LOG_FILEPATH = '/Users/LeoGl/Documents/bird/09-10-2020_11-58_K7_B32.jsonl'
+LOG_FILEPATH = '/Users/LeoGl/Documents/bird/15-10-2020_17-37_K7_B32.jsonl'
 # LOG_FILEPATH = '/Users/LeoGl/Documents/bird/fullAugmentedSongAndCall_K7_B32.jsonl'
 # LOG_FILEPATH = '/Users/LeoGl/Documents/bird/logs/05-09-2020_18-17_K7_B128.jsonl'
 
+WIDTH = 3000
+HEIGHT = 2000
 
 class App(QMainWindow):
 	def __init__(self, LOG_FILEPATH):
@@ -30,8 +32,8 @@ class App(QMainWindow):
 		self.title = 'Birdsong Classifier'
 		self.left = 0
 		self.top = 0
-		self.width = 3000
-		self.height = 2000
+		self.width = WIDTH
+		self.height = HEIGHT
 
 		self.setWindowTitle(self.title)
 		self.setGeometry(self.left, self.top, self.width, self.height)
@@ -56,7 +58,7 @@ class FileRead():
 		self.normal = None
 		self.kernel = None
 		self.batch = None
-		self.files = [[[]]*20]*20
+		self.files = [[[] for b in range(20)] for m in range(20)]
 		self.getKernelBatch()
 
 		self.readLine()
@@ -85,20 +87,14 @@ class FileRead():
 					self.confusion = self.confusion.reshape((dim, dim))
 
 					if len(self.splitlist) > 2:
-						# parse the file names
-						one_dim_list = self.splitlist[2][:-6].split(',\"')
-						item = 0
-						# create a list of file names for each cell in the matrix
-						for z in range(dim):
-							for y in range(dim):
-								# split the string into a list of files
-								file_list = one_dim_list[item].split(',')[-1:]
-								# remove parts of the filepath that is not the file name
-								# for n in range(len(file_list)):
-								# 	file_list[n] = file_list[n].split('/')[9]
-								# add each list of files to the files array
-								self.files[z][y] = file_list
-								item += 1
+						two_dim_list = self.splitlist[2:21]
+						x = 0
+						for row in two_dim_list:
+							y = 0
+							for cell in row.split('], ['):
+								self.files[x][y].append(cell)
+								y += 1
+							x += 1
 
 					not_EOF = False
 
@@ -229,23 +225,51 @@ class RightSideWidget(QWidget):
 
 		super(QWidget, self).__init__(parent)
 		self.layout = QVBoxLayout(self)
-		
+
+		self.file_label = QLabel()
+		self.file_list = QLineEdit()
 		self.textwidget = QLabel()
 		self.textwidget.setText('  Kernel Size is ' + file.getKernel() + '\n  Batch size is ' + file.getBatch())
 		self.textwidget.setFont(QFont('Arial', 20)) 
-		self.textwidget.resize(200, 150)
+		self.textwidget.setFixedWidth(WIDTH * 0.4)
 
+		self.file = file
 		self.confusionwidget = PlotConfusion(self, file)
+		self.confusionwidget.setFixedWidth(WIDTH * 0.4)
+		self.confusionwidget.setFixedHeight(HEIGHT * 0.7)
 
 		self.layout.addWidget(self.textwidget)
 		self.layout.addWidget(self.confusionwidget)
+		self.cid = self.confusionwidget.canvas.mpl_connect("button_release_event", self.onRelease)
+
+	def onRelease(self, event):
+
+		actual = self.confusionwidget.axis_labels[self.confusionwidget.xint]
+		predicted = self.confusionwidget.axis_labels[self.confusionwidget.yint]
+		norm_acc = self.confusionwidget.file.getNormalized()[self.confusionwidget.yint][self.confusionwidget.xint]
+		file_names = self.confusionwidget.file.getFileMatrix()[self.confusionwidget.yint][self.confusionwidget.xint]
+		if file_names != []:
+			self.file_label.setText('file names of misclassified samples: ')
+			self.file_list.setText(str(file_names[0])[1:-1])
+			self.file_list.setFont(QFont('Arial', 10))
+			self.file_list.setFixedWidth(WIDTH * 0.4)
+			self.file_label.setFont(QFont('Arial', 10))
+			self.file_label.setFixedHeight(50)
+			self.file_label.setFixedWidth(WIDTH * 0.4)
+			self.layout.addWidget(self.file_label)
+			self.layout.addWidget(self.file_list)
+		else:
+			self.file_list.setText('')
+
+		self.textwidget.setText('  Actual Species:  ' + str(actual) + "               Kernel Size:" + str(self.file.getKernel()) + '\n  Predicted Species:  ' + str(predicted) + "               Batch Size:" + str(self.file.getBatch()) + '\n  Normalized Accuracy:  ' + str(norm_acc))
+		self.textwidget.setFont(QFont('Arial', 10))
 
 
 class PlotConfusion(QWidget):
 	def __init__(self, parent, file):
 
 		# axis_labels = ['AMADEC', 'ARRAUR','CORALT','DYSMEN', 'EUPIMI','HENLES','HYLDEC','LOPPIT', 'TANGYR', 'TANICT']
-		self.axis_labels = ['AMADEC_CALL', 'AMADEC_SONG', 'ARRAUR_CALL', 'ARRAUR_SONG', 'CORALT_CALL', 'CORALT_SONG', 'DYSMEN_CALL_SONG', 'DYSMEN_SONG', 'EUPIMI_CALL',
+		self.axis_labels = ['AMADEC_CALL', 'AMADEC_SONG', 'ARRAUR_CALL', 'ARRAUR_SONG', 'CORALT_CALL', 'CORALT_SONG', 'DYSMEN_CALL', 'DYSMEN_SONG', 'EUPIMI_CALL',
 						'EUPIMI_SONG', 'HENLES_CALL', 'HENLES_SONG', 'HYLDEC_CALL', 'HYLDEC_SONG', 'LOPPIT_CALL', 'LOPPIT_SONG', 'TANGYR_CALL', 'TANGYR_SONG',
 						'TANICT_CALL', 'TANICT_SONG']
 
@@ -272,7 +296,6 @@ class PlotConfusion(QWidget):
 		layout = QVBoxLayout()
 		layout.addWidget(self.canvas)
 		self.setLayout(layout)
-		self.cid = self.canvas.mpl_connect("button_release_event", self.onRelease)
 		self.cid = self.canvas.mpl_connect("motion_notify_event", self.onMotion)
 		self.heatmap = ax
 
@@ -291,17 +314,10 @@ class PlotConfusion(QWidget):
 		self.canvas.draw()
 		self.rect.remove()
 
-	def onRelease(self, event):
-		if self.xint != -1 and self.yint != -1:
-			print("actual species:", self.axis_labels[self.xint])
-			print("predicted species:", self.axis_labels[self.yint])
-			print("normalized accuracy:", self.file.getNormalized()[self.yint][self.xint])
-			file_names = self.file.getFileMatrix()[self.yint][self.xint]
-			if file_names != []:
-				print("files names:", file_names)
-
-
 if __name__ == '__main__':
 	app = QApplication(sys.argv)
 	x = App(LOG_FILEPATH)
 	sys.exit(app.exec_())
+
+
+
