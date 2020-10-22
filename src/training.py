@@ -109,11 +109,11 @@ class Training:
 
         print(os.listdir(self.filepath+"train/"))
         train_data = ImageFolderWithPaths(root=self.filepath + "train/", transform=transform_img)
-        train_data_loader = data.DataLoader(train_data, batch_size=self.BATCH_SIZE, shuffle=True, num_workers=4,
+        train_data_loader = data.DataLoader(train_data, batch_size=self.BATCH_SIZE, shuffle=True, num_workers=0,
                                             pin_memory=True)
 
         test_data = ImageFolderWithPaths(root=self.filepath + "validation/", transform=transform_img)
-        test_data_loader = data.DataLoader(test_data, batch_size=self.BATCH_SIZE, shuffle=True, num_workers=4,
+        test_data_loader = data.DataLoader(test_data, batch_size=self.BATCH_SIZE, shuffle=True, num_workers=0,
                                            pin_memory=True)
 
         print("Number of train samples: ", len(train_data))

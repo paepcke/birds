@@ -11,7 +11,7 @@ from pathlib import Path
 import shutil
 
 # FILEPATH = "/Users/amyd/Desktop/Projects/birds/First_Test/"
-FILEPATH = "/home/data/birds/Birdsong_Spectrograms/NEW_BIRDSONG/ALL_BIRDSONG/"
+FILEPATH = "/home/data/birds/NEW_BIRDSONG/ALL_SPECTROGRAMS/"
 # FILEPATH = "/Users/LeoGl/PycharmProjects/bird/First_Test/test/"
 EPOCHS = 1
 SEED = 42
@@ -54,7 +54,7 @@ if __name__ == '__main__':
     X = np.array(X)
     y = np.array(y)
     # prepare cross validation
-    skf = StratifiedKFold(n_splits=5, random_state=1, shuffle=True)
+    skf = StratifiedKFold(n_splits=10, random_state=1, shuffle=True)
     # enumerate splits
     num = 0
     for train_index, test_index in skf.split(X, y):
@@ -80,6 +80,5 @@ if __name__ == '__main__':
                     test_index += 1
                 count += 1
             ident += 1
-    # birdsong = Training(FILEPATH, EPOCHS, BATCH_SIZE, KERNEL_SIZE, SEED, NET_NAME, GPU)
-    # print("testing accuracy:", birdsong.test(birdsong.train_data_loader))
-    # print("testing accuracy:", birdsong.test(birdsong.test_data_loader))
+        birdsong = Training(FILEPATH + "../", EPOCHS, BATCH_SIZE, KERNEL_SIZE, SEED, NET_NAME, GPU)
+        birdsong.train()
