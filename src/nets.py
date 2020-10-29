@@ -25,7 +25,7 @@ class BasicNet(nn.Module):
         self.conv2 = nn.Conv2d(6, self.bs, self.ks)
         print("batch size: " + str(self.bs))
         print("kernel size: " + str(self.ks))
-        self.fc1 = nn.Linear(self.bs * int((99 - (self.ks - 1) / 2) ** 2), 120)
+        self.fc1 = nn.Linear(self.bs * int((99 - (self.ks + 1) / 2) ** 2), 120)
         self.fc2 = nn.Linear(120, 84)
         self.fc3 = nn.Linear(84, self.num_class)
 
@@ -34,7 +34,7 @@ class BasicNet(nn.Module):
             x.cuda(self.gpu)
         x = self.pool(F.relu(self.conv1(x)))
         x = self.pool(F.relu(self.conv2(x)))
-        x = x.view(x.size(0), self.bs * int((99 - (self.ks - 1) / 2) ** 2))
+        x = x.view(x.size(0), self.bs * int((99 - (self.ks + 1) / 2) ** 2))
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         x = self.fc3(x)

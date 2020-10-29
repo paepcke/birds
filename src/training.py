@@ -64,6 +64,7 @@ class Training:
 
         # variables
         self.EPOCHS = epochs
+        self.epoch = 0
         self.BATCH_SIZE = batch_size
         self.KERNEL_SIZE = kernel_size
         self.filepath = file_path
@@ -79,6 +80,8 @@ class Training:
         self.model = self.get_net(net_name, self.BATCH_SIZE, self.KERNEL_SIZE, GPU)
         self.train_data_loader, self.test_data_loader = self.import_data()
         self.optimizer = optim.SGD(self.model.parameters(), lr=0.001, momentum=0.9)
+        #lambda1 = lambda epoch: 0.01 * (1.00 ** self.epoch)
+        #self.scheduler = optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda1, last_epoch=-1)
         self.loss_func = nn.CrossEntropyLoss()
 
     def get_net(self, net_name, batch_size, kernel_size, gpu):
@@ -124,12 +127,12 @@ class Training:
     def train(self):
         # Training
         accuracy = []
-        epoch = 0
+        self.epoch = 0
         diff_avg = 100
         loss = 0
-        while (diff_avg >= 0.05 or epoch <= 15) and epoch <= 100:
+        while (diff_avg >= 0.05 or self.epoch <= 15) and self.epoch <= 100:
             # for epoch in range(self.EPOCHS):
-            epoch += 1
+            self.epoch += 1
             loss_out = 0
             for i, (image, label, path) in enumerate(self.train_data_loader):
                 self.optimizer.zero_grad()
@@ -138,14 +141,15 @@ class Training:
                 loss_out += loss
                 loss.backward()
                 self.optimizer.step()
+                #self.scheduler.step()
 
             training_accuracy = self.test(self.train_data_loader)
             testing_accuracy = self.test(self.test_data_loader)
             confusion_matrix, precision, recall, incorrect_paths = self.cf_matrix(self.test_data_loader)
             with open(self.log_filepath, 'a') as f:
-                print("epoch", epoch)
+                print("epoch", self.epoch)
                 f.write(json.dumps(
-                    [epoch, loss.item(), training_accuracy, testing_accuracy, precision, recall, incorrect_paths, confusion_matrix.tolist()]) + "\n")
+                    [self.epoch, loss.item(), training_accuracy, testing_accuracy, precision, recall, incorrect_paths, confusion_matrix.tolist()]) + "\n")
 
                 if len(accuracy) == 5:
                     accuracy.pop(0)
@@ -205,7 +209,10 @@ class Training:
             confusion[pred][truth] += 1
             
         for i in range (0, len(confusion)):
-            precision.append(confusion[i][i] / sum(confusion[i]))
+            if sum(confusion[i]) != 0:
+                precision.append(confusion[i][i] / sum(confusion[i]))
+            else:
+                precision.append(0.0)
             recall.append(confusion[i][i] / sum(confusion[:,i]))
         
         return confusion, precision, recall, incorrect_paths
