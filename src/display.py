@@ -1,20 +1,13 @@
 import sys
-from PyQt5 import QtWidgets
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
-from PyQt5 import QtCore, QtGui
-from PyQt5.QtCore import pyqtSlot
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
 import numpy as np
-import random
-import csv
-import pandas as pd
 import seaborn as sns
-import json
 import math
+from sklearn.metrics import average_precision_score
 
 LOG_FILEPATH = '/Users/LeoGl/Documents/bird/15-10-2020_17-37_K7_B32.jsonl'
 # LOG_FILEPATH = '/Users/LeoGl/Documents/bird/fullAugmentedSongAndCall_K7_B32.jsonl'
@@ -58,6 +51,7 @@ class FileRead():
 		self.normal = None
 		self.kernel = None
 		self.batch = None
+		self.MAP = None
 		self.files = [[[] for b in range(20)] for m in range(20)]
 		self.getKernelBatch()
 
@@ -107,6 +101,7 @@ class FileRead():
 					self.test_accuracy.append(data[3])
 		self.genTru()
 		self.calcNorm()
+		self.calcMAP()
 
 	def genTru(self):
 		self.tru = self.confusion.copy()
@@ -126,6 +121,54 @@ class FileRead():
 			for truth in range(len(self.confusion[0])):
 				if self.tru[pred][pred] != 0:
 					self.normal[pred][truth] = self.confusion[pred][truth] / self.tru[pred][pred]
+
+	def calcMAP(self):
+		temp = self.confusion.copy()
+		for pred in range(len(self.confusion)):
+			for truth in range(len(self.confusion[0])):
+				if pred == truth:
+					temp[pred][truth] = 0
+		false_pos = temp.sum(axis=0)
+		false_positives = np.zeros(int(len(false_pos) / 2))
+		count = 0
+		for species in range(len(false_pos)):
+			if species % 2 == 0:
+				false_positives[count] = false_pos[species]
+				count += 1
+		count = 0
+		for species in range(len(false_pos)):
+			if species % 2 != 0:
+				false_positives[count] += false_pos[species]
+				count += 1
+		print("false_positives", false_positives)
+		temp = self.confusion.copy()
+		for pred in range(len(self.confusion)):
+			for truth in range(len(self.confusion[0])):
+				if pred != truth:
+					temp[pred][truth] = 0
+		true_pos = temp.sum(axis=0)
+		true_positives = np.zeros(int(len(true_pos) / 2))
+		count = 0
+		for species in range(len(true_pos)):
+			if species % 2 == 0:
+				true_positives[count] = true_pos[species]
+				count += 1
+		count = 0
+		for species in range(len(true_pos)):
+			if species % 2 != 0:
+				true_positives[count] += true_pos[species]
+				count += 1
+		print("true_positives", true_positives)
+
+		denom = np.add(true_positives, false_positives)
+		y_scores = np.true_divide(true_positives, denom)
+
+		print("average precision scores by class", y_scores)
+		self.MAP = np.sum(y_scores) / len(y_scores)
+		print("mean average precision", self.MAP)
+
+	def getMAP(self):
+		return self.MAP
 
 	def getEpoch(self):
 		return self.epoch
@@ -229,7 +272,7 @@ class RightSideWidget(QWidget):
 		self.file_label = QLabel()
 		self.file_list = QLineEdit()
 		self.textwidget = QLabel()
-		self.textwidget.setText('  Kernel Size is ' + file.getKernel() + '\n  Batch size is ' + file.getBatch())
+
 		self.textwidget.setFont(QFont('Arial', 20)) 
 		self.textwidget.setFixedWidth(WIDTH * 0.4)
 
@@ -237,13 +280,14 @@ class RightSideWidget(QWidget):
 		self.confusionwidget = PlotConfusion(self, file)
 		self.confusionwidget.setFixedWidth(WIDTH * 0.4)
 		self.confusionwidget.setFixedHeight(HEIGHT * 0.7)
+		self.textwidget.setText('  Kernel Size is ' + file.getKernel() + '\n  Batch size is ' + file.getBatch()
+								+ '\n  MAP is ' + str(self.file.getMAP())[:7])
 
 		self.layout.addWidget(self.textwidget)
 		self.layout.addWidget(self.confusionwidget)
 		self.cid = self.confusionwidget.canvas.mpl_connect("button_release_event", self.onRelease)
 
 	def onRelease(self, event):
-
 		actual = self.confusionwidget.axis_labels[self.confusionwidget.xint]
 		predicted = self.confusionwidget.axis_labels[self.confusionwidget.yint]
 		norm_acc = self.confusionwidget.file.getNormalized()[self.confusionwidget.yint][self.confusionwidget.xint]
@@ -263,7 +307,6 @@ class RightSideWidget(QWidget):
 
 		self.textwidget.setText('  Actual Species:  ' + str(actual) + "               Kernel Size:" + str(self.file.getKernel()) + '\n  Predicted Species:  ' + str(predicted) + "               Batch Size:" + str(self.file.getBatch()) + '\n  Normalized Accuracy:  ' + str(norm_acc))
 		self.textwidget.setFont(QFont('Arial', 10))
-
 
 class PlotConfusion(QWidget):
 	def __init__(self, parent, file):
@@ -313,6 +356,7 @@ class PlotConfusion(QWidget):
 		self.heatmap.add_patch(self.rect)
 		self.canvas.draw()
 		self.rect.remove()
+
 
 if __name__ == '__main__':
 	app = QApplication(sys.argv)
