@@ -9,7 +9,8 @@ import seaborn as sns
 import math
 from sklearn.metrics import average_precision_score
 
-LOG_FILEPATH = '/Users/LeoGl/Documents/bird/15-10-2020_17-37_K7_B32.jsonl'
+# LOG_FILEPATH = '/Users/LeoGl/Documents/bird/15-10-2020_17-37_K7_B32.jsonl'
+LOG_FILEPATH = '/Users/LeoGl/Documents/bird/29-10-2020_12-59_K7_B32.jsonl'
 # LOG_FILEPATH = '/Users/LeoGl/Documents/bird/fullAugmentedSongAndCall_K7_B32.jsonl'
 # LOG_FILEPATH = '/Users/LeoGl/Documents/bird/logs/05-09-2020_18-17_K7_B128.jsonl'
 
@@ -72,7 +73,7 @@ class FileRead():
 			while not_EOF:
 				line = f.readline()
 				if line == '':
-					con = self.splitlist[1][:-4]
+					con = self.splitlist[2][:-4]
 					consplit = con.split('], [')
 					self.confusion = np.fromstring(consplit[0], sep = ',')
 					for i in range (1, len(consplit)):
@@ -140,7 +141,6 @@ class FileRead():
 			if species % 2 != 0:
 				false_positives[count] += false_pos[species]
 				count += 1
-		print("false_positives", false_positives)
 		temp = self.confusion.copy()
 		for pred in range(len(self.confusion)):
 			for truth in range(len(self.confusion[0])):
@@ -158,7 +158,6 @@ class FileRead():
 			if species % 2 != 0:
 				true_positives[count] += true_pos[species]
 				count += 1
-		print("true_positives", true_positives)
 
 		denom = np.add(true_positives, false_positives)
 		y_scores = np.true_divide(true_positives, denom)
