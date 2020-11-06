@@ -7,10 +7,11 @@ from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
 import numpy as np
 import seaborn as sns
 import math
+import warnings
 from sklearn.metrics import average_precision_score
 
 # LOG_FILEPATH = '/Users/LeoGl/Documents/bird/15-10-2020_17-37_K7_B32.jsonl'
-LOG_FILEPATH = '/Users/LeoGl/Documents/bird/29-10-2020_12-59_K7_B32.jsonl'
+LOG_FILEPATH = '/Users/LeoGl/Documents/bird/02-11-2020_13-08_K7_B32.jsonl'
 # LOG_FILEPATH = '/Users/LeoGl/Documents/bird/fullAugmentedSongAndCall_K7_B32.jsonl'
 # LOG_FILEPATH = '/Users/LeoGl/Documents/bird/logs/05-09-2020_18-17_K7_B128.jsonl'
 
@@ -53,7 +54,7 @@ class FileRead():
 		self.kernel = None
 		self.batch = None
 		self.MAP = None
-		self.files = [[[] for b in range(20)] for m in range(20)]
+		self.files = [[[] for i in range(20)] for j in range(20)]
 		self.getKernelBatch()
 
 		self.readLine()
@@ -73,16 +74,16 @@ class FileRead():
 			while not_EOF:
 				line = f.readline()
 				if line == '':
-					con = self.splitlist[2][:-4]
+					con = self.splitlist[21][:-4]
 					consplit = con.split('], [')
-					self.confusion = np.fromstring(consplit[0], sep = ',')
+					self.confusion = np.fromstring(consplit[0], sep=',')
 					for i in range (1, len(consplit)):
 						self.confusion = np.concatenate((self.confusion, np.fromstring(consplit[i], sep = ',')))
 					dim = int(math.sqrt(self.confusion.shape[0]))
 					self.confusion = self.confusion.reshape((dim, dim))
 
 					if len(self.splitlist) > 2:
-						two_dim_list = self.splitlist[2:21]
+						two_dim_list = self.splitlist[1:21]
 						x = 0
 						for row in two_dim_list:
 							y = 0
@@ -90,7 +91,6 @@ class FileRead():
 								self.files[x][y].append(cell)
 								y += 1
 							x += 1
-
 					not_EOF = False
 
 				else:
@@ -162,9 +162,7 @@ class FileRead():
 		denom = np.add(true_positives, false_positives)
 		y_scores = np.true_divide(true_positives, denom)
 
-		print("average precision scores by class", y_scores)
 		self.MAP = np.sum(y_scores) / len(y_scores)
-		print("mean average precision", self.MAP)
 
 	def getMAP(self):
 		return self.MAP
@@ -279,8 +277,8 @@ class RightSideWidget(QWidget):
 		self.confusionwidget = PlotConfusion(self, file)
 		self.confusionwidget.setFixedWidth(WIDTH * 0.4)
 		self.confusionwidget.setFixedHeight(HEIGHT * 0.7)
-		self.textwidget.setText('  Kernel Size is ' + file.getKernel() + '\n  Batch size is ' + file.getBatch()
-								+ '\n  MAP is ' + str(self.file.getMAP())[:7])
+		self.textwidget.setText('  Accuracy: ' + str(max(self.file.getTestingAccuracy()))[:7]
+								+ '\n  MAP: ' + str(self.file.getMAP())[:7])
 
 		self.layout.addWidget(self.textwidget)
 		self.layout.addWidget(self.confusionwidget)
@@ -358,9 +356,7 @@ class PlotConfusion(QWidget):
 
 
 if __name__ == '__main__':
+	warnings.filterwarnings("ignore", category=DeprecationWarning)
 	app = QApplication(sys.argv)
 	x = App(LOG_FILEPATH)
 	sys.exit(app.exec_())
-
-
-
