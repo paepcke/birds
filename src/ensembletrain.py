@@ -258,8 +258,9 @@ def Ensemble:
                 outputs = []
                 data = []
                 for model in self.trainings:
-                    outputs = self.model(test_images)
+                    outputs.append(model(test_images))
                     #compare all four, put remaining in data
+                data = torch.cat((outputs[0], outputs[1], outputs[2], outputs[3]), 1)
 
                 #dump data to a new file
                 fileout = open("NEWEST_ENSEMBLE_OUTPUT.txt","w") 
@@ -268,6 +269,7 @@ def Ensemble:
 
                 #calculate accuracy
                 _, predicted = torch.max(data, 1)
+
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
 
