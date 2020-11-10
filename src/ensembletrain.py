@@ -21,7 +21,7 @@ IMG_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif', '.tif
 #FILEPATH = "/home/data/birds/NEW_BIRDSONG/"
 FILEPATH = "/home/data/birds/ENSEMBLE_DATA/"
 # FILEPATH = "/Users/LeoGl/PycharmProjects/bird/First_Test/"
-EPOCHS = 60
+EPOCHS = 6
 SEED = 42
 BATCH_SIZE = 32
 KERNEL_SIZE = 7
@@ -119,7 +119,7 @@ class Training:
                                             pin_memory=True)
 
         test_data = ImageFolderWithPaths(root=self.filepath + "validation/", transform=transform_img)
-        self.test_data_loader = data.DataLoader(test_data, batch_size=self.BATCH_SIZE, shuffle=True, num_workers=0,
+        test_data_loader = data.DataLoader(test_data, batch_size=self.BATCH_SIZE, shuffle=True, num_workers=0,
                                            pin_memory=True)
 
         print("Number of train samples: ", len(train_data))
@@ -133,7 +133,7 @@ class Training:
         self.epoch = 0
         diff_avg = 100
         loss = 0
-        while (diff_avg >= 0.05 or self.epoch <= 15) and self.epoch <= 2:
+        while (diff_avg >= 0.05 or self.epoch <= 15) and self.epoch <= 1:
             # for epoch in range(self.EPOCHS):
             self.epoch += 1
             loss_out = 0
@@ -227,10 +227,8 @@ class Training:
             f.write(json.dumps(['epoch', 'netnumber' 'loss', 'training_accuracy', 'precision', 'recall', 'incorrect_paths', 'confusion_matrix']) + "\n")
 
 
-def Ensemble:
+class Ensemble:
     def __init__(self):
-        self.train_models()
-        self.test_accuracy()
         self.trainings = []
         self.folders = ['train1/', 'train2/', 'train3/', 'train4/']
 
@@ -260,7 +258,7 @@ def Ensemble:
                 for model in self.trainings:
                     outputs.append(model(test_images))
                     #compare all four, put remaining in data
-                data = torch.cat((outputs[0], outputs[1], outputs[2], outputs[3]), 1)
+                data = torch.cat(outputs, 1)
 
                 #dump data to a new file
                 fileout = open("NEWEST_ENSEMBLE_OUTPUT.txt","w") 
@@ -269,10 +267,14 @@ def Ensemble:
 
                 #calculate accuracy
                 _, predicted = torch.max(data, 1)
+                predicted = predicted.numpy()
+                mappings = {0:6, 1:8, 2:9, 3:11, 4:1, 5:2, 6:5, 7:10, 8:3, 9:4, 10:13, 11:0, 12:7, 13:12}
+                for i in predicted:
+                    i = mappings[i]
 
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
-
+        print("accuracy here")
         print(100 * correct / total)
 
 
@@ -297,5 +299,7 @@ def Ensemble:
 
 if __name__ == '__main__':
     # test_bed()
-    birdsong = Training(FILEPATH, EPOCHS, BATCH_SIZE, KERNEL_SIZE, SEED, NET_NAME, GPU)
-    birdsong.train()
+    birdsong = Ensemble()
+    birdsong.train_models()
+
+
