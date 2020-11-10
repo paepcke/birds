@@ -80,21 +80,22 @@ class Training:
 
 
         # configure net
-        self.model = self.get_net(net_name, self.BATCH_SIZE, self.KERNEL_SIZE, GPU)
-        self.train_data_loader, self.test_data_loader = self.import_data()
+        self.train_data_loader, self.test_data_loader, self.num_classes = self.import_data()
+        print(self.num_classes)
+        self.model = self.get_net(net_name, self.num_classes, self.BATCH_SIZE, self.KERNEL_SIZE, GPU)
         self.optimizer = optim.SGD(self.model.parameters(), lr=0.001, momentum=0.9)
         #lambda1 = lambda epoch: 0.01 * (1.00 ** self.epoch)
         #self.scheduler = optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda1, last_epoch=-1)
         self.loss_func = nn.CrossEntropyLoss()
 
-    def get_net(self, net_name, batch_size, kernel_size, gpu):
+    def get_net(self, net_name, num_class, batch_size, kernel_size, gpu):
         if net_name == 'BasicNet':
-            return BasicNet(batch_size, kernel_size, gpu)
+            return BasicNet(num_class, batch_size, kernel_size, gpu)
         if NET_NAME == 'Resnet18':  # change this to use Andreas's Resnet
             return torch.hub.load('pytorch/vision:v0.6.0', 'resnet18', pretrained=False)
         # default to basic net
         else:
-            return BasicNet(batch_size, kernel_size, gpu)
+            return BasicNet(num_class, batch_size, kernel_size, gpu)
 
             # set the seed across all different necessary platforms
 
@@ -122,10 +123,12 @@ class Training:
         test_data_loader = data.DataLoader(test_data, batch_size=self.BATCH_SIZE, shuffle=True, num_workers=0,
                                            pin_memory=True)
 
+        
         print("Number of train samples: ", len(train_data))
         print("Number of test samples: ", len(test_data))
         print("Detected Classes are: ", train_data.class_to_idx)
-        return train_data_loader, test_data_loader
+        num_classes = len(train_data.class_to_idx)
+        return train_data_loader, test_data_loader, num_classes
 
     def train(self):
         # Training
@@ -133,7 +136,7 @@ class Training:
         self.epoch = 0
         diff_avg = 100
         loss = 0
-        while (diff_avg >= 0.05 or self.epoch <= 15) and self.epoch <= 1:
+        while (diff_avg >= 0.05 or self.epoch <= 15) and self.epoch <= 10:
             # for epoch in range(self.EPOCHS):
             self.epoch += 1
             loss_out = 0
@@ -148,11 +151,11 @@ class Training:
 
             training_accuracy = self.test(self.train_data_loader)
             #testing_accuracy = self.test(self.test_data_loader)
-            confusion_matrix, precision, recall, incorrect_paths = self.cf_matrix(self.train_data_loader)
+            #confusion_matrix, precision, recall, incorrect_paths = self.cf_matrix(self.train_data_loader)
             with open(self.log_filepath, 'a') as f:
                 print("epoch", self.epoch)
                 f.write(json.dumps(
-                    [self.epoch, self.trainpath, loss.item(), training_accuracy, precision, recall, incorrect_paths, confusion_matrix.tolist()]) + "\n")
+                    [self.epoch, self.trainpath, loss.item(), training_accuracy]) + "\n") # precision, recall, confusion_matrix.tolist()]) + "\n")
 
                 if len(accuracy) == 5:
                     accuracy.pop(0)
@@ -224,7 +227,7 @@ class Training:
 
     def configure_log(self):
         with open(self.log_filepath, 'w') as f:
-            f.write(json.dumps(['epoch', 'netnumber' 'loss', 'training_accuracy', 'precision', 'recall', 'incorrect_paths', 'confusion_matrix']) + "\n")
+            f.write(json.dumps(['epoch', 'netnumber' 'loss', 'training_accuracy']) + "\n") #, 'precision', 'recall', 'confusion_matrix']) + "\n")
 
 
 class Ensemble:
@@ -239,8 +242,8 @@ class Ensemble:
         for folder in self.folders:
             self.trainings.append(Training(FILEPATH, folder, EPOCHS, batch, kernel, SEED, NET_NAME, GPU))
 
-        for model in self.trainings:
-            model.train()
+        for training in self.trainings:
+            training.train()
 
         self.test_output()
 
@@ -254,23 +257,32 @@ class Ensemble:
                 
                 test_images, labels, path = data
                 outputs = []
-                data = []
-                for model in self.trainings:
-                    outputs.append(model(test_images))
+                output_data = []
+                for training in self.trainings:
+                    outputs.append(training.model(test_images).data)
                     #compare all four, put remaining in data
-                data = torch.cat(outputs, 1)
-
+                output_data = torch.cat((outputs[0], outputs[1], outputs[2], outputs[3]), 1)
                 #dump data to a new file
-                fileout = open("NEWEST_ENSEMBLE_OUTPUT.txt","w") 
-                fileout.write(data)
+                fileout = open("NEWEST_ENSEMBLE_OUTPUT.txt","w")
+                fileout.write(str(outputs[0].size()))
+                fileout.write(str(outputs[1].size())) 
+                fileout.write(str(outputs[2].size()))
+                fileout.write(str(outputs[3].size())) 
+                fileout.write(str(output_data))
+                fileout.write(str(output_data.size()))
                 fileout.close()
 
                 #calculate accuracy
-                _, predicted = torch.max(data, 1)
-                predicted = predicted.numpy()
+                _, predicted = torch.max(output_data, 1)
+                
+                print(str(predicted))
+                #corrected_predicted = torch.tensor()
                 mappings = {0:6, 1:8, 2:9, 3:11, 4:1, 5:2, 6:5, 7:10, 8:3, 9:4, 10:13, 11:0, 12:7, 13:12}
-                for i in predicted:
-                    i = mappings[i]
+                print(predicted.size())
+                print(list(predicted.size()))
+                for i in range(0, list(predicted.size())[0]):
+                    predicted[i] = torch.tensor(mappings[predicted[i].item()])
+                print(str(predicted))
 
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
