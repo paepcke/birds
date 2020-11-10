@@ -14,12 +14,12 @@ from datetime import datetime, date, time
 
 
 class BasicNet(nn.Module):
-    def __init__(self, batch_size=32, kernel_size=5, processor=None):
+    def __init__(self, num_class, batch_size=32, kernel_size=5, processor=None):
         super(BasicNet, self).__init__()
-        self.gpu = processor
+        self.gpu = processorc
         self.bs = batch_size
         self.ks = kernel_size
-        self.num_class = 20
+        self.num_class = num_class
         self.conv1 = nn.Conv2d(3, 6, self.ks)
         self.pool = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(6, self.bs, self.ks)
@@ -46,7 +46,6 @@ class Resnet18Grayscale(nn.Module):
     '''
     A Resnet18 variant that accepts single-channel
     grayscale images instead of RGB.
-
     Using this class saves space from not having
     to replicate our single-layer spectrograms three
     times to pretend they are RGB images.
@@ -60,7 +59,6 @@ class Resnet18Grayscale(nn.Module):
         '''
         Args and kwargs as per https://github.com/pytorch/vision/blob/master/torchvision/models/resnet.py
         class ResNet.__init__()
-
         '''
         # The [2,2,2,2] is an instruction to the
         # superclass' __init__() for how many layers
@@ -100,8 +98,6 @@ class Resnet18Grayscale(nn.Module):
         Returns device where model resides.
         Can use like this to move a tensor
         to wherever the model is:
-
             some_tensor.to(<model_instance>.device())
-
         '''
         return next(self.parameters()).device
