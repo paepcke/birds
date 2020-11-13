@@ -1,9 +1,9 @@
 """
-File Name: display.py
-Authors: Leo Glikbarg, Amy Dunphy
-Owner: Stanford Center for Conservation Biology
+To display a log file, enter it as a parameter when you
+call display.py from the command line. display.py creates an interactive window to view the training results as recorded
+in a .jsonl log file.
 
-Displays the training results as recorded in a .jsonl log file.
+**Ex: "python display.py my_log_file.jsonl"**
 """
 
 import sys
@@ -17,9 +17,6 @@ import seaborn as sns
 import math
 import warnings
 
-# the absolute or relative filepath to the log file to display
-LOG_FILEPATH = '/Users/LeoGl/Documents/bird/02-11-2020_13-08_K7_B32.jsonl'
-
 # The default dimensions of the entire window
 WIDTH = 1500
 HEIGHT = 1000
@@ -27,16 +24,24 @@ HEIGHT = 1000
 
 class App(QMainWindow):
 	"""
-	QT Window class which contains all QT widgets
+	QT Window class which contains all QT widgets.
+
+	:param log_filepath: the absolute or relative path of the log file to be displayed
+	:type log_filepath: str
+
 	"""
 
 	def __init__(self, log_filepath):
-		"""
-		:param log_filepath: the absolute or relative path of the log file to be displayed
+		"""Constructor method
 		"""
 		super().__init__()
 		# initialize the file reader
-		self.file = FileRead(LOG_FILEPATH)
+		try:
+			open(log_filepath, 'r')
+		except OSError:
+			print("ERROR: log file not found")
+			exit()
+		self.file = FileRead(log_filepath)
 
 		# sets the size and shape of the window
 		self.title = 'Birdsong Classifier'
@@ -57,15 +62,15 @@ class App(QMainWindow):
 
 class FileRead:
 	"""
-	Parses the log file, and stores data
-
-	Parses the file line by line, stores relevant info, runs basic data analysis of info (ie. MAP) and has methods to
+	Parses the log file, and stores data. Parses the file line by line, stores relevant info, runs basic data analysis of info (ie. MAP) and has methods to
 	fetch info.
+
+	:param log_filepath: the absolute or relative path of the log file to be displayed.
+	:type log_filepath: str
 	"""
 
 	def __init__(self, log_filepath):
-		"""
-		:param log_filepath: the absolute or relative path of the log file to be displayed
+		"""Constructor method
 		"""
 		self.LOG_FILEPATH = log_filepath
 
@@ -90,9 +95,7 @@ class FileRead:
 
 	def getKernelBatch(self):
 		"""
-		Get the kernel and batch size of the model
-
-		parses the log file and searches for the kernel and batch size which are then set in the appropriate fields.
+		Get the kernel and batch size of the model. Parses the log file and searches for the kernel and batch size which are then set in the appropriate fields.
 		"""
 		kernel_index = self.LOG_FILEPATH.find('K')
 		end_index = self.LOG_FILEPATH.find('.')
@@ -102,9 +105,7 @@ class FileRead:
 
 	def readLine(self):
 		"""
-		Parses the lof file and collects are important info
-
-		Parses the file line by line, and recording the confusion matrix, accuracies, loss, and misclassified sample
+		Parses the lof file and collects are important info. Parses the file line by line, and recording the confusion matrix, accuracies, loss, and misclassified sample
 		file names. Sets the attributes of the the FileRead() class to their appropriate values.
 		"""
 		not_EOF = True
@@ -158,9 +159,7 @@ class FileRead:
 
 	def genTru(self):
 		"""
-		Calculates a confusion matrix with only correct classifications
-
-		Removes all cells from the confusion matrix of the last epoch where the sample is misclassified.
+		Calculates a confusion matrix with only correct classifications. Removes all cells from the confusion matrix of the last epoch where the sample is misclassified.
 		"""
 		# move all misclassified samples to correct location, zeros out other cells
 		self.tru = self.confusion.copy()
@@ -172,9 +171,7 @@ class FileRead:
 
 	def calcNorm(self):
 		"""
-		Calculates a normalized confusion matrix
-
-		Normalizes the confusion matrix for the last epoch by the number of samples each species has.
+		Calculates a normalized confusion matrix. Normalizes the confusion matrix for the last epoch by the number of samples each species has.
 		"""
 		self.normal = self.confusion.copy()
 		self.normal[0:len(self.normal) - 1][0:len(self.normal[0]) - 1] = 0
@@ -188,6 +185,7 @@ class FileRead:
 		Calculates the mean average precision (MAP) of a confusion matrix.
 
 		:param confusion: a confusion matrix to calculate the MAP of. matrix of last epoch used if None
+		:type confusion: 3-d numpy array
 		"""
 		if confusion is None:
 			confusion = self.confusion
@@ -290,19 +288,16 @@ class FileRead:
 
 class OverallWidget(QWidget):
 	"""
-	The Overall Widget for the window
+	The Overall Widget for the window. Wrapper/container for all the other widget in the window.
 
-	Wrapper/container for all the other widget in the window.
+	:param parent: A parent widget of this widget
+	:type parent: parent widget, optional
+	:param file: A parsed file's data
+	:type file: FileRead object
 	"""
 
 	def __init__(self, parent, file):
-		"""
-		Parameters
-		----------
-		parent : parent widget, optional
-			A parent widget of this widget
-		file : FileRead object
-			A parsed file's data
+		"""Constructor method
 		"""
 		super(QWidget, self).__init__(parent)
 		self.layout = QHBoxLayout(self)
@@ -317,19 +312,16 @@ class OverallWidget(QWidget):
 
 class LeftSideWidget(QWidget):
 	"""
-	Widget for left-side of window
+	Widget for left-side of window. Creates two graphs that together show loss, accuracy, and MAP vs epoch.
 
-	Creates two graphs that together show loss, accuracy, and MAP vs epoch.
+	:param parent: A parent widget of this widget
+	:type parent: parent widget, optional
+	:param file: A parsed file's data
+	:type file: FileRead object
 	"""
 
 	def __init__(self, parent, file):
-		"""
-		Parameters
-		----------
-		parent : parent widget, optional
-			A parent widget of this widget
-		file : FileRead object
-			A parsed file's data
+		"""Constructor method
 		"""
 		super(QWidget, self).__init__(parent)
 		self.layout = QVBoxLayout(self)
@@ -343,19 +335,16 @@ class LeftSideWidget(QWidget):
 
 class PlotLoss(QWidget):
 	"""
-	Plot of Loss vs Epoch
+	Plot of Loss vs Epoch. Creates a widget that is a graph of loss vs epoch.
 
-	Creates a widget that is a graph of loss vs epoch.
+	:param parent: A parent widget of this widget
+	:type parent: parent widget, optional
+	:param file: A parsed file's data
+	:type file:	FileRead object
 	"""
 
 	def __init__(self, parent, file):
-		"""
-		Parameters
-		----------
-		parent : parent widget, optional
-			A parent widget of this widget
-		file : FileRead object
-			A parsed file's data
+		"""Constructor method
 		"""
 		super(QWidget, self).__init__(parent)
 		# set figure size, widget size
@@ -378,19 +367,17 @@ class PlotLoss(QWidget):
 
 class PlotAccuracy(QWidget):
 	"""
-	Plot of Accuracy and MAP vs Epoch
+	Plot of Accuracy and MAP vs Epoch. Creates a widget that is a graph of training accuracy, testing accuracy, and
+	MAP vs epoch.
 
-	Creates a widget that is a graph of training accuracy, testing accuracy, and MAP vs epoch.
+	:param parent: A parent widget of this widget
+	:type parent: parent widget, optional
+	:param file: A parsed file's data
+	:type file: FileRead object
 	"""
 
 	def __init__(self, parent, file):
-		"""
-		Parameters
-		----------
-		parent : parent widget, optional
-			A parent widget of this widget
-		file : FileRead object
-			A parsed file's data
+		"""Constructor method
 		"""
 		super(QWidget, self).__init__(parent)
 		# set figure size, widget size
@@ -415,19 +402,16 @@ class PlotAccuracy(QWidget):
 
 class RightSideWidget(QWidget):
 	"""
-	Widget for right-side of window
+	Widget for right-side of window. Creates labels with info about the model, and the training results. Graphs a normalized confusion matrix.
 
-	Creates labels with info about the model, and the training results. Graphs a normalized confusion matrix.
+	:param parent: A parent widget of this widget
+	:type parent: parent widget, optional
+	:param file: A parsed file's data
+	:type file:	FileRead object
 	"""
 
 	def __init__(self, parent, file):
-		"""
-		Parameters
-		----------
-		parent : parent widget, optional
-			A parent widget of this widget
-		file : FileRead object
-			A parsed file's data
+		"""Constructor method
 		"""
 		super(QWidget, self).__init__(parent)
 		self.layout = QVBoxLayout(self)
@@ -481,21 +465,18 @@ class RightSideWidget(QWidget):
 
 class PlotConfusion(QWidget):
 	"""
-	Confusion Matrix widget
-
-	Sets the axis labels, the size of the figure, and the whole widget. Initializes miscellaneous values, sets labels
+	Confusion Matrix widget. Sets the axis labels, the size of the figure, and the whole widget. Initializes miscellaneous values, sets labels
 	and values, and then graphs the confusion matrix as a normalized heatmap. Creates a connection between a motion
 	event and the OnMotion method.
+
+	:param parent: A parent widget of this widget
+	:type parent: parent widget, optional
+	:param file: A parsed file's data
+	:type parent: FileRead object
 	"""
 
 	def __init__(self, parent, file):
-		"""
-		Parameters
-		----------
-		parent : parent widget, optional
-			A parent widget of this widget
-		file : FileRead object
-			A parsed file's data
+		"""Constructor method
 		"""
 
 		# axis_labels = ['AMADEC', 'ARRAUR','CORALT','DYSMEN', 'EUPIMI','HENLES','HYLDEC','LOPPIT', 'TANGYR', 'TANICT']
@@ -559,5 +540,5 @@ if __name__ == '__main__':
 	"""creates and runs a QT app which displays information stored at LOG_FILEPATH"""
 	warnings.filterwarnings("ignore", category=DeprecationWarning)
 	app = QApplication(sys.argv)
-	x = App(LOG_FILEPATH)
+	x = App(sys.argv[1])
 	sys.exit(app.exec_())
