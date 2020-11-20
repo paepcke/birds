@@ -15,9 +15,10 @@ import sys
 sys.path.insert(0, os.path.abspath('../'))
 sys.path.insert(0, os.path.abspath('../src'))
 sys.path.insert(0, os.path.abspath('..'))
-sys.path.insert(0, os.path.abspath('.'))
-sys.path.insert(0, os.path.abspath('/Users/LeoGl/PycharmProjects/Bird_Classifier/birds/src/'))
-sys.path.insert(0, os.path.abspath('/Users/LeoGl/PycharmProjects/Bird_Classifier/birds/data_augmentation/src'))
+sys.path.insert(0, os.path.abspath('/home/docs/checkouts/readthedocs.org/user_builds/stanford-ccb-bird-classifier/checkouts/latest/src/'))
+sys.path.insert(0, os.path.abspath('/home/docs/checkouts/readthedocs.org/user_builds/stanford-ccb-bird-classifier/checkouts/latest/data_augmentation/src/'))
+# sys.path.insert(0, os.path.abspath('/Users/LeoGl/PycharmProjects/Bird_Classifier/birds/src/'))
+# sys.path.insert(0, os.path.abspath('/Users/LeoGl/PycharmProjects/Bird_Classifier/birds/data_augmentation/src'))
 
 
 # -- Project information -----------------------------------------------------
