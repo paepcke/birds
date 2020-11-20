@@ -1,8 +1,8 @@
-.. _nets_label:
+.. _download_label:
 
-src/nets.py
+src/recording_download.py
 ========================================================
 
-.. automodule:: nets
+.. automodule:: recording_download
     :members:
     :exclude-members:

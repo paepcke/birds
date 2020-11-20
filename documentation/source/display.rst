@@ -1,4 +1,4 @@
-Displaying Training Results
+src/display.py
 ========================================================
 
 .. automodule:: display

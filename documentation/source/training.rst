@@ -1,4 +1,6 @@
-Training the Model
+.. _training_label:
+
+src/training.py
 ========================================================
 
 .. automodule:: training

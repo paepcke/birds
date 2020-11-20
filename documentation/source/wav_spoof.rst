@@ -1,8 +1,6 @@
-.. _nets_label:
-
-src/nets.py
+data_augmentation/src/WavSpoofer.py
 ========================================================
 
-.. automodule:: nets
+.. automodule:: WavSpoofer
     :members:
     :exclude-members:

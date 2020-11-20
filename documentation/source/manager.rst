@@ -1,8 +1,8 @@
-.. _nets_label:
+.. _manager_label:
 
-src/nets.py
+src/manager.py
 ========================================================
 
-.. automodule:: nets
+.. automodule:: manager
     :members:
     :exclude-members:

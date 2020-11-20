@@ -7,16 +7,19 @@ Documentation for the Stanford CCB Bird Classifier!
 ========================================================
 .. image:: nature-3308161_1920.jpg
 
+Contents:
+------------------
+
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
 
-   display
-   nets
-   training
+   setup
+   train&eval
+   files
+
 
 Indices and tables
-==================
+------------------
 
 * :ref:`genindex`
 * :ref:`modindex`
