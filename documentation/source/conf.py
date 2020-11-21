@@ -20,6 +20,8 @@ sys.path.insert(0, os.path.abspath('/home/docs/checkouts/readthedocs.org/user_bu
 # sys.path.insert(0, os.path.abspath('/Users/LeoGl/PycharmProjects/Bird_Classifier/birds/src/'))
 # sys.path.insert(0, os.path.abspath('/Users/LeoGl/PycharmProjects/Bird_Classifier/birds/data_augmentation/src'))
 
+autodoc_mock_imports = ["WavSpoofer", "recording_download", "download", "wav_spoof"]
+
 
 # -- Project information -----------------------------------------------------
 
@@ -52,8 +54,6 @@ language = '.py'
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = []
-autodoc_mock_imports = ["wav_spoof", "download"]
-
 
 # -- Options for HTML output -------------------------------------------------
 
