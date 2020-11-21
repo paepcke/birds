@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.abspath('/home/docs/checkouts/readthedocs.org/user_bu
 # sys.path.insert(0, os.path.abspath('/Users/LeoGl/PycharmProjects/Bird_Classifier/birds/src/'))
 # sys.path.insert(0, os.path.abspath('/Users/LeoGl/PycharmProjects/Bird_Classifier/birds/data_augmentation/src'))
 
-autodoc_mock_imports = ["WavSpoofer", "recording_download", "download", "wav_spoof"]
+autodoc_mock_imports = ["soundfile"]
 
 
 # -- Project information -----------------------------------------------------
