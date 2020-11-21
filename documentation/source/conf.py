@@ -12,6 +12,7 @@
 #
 import os
 import sys
+from mock import Mock
 sys.path.insert(0, os.path.abspath('../'))
 sys.path.insert(0, os.path.abspath('../src'))
 sys.path.insert(0, os.path.abspath('..'))
@@ -20,7 +21,8 @@ sys.path.insert(0, os.path.abspath('/home/docs/checkouts/readthedocs.org/user_bu
 # sys.path.insert(0, os.path.abspath('/Users/LeoGl/PycharmProjects/Bird_Classifier/birds/src/'))
 # sys.path.insert(0, os.path.abspath('/Users/LeoGl/PycharmProjects/Bird_Classifier/birds/data_augmentation/src'))
 
-autodoc_mock_imports = ["soundfile"]
+# autodoc_mock_imports = ["soundfile"]
+sys.modules['soundfile'] = Mock()
 
 
 # -- Project information -----------------------------------------------------
