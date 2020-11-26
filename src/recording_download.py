@@ -7,9 +7,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy import signal
 from scipy.signal import butter
+from scipy.signal import lfilter
 import soundfile as sf
 import librosa
 import librosa.display
+import noisereduce as nr
+import os
 
 # A list of the scientific names for the bird species in this study
 
@@ -40,7 +43,7 @@ def download_bird(bird):
     return birdname
 
 
-def get_data(birdname):
+def get_data(birdname, out_dir):
     """
     Opens a specifc recording of a bird, filters the audio and converts it to a spectrogram which is saved.
 
@@ -56,13 +59,13 @@ def get_data(birdname):
     for i in range(0, int(dur/5)):
         audio, sr = librosa.load(filepath, offset=5.0 * i, duration=5.0, sr=None)
         # filter the bird audio
-        audio = filter_bird(birdname, str(i), audio, sr)
+        audio = filter_bird(birdname, str(i), audio, sr, out_dir)
     
         # create and save spectrogram
         create_spectrogram(birdname, str(i), audio, sr)
     
     
-def filter_bird(birdname, instance, audio, sr):
+def filter_bird(birdname, instance, audio, sr, out_dir):
     """
     Opens a specifc recording of a bird, filters the audio and converts it to a spectrogram which is saved.
 
@@ -78,11 +81,18 @@ def filter_bird(birdname, instance, audio, sr):
     """
     #bandpass
     b, a = define_bandpass(2000, 3500, sr)
+    # below 2khz
     output = lfilter(b, a, audio)
 
-    #write filtered file
-    outfile = './Birdsong_Filtered/' + birdname + instance + '.wav' 
-    librosa.output.write_wav(outfile, output, sr)
+    # noise reduction
+    # select section of data that is noise
+    noisy_part = output[0:1000]
+    # perform noise reduction
+    reduced_noise = nr.reduce_noise(audio_clip=output, noise_clip=noisy_part, verbose=True)
+
+    # write filtered file
+    outfile = out_dir + birdname + instance + '.wav'
+    sf.write(outfile, reduced_noise, sr)
     return output
 
 
@@ -141,11 +151,20 @@ if __name__ == '__main__':
     Downloads all the recordings for all the species in the study and converts them to filtered logarithmic mel
     spectrograms.
     """
-    for i in range(0, 13):
-        birdname = birds[i]
-        response = requests.get("https://www.xeno-canto.org/api/2/recordings?query=" + birdname + "+len:5-60+q_gt:C")
-        data = response.json()
+    # for i in range(0, 13):
+    #     birdname = birds[i]
+    #     response = requests.get("https://www.xeno-canto.org/api/2/recordings?query=" + birdname + "+len:5-60+q_gt:C")
+    #     data = response.json()
+    #
+    #     for bird in data['recordings']:
+    #         birdname = download_bird(bird)   #downloads the bird and returns the important part of filename
+    #         get_data(birdname)
 
-        for bird in data['recordings']:
-            birdname = download_bird(bird)   #downloads the bird and returns the important part of filename
-            get_data(birdname)
+    filepath_in = "/Users/LeoGl/Documents/Filtering/BIRDSONG/"
+    filepath_out = "/Users/LeoGl/Documents/Filtering/Birdsong_Filtered/"
+    for species in os.listdir(filepath_in):
+        for sample in os.listdir(filepath_in + species):
+            audio, sr = librosa.load(filepath_in + species + "/" + sample, sr=None)
+            instance = ""
+            birdname = "filt_" + sample
+            filter_bird(birdname, instance, audio, sr, filepath_out + species + "/")
