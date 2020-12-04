@@ -15,25 +15,20 @@ from nets import BasicNet
 import json
 
 IMG_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif', '.tiff', '.webp')
-# FILEPATH = "/Users/amyd/Desktop/Projects/birds/First_Test/"
-# FILEPATH = "/home/data/birds/Birdsong_Spectrograms_Augmented/"
-# FILEPATH = "/home/data/birds/Birdsong_Spectrograms/"
-#FILEPATH = "/home/data/birds/NEW_BIRDSONG/"
 FILEPATH = "/home/data/birds/ENSEMBLE_DATA/"
-# FILEPATH = "/Users/LeoGl/PycharmProjects/bird/First_Test/"
+
 EPOCHS = 6
 SEED = 42
 BATCH_SIZE = 32
 KERNEL_SIZE = 7
 NET_NAME = 'BasicNet'
-# NET_NAME = 'Resnet18'
 GPU = 0
+
 
 class ImageFolderWithPaths(datasets.ImageFolder):
     """Custom dataset that includes image file paths. Extends
     torchvision.datasets.ImageFolder
     """
-
     def __init__(self, root, transform=None, target_transform=None,
                  loader=datasets.folder.default_loader, is_valid_file=None):
         super(datasets.ImageFolder, self).__init__(root, loader, IMG_EXTENSIONS if is_valid_file is None else None,
@@ -52,7 +47,9 @@ class ImageFolderWithPaths(datasets.ImageFolder):
         tuple_with_path = (original_tuple + (path,))
         return tuple_with_path
 
-    
+
+#Primary training class. Creates one net, and trains it. Contains methods for outputting 
+#confusion matrix, accuracy, and other stats, and for logging them. 
 class Training:
     def __init__(self, file_path, train_path, epochs, batch_size, kernel_size, seed=42, net_name='BasicNet', gpu=0):
         # handle seed
@@ -60,11 +57,11 @@ class Training:
             self.set_seed(seed)
 
         # define device used
+        #at some point may be worth putting different nets on different parts of cuda for speed
         self.device = torch.device("cuda:" + str(gpu) if (torch.cuda.is_available() and gpu is not None) else "cpu")
         print(self.device)
 
         # variables
-
         self.EPOCHS = epochs
         self.epoch = 0
         self.BATCH_SIZE = batch_size
@@ -72,22 +69,21 @@ class Training:
         self.filepath = file_path
         self.trainpath = train_path
 
-        # configure log file
+        # configure log json file
         now = datetime.now()
         self.log_filepath = now.strftime("%d-%m-%Y") + '_' + now.strftime("%H-%M") + "_K" + str(
             self.KERNEL_SIZE) + '_B' + str(self.BATCH_SIZE) + '.jsonl'
         self.configure_log()
 
-
         # configure net
         self.train_data_loader, self.test_data_loader, self.num_classes = self.import_data()
-        print(self.num_classes)
         self.model = self.get_net(net_name, self.num_classes, self.BATCH_SIZE, self.KERNEL_SIZE, GPU)
         self.optimizer = optim.SGD(self.model.parameters(), lr=0.001, momentum=0.9)
         #lambda1 = lambda epoch: 0.01 * (1.00 ** self.epoch)
         #self.scheduler = optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda1, last_epoch=-1)
         self.loss_func = nn.CrossEntropyLoss()
 
+    #Not currently in use, relevant if we want to test different net architectures
     def get_net(self, net_name, num_class, batch_size, kernel_size, gpu):
         if net_name == 'BasicNet':
             return BasicNet(num_class, batch_size, kernel_size, gpu)
@@ -97,24 +93,23 @@ class Training:
         else:
             return BasicNet(num_class, batch_size, kernel_size, gpu)
 
-            # set the seed across all different necessary platforms
-
+    # set the seed across all different necessary platforms
     # to allow for comparison of different model seeding.
     def set_seed(self, seed):
         torch.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
-        # Not totally sure what these two do!
+        # Not totally sure what these two do! leave them in, I guess? 
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
     # access data
+    # returns the training dataloader, testing dataloader, and number of classes (to be passed as parameter to net)
     def import_data(self):
-        # define the transform to be done on all images
+        # define the transform to be done on all images -- converts to tensor and resizes
         transform_img = transforms.Compose([
             transforms.Resize((400, 400)),  # should actually be 1:3 but broke the system
             transforms.ToTensor()])
 
-        
         train_data = ImageFolderWithPaths(root=self.filepath + self.trainpath, transform=transform_img)
         train_data_loader = data.DataLoader(train_data, batch_size=self.BATCH_SIZE, shuffle=True, num_workers=0,
                                             pin_memory=True)
@@ -130,14 +125,15 @@ class Training:
         num_classes = len(train_data.class_to_idx)
         return train_data_loader, test_data_loader, num_classes
 
+    #main train loop
+    #also calls testing
     def train(self):
         # Training
         accuracy = []
         self.epoch = 0
         diff_avg = 100
         loss = 0
-        while (diff_avg >= 0.05 or self.epoch <= 15) and self.epoch <= 10:
-            # for epoch in range(self.EPOCHS):
+        while (diff_avg >= 0.03 or self.epoch <= 15) and self.epoch <= 65: 
             self.epoch += 1
             loss_out = 0
             for i, (image, label, path) in enumerate(self.train_data_loader):
@@ -150,12 +146,19 @@ class Training:
                 #self.scheduler.step()
 
             training_accuracy = self.test(self.train_data_loader)
-            #testing_accuracy = self.test(self.test_data_loader)
-            #confusion_matrix, precision, recall, incorrect_paths = self.cf_matrix(self.train_data_loader)
+            #there are errors with confusion matrix calculation on first epoch sometimes
+            try:
+                confusion_matrix, precision, recall, incorrect_paths = self.cf_matrix(self.train_data_loader)
+            except: 
+                print("error with confusion matrix generation")
+                confusion_matrix = None
+                precision = None    
+                recall = None
+
             with open(self.log_filepath, 'a') as f:
                 print("epoch", self.epoch)
                 f.write(json.dumps(
-                    [self.epoch, self.trainpath, loss.item(), training_accuracy]) + "\n") # precision, recall, confusion_matrix.tolist()]) + "\n")
+                    [self.epoch, self.trainpath, loss.item(), training_accuracy, precision, recall, confusion_matrix.tolist()]) + "\n")
 
                 if len(accuracy) == 5:
                     accuracy.pop(0)
@@ -190,7 +193,7 @@ class Training:
                     correct += (predicted == labels).sum().item()
         return 100 * correct / total
 
-    # return the confusion matrix, followed by precision and recall
+    # return the confusion matrix, precision, and recall
     def cf_matrix(self, data_loader):
         list_predicted = []
         list_labels = []
@@ -227,29 +230,37 @@ class Training:
 
     def configure_log(self):
         with open(self.log_filepath, 'w') as f:
-            f.write(json.dumps(['epoch', 'netnumber' 'loss', 'training_accuracy']) + "\n") #, 'precision', 'recall', 'confusion_matrix']) + "\n")
+            f.write(json.dumps(['epoch', 'netnumber' 'loss', 'training_accuracy', 'precision', 'recall', 'confusion_matrix']) + "\n")
 
-
+#Class that creates multiple Training objects
 class Ensemble:
     def __init__(self):
         self.trainings = []
+        #list of folders with training data, under parent directory FILEPATH defined at top of file
         self.folders = ['train1/', 'train2/', 'train3/', 'train4/']
 
+    #create and instantiate a Training object (ie. a net) for each othe folders in self.folders
     def train_models(self):
         kernel = 7
         batch = 64
         
         for folder in self.folders:
+            #FILEPATH is parent folder defined at top of file
             self.trainings.append(Training(FILEPATH, folder, EPOCHS, batch, kernel, SEED, NET_NAME, GPU))
 
+        #train the nets
         for training in self.trainings:
             training.train()
 
         self.test_output()
 
+    #test output of the four nets by combining + testing on testing dataset
+    #I'm still sketched out by this whole function, I want to test it more rigorously 
+    #to ensure it's actually doing what's expected
     def test_output(self):
         correct = 0
         total = 0
+        #all of the Training objects have a test dataloader, this grabs it from the first one
         data_loader = self.trainings[0].test_data_loader
 
         with torch.no_grad():
@@ -258,38 +269,43 @@ class Ensemble:
                 test_images, labels, path = data
                 outputs = []
                 output_data = []
+                #gets output of each net
                 for training in self.trainings:
                     outputs.append(training.model(test_images).data)
-                    #compare all four, put remaining in data
+
+                #concatenates the outputs, then calls torch.max across each row
                 output_data = torch.cat((outputs[0], outputs[1], outputs[2], outputs[3]), 1)
-                #dump data to a new file
-                fileout = open("NEWEST_ENSEMBLE_OUTPUT.txt","w")
-                fileout.write(str(outputs[0].size()))
-                fileout.write(str(outputs[1].size())) 
-                fileout.write(str(outputs[2].size()))
-                fileout.write(str(outputs[3].size())) 
-                fileout.write(str(output_data))
-                fileout.write(str(output_data.size()))
-                fileout.close()
+                _, predicted = torch.max(output_data, 1)
 
                 #calculate accuracy
-                _, predicted = torch.max(output_data, 1)
-                
-                print(str(predicted))
-                #corrected_predicted = torch.tensor()
+
+                #mappings are manually entered, as they depend on the human decision of how to sort the dataset
+                #the testing dataset goes from 0-13 in alphabetical order
+                #the training datasets go in order (train1, train2, etc.) and alphabetical order within that
                 mappings = {0:6, 1:8, 2:9, 3:11, 4:1, 5:2, 6:5, 7:10, 8:3, 9:4, 10:13, 11:0, 12:7, 13:12}
-                print(predicted.size())
-                print(list(predicted.size()))
+                #print(predicted.size())
+                #print(list(predicted.size()))
                 for i in range(0, list(predicted.size())[0]):
                     predicted[i] = torch.tensor(mappings[predicted[i].item()])
-                print(str(predicted))
+                #print(str(predicted))
+
+                #dump data to a new file
+                fileout = open("NEWEST_ENSEMBLE_OUTPUT.txt","a")
+                fileout.write("predicted is" + str(predicted))
+                fileout.write("actual is" + str(labels))
+                fileout.close()
 
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
         print("accuracy here")
         print(100 * correct / total)
+        fileout = open("NEWEST_ENSEMBLE_OUTPUT.txt","a")
+        fileout.write("final accuracy is" + str(100 * correct / total))
+        fileout.close()
 
 
+    #currently untested, might be broken
+    #runs through a variety of kernel/batch sizes
     def test_bed():
         kernel_upper = 9
         kernel_lower = 7
@@ -310,7 +326,6 @@ class Ensemble:
 
 
 if __name__ == '__main__':
-    # test_bed()
     birdsong = Ensemble()
     birdsong.train_models()
 
