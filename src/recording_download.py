@@ -1,5 +1,5 @@
 """
-Functions involved in downloading birds from xeno-canto
+Functions involved in downloading birds from xeno-canto and afiltering, augmenting, and sorting those downloads.
 """
 import requests
 import json
@@ -13,6 +13,7 @@ import librosa
 import librosa.display
 import noisereduce as nr
 import os
+import sys
 
 # A list of the scientific names for the bird species in this study
 
@@ -23,12 +24,14 @@ birds = ['Tangara+gyrola', 'Amazilia+decora', 'Hylophilus+decurtatus', 'Arremon+
          'Empidonax+flaviventris']
 
 
-def download_bird(bird):
+def download_bird(bird, out_dir):
     """
     Downloads all recording of a specifc bird species from zeno-canto
 
     :param bird: the scientific name of the bird to be downloaded
     :type bird: str
+    :param out_dir: the relative or absolute file path to a directory to put the output files
+    :type out_dir: str
     :returns birdname: returns the bird's scientific name + recording id
     """
     #download file
@@ -37,42 +40,45 @@ def download_bird(bird):
 
     #write to file
     birdname = bird['gen'] + bird['sp'] + bird['id'] 
-    filepath = './Birdsong/' + birdname + '.wav' 
+    filepath = out_dir + birdname + '.wav' 
     with open(filepath, 'wb') as f:
         f.write(birdsong.content)           
     return birdname
 
 
-def get_data(birdname, out_dir):
+def get_data(birdname, in_dir, out_dir):
     """
     Opens a specifc recording of a bird, filters the audio and converts it to a spectrogram which is saved.
 
     :param birdname: the bird's scientific name + recording id
     :type birdname: str
+    :param in_dir: the relative or absolute file path to a directory to fetch the files from
+    :type in_dir: str
+    :param out_dir: the relative or absolute file path to a directory to put the output files
+    :type out_dir: str
     """
     # read back from file
-    filepath = './Birdsong/' + birdname + '.wav'
+    filepath = in_dir + birdname
     
-    audiotest, sr = librosa.load(filepath, sr=None)      # fix this
+    audiotest, sr = librosa.load(filepath, sr=None)   
     dur = librosa.get_duration(audiotest, sr)
-    
+
+    # split the audio and filter
     for i in range(0, int(dur/5)):
         audio, sr = librosa.load(filepath, offset=5.0 * i, duration=5.0, sr=None)
         # filter the bird audio
-        audio = filter_bird(birdname, str(i), audio, sr, out_dir)
+        audio = filter_bird(birdname, audio, sr)
+        # output the filtered audio
+        outfile = out_dir + birdname[:len(birdname) - 4] + str(i) + ".wav"
+        librosa.output.write_wav(outfile, audio, sr)
+        
     
-        # create and save spectrogram
-        create_spectrogram(birdname, str(i), audio, sr)
-    
-    
-def filter_bird(birdname, instance, audio, sr, out_dir):
+def filter_bird(birdname, audio, sr):
     """
     Opens a specifc recording of a bird, filters the audio and converts it to a spectrogram which is saved.
 
     :param birdname: the bird's scientific name + recording id
     :type birdname: str
-    :param instance: which chronological 5s segment of the orginal recording recording this clip is from
-    :type instance: int
     :param audio: the librosa audio data of the 5s recording to be filtered
     :type audio: audio time
     :param sr: the sample rate of the audio
@@ -88,12 +94,7 @@ def filter_bird(birdname, instance, audio, sr, out_dir):
     # select section of data that is noise
     noisy_part = output[0:1000]
     # perform noise reduction
-    reduced_noise = nr.reduce_noise(audio_clip=output, noise_clip=noisy_part, verbose=True)
-
-    # write filtered file
-    outfile = out_dir + birdname + instance + '.wav'
-    sf.write(outfile, reduced_noise, sr)
-    return output
+    return nr.reduce_noise(audio_clip=output, noise_clip=noisy_part, verbose=True, n_grad_freq=0, n_std_thresh=2)
 
 
 def define_bandpass(lowcut, highcut, sr, order = 2):
@@ -117,7 +118,7 @@ def define_bandpass(lowcut, highcut, sr, order = 2):
     return b, a
 
 
-def create_spectrogram(birdname, instance, audio, sr, n_mels = 128):
+def create_spectrogram(birdname, instance, audio, sr, out_dir, n_mels = 128):
     """
     Filters audio and converts it to a spectrogram which is saved.
 
@@ -129,11 +130,13 @@ def create_spectrogram(birdname, instance, audio, sr, n_mels = 128):
     :type audio: audio time
     :param sr: the sample rate of the audio
     :type sr: int
+    :param out_dir: the relative or absolute file path to a directory to put the output files
+    :type out_dir: str
     :param n_mels: the number of mel bands in the spectrogram
     :type n_mels: int
     """
     # create a mel spectrogram
-    spectrogramfile = './Birdsong_Spectrograms/' + birdname + instance + '.jpg'
+    spectrogramfile = out_dir + birdname[:len(birdname) - 4] + '.jpg'
     mel = librosa.feature.melspectrogram(audio, sr=sr, n_mels=n_mels)
     # create a logarithmic mel spectrogram
     log_mel = librosa.power_to_db(mel, ref=np.max)
@@ -148,23 +151,26 @@ def create_spectrogram(birdname, instance, audio, sr, n_mels = 128):
 
 if __name__ == '__main__':
     """
-    Downloads all the recordings for all the species in the study and converts them to filtered logarithmic mel
-    spectrograms.
+    Parses the command line parameters and calls the appropriate functions..
     """
-    # for i in range(0, 13):
-    #     birdname = birds[i]
-    #     response = requests.get("https://www.xeno-canto.org/api/2/recordings?query=" + birdname + "+len:5-60+q_gt:C")
-    #     data = response.json()
-    #
-    #     for bird in data['recordings']:
-    #         birdname = download_bird(bird)   #downloads the bird and returns the important part of filename
-    #         get_data(birdname)
-
-    filepath_in = "/Users/LeoGl/Documents/Filtering/BIRDSONG/"
-    filepath_out = "/Users/LeoGl/Documents/Filtering/Birdsong_Filtered/"
-    for species in os.listdir(filepath_in):
-        for sample in os.listdir(filepath_in + species):
-            audio, sr = librosa.load(filepath_in + species + "/" + sample, sr=None)
+    if len(sys.argv) == 4:
+        filepath_in = str(sys.argv[2])
+        filepath_out = str(sys.argv[3])
+        download = False
+        for sample in os.listdir(filepath_in):
+            audio, sr = librosa.load(filepath_in + sample, sr=None)
             instance = ""
-            birdname = "filt_" + sample
-            filter_bird(birdname, instance, audio, sr, filepath_out + species + "/")
+            if sys.argv[1] == "-f":
+                get_data(sample, filepath_in, filepath_out)
+            elif sys.argv[1] == "-s":
+                create_spectrogram(sample, instance, audio, sr, filepath_out)
+            elif sys.argv[1] == "-d":
+                download = True
+                break
+            else:
+                print("ERROR: invalid flag argument")
+        if download:
+            download_bird(sys.arv[2], sys.argv[3])
+    else:
+        print("ERROR: invlaid number of arguments")
+        

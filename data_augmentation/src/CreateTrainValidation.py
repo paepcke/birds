@@ -20,7 +20,7 @@ import os
 import random
 import sys
 
-FILEPATH = '/home/data/birds/NEW_BIRDSONG/current_files/'
+FILEPATH = '/home/data/birds/NEW_BIRDSONG/EXTRA_FILTERED/ALL_SPECTROGRAMS/'
 SPLIT = 0.8
 
 
@@ -51,7 +51,7 @@ def manual_split(split, starting_filepath):
 
 if __name__ == '__main__':
     """main method"""
-    if len(sys.argv) > 1:
-        manual_split(SPLIT, sys.argv[1])
+    if len(sys.argv) > 2:
+        manual_split(SPLIT, sys.argv[1]])
     else:
         manual_split(SPLIT, FILEPATH)

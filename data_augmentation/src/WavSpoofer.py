@@ -6,53 +6,66 @@ import random
 import os
 import numpy as np
 import math
+import sys
 
 BACKGROUND_NOISE_PATH = "/Users/lglik/Code/birds/data_augmentation/lib/default_background"
-DESTINATION_PATH = "/Users/LeoGl/PycharmProjects/bird/wav_test/experimental/dest/"
-SOURCE_FOLDER_PATH = "/Users/LeoGl/PycharmProjects/bird/wav_test/experimental/source/"
+DESTINATION_PATH = "/home/data/birds/NEW_BIRDSONG/EXTRA_FILTERED/CALL_FILTERED_FULL_AUG"
+SOURCE_FOLDER_PATH = "/home/data/birds/NEW_BIRDSONG/EXTRA_FILTERED/CALL_FILTERED_TIMESHIFT"
 SPECIES = ""
 
 
-def time_shift(species=None):
+def time_shift(in_dir, out_dir, species=None):
     """
     Performs a time shift on all the wav files in the species directory. The shift is 'rolling' such that
     no information is lost.
-
+    
+    :param in_dir: the path to the directory to fetch samples from
+    :type in_dir: str
+    :param out_dir: the path to the directory to save the new files to
+    :type out_dir: str
     :param species: the directory names of the species to modify the wav files of. If species=None, all subdirectories will be used.
     :type species: str
     """
-    for file_name in os.listdir(SOURCE_FOLDER_PATH):
+    for file_name in os.listdir(in_dir):
         if species is None or species in file_name:
+            y, sample_rate = librosa.load(in_dir + file_name)
+            length = 95 * librosa.get_duration(y, sample_rate)
             # shifts the recording by a random amount between 0 and 5 seconds by a multiple of 10 ms
-            amount = random.randrange(0, 500, 1) * 0.01
-            y0, sample_rate0 = librosa.load(SOURCE_FOLDER_PATH + "/" + file_name, offset=amount)
-            y1, sample_rate1 = librosa.load(SOURCE_FOLDER_PATH + "/" + file_name, duration=amount)
+            amount = random.randrange(1, int(length), 1) * 0.01
 
+            # create two seperate sections of the audio
+            y0, sample_rate0 = librosa.load(in_dir + file_name, offset=amount)
+            y1, sample_rate1 = librosa.load(in_dir + file_name, duration=amount)
+                
             # combine the wav data
             y2 = np.append(y0, y1)
 
             # output the new wav data to a file
-            librosa.output.write_wav(DESTINATION_PATH + "/" + file_name[:len(file_name) - 4]
+            librosa.output.write_wav(out_dir + file_name[:len(file_name) - 4]
                                      + "_shift" + str(amount) + ".wav", y2, sample_rate0)
 
 
-def change_volume(species=None):
+def change_volume(in_dir, out_dir, species=None):
     """
     Adjusts the volume of all the wav files in the species directory.
-
+    
+    :param in_dir: the path to the directory to fetch samples from
+    :type in_dir: str
+    :param out_dir: the path to the directory to save the new files to
+    :type out_dir: str
     :param species: the directory names of the species to modify the wav files of. If species=None, all subdirectories will be used.
     :type species: str
     """
-    for file_name in os.listdir(SOURCE_FOLDER_PATH):
+    for file_name in os.listdir(in_dir):
         if species is None or species in file_name:
-            y0, sample_rate0 = librosa.load(SOURCE_FOLDER_PATH + "/" + file_name)
+            y0, sample_rate0 = librosa.load(in_dir + file_name)
 
             # adjust the volume
             factor = random.randrange(-12, 12, 1)
             y1 = y0 * (10 ** (factor / 20))
 
             # output the new wav data to a file
-            librosa.output.write_wav(DESTINATION_PATH + "/" + file_name[:len(file_name) - 4]
+            librosa.output.write_wav(out_dir + file_name[:len(file_name) - 4]
                                      + "_volume" + str(factor) + ".wav", y1, sample_rate0)
 
 
@@ -94,6 +107,16 @@ def add_background(species=None):
 
 
 if __name__ == '__main__':
-    """The main method. Put whatever types of spoofing you want to run here:"""
-    time_shift()
+    """The main method. Parses command-line input and calls appropriate functions:"""
+    if len(sys.argv) >= 4:
+        in_dir = sys.argv[2]
+        out_dir = sys.argv[3]
+        if sys.argv[1] == "-ts":
+            time_shift(in_dir, out_dir)
+        elif sys.argv[1] == "-cv":
+            change_volume(in_dir, out_dir)
+        else:
+            print("ERROR: invlaid parameter flag")
+    else:
+        print("ERROR: invalid arguements")
 
