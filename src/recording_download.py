@@ -40,7 +40,7 @@ def download_bird(bird, out_dir):
 
     #write to file
     birdname = bird['gen'] + bird['sp'] + bird['id'] 
-    filepath = out_dir + birdname + '.wav' 
+    filepath = os.path.join(out_dir, birdname) + '.wav' 
     with open(filepath, 'wb') as f:
         f.write(birdsong.content)           
     return birdname
@@ -48,7 +48,7 @@ def download_bird(bird, out_dir):
 
 def get_data(birdname, in_dir, out_dir):
     """
-    Opens a specifc recording of a bird, filters the audio and converts it to a spectrogram which is saved.
+    Opens a specifc recording of a bird, filters the audio and saves the new version.
 
     :param birdname: the bird's scientific name + recording id
     :type birdname: str
@@ -58,19 +58,23 @@ def get_data(birdname, in_dir, out_dir):
     :type out_dir: str
     """
     # read back from file
-    filepath = in_dir + birdname
+    filepath = os.path.join(in_dir, birdname)
     
     audiotest, sr = librosa.load(filepath, sr=None)   
     dur = librosa.get_duration(audiotest, sr)
 
     # split the audio and filter
-    for i in range(0, int(dur/5)):
-        audio, sr = librosa.load(filepath, offset=5.0 * i, duration=5.0, sr=None)
-        # filter the bird audio
-        audio = filter_bird(birdname, audio, sr)
-        # output the filtered audio
-        outfile = out_dir + birdname[:len(birdname) - 4] + str(i) + ".wav"
-        librosa.output.write_wav(outfile, audio, sr)
+    audio = filter_bird(birdname, audiotest, sr)
+    outfile = os.path.join(out_dir, birdname[:len(birdname) - 4]) + ".wav"
+    librosa.output.write_wav(outfile, audio, sr)
+        
+    #for i in range(0, int(dur/5)):
+    #    audio, sr = librosa.load(filepath, offset=5.0 * i, duration=5.0, sr=None)
+    #    # filter the bird audio
+    #    audio = filter_bird(birdname, audio, sr)
+    #    # output the filtered audio
+    #    outfile = os.path.join(out_dir, birdname[:len(birdname) - 4]) + str(i) + ".wav"
+    #    librosa.output.write_wav(outfile, audio, sr)
         
     
 def filter_bird(birdname, audio, sr):
@@ -90,11 +94,15 @@ def filter_bird(birdname, audio, sr):
     # below 2khz
     output = lfilter(b, a, audio)
 
+    # normalize the volume
+    output = output / np.max(output)
+
     # noise reduction
     # select section of data that is noise
     noisy_part = output[0:1000]
+    return output
     # perform noise reduction
-    return nr.reduce_noise(audio_clip=output, noise_clip=noisy_part, verbose=True, n_grad_freq=0, n_std_thresh=2)
+    #return nr.reduce_noise(audio_clip=output, noise_clip=noisy_part, verbose=True, n_grad_freq=0, n_std_thresh=2)
 
 
 def define_bandpass(lowcut, highcut, sr, order = 2):
@@ -136,7 +144,7 @@ def create_spectrogram(birdname, instance, audio, sr, out_dir, n_mels = 128):
     :type n_mels: int
     """
     # create a mel spectrogram
-    spectrogramfile = out_dir + birdname[:len(birdname) - 4] + '.jpg'
+    spectrogramfile = os.path.join(out_dir, birdname[:len(birdname) - 4]) + '.jpg'
     mel = librosa.feature.melspectrogram(audio, sr=sr, n_mels=n_mels)
     # create a logarithmic mel spectrogram
     log_mel = librosa.power_to_db(mel, ref=np.max)
@@ -158,7 +166,7 @@ if __name__ == '__main__':
         filepath_out = str(sys.argv[3])
         download = False
         for sample in os.listdir(filepath_in):
-            audio, sr = librosa.load(filepath_in + sample, sr=None)
+            audio, sr = librosa.load(os.path.join(filepath_in, sample), sr=None)
             instance = ""
             if sys.argv[1] == "-f":
                 get_data(sample, filepath_in, filepath_out)

@@ -34,24 +34,21 @@ def manual_split(split, starting_filepath):
     :type starting_filepath: str
     """
     birdlist = os.listdir(starting_filepath)
-    print(birdlist)
     if '.DS_STORE' in birdlist:
         birdlist.remove('.DS_Store')  # ghost file
-    print(birdlist)
     for bird in birdlist:
-        for file in os.listdir(starting_filepath + bird):
-            print(file)
+        for file in os.listdir(os.path.join(starting_filepath, bird)):
             if random.random() >= split:
-                os.rename(starting_filepath + bird + '/' + file, starting_filepath +
-                          "../validation/" + bird + "/" + file)
+                os.rename(os.path.join(starting_filepath, bird) + '/' + file, os.path.join(starting_filepath,
+                          "../validation/") + bird + "/" + file)
             else:
-                os.rename(starting_filepath + bird + '/' + file, starting_filepath +
-                          "../train/" + bird + "/" + file)
+                os.rename(os.path.join(starting_filepath, bird) + '/' + file, os.path.join(starting_filepath,
+                          "../train/") + bird + "/" + file)
 
 
 if __name__ == '__main__':
     """main method"""
-    if len(sys.argv) > 2:
-        manual_split(SPLIT, sys.argv[1]])
+    if len(sys.argv) >= 2:
+        manual_split(SPLIT, sys.argv[1])
     else:
         manual_split(SPLIT, FILEPATH)

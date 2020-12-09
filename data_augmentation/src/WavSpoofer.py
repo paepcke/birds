@@ -28,20 +28,20 @@ def time_shift(in_dir, out_dir, species=None):
     """
     for file_name in os.listdir(in_dir):
         if species is None or species in file_name:
-            y, sample_rate = librosa.load(in_dir + file_name)
+            y, sample_rate = librosa.load(os.path.join(in_dir, file_name))
             length = 95 * librosa.get_duration(y, sample_rate)
             # shifts the recording by a random amount between 0 and 5 seconds by a multiple of 10 ms
             amount = random.randrange(1, int(length), 1) * 0.01
 
             # create two seperate sections of the audio
-            y0, sample_rate0 = librosa.load(in_dir + file_name, offset=amount)
-            y1, sample_rate1 = librosa.load(in_dir + file_name, duration=amount)
+            y0, sample_rate0 = librosa.load(os.path.join(in_dir, file_name), offset=amount)
+            y1, sample_rate1 = librosa.load(os.path.join(in_dir, file_name), duration=amount)
                 
             # combine the wav data
             y2 = np.append(y0, y1)
 
             # output the new wav data to a file
-            librosa.output.write_wav(out_dir + file_name[:len(file_name) - 4]
+            librosa.output.write_wav(os.path.join(out_dir, file_name[:len(file_name) - 4])
                                      + "_shift" + str(amount) + ".wav", y2, sample_rate0)
 
 
@@ -58,14 +58,14 @@ def change_volume(in_dir, out_dir, species=None):
     """
     for file_name in os.listdir(in_dir):
         if species is None or species in file_name:
-            y0, sample_rate0 = librosa.load(in_dir + file_name)
+            y0, sample_rate0 = librosa.load(os.path.join(in_dir, file_name))
 
             # adjust the volume
             factor = random.randrange(-12, 12, 1)
             y1 = y0 * (10 ** (factor / 20))
 
             # output the new wav data to a file
-            librosa.output.write_wav(out_dir + file_name[:len(file_name) - 4]
+            librosa.output.write_wav(os.path.join(out_dir, file_name[:len(file_name) - 4])
                                      + "_volume" + str(factor) + ".wav", y1, sample_rate0)
 
 
@@ -81,10 +81,10 @@ def add_background(species=None):
         if species is None or species in file_name:
             for background_name in os.listdir(BACKGROUND_NOISE_PATH):
                 # load all of both wav files and determine the length of each
-                y0, sample_rate0 = librosa.load(BACKGROUND_NOISE_PATH + "/" + background_name)
+                y0, sample_rate0 = librosa.load(os.path.join(BACKGROUND_NOISE_PATH, background_name))
                 duration = int(librosa.get_duration(y0, sample_rate0))
                 start_loc = random.randrange(0, duration - 5, 1)
-                y1, sample_rate1 = librosa.load(SOURCE_FOLDER_PATH + "/" + file_name, duration=5)
+                y1, sample_rate1 = librosa.load(os.path.join(SOURCE_FOLDER_PATH, file_name), duration=5)
                 recording_length = librosa.core.get_duration(y=y1, sr=sample_rate1)
 
                 # load the source wav file and 5 seconds of the background file
@@ -93,16 +93,16 @@ def add_background(species=None):
                 if recording_length < 5:
                     dur_limit = math.floor(recording_length / 0.05) * 0.05
 
-                y2, sample_rate2 = librosa.load(BACKGROUND_NOISE_PATH + "/" + background_name, duration=dur_limit,
+                y2, sample_rate2 = librosa.load(os.path.join(BACKGROUND_NOISE_PATH + background_name), duration=dur_limit,
                                                 offset=start_loc)
-                y3, sample_rate3 = librosa.load(SOURCE_FOLDER_PATH + "/" + file_name, duration=dur_limit)
+                y3, sample_rate3 = librosa.load(os.path.join(SOURCE_FOLDER_PATH, file_name), duration=dur_limit)
 
                 # combine the wav data
                 y4 = y2 * (10 ** (-3 / 20)) + (y3 * (10 ** (-3 / 20)))
                 sr = int((sample_rate2 + sample_rate3) / 2)
 
                 # output the new wav data to a file
-                librosa.output.write_wav(DESTINATION_PATH + "/" + file_name[:len(file_name) - 4]
+                librosa.output.write_wav(os.path.join(DESTINATION_PATH, file_name[:len(file_name) - 4])
                                          + "_" + background_name[:len(file_name) - 4], y4, sr)
 
 
