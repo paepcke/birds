@@ -27,7 +27,8 @@ setup(
                         'matplotlib>=3.3.0',
                         'librosa>=0.7.2',
                         'scipy>=1.5.2',
-                        'SoundFile>=0.10.3.post1'
+                        'SoundFile>=0.10.3.post1',
+                        'logging-singleton>=0.1',
                         ],
 
     tests_require    =['pytest',

@@ -51,14 +51,14 @@ class ImageFolderWithPaths(datasets.ImageFolder):
 #Primary training class. Creates one net, and trains it. Contains methods for outputting 
 #confusion matrix, accuracy, and other stats, and for logging them. 
 class Training:
-    def __init__(self, file_path, train_path, epochs, batch_size, kernel_size, seed=42, net_name='BasicNet', gpu=0):
+    def __init__(self, file_path, train_path, epochs, batch_size, kernel_size, seed=42, net_name='BasicNet', gpu_index=0):
         # handle seed
         if seed is not None:
             self.set_seed(seed)
 
         # define device used
         #at some point may be worth putting different nets on different parts of cuda for speed
-        self.device = torch.device("cuda:" + str(gpu) if (torch.cuda.is_available() and gpu is not None) else "cpu")
+        self.device = torch.device("cuda:" + str(gpu_index) if (torch.cuda.is_available() and gpu_index is not None) else "cpu")
         print(self.device)
 
         # variables
@@ -84,14 +84,14 @@ class Training:
         self.loss_func = nn.CrossEntropyLoss()
 
     #Not currently in use, relevant if we want to test different net architectures
-    def get_net(self, net_name, num_class, batch_size, kernel_size, gpu):
+    def get_net(self, net_name, num_class, batch_size, kernel_size, gpu_index):
         if net_name == 'BasicNet':
-            return BasicNet(num_class, batch_size, kernel_size, gpu)
+            return BasicNet(num_class, batch_size, kernel_size, gpu_index)
         if NET_NAME == 'Resnet18':  # change this to use Andreas's Resnet
             return torch.hub.load('pytorch/vision:v0.6.0', 'resnet18', pretrained=False)
         # default to basic net
         else:
-            return BasicNet(num_class, batch_size, kernel_size, gpu)
+            return BasicNet(num_class, batch_size, kernel_size, gpu_index)
 
     # set the seed across all different necessary platforms
     # to allow for comparison of different model seeding.
@@ -326,6 +326,7 @@ class Ensemble:
 
 
 if __name__ == '__main__':
+    FILEPATH = "/home/data/birds/ENSEMBLE_DATA/"
     birdsong = Ensemble()
     birdsong.train_models()
 

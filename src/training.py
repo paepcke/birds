@@ -2,17 +2,18 @@ import os
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.autograd import Variable
 import torch.utils.data as data
-import torchvision
 from torchvision import transforms
 from torchvision import datasets
 import torch.optim as optim
-import torch.multiprocessing
-import logging
-from datetime import datetime, date, time
-from nets import BasicNet
+#import torch.multiprocessing
+from logging_service import LoggingService
+from datetime import datetime
+from nets import BasicNet, get_resnet18_partially_trained
 import json
+from sklearn.metrics import confusion_matrix
+
+from pathlib import Path
 
 IMG_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif', '.tiff', '.webp')
 # FILEPATH = "/Users/amyd/Desktop/Projects/birds/First_Test/"
@@ -25,6 +26,8 @@ SEED = 42
 BATCH_SIZE = 32
 KERNEL_SIZE = 7
 NET_NAME = 'BasicNet'
+SAMPLE_WIDTH  = 400 # pixels
+SAMPLE_HEIGHT = 400 # pixels
 # NET_NAME = 'Resnet18'
 GPU = 0
 
@@ -53,13 +56,23 @@ class ImageFolderWithPaths(datasets.ImageFolder):
 
     
 class Training:
-    def __init__(self, file_path, epochs, batch_size, kernel_size, seed=42, net_name='BasicNet', gpu=0):
+    def __init__(self, 
+                 file_path, 
+                 epochs, 
+                 batch_size, 
+                 kernel_size, 
+                 seed=42, 
+                 net_name='BasicNet', 
+                 gpu_index=0, 
+                 unit_testing=False):
+        
+        self.log = LoggingService()
         # handle seed
         if seed is not None:
             self.set_seed(seed)
 
         # define device used
-        self.device = torch.device("cuda:" + str(gpu) if (torch.cuda.is_available() and gpu is not None) else "cpu")
+        self.device = torch.device("cuda:" + str(gpu_index) if (torch.cuda.is_available() and gpu_index is not None) else "cpu")
         print(self.device)
 
         # variables
@@ -75,23 +88,31 @@ class Training:
             self.KERNEL_SIZE) + '_B' + str(self.BATCH_SIZE) + '.jsonl'
         self.configure_log()
 
+        if unit_testing:
+            return
 
         # configure net
         self.model = self.get_net(net_name, self.BATCH_SIZE, self.KERNEL_SIZE, GPU)
+
         self.train_data_loader, self.test_data_loader = self.import_data()
         self.optimizer = optim.SGD(self.model.parameters(), lr=0.001, momentum=0.9)
         #lambda1 = lambda epoch: 0.01 * (1.00 ** self.epoch)
         #self.scheduler = optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda1, last_epoch=-1)
         self.loss_func = nn.CrossEntropyLoss()
 
-    def get_net(self, net_name, batch_size, kernel_size, gpu):
+    def get_net(self, net_name, batch_size, kernel_size, gpu_index):
         if net_name == 'BasicNet':
-            return BasicNet(batch_size, kernel_size, gpu)
-        if NET_NAME == 'Resnet18':  # change this to use Andreas's Resnet
+            return BasicNet(batch_size, kernel_size, gpu_index)
+        if net_name == 'Resnet18Partial':
+            # Number of classes is the number of subdirectories
+            # under the train (or validate) directory:
+            num_classes = len(os.listdir(os.path.join(FILEPATH, 'train')))
+            return get_resnet18_partially_trained(num_classes)
+        if net_name == 'Resnet18':  # change this to use Andreas's Resnet
             return torch.hub.load('pytorch/vision:v0.6.0', 'resnet18', pretrained=False)
         # default to basic net
         else:
-            return BasicNet(batch_size, kernel_size, gpu)
+            return BasicNet(batch_size, kernel_size, gpu_index)
 
             # set the seed across all different necessary platforms
 
@@ -107,7 +128,7 @@ class Training:
     def import_data(self):
         # define the transform to be done on all images
         transform_img = transforms.Compose([
-            transforms.Resize((400, 400)),  # should actually be 1:3 but broke the system
+            transforms.Resize((SAMPLE_WIDTH, SAMPLE_HEIGHT)),  # should actually be 1:3 but broke the system
             transforms.ToTensor()])
 
         print(os.listdir(self.filepath+"train/"))
@@ -134,8 +155,21 @@ class Training:
             # for epoch in range(self.EPOCHS):
             self.epoch += 1
             loss_out = 0
-            for i, (image, label, path) in enumerate(self.train_data_loader):
+            self.model.train()
+            # Run through all test samples in the data loader.
+            # On each call the data loader delivers a tensor of
+            # shape:
+            #   (batch_size, 3, img_height, img_width)
+            # The 3 being one each for RGB:
+             
+            for i, (image, label, _path) in enumerate(self.train_data_loader):
                 self.optimizer.zero_grad()
+                # Outputs will be shape [batch-size, num-classes].
+                # Like this for batch size 4, and two classes:
+                # tensor([[-0.1354,  0.2330],
+                #         [ 0.2061,  0.7231],
+                #         [-0.0309,  0.5371],
+                #         [ 0.0192,  0.3640]], grad_fn=<AddmmBackward>)                
                 outputs = self.model(image)
                 loss = self.loss_func(outputs, label)
                 loss_out += loss
@@ -144,8 +178,10 @@ class Training:
                 #self.scheduler.step()
 
             training_accuracy = self.test(self.train_data_loader)
-            testing_accuracy = self.test(self.test_data_loader)
+            testing_accuracy  = self.test(self.test_data_loader)
             confusion_matrix, precision, recall, incorrect_paths = self.cf_matrix(self.test_data_loader)
+            
+            # Record performance during this epoch:
             with open(self.log_filepath, 'a') as f:
                 print("epoch", self.epoch)
                 f.write(json.dumps(
@@ -165,56 +201,68 @@ class Training:
     def test(self, data_loader):
         correct = 0
         total = 0
+        self.model.eval()
         with torch.no_grad():
-            if len(list(enumerate(data_loader))) == 3:
-                for test_step, data in enumerate(data_loader):
-                    test_images, labels = data
-                    outputs = self.model(test_images)
-                    _, predicted = torch.max(outputs.data, 1)
-                    total += labels.size(0)
-                    correct += (predicted == labels).sum().item()
-            else:
-                for test_step, data in enumerate(data_loader):
-                    test_images, labels, path = data
-                    outputs = self.model(test_images)
-                    _, predicted = torch.max(outputs.data, 1)
-                    total += labels.size(0)
-                    correct += (predicted == labels).sum().item()
+            
+            for _test_step, data in enumerate(data_loader):
+                test_images, labels, _path = data
+                # Feed batch-size images to the model.
+                # Outputs will be batch-size rows of num-classes
+                # elements each:
+
+                outputs = self.model(test_images)
+
+                # For each of the batch-size samples, get
+                # the maximum of the prediction for each class,
+                # plus that max value's index into its row
+                # (a.k.a. argmax).
+                # The '1' in the max call has max computed over 
+                # dimension 1 of outputs.data, i.e over the num-classes
+                # rows. Lengths of the max values and argmax
+                # will be batch-size:
+                 
+                _max_predictions, argmax_predicted = torch.max(outputs.data, 1)
+                total += labels.size(0)
+                correct += (argmax_predicted == labels).sum().item()
         return 100 * correct / total
 
     # return the confusion matrix, followed by precision and recall
     def cf_matrix(self, data_loader):
+        
         list_predicted = []
         list_labels = []
-        incorrect_paths = [[""]*20]*20
-        
-        precision = []
-        recall = []
+        num_classes = self.model.num_classes
+        incorrect_paths = [[""]*num_classes]*num_classes
         
         with torch.no_grad():
-            for test_step, data in enumerate(data_loader):
+            for _test_step, data in enumerate(data_loader):
                 test_images, labels, path = data
+                
+                # Turn the tuple of full paths into 
+                # an array of basenames only: 
+                #     ('/foo/bar/car.png', '/foo/fum/cat.png')
+                # ==> ['car', 'cat']
+                sample_ids = [Path(sample_path).stem for sample_path in path]
                 model_output = self.model(test_images)
                 _, predicted = torch.max(model_output.data, 1)
-                list_predicted.extend(list(predicted.numpy()))
-                list_labels.extend(list(labels.numpy()))
-                is_correct = (predicted == labels).sum().item()
+
+                # Build up a list of *all* predictions (over all samples): 
+                list_predicted.extend(predicted.tolist())
+                # ... and a parallel list of all corresponding labels:
+                list_labels.extend(labels.tolist())
+                
+                # Build a matrix species name lists: each 
+                # cell is a comma separated list of class
+                # names that were confused:
+                
                 for x in range(len(labels) - 1):
                     if predicted[x] != labels[x]:
-                        path[x] = path[x].split('/')[len(path[x].split('/')) - 1]
-                        incorrect_paths[predicted[x]][labels[x]] += (path[x] + ",")
-        
-        confusion = np.zeros((self.model.num_class, self.model.num_class))
-        for pred, truth in zip(list_predicted, list_labels):
-            confusion[pred][truth] += 1
-            
-        for i in range (0, len(confusion)):
-            if sum(confusion[i]) != 0:
-                precision.append(confusion[i][i] / sum(confusion[i]))
-            else:
-                precision.append(0.0)
-            recall.append(confusion[i][i] / sum(confusion[:,i]))
-        
+                        # path[x] = path[x].split('/')[len(path[x].split('/')) - 1]
+                        incorrect_paths[predicted[x]][labels[x]] += (sample_ids[x] + ",")
+
+        confusion = confusion_matrix(list_labels, list_predicted)
+        recall = np.diag(confusion) / np.sum(confusion, axis = 1)
+        precision = np.diag(confusion) / np.sum(confusion, axis = 0)
         return confusion, precision, recall, incorrect_paths
 
     def configure_log(self):

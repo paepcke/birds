@@ -1,0 +1,1 @@
+["epoch", "loss", "training_accuracy", "testing_accuracy", "precision", "recall", "incorrect_paths", "confusion_matrix"]

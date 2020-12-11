@@ -11,12 +11,14 @@ import torch.optim as optim
 import torch.multiprocessing
 import logging
 from datetime import datetime, date, time
+from torchvision import models
+from torchvision.models import resnet18
 
 
 class BasicNet(nn.Module):
     def __init__(self, num_class, batch_size=32, kernel_size=5, processor=None):
         super(BasicNet, self).__init__()
-        self.gpu = processorc
+        self.gpu = processor
         self.bs = batch_size
         self.ks = kernel_size
         self.num_class = num_class
@@ -40,6 +42,27 @@ class BasicNet(nn.Module):
         x = self.fc3(x)
         return x
 
+
+# Resnet18 retain 6 layers of pretraining.
+# Train the remaining 4 layers with your own
+# dataset:
+
+def get_resnet18_partially_trained(num_classes, num_layers_to_retain=6):
+    model = resnet18(pretrained=True)
+    # Freeze the bottom num_layers_to_retain layers:
+    for (i, child) in enumerate(model.children()):
+        for param in child.parameters():
+            param.requires_grad = False
+        if i >= num_layers_to_retain:
+            break
+    num_in_features = model.fc.in_features
+    
+    model.fc = nn.Linear(num_in_features, num_classes)
+    
+    # Create a property on the model that 
+    # returns the number of output classes:
+    model.num_classes = model.fc.out_features
+    return model
 
 # class Resnet18Grayscale(ResNet):
 class Resnet18Grayscale(nn.Module):
