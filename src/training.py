@@ -67,13 +67,14 @@ class Training:
                  unit_testing=False):
         
         self.log = LoggingService()
+
         # handle seed
         if seed is not None:
             self.set_seed(seed)
 
         # define device used
         self.device = torch.device("cuda:" + str(gpu_index) if (torch.cuda.is_available() and gpu_index is not None) else "cpu")
-        print(self.device)
+        self.log.info(f"Computing device: {self.device}")
 
         # variables
         self.EPOCHS = epochs
@@ -131,7 +132,7 @@ class Training:
             transforms.Resize((SAMPLE_WIDTH, SAMPLE_HEIGHT)),  # should actually be 1:3 but broke the system
             transforms.ToTensor()])
 
-        print(os.listdir(self.filepath+"train/"))
+        self.log.info(f"Training files: {os.listdir(os.path.join(self.filepath, 'train'))}")
         train_data = ImageFolderWithPaths(root=self.filepath + "train/", transform=transform_img)
         train_data_loader = data.DataLoader(train_data, batch_size=self.BATCH_SIZE, shuffle=True, num_workers=0,
                                             pin_memory=True)
@@ -140,9 +141,10 @@ class Training:
         test_data_loader = data.DataLoader(test_data, batch_size=self.BATCH_SIZE, shuffle=True, num_workers=0,
                                            pin_memory=True)
 
-        print("Number of train samples: ", len(train_data))
-        print("Number of test samples: ", len(test_data))
-        print("Detected Classes are: ", train_data.class_to_idx)
+        self.log.info(f"Number of train samples: {len(train_data)}")
+        self.log.info(f"Number of test samples: {len(test_data)}")
+        self.log.info(f"Detected Classes are: {train_data.class_to_idx}")
+
         return train_data_loader, test_data_loader
 
     def train(self):
@@ -183,7 +185,9 @@ class Training:
             
             # Record performance during this epoch:
             with open(self.log_filepath, 'a') as f:
-                print("epoch", self.epoch)
+                
+                self.log.info(f"Epoch f{self.epoch}")
+                self.log.info(f"Writing results to log")
                 f.write(json.dumps(
                     [self.epoch, loss.item(), training_accuracy, testing_accuracy, precision, recall, incorrect_paths, confusion_matrix.tolist()]) + "\n")
 
