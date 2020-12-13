@@ -5,6 +5,7 @@ Created on Dec 6, 2020
 '''
 import glob
 import os
+from pathlib import Path
 import unittest
 
 from training import EPOCHS, SEED, BATCH_SIZE, KERNEL_SIZE
@@ -17,9 +18,11 @@ import training
 #******TEST_ALL = True
 TEST_ALL = False
 
-FILEPATH = os.path.join(os.path.dirname(__file__), 'data/')
+CURR_DIR = os.path.join(os.path.dirname(__file__))
+FILEPATH = os.path.join(CURR_DIR, 'data/')
 training.FILEPATH = FILEPATH
 NET_NAME = 'Resnet18Partial'
+
 
 
 class TestTraining(unittest.TestCase):
@@ -80,6 +83,18 @@ class TestTraining(unittest.TestCase):
 
     def tearDown(self):
         pass
+
+    #------------------------------------
+    # tearDownClass 
+    #-------------------
+    
+    @classmethod
+    def tearDownClass(cls):
+        # Remove the .jsonl result files created during
+        # training:
+        for res_file in Path(CURR_DIR).glob('*.jsonl'):
+            res_file.unlink()
+
     
     #------------------------------------
     # testGetNet 

@@ -10,6 +10,7 @@ import sys
 from sklearn.model_selection import StratifiedKFold
 from torchvision import datasets
 from torchvision import transforms
+from torchvision.datasets.folder import ImageFolder
 
 import numpy as np
 from training import Training
@@ -67,56 +68,22 @@ class cross_fold_split_and_validation:
         self.train_index = 0
         self.test_index = 0
 
+# Should actually be 1:3 but broke the system:
+SAMPLE_WIDTH  = 400 # pixels
+SAMPLE_HEIGHT = 400 # pixels
 
-class BirdDataset:
-    
-    # Should actually be 1:3 but broke the system:
-    SAMPLE_WIDTH  = 400 # pixels
-    SAMPLE_HEIGHT = 400 # pixels
+class BirdDataset(ImageFolder):
     
     IMG_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif', '.tiff', '.webp')
 
     def __init__(self, 
                  filepath,
-                 sample_width=BirdDataset.SAMPLE_WIDTH,
-                 sample_height=BirdDataset.SAMPLE_WIDTH,
+                 sample_width=SAMPLE_WIDTH,
+                 sample_height=SAMPLE_HEIGHT
                  ):
-        """Counts the number of classes, counts the number of samples in each class,
-        stores the samples with their associated labels.
-        Creates two ordered dicts: X and y. These map integers
-        to full species_sample_path paths of spectrogram images. Example
-        Two species, one with five samples, the other with three:
-            
-              X: 0: species0_img_file0
-                 1: species0_img_file1
-                       ...
-                 4: species0_img_file4
-                 
-                 5: species1_img_file0
-                 6: species1_img_file1
-                 7: species1_img_file2
-                 
-              y: 0: species0_folder_name
-                 1: species0_folder_name
-                      ...
-                 4: species0_folder_name
-                 5: species1_folder_name
-                 6: species1_folder_name
-                 7: species1_folder_name
-        """
-        assert os.path.exists(filepath)
-        # Define the transform to be done on all images
         transform_img = transforms.Compose([
-            transforms.Resize((BirdDataset.SAMPLE_WIDTH, BirdDataset.SAMPLE_HEIGHT)),  
+            transforms.Resize((sample_width, sample_height)),  # should actually be 1:3 but broke the system
             transforms.ToTensor()])
-        
-        super(datasets.ImageFolder, self).__init__(filepath,
-                                                   transform=transform_img,
-                                                   target_transform=None,
-                                                   loader=datasets.folder.default_loader,
-                                                   target_transform=None,
-                                                   is_valid_file=lambda file_path : Path(filepath.lower()).suffix in BirdDataset.IMG_EXTENSIONS
-                                                   )
 
         # Build three data structures:
         #     class_name --> class id int needed for model building
