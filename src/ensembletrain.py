@@ -47,7 +47,6 @@ class ImageFolderWithPaths(datasets.ImageFolder):
         tuple_with_path = (original_tuple + (path,))
         return tuple_with_path
 
-
 #Primary training class. Creates one net, and trains it. Contains methods for outputting 
 #confusion matrix, accuracy, and other stats, and for logging them. 
 class Training:
@@ -87,11 +86,11 @@ class Training:
     def get_net(self, net_name, num_class, batch_size, kernel_size, gpu):
         if net_name == 'BasicNet':
             return BasicNet(num_class, batch_size, kernel_size, gpu)
-        if NET_NAME == 'Resnet18':  # change this to use Andreas's Resnet
+        elif NET_NAME == 'Resnet18':  # change this to use Andreas's Resnet
             return torch.hub.load('pytorch/vision:v0.6.0', 'resnet18', pretrained=False)
         # default to basic net
         else:
-            return BasicNet(num_class, batch_size, kernel_size, gpu)
+            raise ValueError("Unknown net name")
 
     # set the seed across all different necessary platforms
     # to allow for comparison of different model seeding.
@@ -245,7 +244,7 @@ class Ensemble:
         batch = 64
         
         for folder in self.folders:
-            #FILEPATH is parent folder defined at top of file
+            #FILEPATH is parent s defined at top of file
             self.trainings.append(Training(FILEPATH, folder, EPOCHS, batch, kernel, SEED, NET_NAME, GPU))
 
         #train the nets
@@ -282,13 +281,12 @@ class Ensemble:
                 #mappings are manually entered, as they depend on the human decision of how to sort the dataset
                 #the testing dataset goes from 0-13 in alphabetical order
                 #the training datasets go in order (train1, train2, etc.) and alphabetical order within that
+                #I know this is cursed, someone fix this in the future lol
                 mappings = {0:6, 1:8, 2:9, 3:11, 4:1, 5:2, 6:5, 7:10, 8:3, 9:4, 10:13, 11:0, 12:7, 13:12}
-                #print(predicted.size())
-                #print(list(predicted.size()))
                 for i in range(0, list(predicted.size())[0]):
                     predicted[i] = torch.tensor(mappings[predicted[i].item()])
-                #print(str(predicted))
 
+                    
                 #dump data to a new file
                 fileout = open("NEWEST_ENSEMBLE_OUTPUT.txt","a")
                 fileout.write("predicted is" + str(predicted))
@@ -328,5 +326,4 @@ class Ensemble:
 if __name__ == '__main__':
     birdsong = Ensemble()
     birdsong.train_models()
-
 
