@@ -24,7 +24,6 @@ KERNEL_SIZE = 5
 NET_NAME = 'BasicNet'
 GPU = 0
 
-
 class cross_fold_split_and_validation:
     """
     A class that creates KFoldStratified splits of the data and then trains separate models and evaluates them with
@@ -61,8 +60,8 @@ class cross_fold_split_and_validation:
         self.X = OrderedDict()  # samples
         self.y = OrderedDict()  # labels
         self.file_list = []  # all of the samples
-        self.folder_list = []  # all of the classes
-        self.ident = 0  # the number of classes
+        self.folder_list = []  # all of the class_to_id
+        self.ident = 0  # the number of class_to_id
         self.count = 0  # the number of total samples
         self.train_index = 0
         self.test_index = 0
@@ -81,7 +80,7 @@ class BirdDataset:
                  sample_width=BirdDataset.SAMPLE_WIDTH,
                  sample_height=BirdDataset.SAMPLE_WIDTH,
                  ):
-        """Counts the number of classes, counts the number of samples in each class,
+        """Counts the number of class_to_id, counts the number of samples in each class,
         stores the samples with their associated labels.
         Creates two ordered dicts: X and y. These map integers
         to full species_sample_path paths of spectrogram images. Example
@@ -120,7 +119,7 @@ class BirdDataset:
 
         # Build three data structures:
         #     class_name --> class id int needed for model building
-        #                    No strings allowed for classes
+        #                    No strings allowed for class_to_id
         #     sample_id  --> sample file path
         #     sample_id  --> class id
         #
@@ -136,7 +135,7 @@ class BirdDataset:
         # IDs on the fly; class names are the folder names
         # without leading path:
         
-        self.classes = OrderedDict({os.path.basename(class_name) : class_id 
+        self.class_to_id = OrderedDict({os.path.basename(class_name) : class_id 
                             for class_id, class_name 
                              in enumerate(os.listdir(filepath))})
         self.sample_id_to_path = OrderedDict({})
@@ -149,7 +148,7 @@ class BirdDataset:
         
         for sample_folder in filepath:
             class_name    = os.path.basename(sample_folder)
-            class_id      = self.classes[class_name]
+            class_id      = self.class_to_id[class_name]
             
             # List of full paths to each sample of current class:
             folder_content  = os.listdir(sample_folder)

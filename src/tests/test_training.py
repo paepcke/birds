@@ -42,7 +42,7 @@ class TestTraining(unittest.TestCase):
         train_root         = os.path.join(FILEPATH, 'train')
         validate_root      = os.path.join(FILEPATH, 'validate')
         
-        # Number of classes is the number of subdirectories
+        # Number of class_to_id is the number of subdirectories
         # under the train (or validate) directory:
         cls.num_classes    = len(os.listdir(train_root))
         
@@ -117,13 +117,13 @@ class TestTraining(unittest.TestCase):
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def testImportData(self):
         (train_data_loader, test_data_loader) = self.training.import_data()
-        self.assertListEqual(train_data_loader.dataset.classes,
+        self.assertListEqual(train_data_loader.dataset.class_to_id,
                              ['DYSMEN_S', 'HENLES_S'])
         self.assertDictEqual(train_data_loader.dataset.class_to_idx,
                              {'DYSMEN_S': 0, 'HENLES_S': 1})
         self.assertEqual(len(train_data_loader.dataset), 12)
         
-        self.assertListEqual(test_data_loader.dataset.classes,
+        self.assertListEqual(test_data_loader.dataset.class_to_id,
                              ['DYSMEN_S', 'HENLES_S'])
         self.assertDictEqual(test_data_loader.dataset.class_to_idx,
                              {'DYSMEN_S': 0, 'HENLES_S': 1})
