@@ -5,9 +5,10 @@ Created on Dec 13, 2020
 '''
 
 from sklearn.model_selection._split import StratifiedKFold
+import torch
+from torch import unsqueeze, cat
 from torch.utils.data import DataLoader
 from torch.utils.data import DistributedSampler
-from torch.utils.data.sampler import Sampler, BatchSampler
 
 import numpy as np
 
@@ -38,7 +39,13 @@ class BirdDataLoader(DataLoader):
         '''
         
         fold_indices_sampler = SKFSampler(dataset, num_folds=num_folds)
-        self.sampler = fold_indices_sampler
+        self.sampler     = fold_indices_sampler
+        self.num_folds   = num_folds
+        # Total num of batches served when
+        # rotating through all folds is computed
+        # the first time __len__() is called:
+        
+        self.num_batches = None
         
         #***** delete
 #         self.sampler = BatchSampler(fold_indices_sampler,
@@ -62,27 +69,160 @@ class BirdDataLoader(DataLoader):
     #-------------------
 
     def __len__(self):
-        num_samples = len(self.sampler)
-        
-        # As many batches as can be filled
-        # with samples (the // operator rounds down)):
-         
-        num_batches = num_samples // self.batch_size
-        
-        if not self.drop_last and (num_samples % self.batch_size) > 0:
-            # Add the final partially filled batch, 
-            # if num_samples not a multiple of batches += 1
-            num_batches += 1
+        '''
+        Number of batches this loader will
+        feed out. Example:
+            o 12 samples total
+            o  3 folds
+            o  2 batch size
+            o  4 samples in each fold (12/3)
+            o  2 batches per fold (samples-each-fold / batch-size)
+            o  3 number of trips through folds
+            o  2 number of folds in each of the 3
+                 trips (num-folds - hold-out-fold)
+            o 12 batches total: batches-per-fold * folds-per-trip * num-folds 
+                   2*2*3 = 12
+        '''
+
+        # Compute number of batches only once:
+        if self.num_batches is None:
             
-        return num_batches
-    
+            # This computation can surely be more
+            # concise and direct. But it happens only
+            # once, and this step by step is easier
+            # on the eyes than one minimal expression:
+            num_samples      = len(self.sampler)
+            
+            # Rounded-down number of samples that fit into each fold:
+            samples_per_fold = num_samples // self.num_folds
+            batches_per_fold = samples_per_fold // self.batch_size
+            # For each of the num-folds trips, (num-folds - 1)*batches-per-fold
+            # are server out:
+            self.num_batches = self.num_folds * batches_per_fold * (self.num_folds - 1)
+            
+            # May have more samples than exactly fit into
+            # that total_batches number of batches. So there
+            # may be one more partially filled batch for every trip
+            # through the folds:
+            
+            remainder_samples = num_samples % self.num_batches 
+            
+            if not self.drop_last and remainder_samples > 0:
+                # Add the final partially filled batch, 
+                # if num_samples not a multiple of batches += 1
+                self.num_batches += 1
+            
+        return self.num_batches
+
     #------------------------------------
-    # __next__ 
+    # __iter__
     #-------------------
     
-    def __next__(self):
-        return next(self.sampler)
+    def __iter__(self):
+        # Call to __next__() returns
+        # a generator, which does the 
+        # right thing with next(), list(),
+        # and for loops. Return that iterator:
+        
+        return(self.__next__())
+    
+    #------------------------------------
+    # __next__
+    #-------------------
 
+    def __next__(self):
+        
+        self.curr_fold_idx = 0
+        for fold_train_ids, fold_test_ids in self.sampler:
+
+            # Keep track of which fold we are working
+            # on. Needed only as info for client; not
+            # used for logic in this method:
+            
+            self.curr_fold_idx += 1
+            
+            # fold_train_ids has all sample IDs
+            # to use for training in this fold. 
+            # The fold_test_ids holds the left-out
+            # sample IDs to use for testing once 
+            # the fold_train_ids have been served out
+            # one batch at a time.
+            
+            # Set this fold's test ids aside for client
+            # to retrieve via: get_fold_test_sample_ids()
+            # once they pulled all the batches of this
+            # fold:
+            self.curr_test_sample_ids = fold_test_ids
+            
+            num_train_sample_ids = len(fold_train_ids)
+            num_batches = num_train_sample_ids // self.batch_size
+            num_remainder_samples = num_train_sample_ids % self.batch_size
+            batch_start_idx = 0
+            
+            for _batch_count in range(num_batches):
+                
+                batch  = None
+                # Truth labels for each sample in 
+                # the current batch:
+                y      = []
+                batch_end_idx    = batch_start_idx + self.batch_size
+                curr_batch_range = range(batch_start_idx, batch_end_idx)
+                
+                for sample_id in curr_batch_range:
+                    
+                    # Get one pair: <img-tensor>, class_id_int:
+                    (img_tensor, label) = self.dataset[sample_id]
+                    expanded_img_tensor = unsqueeze(img_tensor, dim=0)
+                    batch = (cat((batch, expanded_img_tensor), dim=0)
+                              if batch is not None
+                            else expanded_img_tensor)
+                    y.append(label)
+                    
+                # Got one batch ready:
+                yield (batch, torch.tensor(y))
+                # Client consumed one batch in current fold.
+                # Next batch: Starts another batch size
+                # samples onwards in the train fold:
+                batch_start_idx += self.batch_size
+                continue
+            
+            # Done all full batches. Any partial batch 
+            # left over that we should include?
+            
+            if num_remainder_samples > 0 and not self.drop_last:
+                batch = None
+                y     = []
+                
+                for sample_id in range(batch_start_idx, 
+                                       batch_start_idx + num_remainder_samples):
+                    (img_tensor, label) = self.dataset[sample_id] 
+                    expanded_img_tensor = unsqueeze(img_tensor, dim=0)
+                    batch = (cat((batch, expanded_img_tensor))
+                              if batch is not None
+                            else expanded_img_tensor)
+                    y.append(label)
+                yield (batch, torch.tensor(y))
+            # Next fold:
+            continue
+
+    #------------------------------------
+    # get_curr_fold_idx 
+    #-------------------
+    
+    def get_curr_fold_idx(self):
+        return self.curr_fold_idx
+
+
+    #------------------------------------
+    # get_fold_test_sample_ids 
+    #-------------------
+    
+    def get_fold_test_sample_ids(self):
+        try:
+            return self.curr_test_sample_ids
+        except:
+            return None
+    
 
 # --------------------------- Class SKFSampler --------------
 

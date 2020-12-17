@@ -5,15 +5,13 @@ and then uses cross validation to train and validate models with different sets 
 from _collections import OrderedDict
 import os
 from pathlib import Path
-import sys
 
-from sklearn.model_selection import StratifiedKFold
+import torch
 from torchvision import datasets
 from torchvision import transforms
 from torchvision.datasets.folder import ImageFolder
 
 import numpy as np
-from training import Training
 
 
 # Should actually be 1:3 but broke the system:
@@ -151,6 +149,17 @@ class BirdDataset(ImageFolder):
     #-------------------
 
     def __getitem__(self, sample_id):
+        '''
+        Returns a two-tuple: image tensor, target class
+        
+        @param sample_id: Image sample identifier
+        @type sample_id: int
+        @return Image loaded as a PIL, then downsized,
+            and transformed to a tensor.
+        '''
 
-        img = datasets.folder.default_loader(self.sample_id_to_path[sample_id])
-        return (img, self.sample_id_to_class[sample_id])
+        img = self.loader(self.sample_id_to_path[sample_id])
+        img_tensor = self.transform(img)
+        label = self.sample_id_to_class[sample_id]
+
+        return (img_tensor, label)

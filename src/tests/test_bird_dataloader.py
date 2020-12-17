@@ -12,8 +12,8 @@ from bird_dataloader import BirdDataLoader, SKFSampler
 from bird_dataset import BirdDataset
 
 
-#TEST_ALL = True
-TEST_ALL = False
+TEST_ALL = True
+#TEST_ALL = False
 
 class TestBirdDataLoader(unittest.TestCase):
 
@@ -44,11 +44,11 @@ class TestBirdDataLoader(unittest.TestCase):
 
 
     #------------------------------------
-    # testSampler 
+    # test_sampler 
     #-------------------
     
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    def testSampler(self):
+    def test_sampler(self):
         
         sampler = SKFSampler(self.dataset, num_folds=3, shuffle=True)
         
@@ -81,14 +81,242 @@ class TestBirdDataLoader(unittest.TestCase):
             self.assertEqual(test_indices.all(), expected[i]['test_indices'].all())
 
     #------------------------------------
-    # testLoading
+    # test_loading_batches_fit_in_fold
     #-------------------
 
-    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    def testLoading(self):
-        dl = BirdDataLoader(self.dataset, batch_size=2, num_folds=3)
-        (sample, class_id) = next(dl)
-        print(sample, class_id) 
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_loading_batches_fit_in_fold(self):
+        '''
+        Case when the batch size neatly divides
+        into the number of samples. Example:
+        
+            num-samples = 12
+            batch-size  =  2
+            num-folds   = 12/2 = 6 batches
+        
+        In contrast to, say batch size 5, for which
+        two full batches can be served, but two samples
+        are left over. This case is tested in a separate
+        test method 
+        '''
+        batch_size        = 2
+        num_folds         = 3
+        num_samples       = 12 # 6 images each for 2 species
+        samples_per_fold  = num_samples / num_folds
+        unique_class_ids  = list(self.dataset.class_to_id.values())
+        
+        dl = BirdDataLoader(self.dataset, 
+                            batch_size=batch_size, 
+                            num_folds=num_folds)
+        
+        # Number of samples in our unittest *dataset*,
+        # i.e. not in the dataloader: six of one species, 
+        # and six of another:
+        
+        self.assertEqual(len(dl.dataset), num_samples)
+        
+        # Total number of batches we expect from 
+        # the dataloader; for the algorithm, see method
+        # __len__() in class BirdDataLoader:
+
+        num_batches_total = 12
+        
+        # But: length of the bird loader should be
+        # the number of batches it will feed out
+        #    num-samples / batch-size = 12/2 = 6   #<---- 4 (12-4)/2?
+        
+        self.assertEqual(len(dl), num_batches_total)
+
+        # Get an iterator over the data loader
+        # This step would happen automatically 
+        # if using a for loop: "for batch in dl:..."
+        it = iter(dl)
+        
+        (batch1, y1) = next(it)
+        # Tensor dimensions should be: batch size,
+        # 3 for RGB, pixel-height, pixel-width:
+         
+        self.assertTupleEqual(batch1.shape, (batch_size,3,400,400))
+        
+        # There should be one truth label for each
+        # sample in batch1:
+        
+        self.assertEqual(len(y1), batch_size)
+        
+        # Each truth label should be one of
+        # the class IDs that the underlying BirdDataset
+        # knows about:
+        
+        for class_label in y1:
+            self.assertIn(class_label, unique_class_ids)
+        
+        # The current fold's list of sample indices
+        # in the test fold should be as long as the
+        # number of samples in each fold:
+        #     num-samples / num-folds = 12 / 3 = 4 
+
+        self.assertEqual(len(dl.get_fold_test_sample_ids()),
+                         samples_per_fold)
+        
+        (batch2, _y2) = next(it)
+        self.assertTupleEqual(batch2.shape, (batch_size,3,400,400))
+        
+        # Start over with a new dataloader, same data,
+        # and count how many batches it servers out:
+        
+        dl = BirdDataLoader(self.dataset, 
+                            batch_size=batch_size, 
+                            num_folds=num_folds)
+
+        # We should have 4batches-per-fold - 2batches-pulled = 2
+        # more batches in the current first fold. Followed by 
+        # num_folds - 1 = 2 additional folds' worth of more batches:
+        #  
+        #  (3folds * 2batches-per-fold) - 2batches-already-pulled = 4
+        # 
+        # more batches:
+        
+        for i, _batch in enumerate(dl):
+            pass
+        
+        # The plus-1 is b/c i is zero-origin:
+        self.assertEqual(i+1, num_batches_total)
+        self.assertEqual(len(dl), num_batches_total)
+        
+        # Last fold's number of test sample ids
+        # should be the full length as in previous
+        # batches:
+        self.assertEqual(len(dl.get_fold_test_sample_ids()), 
+                         samples_per_fold)
+
+    #------------------------------------
+    # test_no_batch_filled 
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_no_batch_filled(self):
+        '''
+        Nasty case, when divisions between number
+        of samples, batch size, number of folds,
+        and distribution of classes does not come
+        out well. 
+        
+        We use all samples, as usual: 12. Set
+        batch_size to 3, and num_folds to 5. We
+        get cases of 9 training samples, and 3 test
+        samples:
+        
+        When batches fit: 9 train, 3 test:
+        
+            >>> fold_train_ids
+            array([ 2,  3,  4,  5,  7,  8,  9, 10, 11])
+        
+            >>> fold_test_ids
+            array([0, 1, 6])
+
+        And:
+		When batches have one left over: 10 train, 2 test:
+		
+		    >>> fold_train_ids
+		    array([ 0,  1,  2,  4,  5,  6,  7,  8, 10, 11])
+		
+		    >>> fold_test_ids
+		    array([3, 9])
+		
+		In this case, the number of full or partial batches 
+		for each of the five folds comes out like this:
+		
+		    Fold
+			   1 : full batch
+			          "           <-- Each batch is 3 samples,
+			          " 	          so 9 train, 3 test      
+			   2 : full batch      
+			          "
+			          "
+			   3 : full batch
+			          "
+			          "            <-- case of 10 train, 2 test
+			          1
+			   4 : full batch
+			          "
+			          "
+			          1
+			   5 : full batch
+			          "
+			          "
+			          1
+        '''
+        
+        batch_size   = 3
+        num_folds    = 5
+        _num_samples  = 12
+        
+        dl = BirdDataLoader(self.dataset, 
+                            batch_size=batch_size, 
+                            num_folds=num_folds)
+
+        num_samples_seen = 0
+        num_batches_seen = 0
+        for _i, (batch, _y) in enumerate(dl):
+            num_samples_seen += len(batch)
+            num_batches_seen += 1
+
+        self.assertEqual(num_batches_seen, 18)
+        self.assertEqual(num_samples_seen, 48)
+
+    #------------------------------------
+    # test_loading_batches_not_fitting_in_folds
+    #-------------------
+
+    #********Work on this
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_loading_batches_not_fitting_in_folds(self):
+
+        batch_size        = 2
+        num_folds         = 5   # Cause batches not to nicely
+                                # fit into their folds 
+        _num_samples      = 12  # 6 images each for 2 species
+        unique_class_ids  = list(self.dataset.class_to_id.values())
+
+        dl = BirdDataLoader(self.dataset, 
+                            batch_size=batch_size, 
+                            num_folds=num_folds)
+
+        it = iter(dl)
+
+        (batch1, y1) = next(it)
+        
+        # Tensor dimensions should be: batch size,
+        # 3 for RGB, pixel-height, pixel-width:
+         
+        self.assertTupleEqual(batch1.shape, (batch_size,3,400,400))
+        
+        # There should be one truth label for each
+        # sample in batch1:
+        
+        self.assertEqual(len(y1), batch_size)
+        
+        # Each truth label should be one of
+        # the class IDs that the underlying BirdDataset
+        # knows about:
+        
+        for class_label in y1:
+            self.assertIn(class_label, unique_class_ids)
+
+
+        dl = BirdDataLoader(self.dataset, 
+                            batch_size=batch_size, 
+                            num_folds=num_folds)
+
+        for i, _batch in enumerate(dl):
+            pass
+        
+        # Expect: 5 batches 
+        num_batches = 25
+        self.assertEqual(i+1, num_batches)
+        
+        
+        print('foo')
 
 # --------------------------------- Main --------------------
 if __name__ == "__main__":
