@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class BasicNet(nn.Module):
-    """
+  """
     A class defining the neural net.
 
     :param batch_size: An int used to define the batch size of each layer.
@@ -17,16 +17,13 @@ class BasicNet(nn.Module):
     :param processor: The number of the GPU to use. The CPU is used if None.
     :type processor: int
     """
-    def __init__(self, batch_size=32, kernel_size=5, processor=None):
-        """Constructor method
-        """
+    def __init__(self, num_class, batch_size=32, kernel_size=5, processor=None):
         super(BasicNet, self).__init__()
-        self.gpu = processor
+        self.gpu = processorc
         self.bs = batch_size
         self.ks = kernel_size
-        self.num_class = 20  # how many species or classes to use
+        self.num_class = num_class
 
-        # a mix of pooling and convolutional layers
         self.conv1 = nn.Conv2d(3, 6, self.ks)
         self.pool = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(6, self.bs, self.ks)
@@ -59,3 +56,4 @@ class BasicNet(nn.Module):
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
         return x
+
