@@ -56,10 +56,10 @@ class Training:
         if seed is not None:
             self.set_seed(seed)
 
-        # define device used
+        # define device_residence used
         #at some point may be worth putting different nets on different parts of cuda for speed
-        self.device = torch.device("cuda:" + str(gpu_index) if (torch.cuda.is_available() and gpu_index is not None) else "cpu")
-        print(self.device)
+        self.device_residence = torch.device_residence("cuda:" + str(gpu_index) if (torch.cuda.is_available() and gpu_index is not None) else "cpu")
+        print(self.device_residence)
 
         # variables
         self.EPOCHS = epochs

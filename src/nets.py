@@ -113,14 +113,14 @@ class Resnet18Grayscale(nn.Module):
         return out_probs
 
     # ------------------------------------
-    # device
+    # device_residence
     # -------------------
 
-    def device(self):
+    def device_residence(self):
         '''
-        Returns device where model resides.
+        Returns device_residence where model resides.
         Can use like this to move a tensor
         to wherever the model is:
-            some_tensor.to(<model_instance>.device())
+            some_tensor.to(<model_instance>.device_residence())
         '''
-        return next(self.parameters()).device
+        return next(self.parameters()).device_residence

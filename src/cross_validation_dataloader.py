@@ -4,18 +4,62 @@ Created on Dec 13, 2020
 @author: paepcke
 '''
 
-from sklearn.model_selection._split import StratifiedKFold
 import torch
 from torch import unsqueeze, cat
 from torch.utils.data import DataLoader
 from torch.utils.data import DistributedSampler
 
-import numpy as np
+from samplers import SKFSampler, DistributedSKFSampler
 
 
-class BirdDataLoader(DataLoader):
+class CrossValidatingDataLoader(DataLoader):
     '''
+    
+    Subclass of torch.utils.data.DataLoader. Provides
+    stratified k-fold crossvalidation in single-machine,
+    (optionally) single-GPU context.
+    
+    Instantiate this class if running only on a
+    single machine, optionally using a single GPU. Else,
+    instantiate the MultiprocessingDataLoader subclass 
+    instead.
+    
+    An instance of this class wraps a BirdDataset instance, 
+    which provides tuples (<img-tensor>, class-label-int) from
+    the file system when given a sample ID.
+    
+    This subclass of torch.utils.data.DataLoader specilizes
+    the default by using a stratified k-fold cross validation
+    sampler. That underlying sampler manages partitioning of
+    samples into folds, and successively feeding samples from
+    the training folds. The sampler also manages the 'switching out'
+    of folds to take the role of test fold in round robin fashion.
+        
+    This DataLoader instance also managing combination of 
+    samples into batches.
+    
+    An instance of this class presents an iterator API, additionally
+    serving the test samples whenever one set of train folds are 
+    exhausted. Example: assume 
+          
+          o k-fold cross validation k = 5
+        
+          for split in range(k):
+          
+              for batch in my_bird_dataloader:
+                  <feed training batch to emerging model>
+                  
+              # Exhausted all train folds of one split
+              # Now test current state of the 
+              # model using the split's test samples,
+              # which are available as an iterator from the
+              # dataloader:
+              
+              for (img_tensor, label) in my_bird_dataloader.validation_samples():
+                  <test model on img_tensor>
 
+    The validation_samples() method is a generator that provides the content of 
+    the just exhausted split's test samples.
     '''
 
     #------------------------------------
@@ -25,34 +69,68 @@ class BirdDataLoader(DataLoader):
     def __init__(self,
                  dataset,
                  batch_size=32,
+                 shuffle=False,
+                 seed=42,
                  num_workers=0,
                  pin_memory=False,
                  prefetch_factor=2,
                  drop_last=False,
-                 num_folds=10
+                 num_folds=10,
+                 sampler=None
                  ):
         '''
-        Constructor
-        Note: the shuffle keyword must not be specified, because
-              we are using the SKFSampler below; specified in
-              (https://pytorch.org/docs/stable/data.html#torch.utils.data.Sampler)
+        This instance will  
+        
+         
+        
+        @param dataset: underlying map-store that 
+                supplies(img_torch, label) tuples
+        @type dataset: BirdDataset
+        @param batch_size: number of samples to combine into 
+            a batch to feed model during training
+        @type batch_size: int
+        @param pin_memory: set to True if using a GPU. Speeds
+            transfer of tensors from CPU to GPU
+        @type pin_memory: bool
+        @param prefetch_factor: how many samples to prefetch from
+            underlying database to speed access to file system
+        @type prefetch_factor: int
+        @param drop_last: whether or not to serve only partially 
+            filled batches. Those occur when samples cannot be
+            evenly packed into batches. 
+        @type drop_last: bool
+        @param num_folds: the 'k' in k-fold cross validation
+        @type num_folds: int
+        @param sampler: Only used when MultiprocessingDataLoader
+            is being instantiated, and that class's __init__()
+            calls super(). Leave out for singleprocess/single-GPU
+            use
+        @type sampler: {None | DistributedSKFSampler}
         '''
         
-        fold_indices_sampler = SKFSampler(dataset, num_folds=num_folds)
-        self.sampler     = fold_indices_sampler
+        # Sampler will only be set if a subclass instance
+        # of MultiprocessingDataLoader is being initialized.
+        # Else, running single process:
+        
+        if sampler is None:
+            self.sampler = SKFSampler(dataset, 
+                                      num_folds=num_folds, 
+                                      shuffle=shuffle,
+                                      seed=seed)
+        else:
+            self.sampler = sampler
+            
+        if not isinstance(batch_size, int) and batch_size > 0:
+            raise ValueError(f"Batch size must be a positive int, not {type(batch_size)}")
+        self.batch_size = batch_size
+            
         self.num_folds   = num_folds
+
         # Total num of batches served when
         # rotating through all folds is computed
         # the first time __len__() is called:
         
         self.num_batches = None
-        
-        #***** delete
-#         self.sampler = BatchSampler(fold_indices_sampler,
-#                                     batch_size,
-#                                     drop_last
-#                                     )
-        #***** End delete
         
         super().__init__(
                  dataset,
@@ -93,6 +171,9 @@ class BirdDataLoader(DataLoader):
             # on the eyes than one minimal expression:
             num_samples      = len(self.sampler)
             
+            if num_samples == 0:
+                raise ValueError("No samples to serve.")
+            
             # Rounded-down number of samples that fit into each fold:
             samples_per_fold = num_samples // self.num_folds
             batches_per_fold = samples_per_fold // self.batch_size
@@ -132,32 +213,45 @@ class BirdDataLoader(DataLoader):
 
     def __next__(self):
         
-        self.curr_fold_idx = 0
-        for fold_train_ids, fold_test_ids in self.sampler:
+        self.curr_split_idx = 0
+        
+        # Loop over all splits (i.e. over all
+        # configurations of which fold is for
+        # validation.
+        
+        # Get one list of sample IDs that
+        # covers all samples in one split.
+        # And one list of sample IDs in the 
+        # test split:
+        
+        for split_train_ids, split_test_ids in self.sampler:
 
-            # Keep track of which fold we are working
+            # Keep track of which split we are working
             # on. Needed only as info for client; not
             # used for logic in this method:
             
-            self.curr_fold_idx += 1
+            self.curr_split_idx += 1
             
-            # fold_train_ids has all sample IDs
-            # to use for training in this fold. 
-            # The fold_test_ids holds the left-out
+            # split_train_ids has all sample IDs
+            # to use for training in this split. 
+            # The split_test_ids holds the left-out
             # sample IDs to use for testing once 
-            # the fold_train_ids have been served out
+            # the split_train_ids have been served out
             # one batch at a time.
             
-            # Set this fold's test ids aside for client
-            # to retrieve via: get_fold_test_sample_ids()
+            # Set this split's test ids aside for client
+            # to retrieve via: get_split_test_sample_ids()
             # once they pulled all the batches of this
-            # fold:
-            self.curr_test_sample_ids = fold_test_ids
+            # split:
+            self.curr_test_sample_ids = split_test_ids
             
-            num_train_sample_ids = len(fold_train_ids)
+            num_train_sample_ids = len(split_train_ids)
             num_batches = num_train_sample_ids // self.batch_size
             num_remainder_samples = num_train_sample_ids % self.batch_size
             batch_start_idx = 0
+            
+            # Create num_batches batches from the
+            # training data of this split:
             
             for _batch_count in range(num_batches):
                 
@@ -180,10 +274,14 @@ class BirdDataLoader(DataLoader):
                     
                 # Got one batch ready:
                 yield (batch, torch.tensor(y))
+                
                 # Client consumed one batch in current fold.
                 # Next batch: Starts another batch size
-                # samples onwards in the train fold:
+                # samples onwards in the train folds:
+                
                 batch_start_idx += self.batch_size
+                
+                # Put together next batch:
                 continue
             
             # Done all full batches. Any partial batch 
@@ -202,7 +300,8 @@ class BirdDataLoader(DataLoader):
                             else expanded_img_tensor)
                     y.append(label)
                 yield (batch, torch.tensor(y))
-            # Next fold:
+                
+            # Next split:
             continue
 
     #------------------------------------
@@ -210,100 +309,71 @@ class BirdDataLoader(DataLoader):
     #-------------------
     
     def get_curr_fold_idx(self):
-        return self.curr_fold_idx
+        return self.curr_split_idx
 
 
     #------------------------------------
-    # get_fold_test_sample_ids 
+    # get_split_test_sample_ids 
     #-------------------
     
-    def get_fold_test_sample_ids(self):
+    def get_split_test_sample_ids(self):
         try:
             return self.curr_test_sample_ids
         except:
             return None
     
-
-# --------------------------- Class SKFSampler --------------
-
-class SKFSampler(StratifiedKFold):
-    
     #------------------------------------
-    # Constructor
-    #-------------------
-
-    def __init__(self,
-                 dataset,
-                 num_folds=10,
-                 random_state=1,
-                 shuffle=False
-                 ):
-        super().__init__(n_splits=num_folds,
-                         random_state=random_state if shuffle else None, 
-                         shuffle=shuffle)
-        
-        self.dataset = dataset
-        
-        # Keep track of how many folds
-        # we served. Just for logging, 
-        # performance analysis, and
-        # debugging:
-        
-        self.folds_served = 0
-        
-        # Stratified k-fold needs only the labels 
-        # in an array; the corresponding samples each 
-        # have the same index as the one for each 
-        # y-split (https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.StratifiedKFold.html#sklearn.model_selection.StratifiedKFold)
-        
-        self.fold_generator = self.split(np.zeros(len(dataset)), 
-                                         dataset.sample_classes()
-                                         )
-
-    #------------------------------------
-    # __len__ 
+    # validation_samples 
     #-------------------
     
-    def __len__(self):
-        return len(self.dataset)
-
-    #------------------------------------
-    # __iter__ 
-    #-------------------
-
-    def __iter__(self):
-        return self
-
-    #------------------------------------
-    # __next__ 
-    #-------------------
-    
-    def __next__(self):
-        return next(self.fold_generator)
-
+    def validation_samples(self):
+        '''
+        Generator that runs through every
+        test sample_id of the current fold, 
+        and feeds (<img_tensor, label) pairs.
+        
+           for (img_tensor, label) in my_bird_dataloader.validation_samples():
+               <test model>
+        '''
+        
+        for sample_id in self.get_split_test_sample_ids():
+            yield self.dataset[sample_id]
 
 # -------------------- Multiprocessing Dataloader -----------
 
-class MultiprocessingDataloader(BirdDataLoader):
+class MultiprocessingDataLoader(CrossValidatingDataLoader):
+    '''
+    Use this class for dataloader if running using
+    multiple machines, or using multiple GPUs on a
+    single machine.
+    '''
     
     #------------------------------------
     # Constructor 
     #-------------------
 
-    def __init__(self, dataset, world_size, node_rank, **kwargs):
-        
-        self.dataset  = dataset
+    def __init__(self, 
+                 dataset, 
+                 world_size,    # Total number of GPUs across all machines 
+                 node_rank,     # Sequence number of machine (0 for master node)
+                 batch_size=32,
+                 prefetch_factor=2,
+                 drop_last=False,
+                 num_folds=10,
+                 **kwargs
+                 ):
         
         self.sampler = DistributedSampler(
                 dataset,
                 num_replicas=world_size,
-                rank=node_rank
+                rank=node_rank,
+                drop_last=drop_last
                 )
 
         super().__init__(dataset,
-                         shuffle=False,
-                         num_workers=0,
+                         batch_size=batch_size,
+                         num_folds=num_folds,
+                         prefetch_factor=prefetch_factor,
                          pin_memory=True,
                          sampler=self.sampler,
                          **kwargs)
-

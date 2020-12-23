@@ -8,15 +8,24 @@ import os
 from pathlib import Path
 import unittest
 
-from birds_train_parallel import BirdTrainer
+from training import EPOCHS, SEED, BATCH_SIZE, KERNEL_SIZE
+from training import Training
+import training
 
+
+#********
+#********
 #******TEST_ALL = True
 TEST_ALL = False
 
 CURR_DIR = os.path.join(os.path.dirname(__file__))
 FILEPATH = os.path.join(CURR_DIR, 'data/')
+training.FILEPATH = FILEPATH
+NET_NAME = 'Resnet18Partial'
 
-class TestBirdsTrainingParallel(unittest.TestCase):
+
+
+class TestTraining(unittest.TestCase):
 
     GPU_INDEX = 0
 
