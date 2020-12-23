@@ -102,20 +102,20 @@ class TrainResult:
             #     num_correctly_predicted-C-samples / num-samples-in-class-C
             diag = torch.diagonal(self.conf_matrix())
             self._within_class_recalls = diag / torch.sum(self.conf_matrix(), 
-                                                          axis = 1)
+                                                          axis = 0)
         return self._within_class_recalls
             
     #------------------------------------
-    # within_class_precision 
+    # within_class_precisions 
     #-------------------
     
-    def within_class_precision(self):
+    def within_class_precisions(self):
         if self._within_class_precision is None:
             #  For each class C:
             #     For each class C: num_correctly_predicted-C-samples / num-samples-predicted-to-be-in-class-C
             diag = torch.diagonal(self.conf_matrix())
             self._within_class_precision = diag / torch.sum(self.conf_matrix(), 
-                                                            axis = 0)
+                                                            axis = 1)
         return self._within_class_precision
 
     #------------------------------------

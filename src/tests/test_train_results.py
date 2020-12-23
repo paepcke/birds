@@ -47,7 +47,23 @@ class Test(unittest.TestCase):
         # Labels that lead to first batch correct, 
         # second not:
         
-        self.batch_label_non_match = torch.tensor([2,1]) 
+        self.batch_label_non_match = torch.tensor([2,1])
+        
+        # Larger batch:
+        self.ten_results = torch.tensor(           # Label
+            [[0.5922, 0.6546, 0.7172, 0.0139],     #   2
+        	 [0.9124, 0.9047, 0.6819, 0.9329],     #   3
+        	 [0.2345, 0.1733, 0.5420, 0.4659],     #   2
+        	 [0.5954, 0.8958, 0.2294, 0.5529],     #   1
+        	 [0.3861, 0.2918, 0.0972, 0.0548],     #   0
+        	 [0.4647, 0.7002, 0.9632, 0.1320],     #   2
+        	 [0.5064, 0.3124, 0.6235, 0.0118],     #   2
+        	 [0.3487, 0.6241, 0.8620, 0.4953],     #   2
+        	 [0.0386, 0.4663, 0.2362, 0.4898],     #   3
+        	 [0.7019, 0.5001, 0.4052, 0.2223]]     #   0
+            )
+        self.ten_labels_perfect     = torch.tensor([2,3,2,1,0,2,2,2,3,0])
+        self.ten_labels_first_wrong = torch.tensor([0,3,2,1,0,2,2,2,3,0])
 
     #------------------------------------
     # tearDown 
@@ -122,7 +138,7 @@ class Test(unittest.TestCase):
     # test_accuracy
     #-------------------
 
-    #********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_accuracy(self):
         self.epoch = 1
         # Single split, correct prediction
@@ -160,6 +176,73 @@ class Test(unittest.TestCase):
                             LearningPhase.TRAINING
                             )
         self.assertEqual(tally.accuracy(), 0.5)
+
+    #------------------------------------
+    # test_per_class_recall 
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_per_class_recall(self):
+        self.epoch = 1
+        # Single split, correct predictions
+        # for all 10 samples:
+        tally = self.tally_result(
+                            0, # Split number
+                            self.ten_labels_perfect,
+                            self.ten_results,
+                            LearningPhase.TRAINING
+                            )
+        
+        recalls = tally.within_class_recalls()
+        truth   = torch.tensor([1.,1.,1.,1.])
+        self.assertTrue((recalls == truth).all())
+        
+        tally = self.tally_result(
+                            0, # Split number
+                            self.ten_labels_first_wrong,
+                            self.ten_results,
+                            LearningPhase.TRAINING
+                            )
+        recalls = tally.within_class_recalls()
+        truth   = torch.tensor([1.,1.,.8,1.])
+        self.assertTrue((recalls == truth).all())
+
+    #------------------------------------
+    # test_per_class_precision 
+    #-------------------
+    
+    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_per_class_precision(self):
+        self.epoch = 1
+        # Single split, correct predictions
+        # for all 10 samples:
+        tally = self.tally_result(
+                            0, # Split number
+                            self.ten_labels_perfect,
+                            self.ten_results,
+                            LearningPhase.TRAINING
+                            )
+        
+        precisions = tally.within_class_precisions()
+        truth   = torch.tensor([1.,1.,1.,1.])
+        self.assertTrue(torch.eq(precisions, truth).all())
+
+        tally = self.tally_result(
+                            0, # Split number
+                            self.ten_labels_first_wrong,
+                            self.ten_results,
+                            LearningPhase.TRAINING
+                            )
+        precisions = tally.within_class_precisions()
+        # Truth is actually [0.6666..., 1.,1.,1.]. So:
+        # subtract truth from precision element by element.
+        # The first el will be very small, the others will
+        # be zero. Sum the elements to get one small float.
+        # Assert that the float is within 2 decimal places
+        # of zero:
+        truth      = torch.tensor([0.67,1.,1.,1.])
+        deviation_from_truth = float(torch.sum(precisions - truth))
+        self.assertAlmostEqual(deviation_from_truth, 0.0, places=2)
 
 # ---------------- Utils ------------
 
