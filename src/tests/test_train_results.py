@@ -240,6 +240,73 @@ class Test(unittest.TestCase):
         self.assertAlmostEqual(deviation_from_truth, 0.0, places=2)
 
     #------------------------------------
+    # test_recall 
+    #-------------------
+    
+    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_recall(self):
+
+        # Single split, correct predictions
+        # for all 10 samples:
+        tally1 = self.tally_result(
+                            0, # Split number
+                            self.ten_labels_perfect,
+                            self.ten_results,
+                            LearningPhase.TRAINING
+                            )
+        
+        #prec_tally1 = tally.within_class_precisions()
+        #truth   = torch.tensor([1.,1.,1.,1.])
+        #self.assertTrue(torch.eq(precisions, truth).all())
+
+        tally2 = self.tally_result(
+                            0, # Split number
+                            self.ten_labels_first_wrong,
+                            self.ten_results,
+                            LearningPhase.TRAINING
+                            )
+        recall_tally1_2 = tally2.within_class_recalls()
+        
+        mean_recall = tally2.recall()
+        self.assertEqual(mean_recall,
+                         torch.mean(recall_tally1_2)
+                         )
+
+    #------------------------------------
+    # test_precision 
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_precision(self):
+
+        # Single split, correct predictions
+        # for all 10 samples:
+        tally = self.tally_result(
+                            0, # Split number
+                            self.ten_labels_perfect,
+                            self.ten_results,
+                            LearningPhase.TRAINING
+                            )
+        
+        #prec_tally1 = tally.within_class_precisions()
+        #truth   = torch.tensor([1.,1.,1.,1.])
+        #self.assertTrue(torch.eq(precisions, truth).all())
+
+        tally = self.tally_result(
+                            0, # Split number
+                            self.ten_labels_first_wrong,
+                            self.ten_results,
+                            LearningPhase.TRAINING
+                            )
+        prec_tally1_2 = tally.within_class_precisions()
+        
+        mean_precision = tally.precision()
+        self.assertEqual(mean_precision,
+                         torch.mean(prec_tally1_2)
+                         )
+
+
+    #------------------------------------
     # test_accuracy_aggregation 
     #-------------------
     
@@ -305,23 +372,72 @@ class Test(unittest.TestCase):
                               epoch=2
                               )
 
-        epoch1_mean_acc = self.tally_collection.mean_accuracy(epoch=1)
+        # Accuracy over epoch 1, Training phase (1 tally)
+        epoch1_mean_acc = self.tally_collection.mean_accuracy(epoch=1,
+                                                              learning_phase=LearningPhase.TRAINING
+                                                              )
         self.assertEqual(epoch1_mean_acc, 1.0)
         
-        epoch2_mean_acc = self.tally_collection.mean_accuracy(epoch=2)
+        # Accuracy over epoch 2, Testing phase (2 tallies)
+        epoch2_mean_acc = self.tally_collection.mean_accuracy(epoch=2,
+                                                              learning_phase=LearningPhase.TESTING
+                                                              )
         self.assertEqual(epoch2_mean_acc, 0.9)
 
         true_mean = (0.9 + 0.9) / 2
-        epoch2_3_mean_acc = self.tally_collection.mean_accuracy(epoch=2)
+        epoch2_3_mean_acc = self.tally_collection.mean_accuracy(epoch=2,
+                                                                learning_phase=LearningPhase.TESTING
+                                                                )
         self.assertEqual(epoch2_3_mean_acc, true_mean)
+
+    #------------------------------------
+    # test_loss_accumulation 
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_loss_accumulation(self):
         
-        # Finally: accuracy over all three tallies,
-        # independent of epoch:
-        true_mean = round((1 + 0.9 + 0.9) / 3, 6)
-        epoch1_2_3_mean_acc = self.tally_collection.mean_accuracy()
-        self.assertEqual(epoch1_2_3_mean_acc, true_mean)
+        loss1 = torch.tensor(10.0)
+        # Add to epoch 1:
+        self.tally_collection.add_loss(1, loss1)
+        # Over all epochs:
+        self.assertEqual(self.tally_collection.cumulative_loss(),
+                         loss1
+                         )
         
+        # Just over epoch 1:
+        self.assertEqual(self.tally_collection.cumulative_loss(epoch=1),
+                         loss1
+                         )
+
+        # Add another loss to epoch one:
+        loss2 = torch.tensor(20.0)
+        self.tally_collection.add_loss(1, loss2)
         
+        # Over all epochs:
+        self.assertEqual(self.tally_collection.cumulative_loss(),
+                         loss1 + loss2
+                         )
+        
+        # Just epoch1:
+        self.assertEqual(self.tally_collection.cumulative_loss(epoch=1),
+                         loss1 + loss2
+                         )
+
+        loss3 = torch.tensor(30)
+
+        # Add another epoch to track:
+        self.tally_collection.add_loss(2, loss3)
+
+        # Just epoch1:
+        self.assertEqual(self.tally_collection.cumulative_loss(epoch=1),
+                         loss1 + loss2
+                         )
+
+        # Just epoch2:
+        self.assertEqual(self.tally_collection.cumulative_loss(epoch=2),
+                         loss3
+                         )
 
 
     # ****** Needs thinking and debugging in result_tallying
@@ -427,7 +543,7 @@ class Test(unittest.TestCase):
                                                     labels=list(range(self.num_classes)) # Class labels
                                                     ))
 
-        tally = TrainResult(split_num, epoch, learning_phase, conf_matrix)
+        tally = TrainResult(split_num, epoch, learning_phase, epoch, conf_matrix)
         self.tally_collection.add(tally)
         return tally
 

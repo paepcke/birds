@@ -4,8 +4,12 @@ Created on Dec 23, 2020
 @author: paepcke
 '''
 
+from enum import Enum
 import numpy as np
+
 import torch
+
+from utils.learning_phase import LearningPhase
 
 # ---------------------- Class Train Result Collection --------
 
@@ -19,25 +23,67 @@ class TrainResultCollection(dict):
         
         if initial_train_result is not None:
             self.results[initial_train_result.split_num] = initial_train_result
-        self.epoch_losses = {}
+        self.epoch_losses_training    = {}
+        self.epoch_losses_validation  = {}
+        self.epoch_losses_testing     = {}
 
     # ----------------- Epoch-Level Aggregation Methods -----------
+
+    #------------------------------------
+    # cumulative_loss 
+    #-------------------
     
+    def cumulative_loss(self, epoch=None, learning_phase=LearningPhase.TRAINING):
+        '''
+        Return the accumulated loss, either
+        summed over all epochs, or by epoch
+        
+        @param epoch: optionally an epoch whose
+            accumulated loss is to be returned
+        @type epoch: int
+        @param learning_phase: from which phase, 
+            training, validating, testing the loss
+            is to be returned
+        @type learning_phase: LearningPhase
+        @returned cumulative loss
+        @rtype: float
+        '''
+        
+        if learning_phase == LearningPhase.TRAINING:
+            loss_dict = self.epoch_losses_training
+        elif learning_phase == LearningPhase.VALIDATING:
+            loss_dict = self.epoch_losses_validation
+        elif learning_phase == LearningPhase.TESTING:
+            loss_dict = self.epoch_losses_testing
+        else:
+            raise ValueError(f"Learning phase must be a LearningPhase enum element, not '{learning_phase}'")
+        
+        if epoch is None:
+            res = torch.sum(torch.tensor(list(loss_dict.values()), 
+                                         dtype=float))
+        else:
+            res = loss_dict[epoch]
+        return float(res)
+
     #------------------------------------
     # mean_accuracy
     #-------------------
 
-    def mean_accuracy(self, epoch=None):
-        
+    def mean_accuracy(self, epoch=None, learning_phase=LearningPhase.TRAINING):
+
         if epoch is None:
-            m = np.mean([tally.accuracy() 
+            m = np.mean([tally.accuracy()
                          for tally 
-                         in self.values()])
+                         in self.values()
+                         if tally.learning_phase() == learning_phase
+                         ])
         else:
             m = np.mean([tally.accuracy() 
                          for tally 
                          in self.values() 
-                         if tally.epoch() == epoch])
+                         if tally.epoch() == epoch and \
+                            tally.learning_phase() == learning_phase
+                         ])
         # m is an np.float.
         # We want to return a Python float. The conversion
         # starts being inaccurate around the 6th digit.
@@ -105,6 +151,29 @@ class TrainResultCollection(dict):
         '''
         self[tally_result.split_num] = tally_result
 
+    #------------------------------------
+    # add_loss 
+    #-------------------
+    
+    def add_loss(self, epoch, loss, learning_phase=LearningPhase.TRAINING):
+
+        if learning_phase == LearningPhase.TRAINING:
+            loss_dict = self.epoch_losses_training
+        elif learning_phase == LearningPhase.VALIDATING:
+            loss_dict = self.epoch_losses_validation
+        elif learning_phase == LearningPhase.TESTING:
+            loss_dict = self.epoch_losses_testing
+        else:
+            raise ValueError(f"Learning phase must be a LearningPhase enum element, not '{learning_phase}'")
+
+        try:
+            loss_dict[epoch] += loss
+        except KeyError:
+            # First addition of a loss. If we
+            # don't store a copy, then future
+            # additions will modify the passed-in
+            # loss variable:
+            loss_dict[epoch] = loss.detach().clone()
 
 # ----------------------- Class Train Results -----------
 
@@ -122,11 +191,12 @@ class TrainResult:
     # Constructor 
     #-------------------
 
-    def __init__(self, split_num, epoch, learning_phase, conf_matrix):
+    def __init__(self, split_num, epoch, learning_phase, loss, conf_matrix):
         
         self._split_num      = split_num
         self._epoch          = epoch
         self._learning_phase = learning_phase
+        self._loss           = loss
         self._conf_matrix    = conf_matrix
         
         self._num_samples = self._num_correct = self._num_wrong = None
@@ -150,6 +220,20 @@ class TrainResult:
         if self._num_wrong is None:
             self._num_wrong = self.num_samples() - self.num_correct()
         return self._num_wrong
+
+    #------------------------------------
+    # precision 
+    #-------------------
+
+    def precision(self):
+        return torch.mean(self.within_class_precisions())
+
+    #------------------------------------
+    # recall 
+    #-------------------
+
+    def recall(self):
+        return torch.mean(self.within_class_recalls())
 
     #------------------------------------
     # within_class_recalls 
@@ -216,6 +300,13 @@ class TrainResult:
     def learning_phase(self):
         return self._learning_phase
     
+    #------------------------------------
+    # loss 
+    #-------------------
+    
+    def loss(self):
+        return self._loss
+
     #------------------------------------
     # conf_matrix 
     #-------------------
