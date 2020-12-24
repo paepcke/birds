@@ -9,9 +9,7 @@ code by
 
 @author: paepcke
 '''
-from _collections import OrderedDict
 import argparse
-from collections import deque
 from datetime import datetime
 from enum import Enum
 import json
@@ -28,7 +26,7 @@ from torch import cuda
 from torch import hub
 from torch import optim
 import torch
-from torch.nn import BCELoss
+#from torch.nn import BCELoss
 from torch.utils.tensorboard import SummaryWriter
 from torchvision.models.resnet import ResNet, BasicBlock
 
@@ -42,6 +40,8 @@ from utils.dottable_config import DottableConfigParser
 from result_tallying import TrainResult, TrainResultCollection
 
 import faulthandler; faulthandler.enable()
+
+from utils.learning_phase import LearningPhase
 
 # For parallelism:
 
@@ -58,14 +58,6 @@ class InterruptTraining(Exception):
     # Used to handle cnt-C
     pass
 
-# ----------------------- Enumerations --------------
-
-class LearningPhase(Enum):
-    TRAINING   = 1
-    VALIDATING = 2
-    TESTING    = 3
-
-# ------------------------ SpectrogramTrainer --------
 
 class BirdTrainer(object):
     
@@ -238,7 +230,7 @@ class BirdTrainer(object):
         self.setup_result_logging(logfile, self.num_classes)
         
         # Initialize running statistics:
-        self.tallies = self.TrainResultCollection()
+        self.tallies = TrainResultCollection()
 
     #------------------------------------
     # setup_gpus
@@ -471,15 +463,18 @@ class BirdTrainer(object):
                      split_num, 
                      labels_tns, 
                      pred_prob_tns,
+                     loss,
                      learning_phase,
                      ):
         '''
+        #******* UPDATE THIS COMMENT
         Given a set of batch results, and a dict
         of running tallies, update and return the
         tallies. All quantities, even counts, are 
         kept as float tensors.
         
-        This method is shared between train_one_split() and eval_epoch()
+        This method is shared between train_one_split() and 
+        validate_one_split()
         
         Tallies is expected to contain:
             running_loss,
@@ -533,9 +528,35 @@ class BirdTrainer(object):
                                                     labels=list(range(self.num_classes)) # Class labels
                                                     ))
 
-        tally = TrainResult(split_num, self.epoch, learning_phase, conf_matrix)
+        tally = TrainResult(split_num, self.epoch, learning_phase, loss, conf_matrix)
         self.tally_collection.add(tally)
         return tally
+
+    #------------------------------------
+    # record_amy_display_results 
+    #-------------------
+    
+    def record_amy_display_results(self, tally):
+        '''
+        Amy's displays of results with bird names
+        in confusion matrix require json file
+        records equivalent to what's in a TrainResult.
+        Write out to file:
+        
+        @param tally: results from one training split
+        @type tally: TrainResult
+        '''
+        
+        with open(self.log_filepath, 'a') as f:
+            f.write(json.dumps(
+                [self.epoch, 
+                 self.loss, 
+                 tally.accumulated if tally.learning_phase == LearningPhase.TRAINING else None,
+                 tally.accumulated if tally.learning_phase == LearningPhase.VALIDATING else None,
+                 tally.precision,
+                 tally.recall, 
+                 None,            # incorrect_paths, 
+                 tally.confusion_matrix.tolist()]) + "\n")
 
     #------------------------------------
     # train 
@@ -573,7 +594,7 @@ class BirdTrainer(object):
                     
                 # Remember the cumulative training loss
                 # of this epoch:
-                self.tally_collection.epoch_losses[self.epoch] = epoch_train_loss
+                self.tally_collection.add_loss(self.epoch, epoch_train_loss)
                 
         except (KeyboardInterrupt, InterruptTraining):
             self.log.info("Early stopping due to keyboard intervention")
@@ -583,7 +604,7 @@ class BirdTrainer(object):
                 dest_dir  = os.path.dirname(dest_path)
                 if not os.path.exists(dest_dir):
                     os.makedirs(dest_dir)
-                  # ****** Wanted!!!!
+                    # ****** Wanted!!!!
 #                 self.save_model_checkpoint(dest_path,
 #                                 		   self.model,
 #                                 		   self.optimizer,
