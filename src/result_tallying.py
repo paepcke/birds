@@ -24,13 +24,72 @@ class TrainResultCollection(dict):
     # ----------------- Epoch-Level Aggregation Methods -----------
     
     #------------------------------------
-    # accuracy
+    # mean_accuracy
     #-------------------
 
-    def accuracy(self, epoch):
-        np.mean([tally.accuracy() for tally 
-                                  in self.values() 
-                                  if tally.epoch == epoch])
+    def mean_accuracy(self, epoch=None):
+        
+        if epoch is None:
+            m = np.mean([tally.accuracy() 
+                         for tally 
+                         in self.values()])
+        else:
+            m = np.mean([tally.accuracy() 
+                         for tally 
+                         in self.values() 
+                         if tally.epoch() == epoch])
+        # m is an np.float.
+        # We want to return a Python float. The conversion
+        # starts being inaccurate around the 6th digit.
+        # Example:
+        #      torch.tensor(0.9).item() --> 0.8999999761581421  
+        # This inaccuracy is 'inherited' into the np.float32. 
+        # The following gymnastics are a work-around:
+        # Round in numpy country:
+        
+        mean_acc_tensor = (m * 10**6).round() / (10**6)
+        
+        # Convert to Python float, and round that
+        # float to 6 digits:
+        
+        mean_acc = round(mean_acc_tensor.item(), 6) 
+        
+        return mean_acc
+    
+    #******* Needs thinking and debugging
+#     #------------------------------------
+#     # mean_within_class_recall
+#     #-------------------
+#     
+#     def mean_within_class_recall(self, epoch=None):
+#         
+#         if epoch is None:
+#             m = np.mean([tally.within_class_recalls()
+#                          for tally
+#                          in self.values()])
+#         else:
+#             m = np.mean([tally.within_class_recalls()
+#                          for tally
+#                          in self.values() 
+#                          if tally.epoch == epoch])
+#         return m
+# 
+#     #------------------------------------
+#     # mean_within_class_precision 
+#     #-------------------
+#     
+#     def mean_within_class_precision(self, epoch=None):
+#         
+#         if epoch is None:
+#             m = torch.mean([tally.within_class_precisions() 
+#                             for tally
+#                             in self.values()]) 
+#         else:
+#             m = torch.mean([tally.within_class_precisions 
+#                             for tally
+#                             in self.values() 
+#                             if tally.epoch == epoch])
+#         return m
 
     #------------------------------------
     # add 
@@ -71,7 +130,7 @@ class TrainResult:
         self._conf_matrix    = conf_matrix
         
         self._num_samples = self._num_correct = self._num_wrong = None
-        self._within_class_recalls = self._within_class_precision = None
+        self._within_class_recalls = self._within_class_precisions = None
         self._accuracy = None
 
     #------------------------------------
@@ -110,13 +169,13 @@ class TrainResult:
     #-------------------
     
     def within_class_precisions(self):
-        if self._within_class_precision is None:
+        if self._within_class_precisions is None:
             #  For each class C:
             #     For each class C: num_correctly_predicted-C-samples / num-samples-predicted-to-be-in-class-C
             diag = torch.diagonal(self.conf_matrix())
-            self._within_class_precision = diag / torch.sum(self.conf_matrix(), 
+            self._within_class_precisions = diag / torch.sum(self.conf_matrix(), 
                                                             axis = 1)
-        return self._within_class_precision
+        return self._within_class_precisions
 
     #------------------------------------
     # accuracy 
@@ -164,6 +223,7 @@ class TrainResult:
     def conf_matrix(self):
         return self._conf_matrix
 
+
 #     #------------------------------------
 #     # __eq__ 
 #     #-------------------
@@ -189,18 +249,3 @@ class TrainResult:
 #             return True
 #         else:
 #             return False
-
-    #------------------------------------
-    # print 
-    #-------------------
-    
-    def print(self, include_weights=False):
-        msg = (f"best_valid_acc      : {self.best_valid_acc}\n"
-               f"best_valid_fscore   : {self.best_valid_fscore}\n"
-               f"best_valid_precision: {self.best_valid_precision}\n"
-               f"best_valid_recall   : {self.best_valid_recall}\n"
-               f"best_valid_loss     : {self.best_valid_loss}\n"
-               )
-        if include_weights:
-            msg += f"best_valid_weights: {self.best_valid_wts}\n" 
-        print(msg)

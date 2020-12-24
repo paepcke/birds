@@ -11,8 +11,8 @@ from sklearn.metrics import confusion_matrix
 from birds_train_parallel import TrainResultCollection, TrainResult
 from birds_train_parallel import LearningPhase
 
-#********TEST_ALL = True
-TEST_ALL = False
+TEST_ALL = True
+#TEST_ALL = False
 
 class Test(unittest.TestCase):
 
@@ -78,7 +78,6 @@ class Test(unittest.TestCase):
 
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_basics_single_split(self):
-        self.epoch = 1
         tally = self.tally_result(
                             0, # Split number
                             self.single_label_matching,
@@ -109,7 +108,6 @@ class Test(unittest.TestCase):
     
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_basics_two_splits(self):
-        self.epoch = 1
         tally = self.tally_result(
                             0, # Split number
                             self.batch_label_matching,
@@ -140,7 +138,6 @@ class Test(unittest.TestCase):
 
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_accuracy(self):
-        self.epoch = 1
         # Single split, correct prediction
         tally = self.tally_result(
                             0, # Split number
@@ -183,7 +180,6 @@ class Test(unittest.TestCase):
     
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_per_class_recall(self):
-        self.epoch = 1
         # Single split, correct predictions
         # for all 10 samples:
         tally = self.tally_result(
@@ -211,9 +207,8 @@ class Test(unittest.TestCase):
     # test_per_class_precision 
     #-------------------
     
-    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_per_class_precision(self):
-        self.epoch = 1
         # Single split, correct predictions
         # for all 10 samples:
         tally = self.tally_result(
@@ -244,6 +239,144 @@ class Test(unittest.TestCase):
         deviation_from_truth = float(torch.sum(precisions - truth))
         self.assertAlmostEqual(deviation_from_truth, 0.0, places=2)
 
+    #------------------------------------
+    # test_accuracy_aggregation 
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_accuracy_aggregation(self):
+        
+        tally1 = self.tally_result(
+                              0, # Split number
+                              self.single_label_matching,
+                              self.single_pred,
+                              LearningPhase.TRAINING
+                              )
+        tally2 = self.tally_result(
+                              0, # Split number
+                              self.single_label_non_match,
+                              self.single_pred,
+                              LearningPhase.TRAINING
+                              )
+        acc1 = tally1.accuracy()
+        acc2 = tally2.accuracy()
+        
+        mean_acc = (acc1+acc2)/2
+        
+        mean_accuracy = self.tally_collection.mean_accuracy()
+        self.assertEqual(mean_accuracy, mean_acc.item()) # 0.5
+
+        tally1 = self.tally_result(
+                              0, # Split number
+                              self.ten_labels_perfect,
+                              self.ten_results,
+                              LearningPhase.TRAINING
+                              )
+
+    #------------------------------------
+    # test_within_epoch_accuracy 
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_within_epoch_accuracy(self):
+        
+        # Epoch 1 result
+        _tally1 = self.tally_result(
+                              0, # Split number
+                              self.ten_labels_perfect,
+                              self.ten_results,
+                              LearningPhase.TRAINING,
+                              epoch=1
+                              )
+        # Epoch 2 result:
+        _tally2 = self.tally_result(
+                              0, # Split number
+                              self.ten_labels_first_wrong,
+                              self.ten_results,
+                              LearningPhase.TESTING,
+                              epoch=2
+                              )
+        # Second Epoch 2 result:
+        _tally3 = self.tally_result(
+                              0, # Split number
+                              self.ten_labels_first_wrong,
+                              self.ten_results,
+                              LearningPhase.TESTING,
+                              epoch=2
+                              )
+
+        epoch1_mean_acc = self.tally_collection.mean_accuracy(epoch=1)
+        self.assertEqual(epoch1_mean_acc, 1.0)
+        
+        epoch2_mean_acc = self.tally_collection.mean_accuracy(epoch=2)
+        self.assertEqual(epoch2_mean_acc, 0.9)
+
+        true_mean = (0.9 + 0.9) / 2
+        epoch2_3_mean_acc = self.tally_collection.mean_accuracy(epoch=2)
+        self.assertEqual(epoch2_3_mean_acc, true_mean)
+        
+        # Finally: accuracy over all three tallies,
+        # independent of epoch:
+        true_mean = round((1 + 0.9 + 0.9) / 3, 6)
+        epoch1_2_3_mean_acc = self.tally_collection.mean_accuracy()
+        self.assertEqual(epoch1_2_3_mean_acc, true_mean)
+        
+        
+
+
+    # ****** Needs thinking and debugging in result_tallying
+#     #------------------------------------
+#     # test_within_class_recall_aggregation 
+#     #-------------------
+#     
+#     #****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+#     def test_within_class_recall_aggregation(self):
+#         tally1 = self.tally_result(
+#                               0, # Split number
+#                               self.single_label_matching,
+#                               self.single_pred,
+#                               LearningPhase.TRAINING
+#                               )
+#         tally2 = self.tally_result(
+#                               0, # Split number
+#                               self.single_label_non_match,
+#                               self.single_pred,
+#                               LearningPhase.TRAINING
+#                               )
+#         # Because only one class represented,
+#         # the others will be nan:
+#         within_class_recalls1 = tally1.within_class_recalls()
+#         within_class_recalls2 = tally2.within_class_recalls()
+# 
+#         agg_within_class_recall = (within_class_recalls1 + within_class_recalls2) / 2.0
+#         for idx in range(len(agg_within_class_recall)):
+#             if idx in [0,1,3]:
+#                 self.assertTrue(torch.isnan(agg_within_class_recall[idx]))
+#             else:
+#                 self.assertEqual(agg_within_class_recall[idx], 0.5)
+# 
+#         # Larger batch:
+#  
+#         tally1 = self.tally_result(
+#                             0, # Split number
+#                             self.ten_labels_perfect,
+#                             self.ten_results,
+#                             LearningPhase.TRAINING
+#                             )
+# 
+#         tally2 = self.tally_result(
+#                             0, # Split number
+#                             self.ten_labels_first_wrong,
+#                             self.ten_results,
+#                             LearningPhase.TRAINING
+#                             )
+#         
+#         recalls1 = tally1.within_class_recalls()
+#         recalls2 = tally2.within_class_recalls()
+#         
+#         mean_within_class_recall = self.tally_collection.mean_within_class_recall()
+#         print('foo')
+
 # ---------------- Utils ------------
 
     #------------------------------------
@@ -255,6 +388,7 @@ class Test(unittest.TestCase):
                      labels_tns, 
                      pred_prob_tns,
                      learning_phase,
+                     epoch=1
                      ):
         '''
         Copy of BirdTrainer's tally_result for
@@ -293,7 +427,7 @@ class Test(unittest.TestCase):
                                                     labels=list(range(self.num_classes)) # Class labels
                                                     ))
 
-        tally = TrainResult(split_num, self.epoch, learning_phase, conf_matrix)
+        tally = TrainResult(split_num, epoch, learning_phase, conf_matrix)
         self.tally_collection.add(tally)
         return tally
 
