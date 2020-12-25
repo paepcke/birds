@@ -213,7 +213,7 @@ class CrossValidatingDataLoader(DataLoader):
 
     def __next__(self):
         
-        self.curr_split_idx = 0
+        self.curr_split_idx = -1
         
         # Loop over all splits (i.e. over all
         # configurations of which fold is for

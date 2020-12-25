@@ -6,6 +6,7 @@ Created on Dec 23, 2020
 
 from enum import Enum
 import numpy as np
+import datetime
 
 import torch
 
@@ -26,6 +27,23 @@ class TrainResultCollection(dict):
         self.epoch_losses_training    = {}
         self.epoch_losses_validation  = {}
         self.epoch_losses_testing     = {}
+
+    #------------------------------------
+    # tallies
+    #-------------------
+
+    def tallies(self, epoch=None, learning_phase=None):
+        
+        all_tallies = self.values()
+        if epoch is not None:
+            all_tallies = filter(lambda t: t.epoch() == epoch, 
+                                 all_tallies)
+        if learning_phase is not None:
+            all_tallies = filter(lambda t: t.learning_phase() == learning_phase,
+                                 all_tallies)
+        
+        for tally in sorted(list(all_tallies), key=lambda t: t.created_at()):
+            yield tally
 
     # ----------------- Epoch-Level Aggregation Methods -----------
 
@@ -49,15 +67,7 @@ class TrainResultCollection(dict):
         @rtype: float
         '''
         
-        if learning_phase == LearningPhase.TRAINING:
-            loss_dict = self.epoch_losses_training
-        elif learning_phase == LearningPhase.VALIDATING:
-            loss_dict = self.epoch_losses_validation
-        elif learning_phase == LearningPhase.TESTING:
-            loss_dict = self.epoch_losses_testing
-        else:
-            raise ValueError(f"Learning phase must be a LearningPhase enum element, not '{learning_phase}'")
-        
+        loss_dict = self.fetch_loss_dict(learning_phase)
         if epoch is None:
             res = torch.sum(torch.tensor(list(loss_dict.values()), 
                                          dtype=float))
@@ -157,14 +167,7 @@ class TrainResultCollection(dict):
     
     def add_loss(self, epoch, loss, learning_phase=LearningPhase.TRAINING):
 
-        if learning_phase == LearningPhase.TRAINING:
-            loss_dict = self.epoch_losses_training
-        elif learning_phase == LearningPhase.VALIDATING:
-            loss_dict = self.epoch_losses_validation
-        elif learning_phase == LearningPhase.TESTING:
-            loss_dict = self.epoch_losses_testing
-        else:
-            raise ValueError(f"Learning phase must be a LearningPhase enum element, not '{learning_phase}'")
+        loss_dict = self.fetch_loss_dict(learning_phase)
 
         try:
             loss_dict[epoch] += loss
@@ -174,6 +177,73 @@ class TrainResultCollection(dict):
             # additions will modify the passed-in
             # loss variable:
             loss_dict[epoch] = loss.detach().clone()
+
+    #------------------------------------
+    # epochs 
+    #-------------------
+    
+    def epochs(self):
+        '''
+        Return a sorted list of epochs
+        that are represented in tallies
+        within the collection. 
+        '''
+        return sorted(set(self.keys()))
+    
+    #------------------------------------
+    # num_tallies 
+    #-------------------
+
+    def num_tallies(self, epoch=None, learning_phase=LearningPhase.TRAINING):
+        '''
+        Return number of tallies contained in
+        this collection. Available filters are
+        epoch and learning phase:
+         
+        @param epoch: epoch to which counted tallies
+            are to belong
+        @type epoch: {None | int}
+        @param learning_phase: learning phase to which 
+            counted tallies are to belong 
+        @type learning_phase: {None | LearningPhase}
+        @return number of tallies held in collection
+        @rtype int
+        '''
+
+        if epoch is None:
+            l = len([tally
+                     for tally 
+                     in self.values()
+                     if tally.learning_phase() == learning_phase
+                     ])
+        else:
+            l = len([tally
+                     for tally 
+                     in self.values() 
+                     if tally.epoch() == epoch and \
+                        tally.learning_phase() == learning_phase
+                     ])
+            
+        return l
+
+    #------------------------------------
+    # fetch_loss_dict
+    #-------------------
+    
+    def fetch_loss_dict(self, learning_phase):
+        
+        if learning_phase == LearningPhase.TRAINING:
+            loss_dict = self.epoch_losses_training
+        elif learning_phase == LearningPhase.VALIDATING:
+            loss_dict = self.epoch_losses_validation
+        elif learning_phase == LearningPhase.TESTING:
+            loss_dict = self.epoch_losses_testing
+        else:
+            raise ValueError(f"Learning phase must be a LearningPhase enum element, not '{learning_phase}'")
+
+        return loss_dict
+        
+
 
 # ----------------------- Class Train Results -----------
 
@@ -202,6 +272,8 @@ class TrainResult:
         self._num_samples = self._num_correct = self._num_wrong = None
         self._within_class_recalls = self._within_class_precisions = None
         self._accuracy = None
+        
+        self._created_at = datetime.datetime.now() 
 
     #------------------------------------
     # num_correct 
@@ -313,7 +385,13 @@ class TrainResult:
     
     def conf_matrix(self):
         return self._conf_matrix
-
+    
+    #------------------------------------
+    # created_at 
+    #-------------------
+    
+    def created_at(self):
+        return(self._created_at)
 
 #     #------------------------------------
 #     # __eq__ 

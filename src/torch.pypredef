@@ -64,6 +64,9 @@ def float(input: Tensor):
 def isnan(input: Tensor):
     return Tensor
 
+def argmax(input: Tensor):
+    return Tensor
+
 class no_grad(torch._DecoratorContextManager):
     def __init__(self: torch.no_grad) -> torch.no_grad
         return torch.no_grad

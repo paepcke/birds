@@ -10,8 +10,7 @@ code by
 @author: paepcke
 '''
 import argparse
-from datetime import datetime
-from enum import Enum
+import datetime
 import json
 import os, sys
 import random  # Just so we can fix seed for testing
@@ -72,6 +71,8 @@ class BirdTrainer(object):
     # Device number for CPU (as opposed to GPUs, which 
     # are numbered as positive ints:
     CPU_DEV = -1
+
+    SECS_IN_DAY = 24*60*60
 
     #------------------------------------
     # Constructor
@@ -223,9 +224,7 @@ class BirdTrainer(object):
         # Move to GPU if available:
         self.to_best_device(self.model)
 
-        #**********
         self.log.info(f"Model resides on device: {self.device_residence(self.model)}")
-        #**********
 
         self.setup_result_logging(logfile, self.num_classes)
         
@@ -467,49 +466,93 @@ class BirdTrainer(object):
                      learning_phase,
                      ):
         '''
-        #******* UPDATE THIS COMMENT
-        Given a set of batch results, and a dict
-        of running tallies, update and return the
-        tallies. All quantities, even counts, are 
-        kept as float tensors.
+        Given:
+           o the results of a train or validation run
+             through all batches of one split (i.e. configuration
+             of folds into train + 1-validate,
+           o the true labels for each sample
+           o the total accumulated loss in this split
+           o the phase of the process (train/validate/test)
+           
+        Creates and retains a confusion matrix from 
+        which all other values, such as precision/recall
+        can be derived in the related methods of the 
+        TrainResult class. The matrix is handed to a
+        new TrainResult instance, and that instance is
+        added to self.tally_collection.
         
-        This method is shared between train_one_split() and 
-        validate_one_split()
+        The confusion matrix's row indices will correspond
+        the true class IDs; the column indices correspond to
+        the predicted classes:
         
-        Tallies is expected to contain:
-            running_loss,
-            running_true_non_zero,
-            running_corrects, 
-            running_samples, 
-            running_tp_fp, 
-            running_tp, 
-            running_tp_fn
+                              pred class0 pred class2 pred class3 
+             known class 0      num-pred    num_pred     num_pred
+             known class 1      num_pred    num_pred     num_pred
+             known class 2         ...        ...          ...
+        
+        As passed in, pred_prob_tns is:
+        
+             [num_batches x batch_size x num_classes]
+                  ^             ^            ^
+                  |             |            |
+            all batches      result for    logits for each
+            from a single   each sample    target class
+          split == num_folds  in one batch
+        
+        This method resolves that stack to:
+        
+             [num_batches x batch_size]
+                   ^             ^
+                   |             |
+         [[predicted_class_sample1_batch1, predicted_class_sample2_batch1],
+         [[predicted_class_sample1_batch2, predicted_class_sample2_batch2],
+                          ...
+                 as many rows as there are
+              folds to permute in the cross-val
+                
+                predicted_classes = torch.argmax(output_stack, dim=2)
+
+        The sklearn conf_matrix method is then used.
 
         @param labels_tns: ground truth labels for batch
-        @type labels_tns: torch.Tensor (floats)
-        @param pred_prob_tns: model prediction probabilities for this batch
+        @type labels_tns: torch.Tensor (integer class IDs)
+        @param pred_prob_tns: model prediction probabilities
         @type pred_prob_tns: torch.Tensor
-        @param loss: result of loss function for one batch
+        @param loss: accumulated result of loss function from
+            run through all the folds.
         @type loss: torch.Tensor (float)
-        @param tallies: running tallies to be updated
-        @type tallies: dict
+        @param learning_phase: phase under which to record this
+            result: training, validation, or test.
+        @type learning_phase: LearningPhase
         '''
         
         # Predictions are for one batch. Example for
         # batch_size 2 and 4 target classes:
         #  
-        #    torch.tensor([[1.0, -2.0,  3.4,  4.2],
-        #                  [4.1,  3.0, -2.3, -1.8]
-        #                  ])
-        # get:
-        #     torch.return_types.max(
-        #     values=tensor([4.2, 4.1]),
-        #     indices=tensor([3, 0]))
+        #    torch.tensor([[0.1, -0.2,  .3,  .42], |
+        #                                           | <--- one batch's
+        #                  [.43,  .3, -.23, -.18]  |   for batch_size == 2 
         #
-        # The indices are the class predictions:
+        #                  ])
         
-        max_logits_rowise = torch.max(pred_prob_tns, dim=1)
-        pred_class_ids = max_logits_rowise.indices
+        if learning_phase == LearningPhase.TRAINING:
+            pred_classes_each_batch = torch.argmax(pred_prob_tns, dim=2)
+        else:
+            pred_classes_each_batch = torch.argmax(pred_prob_tns, dim=1)
+        
+        #  For a batch size of 2 we would now have:
+        #       		  tensor([[3, 0],  <-- result batch 1 above
+        #       		          [0, 0],
+        #       		          [0, 0],
+        #       		          [0, 0],
+        #                          ...
+        #    num_fold'th row:     [2, 1]]
+
+        # Conf-matrix only handles flat pred/label inputs:
+        predicted_class_ids = pred_classes_each_batch.flatten()
+        truth_labels        = labels_tns.flatten()
+        
+        # The targets are the same shape.  
         
         # Example Confustion matrix for 16 samples,
         # in 3 classes:
@@ -523,10 +566,11 @@ class BirdTrainer(object):
         # sklearn to know about classes that were not
         # encountered:
         
-        conf_matrix = torch.tensor(confusion_matrix(labels_tns,       # Truth
-                                                    pred_class_ids,   # Prediction
-                                                    labels=list(range(self.num_classes)) # Class labels
-                                                    ))
+        conf_matrix = torch.tensor(confusion_matrix(
+            truth_labels,          # Truth
+            predicted_class_ids,   # Prediction
+            labels=list(range(self.num_classes)) # Class labels
+            ))
 
         tally = TrainResult(split_num, self.epoch, learning_phase, loss, conf_matrix)
         self.tally_collection.add(tally)
@@ -566,7 +610,7 @@ class BirdTrainer(object):
 
         self.epoch = 0
         diff_avg   = 100
-        time_start = datetime.now()
+        time_start = datetime.datetime.now()
         num_folds  = self.config.Training.getint('num_folds') 
 
         # Number of seconds between showing 
@@ -582,19 +626,23 @@ class BirdTrainer(object):
                 
                 for split_num in range(num_folds):
                     self.optimizer.zero_grad()
-                    epoch_train_loss = self.train_one_split(split_num, epoch_train_loss)
-                    self.validate_one_split()
+                    self.train_one_split(split_num, epoch_train_loss)
+                    self.validate_one_split(split_num)
 
-                    # Sign of life?
-                    time_now = datetime.now()
-                    if (time_start - time_now >= alive_pulse) and \
+                    # Time for sign of life?
+                    time_now = datetime.datetime.now()
+                    if self.time_diff(time_start, time_now) >= alive_pulse and \
                         self.config.Training.verbose:
                         self.log.info (f"Split number {split_num} of {num_folds}")
-                        #self.log.info (f"Total correct predictions {self.tallies['running_tp']}, Total true positives {self.tallies['running_tp']}")
-                    
-                # Remember the cumulative training loss
-                # of this epoch:
-                self.tally_collection.add_loss(self.epoch, epoch_train_loss)
+                        
+                # Done with one epoch:
+                # Compute the mean over successive accuracy differences
+                # after the past few epochs. Where 'few' means
+                # the minimum number of epochs as per the config:
+                
+                if self.epoch <= self.config.Training.getint('min_epochs'):
+                    continue
+                
                 
         except (KeyboardInterrupt, InterruptTraining):
             self.log.info("Early stopping due to keyboard intervention")
@@ -630,11 +678,15 @@ class BirdTrainer(object):
 
             # Push sample and target tensors
             # to where the model is:
-            batch   = batch.unsqueeze(0).to(self.device_residence(self.model))
-            targets = targets.unsqueeze(0).to(self.device_residence(self.model))
+            batch   = batch.to(self.device_residence(self.model))
+            targets = targets.to(self.device_residence(self.model))
             
             outputs = self.model(batch)
             loss = self.loss_func(outputs, targets)
+            self.tally_collection.add_loss(self.epoch, 
+                                           loss,
+                                           LearningPhase.TRAINING
+                                           )
             epoch_loss += loss
             loss.backward()
             self.optimizer.step()
@@ -646,20 +698,23 @@ class BirdTrainer(object):
 
             # Remember performance:
             if output_stack is None:
-                output_stack = outputs
+                output_stack = torch.unsqueeze(outputs, dim=0)
             else:
-                output_stack = torch.stack((output_stack, outputs))
-
+                output_stack = torch.cat((output_stack, torch.unsqueeze(outputs, 
+                                                                        dim=0))) 
             if label_stack is None:
-                label_stack = targets
+                label_stack = torch.unsqueeze(targets, dim=0)
             else:
-                label_stack = torch.stack((label_stack, targets))
+                label_stack = torch.cat((label_stack, torch.unsqueeze(targets, 
+                                                                      dim=0)))
 
             # Done with the split?
             if self.dataloader.curr_split_idx > split_num:
-                # All samples in this split are done:
-                self.tally_result(split_num, label_stack, output_stack, LearningPhase.TRAINING)
-                return epoch_loss
+                self.tally_result(split_num,
+                                  label_stack, 
+                                  output_stack,
+                                  loss, 
+                                  LearningPhase.TRAINING)
 
             # Pending STOP request?
             if BirdTrainer.STOP:
@@ -675,9 +730,13 @@ class BirdTrainer(object):
         with torch.no_grad():
             for (val_sample, val_target) in self.dataloader.validation_samples():
                 # Push sample and target tensors
-                # to where the model is:
-                val_sample = val_sample.unsqueeze(0).to(self.device_residence(self.model))
-                val_target = val_target.unsqueeze(0).to(self.device_residence(self.model))
+                # to where the model is; but during
+                # validation we get only a single sample
+                # at a time from the loader, while the 
+                # model input expects batches. Turn sample
+                # and target tensors to single-element batches:
+                val_sample = val_sample.unsqueeze(dim=0).to(self.device_residence(self.model))
+                val_target = val_target.unsqueeze(dim=0).to(self.device_residence(self.model))
 
 #                 if (idx % 250 == 0) and self.config.Training.verbose:
 #                     self.log.info (f"Batch number {idx} of {len(self.dataloader)}")
@@ -697,7 +756,11 @@ class BirdTrainer(object):
 #                 
 #                 val_target = val_target.float()
                 loss =  self.loss_func(pred_prob_tns, val_target)
-                
+                self.tally_collection.add_loss(self.epoch, 
+                                               loss,
+                                               LearningPhase.VALIDATING
+                                               )
+
                 # Free GPU memory:
                 val_sample = val_sample.to('cpu')
                 val_target = val_target.to('cpu')
@@ -707,9 +770,8 @@ class BirdTrainer(object):
                                                  val_target, 
                                                  pred_prob_tns, 
                                                  loss, 
-                                                 self.tallies,
-                                                 ) 
-    
+                                                 LearningPhase.VALIDATING
+                                                 )
 
     # ------------- Utils -----------
 
@@ -1202,6 +1264,51 @@ class BirdTrainer(object):
         @type model: torchvision.models
         '''
         return next(model.parameters()).device
+    
+    #------------------------------------
+    # time_diff 
+    #-------------------
+    
+    def time_diff(self, datetime1, datetime2):
+        '''
+        Given two datetime instances as returned by
+        datetime.datetime.now(), return the difference in 
+        seconds. 
+        
+        @param datetime1: earlier time
+        @type datetime1: datetime
+        @param datetime2: later time
+        @type datetime2: datetime
+        @return difference in seconds
+        @rtype int
+        '''
+        
+        diff = datetime2 - datetime1
+        return diff.seconds
+        
+    #------------------------------------
+    # mean_diff 
+    #-------------------
+    
+    def mean_diff(self, x):
+        '''
+        Given a tensor, return the mean
+        of the differences between successive
+        elements. Used to detect plateaus during
+        successive computations. Only intended
+        for 1D tensors.
+         
+        @param x: tensor of dim 1 
+        @type x: torch.Tensor
+        @returns: mean of differences between 
+            successive elements. Or nan if 
+            tensor only has one element.
+        @rtype: float
+        '''
+        x1 = x.roll(-1)
+        res = (x1 - x)[:-1]
+        m = torch.mean(res.float())
+        return float(m)
 
 # ---------------------- Resnet18Grayscale ---------------
 
@@ -1274,7 +1381,7 @@ class Resnet18Grayscale(ResNet):
     
     def setup_result_logging(self):
 
-        now = datetime.now()
+        now = datetime.datetime.now()
         self.log_filepath = now.strftime("%d-%m-%Y") + '_' + now.strftime("%H-%M") + "_K" + str(
             self.kernel_size) + '_B' + str(self.batch_size) + '.jsonl'
         with open(self.log_filepath, 'w') as f:

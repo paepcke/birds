@@ -243,12 +243,12 @@ class Test(unittest.TestCase):
     # test_recall 
     #-------------------
     
-    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_recall(self):
 
         # Single split, correct predictions
         # for all 10 samples:
-        tally1 = self.tally_result(
+        _tally1 = self.tally_result(
                             0, # Split number
                             self.ten_labels_perfect,
                             self.ten_results,
@@ -281,7 +281,7 @@ class Test(unittest.TestCase):
 
         # Single split, correct predictions
         # for all 10 samples:
-        tally = self.tally_result(
+        _tally = self.tally_result(
                             0, # Split number
                             self.ten_labels_perfect,
                             self.ten_results,
@@ -439,7 +439,69 @@ class Test(unittest.TestCase):
                          loss3
                          )
 
+    #------------------------------------
+    # test_result_collection_generator 
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_result_collection_generator(self):
+        # Epoch 1, learning phase TRAINING
+        _tally_ep1_lp_train1 = self.tally_result(
+                                   0, # Split number
+                                   self.ten_labels_perfect,
+                                   self.ten_results,
+                                   LearningPhase.TRAINING,
+                                   epoch=1
+                                   )
+        # Epoch 1, learning phase TRAINING
+        _tally_ep1_lp_train2 = self.tally_result(
+                                  1, # Split number
+                                  self.ten_labels_perfect,
+                                  self.ten_results,
+                                  LearningPhase.TRAINING,
+                                  epoch=1
+                                  )
+        # Epoch 2, learning phase TRAINING
+        _tally_ep2_lp_train1 = self.tally_result(
+                              0, # Split number
+                              self.ten_labels_first_wrong,
+                              self.ten_results,
+                              LearningPhase.TRAINING,
+                              epoch=2
+                              )
+        # Second Epoch 2 result:
+        _tally_ep2_lp_test = self.tally_result(
+                              0, # Split number
+                              self.ten_labels_first_wrong,
+                              self.ten_results,
+                              LearningPhase.TESTING,
+                              epoch=2
+                              )
+        
+        tallies_sorted = [_tally_ep1_lp_train1,
+                          _tally_ep1_lp_train2,
+                          _tally_ep2_lp_train1,
+                          _tally_ep2_lp_test
+                          ]
+        
+        # All tallies, sorted by time:
+        tallies = list(self.tally_collection.tallies())
+        self.assertEqual(tallies, tallies_sorted)
 
+        # All tallies, sorted by time, but only epoch 1:
+        tallies = list(self.tally_collection.tallies(epoch=1))
+        self.assertEqual(tallies, tallies_sorted[:2])
+        
+        # All tallies, sorted by time, but only training:
+        tallies = list(self.tally_collection.tallies(learning_phase=LearningPhase.TRAINING))
+        self.assertEqual(tallies, tallies_sorted[:3])
+
+        # All tallies, sorted by time, but only testing in epoch 2:
+        tallies = list(self.tally_collection.tallies(epoch=2,
+                                                     learning_phase=LearningPhase.TESTING))
+        self.assertEqual(tallies, [_tally_ep2_lp_test])
+        
+        
     # ****** Needs thinking and debugging in result_tallying
 #     #------------------------------------
 #     # test_within_class_recall_aggregation 
