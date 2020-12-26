@@ -9,6 +9,7 @@ code by
 
 @author: paepcke
 '''
+from _collections import OrderedDict
 import argparse
 import datetime
 import json
@@ -25,22 +26,22 @@ from torch import cuda
 from torch import hub
 from torch import optim
 import torch
-#from torch.nn import BCELoss
 from torch.utils.tensorboard import SummaryWriter
 from torchvision.models.resnet import ResNet, BasicBlock
 
 from cross_validation_dataloader import MultiprocessingDataLoader, CrossValidatingDataLoader
 from multi_root_image_dataset import MultiRootImageDataset
 import numpy as np
+from result_tallying import TrainResult, TrainResultCollection
 import torch.distributed as dist
 import torch.nn as nn
 from utils.dottable_config import DottableConfigParser
+from utils.learning_phase import LearningPhase
 
-from result_tallying import TrainResult, TrainResultCollection
 
+#from torch.nn import BCELoss
 import faulthandler; faulthandler.enable()
 
-from utils.learning_phase import LearningPhase
 
 # For parallelism:
 
@@ -73,6 +74,12 @@ class BirdTrainer(object):
     CPU_DEV = -1
 
     SECS_IN_DAY = 24*60*60
+    
+    # Number of differences between accuracies from 
+    # successive epochs that should be averaged to 
+    # determine whether to continue training:
+    
+    EPOCHS_FOR_PLATEAU_DETECTION = 5
 
     #------------------------------------
     # Constructor
@@ -611,10 +618,18 @@ class BirdTrainer(object):
         self.epoch = 0
         diff_avg   = 100
         time_start = datetime.datetime.now()
-        num_folds  = self.config.Training.getint('num_folds') 
+        num_folds  = self.config.Training.getint('num_folds')
+        # We will keep track of the average accuracy
+        # over the splits of each epoch. The accuracies
+        # dict will key off an epoch number, and hold as
+        # value the mean of accuracies among the splits
+        # of the respective epoch. Use ordered dict so that
+        # successively entered epochs will stay in order:
+        
+        accuracies = OrderedDict() 
 
         # Number of seconds between showing 
-        # status if verbose:
+        # status if verbose; default is 5 seconds:
         alive_pulse = self.config.Training.getint('show_alive', 5)
         try:
             while (diff_avg >= 0.05 or \
@@ -623,10 +638,19 @@ class BirdTrainer(object):
                    self.epoch <= self.config.Training.getint('max_epochs'):
                 self.epoch += 1
                 epoch_train_loss = 0
+                split_num = 0
+                # Get an iterator over all the 
+                # splits from the dataloader:
+                split_training_iterator = self.train_one_split(split_num, 
+                                                               epoch_train_loss)
                 
                 for split_num in range(num_folds):
                     self.optimizer.zero_grad()
-                    self.train_one_split(split_num, epoch_train_loss)
+                    try:
+                        next(split_training_iterator)
+                    except StopIteration:
+                        # Exhausted all the splits
+                        break
                     self.validate_one_split(split_num)
 
                     # Time for sign of life?
@@ -634,16 +658,35 @@ class BirdTrainer(object):
                     if self.time_diff(time_start, time_now) >= alive_pulse and \
                         self.config.Training.verbose:
                         self.log.info (f"Split number {split_num} of {num_folds}")
-                        
+
                 # Done with one epoch:
-                # Compute the mean over successive accuracy differences
-                # after the past few epochs. Where 'few' means
-                # the minimum number of epochs as per the config:
+
+                self.log.info(f"Finished epoch {self.epoch}")
                 
+                # Compute mean accuracy over all splits
+                # of this epoch:
+                accuracies[self.epoch] = self.tally_collection.mean_accuracy(epoch=self.epoch, 
+                                                                             learning_phase=LearningPhase.TRAINING)
+
                 if self.epoch <= self.config.Training.getint('min_epochs'):
+                    # Haven't trained for the minimum of epochs:
                     continue
                 
-                
+                if self.epoch < self.EPOCHS_FOR_PLATEAU_DETECTION:
+                    # Need more epochs to discover accuracy plateau:
+                    continue
+
+                # Compute the mean over successive accuracy differences
+                # after the past few epochs. Where 'few' means
+                # EPOCHS_FOR_PLATEAU_DETECTION:
+
+                past_accuracies = [accuracies[epoch] for epoch 
+                                   in range(len(accuracies)-self.EPOCHS_FOR_PLATEAU_DETECTION,
+                                            self.epoch
+                                            )]
+                diff_avg = self.mean_diff(torch.tensor(past_accuracies))
+
+
         except (KeyboardInterrupt, InterruptTraining):
             self.log.info("Early stopping due to keyboard intervention")
             do_save = self.offer_model_save()
@@ -674,51 +717,96 @@ class BirdTrainer(object):
         output_stack = None
         label_stack  = None
         
-        for (batch, targets) in self.dataloader:
+        loss = 0.0
+        
+        # While loop will be exited when
+        # dataloader has exhausted all batches
+        # from each fold from every split:
 
-            # Push sample and target tensors
-            # to where the model is:
-            batch   = batch.to(self.device_residence(self.model))
-            targets = targets.to(self.device_residence(self.model))
-            
-            outputs = self.model(batch)
-            loss = self.loss_func(outputs, targets)
-            self.tally_collection.add_loss(self.epoch, 
-                                           loss,
-                                           LearningPhase.TRAINING
-                                           )
-            epoch_loss += loss
-            loss.backward()
-            self.optimizer.step()
-            
-            # Free GPU memory:
-            batch   = batch.to('cpu')
-            targets = targets.to('cpu')
-            outputs = outputs.to('cpu')
+        # Get an iterator through all the 
+        # dataloader's batches:
+        batch_feeder = next(self.dataloader)
+        
+        while True:
+            if self.dataloader.finished_split:
 
-            # Remember performance:
-            if output_stack is None:
-                output_stack = torch.unsqueeze(outputs, dim=0)
-            else:
-                output_stack = torch.cat((output_stack, torch.unsqueeze(outputs, 
-                                                                        dim=0))) 
-            if label_stack is None:
-                label_stack = torch.unsqueeze(targets, dim=0)
-            else:
-                label_stack = torch.cat((label_stack, torch.unsqueeze(targets, 
-                                                                      dim=0)))
-
-            # Done with the split?
-            if self.dataloader.curr_split_idx > split_num:
+                # End of a split, record this split's
+                # training results, and yield till
+                # the next split's worth of training
+                # is requested by the caller:
                 self.tally_result(split_num,
                                   label_stack, 
                                   output_stack,
                                   loss, 
                                   LearningPhase.TRAINING)
+                
+                # Acknowledge receipt of the end-of-split:
 
-            # Pending STOP request?
-            if BirdTrainer.STOP:
-                raise InterruptTraining()
+                self.dataloader.finished_split = False
+                
+                # Sit until next() is called on this 
+                # generator again. At that point we continue feeding
+                # from the same dataloader in this while
+                # loop:
+                 
+                yield
+                
+                # Back for a new split. Prepare:
+                # Set model to train mode:
+                self.model.train(True)
+                output_stack = None
+                label_stack  = None
+                # ... and continue in the while loop,
+                # using the continuing batch_feeder
+                continue
+            else:
+                # Not at the end of a split:
+                # The following call will raise StopIteration
+                # when all batches across the split have
+                # been served out:
+                (batch, targets) = next(batch_feeder)
+
+                if batch is None:
+                    # Exhausted this split. Top of while
+                    # loop will notice, and prepare for
+                    # the client's next split to be processed:
+                    continue
+
+                # Push sample and target tensors
+                # to where the model is:
+                batch   = batch.to(self.device_residence(self.model))
+                targets = targets.to(self.device_residence(self.model))
+                
+                outputs = self.model(batch)
+                loss = self.loss_func(outputs, targets)
+                self.tally_collection.add_loss(self.epoch, 
+                                               loss,
+                                               LearningPhase.TRAINING
+                                               )
+                epoch_loss += loss
+                loss.backward()
+                self.optimizer.step()
+                
+                # Free GPU memory:
+                batch   = batch.to('cpu')
+                targets = targets.to('cpu')
+                outputs = outputs.to('cpu')
+    
+                # Remember performance:
+                if output_stack is None:
+                    output_stack = torch.unsqueeze(outputs, dim=0)
+                else:
+                    output_stack = torch.cat((output_stack, torch.unsqueeze(outputs, 
+                                                                            dim=0))) 
+                if label_stack is None:
+                    label_stack = torch.unsqueeze(targets, dim=0)
+                else:
+                    label_stack = torch.cat((label_stack, torch.unsqueeze(targets, 
+                                                                          dim=0)))
+                # Pending STOP request?
+                if BirdTrainer.STOP:
+                    raise InterruptTraining()
+
 
     #------------------------------------
     # validate_one_split 
@@ -1292,8 +1380,8 @@ class BirdTrainer(object):
     
     def mean_diff(self, x):
         '''
-        Given a tensor, return the mean
-        of the differences between successive
+        Given a tensor, return the absolute value
+        of the mean of the differences between successive
         elements. Used to detect plateaus during
         successive computations. Only intended
         for 1D tensors.
@@ -1308,7 +1396,7 @@ class BirdTrainer(object):
         x1 = x.roll(-1)
         res = (x1 - x)[:-1]
         m = torch.mean(res.float())
-        return float(m)
+        return abs(float(m))
 
 # ---------------------- Resnet18Grayscale ---------------
 

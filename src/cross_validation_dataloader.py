@@ -11,6 +11,7 @@ from torch.utils.data import DistributedSampler
 
 from samplers import SKFSampler, DistributedSKFSampler
 
+# ------------------------- Class CrossValidatingDataLoader ----------------
 
 class CrossValidatingDataLoader(DataLoader):
     '''
@@ -24,9 +25,9 @@ class CrossValidatingDataLoader(DataLoader):
     instantiate the MultiprocessingDataLoader subclass 
     instead.
     
-    An instance of this class wraps a BirdDataset instance, 
-    which provides tuples (<img-tensor>, class-label-int) from
-    the file system when given a sample ID.
+    An instance of this class wraps any dict-API dataset instance, 
+    which provides tuples , for instance (<img-tensor>, class-label-int) 
+    from the file system when given a sample ID.
     
     This subclass of torch.utils.data.DataLoader specilizes
     the default by using a stratified k-fold cross validation
@@ -46,18 +47,24 @@ class CrossValidatingDataLoader(DataLoader):
         
           for split in range(k):
           
-              for batch in my_bird_dataloader:
-                  <feed training batch to emerging model>
+              for batch in my_dataloader:
+                  try:
+                      <feed training batch to emerging model>
+                  except EndOfSplit as e:
+                      print(e.message) # Just for debugging
+                      break
                   
               # Exhausted all train folds of one split
               # Now test current state of the 
-              # model using the split's test samples,
+              # model using this split's test samples,
               # which are available as an iterator from the
               # dataloader:
               
-              for (img_tensor, label) in my_bird_dataloader.validation_samples():
+              for (img_tensor, label) in my_ataloader.validation_samples():
                   <test model on img_tensor>
-
+         
+              # next split
+              
     The validation_samples() method is a generator that provides the content of 
     the just exhausted split's test samples.
     '''
@@ -131,7 +138,11 @@ class CrossValidatingDataLoader(DataLoader):
         # the first time __len__() is called:
         
         self.num_batches = None
-        
+        self.curr_split_idx = -1
+        # Have not just finished feeding
+        # all batches from one split:
+        self.finished_split = False
+
         super().__init__(
                  dataset,
                  batch_size=batch_size,
@@ -213,8 +224,6 @@ class CrossValidatingDataLoader(DataLoader):
 
     def __next__(self):
         
-        self.curr_split_idx = -1
-        
         # Loop over all splits (i.e. over all
         # configurations of which fold is for
         # validation.
@@ -223,9 +232,11 @@ class CrossValidatingDataLoader(DataLoader):
         # covers all samples in one split.
         # And one list of sample IDs in the 
         # test split:
-        
-        for split_train_ids, split_test_ids in self.sampler:
-
+        #***********
+        print('foo')
+        #***********
+        for _i, (split_train_ids, split_test_ids) in enumerate(self.sampler):
+            
             # Keep track of which split we are working
             # on. Needed only as info for client; not
             # used for logic in this method:
@@ -301,6 +312,19 @@ class CrossValidatingDataLoader(DataLoader):
                     y.append(label)
                 yield (batch, torch.tensor(y))
                 
+            # Let client know that all batches for one split
+            # have been delivered. The client must reset
+            # this flag:
+             
+            self.finished_split = True
+            
+            # No batch, no target to return for this
+            # call:
+            yield (None, None)
+            
+            if self.finished_split:
+                raise RuntimeError("Client did not reset 'split-finished' flag")
+
             # Next split:
             continue
 
