@@ -80,6 +80,19 @@ class TrainResultCollection(dict):
     #-------------------
 
     def mean_accuracy(self, epoch=None, learning_phase=LearningPhase.TRAINING):
+        '''
+        Computes the mean of all accuracies in the given 
+        epoch and learning phase.
+        
+        @param epoch: epoch during which tallies must have
+            been created to be included in the mean:
+        @type epoch: int
+        @param learning_phase: learning phase during which 
+            included tallies must have been produced.
+        @type learning_phase: LearningPhase
+        @return mean accuracy over the specified tallies
+        @rtype float
+        '''
 
         if epoch is None:
             m = np.mean([tally.accuracy()
