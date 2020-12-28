@@ -139,9 +139,6 @@ class CrossValidatingDataLoader(DataLoader):
         
         self.num_batches = None
         self.curr_split_idx = -1
-        # Have not just finished feeding
-        # all batches from one split:
-        self.finished_split = False
 
         super().__init__(
                  dataset,
@@ -232,10 +229,7 @@ class CrossValidatingDataLoader(DataLoader):
         # covers all samples in one split.
         # And one list of sample IDs in the 
         # test split:
-        #***********
-        print('foo')
-        #***********
-        for _i, (split_train_ids, split_test_ids) in enumerate(self.sampler):
+        for _i, (split_train_ids, split_test_ids) in enumerate(self.sampler.get_split()):
             
             # Keep track of which split we are working
             # on. Needed only as info for client; not
@@ -313,17 +307,9 @@ class CrossValidatingDataLoader(DataLoader):
                 yield (batch, torch.tensor(y))
                 
             # Let client know that all batches for one split
-            # have been delivered. The client must reset
-            # this flag:
-             
-            self.finished_split = True
-            
-            # No batch, no target to return for this
-            # call:
+            # have been delivered by a None/None pair:
+
             yield (None, None)
-            
-            if self.finished_split:
-                raise RuntimeError("Client did not reset 'split-finished' flag")
 
             # Next split:
             continue

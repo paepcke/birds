@@ -320,7 +320,7 @@ class Test(unittest.TestCase):
                               LearningPhase.TRAINING
                               )
         tally2 = self.tally_result(
-                              0, # Split number
+                              1, # Split number
                               self.single_label_non_match,
                               self.single_pred,
                               LearningPhase.TRAINING
@@ -445,6 +445,10 @@ class Test(unittest.TestCase):
     
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_result_collection_generator(self):
+        '''
+        Generator functionality of TrainCollection.
+        Should deliver sequence of TrainResult instances.
+        '''
         # Epoch 1, learning phase TRAINING
         _tally_ep1_lp_train1 = self.tally_result(
                                    0, # Split number
@@ -470,7 +474,7 @@ class Test(unittest.TestCase):
                               epoch=2
                               )
         # Second Epoch 2 result:
-        _tally_ep2_lp_test = self.tally_result(
+        _tally_ep2_lp_test1 = self.tally_result(
                               0, # Split number
                               self.ten_labels_first_wrong,
                               self.ten_results,
@@ -481,7 +485,7 @@ class Test(unittest.TestCase):
         tallies_sorted = [_tally_ep1_lp_train1,
                           _tally_ep1_lp_train2,
                           _tally_ep2_lp_train1,
-                          _tally_ep2_lp_test
+                          _tally_ep2_lp_test1
                           ]
         
         # All tallies, sorted by time:
@@ -499,7 +503,7 @@ class Test(unittest.TestCase):
         # All tallies, sorted by time, but only testing in epoch 2:
         tallies = list(self.tally_collection.tallies(epoch=2,
                                                      learning_phase=LearningPhase.TESTING))
-        self.assertEqual(tallies, [_tally_ep2_lp_test])
+        self.assertEqual(tallies, [_tally_ep2_lp_test1])
         
         
     # ****** Needs thinking and debugging in result_tallying
@@ -604,8 +608,9 @@ class Test(unittest.TestCase):
                                                     pred_class_ids,   # Prediction
                                                     labels=list(range(self.num_classes)) # Class labels
                                                     ))
-
-        tally = TrainResult(split_num, epoch, learning_phase, epoch, conf_matrix)
+        # Use a random loss value:
+        loss = 0.14
+        tally = TrainResult(split_num, epoch, learning_phase, loss, conf_matrix)
         self.tally_collection.add(tally)
         return tally
 

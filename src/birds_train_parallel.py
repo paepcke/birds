@@ -21,7 +21,6 @@ import socket
 import GPUtil
 from logging_service import LoggingService
 from sklearn.metrics import confusion_matrix
-import tensorboard
 from torch import cuda
 from torch import hub
 from torch import optim
@@ -90,7 +89,7 @@ class BirdTrainer(object):
                  root_train_test_data=None,
                  batch_size=None,
                  logfile=None,
-                 performance_log_file=None,
+                 performance_log_dir=None,
                  seed=42,
                  testing_cuda_on_cpu=False,
                  started_from_launch=False,
@@ -233,7 +232,10 @@ class BirdTrainer(object):
 
         self.log.info(f"Model resides on device: {self.device_residence(self.model)}")
 
-        self.setup_result_logging(logfile, self.num_classes)
+        self.setup_logging(logfile, self.num_classes)
+        self.setup_json_logging(performance_log_dir,
+                                self.config.Training.kernel_size, 
+                                self.config.Training.batch_size) 
         
         # Initialize running statistics:
         self.tallies = TrainResultCollection()
@@ -520,6 +522,13 @@ class BirdTrainer(object):
                 predicted_classes = torch.argmax(output_stack, dim=2)
 
         The sklearn conf_matrix method is then used.
+        
+        Logging Results: after the validation of each split
+            is complete, means of results for the split are
+            logged. Since this method is called both after
+            one split's training, and again after that split's
+            validation, logging is delayed until a tally for
+            the validation phase is being created.
 
         @param labels_tns: ground truth labels for batch
         @type labels_tns: torch.Tensor (integer class IDs)
@@ -579,8 +588,43 @@ class BirdTrainer(object):
             labels=list(range(self.num_classes)) # Class labels
             ))
 
-        tally = TrainResult(split_num, self.epoch, learning_phase, loss, conf_matrix)
+        # Find labels that were incorrectly predicted:
+        badly_predicted_labels = truth_labels[truth_labels != predicted_class_ids]
+
+        tally = TrainResult(split_num, 
+                            self.epoch, 
+                            learning_phase, 
+                            loss, 
+                            conf_matrix,
+                            badly_predicted_labels=badly_predicted_labels
+                            )
+        
         self.tally_collection.add(tally)
+
+        # For json logging: get file names 
+        # of samples that were incorrectly 
+        # identified; just get the basenames:
+        
+        if learning_phase == LearningPhase.VALIDATING or \
+           learning_phase == LearningPhase.TESTING:
+            
+            # Get the sample_ids that were misclassified
+            # in each of this epoch's training splits:
+            curr_epoch_misses = []
+            [curr_epoch_misses.extend(split_tallies.badly_predicted_labels) 
+                for split_tallies
+                 in self.tally_collection.tallies(epoch=self.epoch)
+                 ]
+            
+            # Get the basenames of the files that
+            # correspond to each of the samples:
+            difficult_images = \
+                [os.path.basename(self.dataloader.dataset.sample_id_to_path[sample_id.item()])
+                for sample_id
+                 in curr_epoch_misses]
+            
+            self.write_json_record(tally, difficult_images)
+        
         return tally
 
     #------------------------------------
@@ -639,6 +683,7 @@ class BirdTrainer(object):
                 self.epoch += 1
                 epoch_train_loss = 0
                 split_num = 0
+                
                 # Get an iterator over all the 
                 # splits from the dataloader:
                 split_training_iterator = self.train_one_split(split_num, 
@@ -678,11 +723,12 @@ class BirdTrainer(object):
 
                 # Compute the mean over successive accuracy differences
                 # after the past few epochs. Where 'few' means
-                # EPOCHS_FOR_PLATEAU_DETECTION:
+                # EPOCHS_FOR_PLATEAU_DETECTION. The '1+' is needed
+                # because our epochs start at 1:
 
                 past_accuracies = [accuracies[epoch] for epoch 
-                                   in range(len(accuracies)-self.EPOCHS_FOR_PLATEAU_DETECTION,
-                                            self.epoch
+                                   in range(1+len(accuracies)-self.EPOCHS_FOR_PLATEAU_DETECTION,
+                                            self.epoch+1
                                             )]
                 diff_avg = self.mean_diff(torch.tensor(past_accuracies))
 
@@ -722,27 +768,20 @@ class BirdTrainer(object):
         # While loop will be exited when
         # dataloader has exhausted all batches
         # from each fold from every split:
-
-        # Get an iterator through all the 
-        # dataloader's batches:
-        batch_feeder = next(self.dataloader)
         
-        while True:
-            if self.dataloader.finished_split:
+        for _i, (batch,targets) in enumerate(self.dataloader):
 
-                # End of a split, record this split's
+            if batch is None:
+                # Exhausted this split. Record this split's
                 # training results, and yield till
                 # the next split's worth of training
                 # is requested by the caller:
+                
                 self.tally_result(split_num,
                                   label_stack, 
                                   output_stack,
                                   loss, 
                                   LearningPhase.TRAINING)
-                
-                # Acknowledge receipt of the end-of-split:
-
-                self.dataloader.finished_split = False
                 
                 # Sit until next() is called on this 
                 # generator again. At that point we continue feeding
@@ -759,53 +798,44 @@ class BirdTrainer(object):
                 # ... and continue in the while loop,
                 # using the continuing batch_feeder
                 continue
+
+            # Got another batch/targets pair:
+            # Push sample and target tensors
+            # to where the model is:
+            batch   = batch.to(self.device_residence(self.model))
+            targets = targets.to(self.device_residence(self.model))
+            
+            outputs = self.model(batch)
+            loss = self.loss_func(outputs, targets)
+            self.tally_collection.add_loss(self.epoch, 
+                                           loss,
+                                           LearningPhase.TRAINING
+                                           )
+            epoch_loss += loss
+            loss.backward()
+            self.optimizer.step()
+            
+            # Free GPU memory:
+            batch   = batch.to('cpu')
+            targets = targets.to('cpu')
+            outputs = outputs.to('cpu')
+
+            # Remember performance:
+            if output_stack is None:
+                output_stack = torch.unsqueeze(outputs, dim=0)
             else:
-                # Not at the end of a split:
-                # The following call will raise StopIteration
-                # when all batches across the split have
-                # been served out:
-                (batch, targets) = next(batch_feeder)
+                output_stack = torch.cat((output_stack, torch.unsqueeze(outputs, 
+                                                                        dim=0))) 
+            if label_stack is None:
+                label_stack = torch.unsqueeze(targets, dim=0)
+            else:
+                label_stack = torch.cat((label_stack, torch.unsqueeze(targets, 
+                                                                      dim=0)))
+            # Pending STOP request?
+            if BirdTrainer.STOP:
+                raise InterruptTraining()
+            
 
-                if batch is None:
-                    # Exhausted this split. Top of while
-                    # loop will notice, and prepare for
-                    # the client's next split to be processed:
-                    continue
-
-                # Push sample and target tensors
-                # to where the model is:
-                batch   = batch.to(self.device_residence(self.model))
-                targets = targets.to(self.device_residence(self.model))
-                
-                outputs = self.model(batch)
-                loss = self.loss_func(outputs, targets)
-                self.tally_collection.add_loss(self.epoch, 
-                                               loss,
-                                               LearningPhase.TRAINING
-                                               )
-                epoch_loss += loss
-                loss.backward()
-                self.optimizer.step()
-                
-                # Free GPU memory:
-                batch   = batch.to('cpu')
-                targets = targets.to('cpu')
-                outputs = outputs.to('cpu')
-    
-                # Remember performance:
-                if output_stack is None:
-                    output_stack = torch.unsqueeze(outputs, dim=0)
-                else:
-                    output_stack = torch.cat((output_stack, torch.unsqueeze(outputs, 
-                                                                            dim=0))) 
-                if label_stack is None:
-                    label_stack = torch.unsqueeze(targets, dim=0)
-                else:
-                    label_stack = torch.cat((label_stack, torch.unsqueeze(targets, 
-                                                                          dim=0)))
-                # Pending STOP request?
-                if BirdTrainer.STOP:
-                    raise InterruptTraining()
 
 
     #------------------------------------
@@ -1246,10 +1276,10 @@ class BirdTrainer(object):
         return configparser_obj
 
     #------------------------------------
-    # setup_result_logging
+    # setup_logging
     #-------------------
     
-    def setup_result_logging(self, logfile, num_classes):
+    def setup_logging(self, logfile, num_classes):
 
         if logfile is None:
             default_logfile_name = os.path.join(os.path.dirname(__file__), 
@@ -1292,6 +1322,63 @@ class BirdTrainer(object):
         self.one_sample_zeros  = torch.zeros(num_classes)
         
         self.tally_collection = TrainResultCollection()
+
+    #------------------------------------
+    # setup_json_logging 
+    #-------------------
+    
+    def setup_json_logging(self, kernel_size, batch_size, json_log_dir=None):
+        
+        now = datetime.datetime.now()
+        base_filepath = (f"{now.strftime('%d-%m-%Y')}_{now.strftime('%H-%M')}_K{kernel_size}" 
+                         f"_B{batch_size}.jsonl")
+        #***** Creates a subdirectory named '2' under
+        #    src/tests, rather than runs_json:
+        #***** Too many json lines written: 197
+        if json_log_dir is None:
+            curr_dir = os.path.dirname(__file__)
+            json_log_dir = os.path.join(curr_dir, 'runs_json')
+            
+        if not os.path.exists(json_log_dir) or not os.path.isdir(json_log_dir):
+            os.mkdir(json_log_dir, 0o755)
+        self.json_filepath = os.path.join(json_log_dir, base_filepath)
+        
+        with open(self.json_filepath, 'w') as f:
+            f.write(json.dumps(['epoch', 
+                                'loss', 
+                                'training_accuracy', 
+                                'testing_accuracy', 
+                                'precision', 
+                                'recall', 
+                                'incorrect_paths', 
+                                'confusion_matrix']) + "\n")
+
+    #------------------------------------
+    # write_json_record 
+    #-------------------
+
+    def write_json_record(self, tally, incorrect_paths):
+        
+        # Mean of accuracies among the 
+        # training splits:
+        mean_accuracy_training = \
+           self.tally_collection.mean_accuracy(tally.epoch, 
+                                               learning_phase=LearningPhase.TRAINING)
+           
+        mean_accuracy_validating = \
+           self.tally_collection.mean_accuracy(tally.epoch, 
+                                               learning_phase=LearningPhase.VALIDATING)
+           
+        with open(self.json_filepath, 'a') as f:
+            f.write(json.dumps(
+                    [tally.epoch, 
+                     tally.loss.item(), 
+                     mean_accuracy_training,
+                     mean_accuracy_validating,
+                     tally.precision.item(), 
+                     tally.accuracy.item(),
+                     incorrect_paths,
+                     tally.conf_matrix.tolist()]) + "\n")
 
     #------------------------------------
     # setup_gpu 
@@ -1464,10 +1551,10 @@ class Resnet18Grayscale(ResNet):
         return next(self.parameters()).device
 
     #------------------------------------
-    # setup_result_logging 
+    # setup_logging 
     #-------------------
     
-    def setup_result_logging(self):
+    def setup_logging(self):
 
         now = datetime.datetime.now()
         self.log_filepath = now.strftime("%d-%m-%Y") + '_' + now.strftime("%H-%M") + "_K" + str(

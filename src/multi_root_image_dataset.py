@@ -182,6 +182,7 @@ class SingleRootImageDataset:
             # Update where to start the IDs for the
             # next folder
             sample_id_start += len(sample_id_range)
+            
 
     #------------------------------------
     # sample_ids

@@ -4,16 +4,17 @@ Created on Dec 23, 2020
 @author: paepcke
 '''
 
-from enum import Enum
-import numpy as np
 import datetime
+import json
+import os
 
 import torch
 
+import numpy as np
 from utils.learning_phase import LearningPhase
 
-# ---------------------- Class Train Result Collection --------
 
+# ---------------------- Class Train Result Collection --------
 class TrainResultCollection(dict):
     
     #------------------------------------
@@ -36,13 +37,13 @@ class TrainResultCollection(dict):
         
         all_tallies = self.values()
         if epoch is not None:
-            all_tallies = filter(lambda t: t.epoch() == epoch, 
+            all_tallies = filter(lambda t: t.epoch == epoch, 
                                  all_tallies)
         if learning_phase is not None:
-            all_tallies = filter(lambda t: t.learning_phase() == learning_phase,
+            all_tallies = filter(lambda t: t.learning_phase == learning_phase,
                                  all_tallies)
         
-        for tally in sorted(list(all_tallies), key=lambda t: t.created_at()):
+        for tally in sorted(list(all_tallies), key=lambda t: t.created_at):
             yield tally
 
     # ----------------- Epoch-Level Aggregation Methods -----------
@@ -95,17 +96,17 @@ class TrainResultCollection(dict):
         '''
 
         if epoch is None:
-            m = np.mean([tally.accuracy()
+            m = np.mean([tally.accuracy
                          for tally 
                          in self.values()
-                         if tally.learning_phase() == learning_phase
+                         if tally.learning_phase == learning_phase
                          ])
         else:
-            m = np.mean([tally.accuracy() 
+            m = np.mean([tally.accuracy 
                          for tally 
                          in self.values() 
-                         if tally.epoch() == epoch and \
-                            tally.learning_phase() == learning_phase
+                         if tally.epoch == epoch and \
+                            tally.learning_phase == learning_phase
                          ])
         # m is an np.float.
         # We want to return a Python float. The conversion
@@ -124,7 +125,7 @@ class TrainResultCollection(dict):
         mean_acc = round(mean_acc_tensor.item(), 6) 
         
         return mean_acc
-    
+
     #******* Needs thinking and debugging
 #     #------------------------------------
 #     # mean_within_class_recall
@@ -172,7 +173,18 @@ class TrainResultCollection(dict):
         @param tally_result: the result to add
         @type tally_result: TrainResult
         '''
-        self[tally_result.split_num] = tally_result
+        # Need as retrieval key the epoch, the split_num, 
+        # and the learning phase, because split nums restart
+        # with each epoch. The key must be hashable, so
+        # cannot use the raw learning_phase enum instance.
+        # Convert it to 'Training', 'Validating', or 'Testing':
+        
+        learning_phase_textual = tally_result.learning_phase.name.capitalize()
+        tally_key = (tally_result.epoch, 
+                     tally_result.split_num,
+                     learning_phase_textual,
+                     ) 
+        self[tally_key] = tally_result
 
     #------------------------------------
     # add_loss 
@@ -274,13 +286,40 @@ class TrainResult:
     # Constructor 
     #-------------------
 
-    def __init__(self, split_num, epoch, learning_phase, loss, conf_matrix):
+    def __init__(self, 
+                 split_num, 
+                 epoch, 
+                 learning_phase, 
+                 loss, 
+                 conf_matrix,
+                 badly_predicted_labels=None):
+        '''
+        Organize results from one train, validate,
+        or test split.
+        
+        @param split_num: split number within current epoch
+        @type split_num: int
+        @param epoch: current epoch
+        @type epoch: int
+        @param learning_phase: whether result is from training,
+            validation, or testing phase
+        @type learning_phase: LearningPhase
+        @param loss: result of loss function
+        @type loss: Tensor
+        @param conf_matrix: confusion matrix containing counts
+            of correctly and incorrectly predicted labels
+        @type conf_matrix: Tensor
+        @param badly_predicted_labels: optionally, the labels that
+            were incorrectly predicted
+        @type badly_predicted_labels: Tensor
+        '''
         
         self._split_num      = split_num
         self._epoch          = epoch
         self._learning_phase = learning_phase
         self._loss           = loss
         self._conf_matrix    = conf_matrix
+        self._badly_predicted_labels = badly_predicted_labels
         
         self._num_samples = self._num_correct = self._num_wrong = None
         self._within_class_recalls = self._within_class_precisions = None
@@ -291,45 +330,56 @@ class TrainResult:
     #------------------------------------
     # num_correct 
     #-------------------
-    
+
+    @property
     def num_correct(self):
         if self._num_correct is None:
-            self._num_correct = torch.sum(torch.diagonal(self.conf_matrix()))
+            self._num_correct = torch.sum(torch.diagonal(self.conf_matrix))
         return self._num_correct
 
     #------------------------------------
     # num_wrong
     #-------------------
 
+    @property
     def num_wrong(self):
         if self._num_wrong is None:
-            self._num_wrong = self.num_samples() - self.num_correct()
+            self._num_wrong = self.num_samples - self.num_correct
         return self._num_wrong
 
     #------------------------------------
     # precision 
     #-------------------
 
+    @property
     def precision(self):
-        return torch.mean(self.within_class_precisions())
+        return torch.mean(self.within_class_precisions)
 
     #------------------------------------
     # recall 
     #-------------------
 
+    @property
     def recall(self):
-        return torch.mean(self.within_class_recalls())
+        return torch.mean(self.within_class_recalls)
 
     #------------------------------------
     # within_class_recalls 
     #-------------------
-    
+
+    @property
     def within_class_recalls(self):
+        '''
+        A tensor with a recall for each
+        of the target classes. Length of the
+        tensor is therefore the number of 
+        the classes: 
+        '''
         if self._within_class_recalls is None:
             #  For each class C: 
             #     num_correctly_predicted-C-samples / num-samples-in-class-C
-            diag = torch.diagonal(self.conf_matrix())
-            self._within_class_recalls = diag / torch.sum(self.conf_matrix(), 
+            diag = torch.diagonal(self.conf_matrix)
+            self._within_class_recalls = diag / torch.sum(self.conf_matrix, 
                                                           axis = 0)
         return self._within_class_recalls
             
@@ -337,12 +387,19 @@ class TrainResult:
     # within_class_precisions 
     #-------------------
     
+    @property
     def within_class_precisions(self):
+        '''
+        A tensor with a precision for each
+        of the target classes. Length of the
+        tensor is therefore the number of 
+        the classes: 
+        '''
         if self._within_class_precisions is None:
             #  For each class C:
             #     For each class C: num_correctly_predicted-C-samples / num-samples-predicted-to-be-in-class-C
-            diag = torch.diagonal(self.conf_matrix())
-            self._within_class_precisions = diag / torch.sum(self.conf_matrix(), 
+            diag = torch.diagonal(self.conf_matrix)
+            self._within_class_precisions = diag / torch.sum(self.conf_matrix, 
                                                             axis = 1)
         return self._within_class_precisions
 
@@ -350,22 +407,25 @@ class TrainResult:
     # accuracy 
     #-------------------
 
+    @property
     def accuracy(self):
         if self._accuracy is None:
-            self._accuracy = self.num_correct() / self.num_samples()
+            self._accuracy = self.num_correct / self.num_samples
         return self._accuracy
 
     #------------------------------------
     # epoch 
     #-------------------
 
+    @property
     def epoch(self):
         return self._epoch
 
     #------------------------------------
     # split_num 
     #-------------------
-    
+
+    @property
     def split_num(self):
         return self._split_num
 
@@ -373,15 +433,17 @@ class TrainResult:
     # num_samples
     #-------------------
 
+    @property
     def num_samples(self):
         if self._num_samples is None:
-            self._num_samples = int(torch.sum(self.conf_matrix()))
+            self._num_samples = int(torch.sum(self.conf_matrix))
         return self._num_samples
 
     #------------------------------------
     # learning_phase 
     #-------------------
     
+    @property
     def learning_phase(self):
         return self._learning_phase
     
@@ -389,6 +451,7 @@ class TrainResult:
     # loss 
     #-------------------
     
+    @property
     def loss(self):
         return self._loss
 
@@ -396,6 +459,7 @@ class TrainResult:
     # conf_matrix 
     #-------------------
     
+    @property
     def conf_matrix(self):
         return self._conf_matrix
     
@@ -403,9 +467,55 @@ class TrainResult:
     # created_at 
     #-------------------
     
+    @property
     def created_at(self):
         return(self._created_at)
 
+    #------------------------------------
+    # badly_predicted_labels 
+    #-------------------
+
+    @property
+    def badly_predicted_labels(self):
+        return self._badly_predicted_labels
+
+    #------------------------------------
+    # __repr__ 
+    #-------------------
+    
+    def __repr__(self):
+        (cm_num_rows, cm_num_cols) = self.conf_matrix.size()
+        cm_dim = f"{cm_num_rows} x {cm_num_cols}"
+        lp = self.learning_phase
+        if lp == LearningPhase.TRAINING:
+            learning_phase = 'Train'
+        elif lp == LearningPhase.VALIDATING:
+            learning_phase = 'Val'
+        elif lp == LearningPhase.TESTING:
+            learning_phase = 'Test'
+        else:
+            raise TypeError(f"Wrong type for {self.learning_phase}")
+            
+        human_readable = (f"<TrainResult epoch {self.epoch} " +
+                          f"split {self.split_num} " +
+                          f"phase {learning_phase} " +
+                          f"conf_matrix {cm_dim}>")
+        return human_readable 
+
+    #------------------------------------
+    # __str__ 
+    #-------------------
+    
+    def __str__(self):
+        '''
+        String representation guaranteed to be unique within a session
+        '''
+        return f"<TrainResult object at {self.id()}>"
+
+            
+#===============================================================================
+# 
+#===============================================================================
 #     #------------------------------------
 #     # __eq__ 
 #     #-------------------

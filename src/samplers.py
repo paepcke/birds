@@ -59,13 +59,6 @@ class SKFSampler(StratifiedKFold):
         self.dataset = dataset
         self.seed = seed
         
-        # Keep track of how many folds
-        # we served. Just for logging, 
-        # performance analysis, and
-        # debugging:
-
-        self.folds_served = 0
-        
         if self.shuffle:
             g = torch.Generator()
             g.manual_seed(self.seed)
@@ -73,16 +66,21 @@ class SKFSampler(StratifiedKFold):
         else:
             indices = range(len(self.dataset))
 
-        my_classes = [dataset.sample_id_to_class[indx] for indx in indices]
+        #**********
+        #my_classes = [dataset.sample_id_to_class[indx] for indx in indices]
+        self.my_classes = [dataset.sample_id_to_class[indx] for indx in indices]
+        #***********
 
         # Stratified k-fold needs only the labels 
         # in an array; the corresponding samples each 
         # have the same index as the one for each 
         # y-split (https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.StratifiedKFold.html#sklearn.model_selection.StratifiedKFold)
         
-        self.fold_generator = self.split(np.zeros(len(dataset)), 
-                                         my_classes
-                                         )
+        #***********
+        #self.fold_generator = self.split(np.zeros(len(dataset)), 
+        #                                 my_classes
+        #                                 )
+        #***********
 
     #------------------------------------
     # __len__ 
@@ -92,23 +90,15 @@ class SKFSampler(StratifiedKFold):
         return len(self.dataset)
 
     #------------------------------------
-    # __iter__ 
-    #-------------------
-
-    def __iter__(self):
-        return self
-
-    #------------------------------------
-    # __next__ 
+    # get_split
     #-------------------
     
-    def __next__(self):
-        try:
-            return next(self.fold_generator)
-        except StopIteration as e:
-            self.folds_served += 1
-            raise StopIteration from e 
-
+    def get_split(self):
+        for _i, train_and_validate_samples in enumerate(
+            self.split(np.zeros(len(self.dataset)), 
+                       self.my_classes)
+            ):
+            yield train_and_validate_samples
 
 # --------------------------- Class DistributedSKFSampler --------------
 
