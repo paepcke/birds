@@ -601,57 +601,73 @@ class BirdTrainer(object):
         
         self.tally_collection.add(tally)
 
-        # For json logging: get file names 
-        # of samples that were incorrectly 
-        # identified; just get the basenames:
-        
-        if learning_phase == LearningPhase.VALIDATING or \
-           learning_phase == LearningPhase.TESTING:
-            
-            # Get the sample_ids that were misclassified
-            # in each of this epoch's training splits:
-            curr_epoch_misses = []
-            [curr_epoch_misses.extend(split_tallies.badly_predicted_labels) 
-                for split_tallies
-                 in self.tally_collection.tallies(epoch=self.epoch)
-                 ]
-            
-            # Get the basenames of the files that
-            # correspond to each of the samples:
-            difficult_images = \
-                [os.path.basename(self.dataloader.dataset.sample_id_to_path[sample_id.item()])
-                for sample_id
-                 in curr_epoch_misses]
-            
-            self.write_json_record(tally, difficult_images)
         
         return tally
 
     #------------------------------------
-    # record_amy_display_results 
+    # record_json_display_results 
     #-------------------
     
-    def record_amy_display_results(self, tally):
+    def record_json_display_results(self, epoch):
         '''
-        Amy's displays of results with bird names
-        in confusion matrix require json file
-        records equivalent to what's in a TrainResult.
-        Write out to file:
+        Amy Dunphy's confusion matrix heatmaps
+        that are labeled at the edges with class
+        names needs a particularly formated json
+        file. Write one epoch's worth of performance
+        summaries to that file.
         
-        @param tally: results from one training split
-        @type tally: TrainResult
+        Assumption: setup_json_logging() was called
+           before the call to this method.
         '''
+
+        # For json logging: get file names 
+        # of samples that were incorrectly 
+        # identified; just get the basenames:
         
-        with open(self.log_filepath, 'a') as f:
+        # Get the sample_ids that were misclassified
+        # in each of this epoch's training splits:
+        curr_epoch_misses = []
+        [curr_epoch_misses.extend(split_tallies.badly_predicted_labels) 
+            for split_tallies
+             in self.tally_collection.tallies(epoch=self.epoch)
+             ]
+        
+        # Get the basenames of the files that
+        # correspond to each of the mis-classified
+        # samples:
+        
+        incorrect_paths = \
+            [os.path.basename(self.dataloader.dataset.sample_id_to_path[sample_id.item()])
+            for sample_id
+             in curr_epoch_misses]
+
+        # Mean of accuracies among the 
+        # training splits of this epoch
+        mean_accuracy_training = \
+           self.tally_collection.mean_accuracy(epoch, 
+                                               learning_phase=LearningPhase.TRAINING)
+           
+        mean_accuracy_validating = \
+           self.tally_collection.mean_accuracy(epoch, 
+                                               learning_phase=LearningPhase.VALIDATING)
+
+        epoch_loss = self.tally_collection.cumulative_loss(epoch=epoch, 
+                                                           learning_phase=LearningPhase.VALIDATING)
+        epoch_mean_precision = self.tally_collection
+
+        with open(self.json_filepath, 'a') as f:
             f.write(json.dumps(
-                [self.epoch, 
-                 self.loss, 
-                 tally.accumulated if tally.learning_phase == LearningPhase.TRAINING else None,
-                 tally.accumulated if tally.learning_phase == LearningPhase.VALIDATING else None,
-                 tally.precision,
-                 tally.recall, 
-                 None,            # incorrect_paths, 
-                 tally.confusion_matrix.tolist()]) + "\n")
+                    [epoch, 
+                     epoch_loss,
+                     mean_accuracy_training,
+                     mean_accuracy_validating,
+                     tally.precision.item(), 
+                     tally.accuracy.item(),
+                     incorrect_paths,
+                     tally.conf_matrix.tolist()]) + "\n")
+
+
+
 
     #------------------------------------
     # train 

@@ -126,6 +126,15 @@ class TrainResultCollection(dict):
         
         return mean_acc
 
+    #------------------------------------
+    # mean_precision 
+    #-------------------
+    
+    def mean_precision(self, epoch, learning_phase=LearningPhase.VALIDATING):
+        #*****
+        pass
+
+
     #******* Needs thinking and debugging
 #     #------------------------------------
 #     # mean_within_class_recall
