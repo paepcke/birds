@@ -5,8 +5,8 @@ Created on Dec 23, 2020
 '''
 
 import datetime
-import json
-import os
+from sklearn.metrics import confusion_matrix
+from sklearn import metrics
 
 import torch
 
@@ -127,12 +127,89 @@ class TrainResultCollection(dict):
         return mean_acc
 
     #------------------------------------
-    # mean_precision 
+    # mean_weighted_precision 
     #-------------------
     
-    def mean_precision(self, epoch, learning_phase=LearningPhase.VALIDATING):
-        #*****
-        pass
+    
+    def mean_weighted_precision(self, 
+                                epoch, 
+                                learning_phase=LearningPhase.VALIDATING):
+        if epoch is None:
+            m = np.mean([tally.precision_weighted
+                         for tally 
+                         in self.values()
+                         if tally.learning_phase == learning_phase
+                         ])
+        else:
+            m = np.mean([tally.precision_weighted
+                         for tally 
+                         in self.values() 
+                         if tally.epoch == epoch and \
+                            tally.learning_phase == learning_phase
+                         ])
+
+        # m is an np.float.
+        # We want to return a Python float. The conversion
+        # starts being inaccurate around the 6th digit.
+        # Example:
+        #      torch.tensor(0.9).item() --> 0.8999999761581421  
+        # This inaccuracy is 'inherited' into the np.float32. 
+        # The following gymnastics are a work-around:
+        # Round in numpy country:
+        
+        mean_prec_tensor = (m * 10**6).round() / (10**6)
+        
+        # Convert to Python float, and round that
+        # float to 6 digits:
+        
+        mean_precision = round(mean_prec_tensor.item(), 6)
+        return mean_precision
+
+    #------------------------------------
+    # mean_weighted_recall
+    #-------------------
+
+    def mean_weighted_recall(self, epoch, learning_phase=LearningPhase.VALIDATING):
+        if epoch is None:
+            m = np.mean([tally.recall_weighted
+                         for tally 
+                         in self.values()
+                         if tally.learning_phase == learning_phase
+                         ])
+        else:
+            m = np.mean([tally.recall_weighted
+                         for tally 
+                         in self.values() 
+                         if tally.epoch == epoch and \
+                            tally.learning_phase == learning_phase
+                         ])
+
+        # m is an np.float.
+        # We want to return a Python float. The conversion
+        # starts being inaccurate around the 6th digit.
+        # Example:
+        #      torch.tensor(0.9).item() --> 0.8999999761581421  
+        # This inaccuracy is 'inherited' into the np.float32. 
+        # The following gymnastics are a work-around:
+        # Round in numpy country:
+        
+        mean_recall_tensor = (m * 10**6).round() / (10**6)
+        
+        # Convert to Python float, and round that
+        # float to 6 digits:
+        
+        mean_recall = round(mean_recall_tensor.item(), 6)
+        return mean_recall
+
+    #------------------------------------
+    # conf_matrix_aggregated 
+    #-------------------
+    
+    def conf_matrix_aggregated(self, epoch=None, learning_phase=LearningPhase.VALIDATING):
+        
+        conf_matrix_sum = torch.zeros((self.num_classes, self.num_classes), dtype=int)
+        for tally in self.tallies(epoch, learning_phase):
+            conf_matrix_sum += tally.conf_matrix
 
 
     #******* Needs thinking and debugging
@@ -300,12 +377,14 @@ class TrainResult:
                  epoch, 
                  learning_phase, 
                  loss, 
-                 conf_matrix,
+                 predicted_class_ids,
+                 truth_labels,
+                 num_classes,
                  badly_predicted_labels=None):
         '''
         Organize results from one train, validate,
         or test split.
-        
+        #****** Add the new args
         @param split_num: split number within current epoch
         @type split_num: int
         @param epoch: current epoch
@@ -323,18 +402,87 @@ class TrainResult:
         @type badly_predicted_labels: Tensor
         '''
         
-        self._split_num      = split_num
-        self._epoch          = epoch
-        self._learning_phase = learning_phase
-        self._loss           = loss
-        self._conf_matrix    = conf_matrix
-        self._badly_predicted_labels = badly_predicted_labels
+        # Some of the following assignments to instance
+        # variables are just straight transfers from
+        # arguments to inst vars. 
+        #
+        # Other assignments create properties
+        #
+        # The funky TrainResult.foo = lambda self: self._foo
+        # adds a property for the instance var:
         
-        self._num_samples = self._num_correct = self._num_wrong = None
-        self._within_class_recalls = self._within_class_precisions = None
-        self._accuracy = None
+        self.created_at = datetime.datetime.now()
+        self.split_num      = split_num
+        self.epoch          = epoch
+        self.learning_phase = learning_phase
+        self.loss           = loss
+        self.badly_predicted_labels = badly_predicted_labels
+        self.num_classes = num_classes
+                
+        self.conf_matrix = self.compute_confusion_matrix(predicted_class_ids,
+                                                          truth_labels)
+
+        # Find classes that are present in the
+        # truth labels; all others will be excluded
+        # from metrics in this result.
+        # Use set subtraction to get the non-represented:
+
+        # Precision
+
+        self.precision_macro = metrics.precision_score(truth_labels, 
+                                                       predicted_class_ids,
+                                                       average='macro')
+
+        self.precision_micro = metrics.precision_score(truth_labels, 
+                                                       predicted_class_ids,
+                                                       average='micro')
+
+        self.precision_weighted = metrics.precision_score(truth_labels, 
+                                                          predicted_class_ids,
+                                                          average='weighted')
         
-        self._created_at = datetime.datetime.now() 
+        # Recall
+        
+        self.recall_macro = metrics.recall_score(truth_labels, 
+                                                 predicted_class_ids,
+                                                 average='macro')
+
+        self.recall_micro = metrics.recall_score(truth_labels, 
+                                                 predicted_class_ids,
+                                                 average='micro')
+
+        self.recall_weighted = metrics.recall_score(truth_labels, 
+                                                    predicted_class_ids,
+                                                    average='weighted')
+                
+        self.f1_score_weighted = metrics.precision_score(truth_labels, 
+                                                         predicted_class_ids,
+                                                         average='weighted')
+
+    #------------------------------------
+    # compute_confusion_matrix
+    #-------------------
+    
+    def compute_confusion_matrix(self, predicted_class_ids, truth_labels):
+        # Example Confustion matrix for 16 samples,
+        # in 3 classes:
+        # 
+        #              C_1-pred, C_2-pred, C_3-pred
+        #  C_1-true        3         1        0
+        #  C_2-true        2         6        1
+        #  C_3-true        0         0        3
+        
+        # The class IDs (labels kwarg) is needed for
+        # sklearn to know about classes that were not
+        # encountered:
+        
+        conf_matrix = torch.tensor(confusion_matrix(
+            truth_labels,          # Truth
+            predicted_class_ids,   # Prediction
+            labels=list(range(self.num_classes)) # Class labels
+            ))
+
+        return conf_matrix
 
     #------------------------------------
     # num_correct 
@@ -342,9 +490,11 @@ class TrainResult:
 
     @property
     def num_correct(self):
-        if self._num_correct is None:
+        try:
+            return self._num_correct
+        except AttributeError:
             self._num_correct = torch.sum(torch.diagonal(self.conf_matrix))
-        return self._num_correct
+            return self._num_correct
 
     #------------------------------------
     # num_wrong
@@ -352,9 +502,11 @@ class TrainResult:
 
     @property
     def num_wrong(self):
-        if self._num_wrong is None:
+        try:
+            return self._num_wrong
+        except AttributeError:
             self._num_wrong = self.num_samples - self.num_correct
-        return self._num_wrong
+            return self._num_wrong
 
     #------------------------------------
     # precision 
@@ -362,7 +514,7 @@ class TrainResult:
 
     @property
     def precision(self):
-        return torch.mean(self.within_class_precisions)
+        return self.precision_weighted
 
     #------------------------------------
     # recall 
@@ -370,7 +522,7 @@ class TrainResult:
 
     @property
     def recall(self):
-        return torch.mean(self.within_class_recalls)
+        return self.recall_weighted
 
     #------------------------------------
     # within_class_recalls 
@@ -384,13 +536,15 @@ class TrainResult:
         tensor is therefore the number of 
         the classes: 
         '''
-        if self._within_class_recalls is None:
+        try:
+            return self._within_class_recalls
+        except AttributeError:
             #  For each class C: 
             #     num_correctly_predicted-C-samples / num-samples-in-class-C
             diag = torch.diagonal(self.conf_matrix)
             self._within_class_recalls = diag / torch.sum(self.conf_matrix, 
                                                           axis = 0)
-        return self._within_class_recalls
+            return self._within_class_recalls
             
     #------------------------------------
     # within_class_precisions 
@@ -404,13 +558,15 @@ class TrainResult:
         tensor is therefore the number of 
         the classes: 
         '''
-        if self._within_class_precisions is None:
+        try:
+            return self._within_class_precisions
+        except AttributeError:
             #  For each class C:
             #     For each class C: num_correctly_predicted-C-samples / num-samples-predicted-to-be-in-class-C
             diag = torch.diagonal(self.conf_matrix)
             self._within_class_precisions = diag / torch.sum(self.conf_matrix, 
                                                             axis = 1)
-        return self._within_class_precisions
+            return self._within_class_precisions
 
     #------------------------------------
     # accuracy 
@@ -418,25 +574,11 @@ class TrainResult:
 
     @property
     def accuracy(self):
-        if self._accuracy is None:
+        try:
+            return self._accuracy
+        except AttributeError:            
             self._accuracy = self.num_correct / self.num_samples
-        return self._accuracy
-
-    #------------------------------------
-    # epoch 
-    #-------------------
-
-    @property
-    def epoch(self):
-        return self._epoch
-
-    #------------------------------------
-    # split_num 
-    #-------------------
-
-    @property
-    def split_num(self):
-        return self._split_num
+            return self._accuracy
 
     #------------------------------------
     # num_samples
@@ -444,49 +586,11 @@ class TrainResult:
 
     @property
     def num_samples(self):
-        if self._num_samples is None:
+        try:
+            return self._num_samples
+        except AttributeError:
             self._num_samples = int(torch.sum(self.conf_matrix))
-        return self._num_samples
-
-    #------------------------------------
-    # learning_phase 
-    #-------------------
-    
-    @property
-    def learning_phase(self):
-        return self._learning_phase
-    
-    #------------------------------------
-    # loss 
-    #-------------------
-    
-    @property
-    def loss(self):
-        return self._loss
-
-    #------------------------------------
-    # conf_matrix 
-    #-------------------
-    
-    @property
-    def conf_matrix(self):
-        return self._conf_matrix
-    
-    #------------------------------------
-    # created_at 
-    #-------------------
-    
-    @property
-    def created_at(self):
-        return(self._created_at)
-
-    #------------------------------------
-    # badly_predicted_labels 
-    #-------------------
-
-    @property
-    def badly_predicted_labels(self):
-        return self._badly_predicted_labels
+            return self.num_samples
 
     #------------------------------------
     # __repr__ 

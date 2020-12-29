@@ -3,13 +3,16 @@ Created on Dec 23, 2020
 
 @author: paepcke
 '''
+import statistics
 import unittest
 
-import torch
+from sklearn import metrics
 from sklearn.metrics import confusion_matrix
+import torch
 
-from birds_train_parallel import TrainResultCollection, TrainResult
 from birds_train_parallel import LearningPhase
+from birds_train_parallel import TrainResultCollection, TrainResult
+
 
 TEST_ALL = True
 #TEST_ALL = False
@@ -84,11 +87,11 @@ class Test(unittest.TestCase):
                             self.single_pred,
                             LearningPhase.TRAINING
                             )
-        self.assertEqual(tally.epoch(), 1)
-        self.assertEqual(tally.split_num(), 0)
-        self.assertEqual(tally.num_samples(), 1)
-        self.assertEqual(tally.num_correct(), 1)
-        self.assertEqual(tally.num_wrong(), 0)
+        self.assertEqual(tally.epoch, 1)
+        self.assertEqual(tally.split_num, 0)
+        self.assertEqual(tally.num_samples, 1)
+        self.assertEqual(tally.num_correct, 1)
+        self.assertEqual(tally.num_wrong, 0)
 
         tally = self.tally_result(
                             0, # Split number
@@ -96,11 +99,11 @@ class Test(unittest.TestCase):
                             self.single_pred,
                             LearningPhase.TRAINING
                             )
-        self.assertEqual(tally.epoch(), 1)
-        self.assertEqual(tally.split_num(), 0)
-        self.assertEqual(tally.num_samples(), 1)
-        self.assertEqual(tally.num_correct(), 0)
-        self.assertEqual(tally.num_wrong(), 1)
+        self.assertEqual(tally.epoch, 1)
+        self.assertEqual(tally.split_num, 0)
+        self.assertEqual(tally.num_samples, 1)
+        self.assertEqual(tally.num_correct, 0)
+        self.assertEqual(tally.num_wrong, 1)
 
     #------------------------------------
     # test_basics_two_splits
@@ -114,11 +117,11 @@ class Test(unittest.TestCase):
                             self.batch_pred,
                             LearningPhase.TRAINING
                             )
-        self.assertEqual(tally.epoch(), 1)
-        self.assertEqual(tally.split_num(), 0)
-        self.assertEqual(tally.num_samples(), 2)
-        self.assertEqual(tally.num_correct(), 2)
-        self.assertEqual(tally.num_wrong(), 0)
+        self.assertEqual(tally.epoch, 1)
+        self.assertEqual(tally.split_num, 0)
+        self.assertEqual(tally.num_samples, 2)
+        self.assertEqual(tally.num_correct, 2)
+        self.assertEqual(tally.num_wrong, 0)
 
         tally = self.tally_result(
                             0, # Split number
@@ -126,11 +129,11 @@ class Test(unittest.TestCase):
                             self.batch_pred,
                             LearningPhase.TRAINING
                             )
-        self.assertEqual(tally.epoch(), 1)
-        self.assertEqual(tally.split_num(), 0)
-        self.assertEqual(tally.num_samples(), 2)
-        self.assertEqual(tally.num_correct(), 1)
-        self.assertEqual(tally.num_wrong(), 1)
+        self.assertEqual(tally.epoch, 1)
+        self.assertEqual(tally.split_num, 0)
+        self.assertEqual(tally.num_samples, 2)
+        self.assertEqual(tally.num_correct, 1)
+        self.assertEqual(tally.num_wrong, 1)
 
     #------------------------------------
     # test_accuracy
@@ -145,7 +148,7 @@ class Test(unittest.TestCase):
                             self.single_pred,
                             LearningPhase.TRAINING
                             )
-        self.assertEqual(tally.accuracy(), 1)
+        self.assertEqual(tally.accuracy, 1)
 
         # Single split, incorrect prediction
         tally = self.tally_result(
@@ -154,7 +157,7 @@ class Test(unittest.TestCase):
                             self.single_pred,
                             LearningPhase.TRAINING
                             )
-        self.assertEqual(tally.accuracy(), 0)
+        self.assertEqual(tally.accuracy, 0)
 
         # Two splits, correct predictions
         tally = self.tally_result(
@@ -163,7 +166,7 @@ class Test(unittest.TestCase):
                             self.batch_pred,
                             LearningPhase.TRAINING
                             )
-        self.assertEqual(tally.accuracy(), 1)
+        self.assertEqual(tally.accuracy, 1)
 
         # Two splits, incorrect predictions
         tally = self.tally_result(
@@ -172,7 +175,7 @@ class Test(unittest.TestCase):
                             self.batch_pred,
                             LearningPhase.TRAINING
                             )
-        self.assertEqual(tally.accuracy(), 0.5)
+        self.assertEqual(tally.accuracy, 0.5)
 
     #------------------------------------
     # test_per_class_recall 
@@ -189,7 +192,7 @@ class Test(unittest.TestCase):
                             LearningPhase.TRAINING
                             )
         
-        recalls = tally.within_class_recalls()
+        recalls = tally.within_class_recalls
         truth   = torch.tensor([1.,1.,1.,1.])
         self.assertTrue((recalls == truth).all())
         
@@ -199,7 +202,7 @@ class Test(unittest.TestCase):
                             self.ten_results,
                             LearningPhase.TRAINING
                             )
-        recalls = tally.within_class_recalls()
+        recalls = tally.within_class_recalls
         truth   = torch.tensor([1.,1.,.8,1.])
         self.assertTrue((recalls == truth).all())
 
@@ -218,7 +221,7 @@ class Test(unittest.TestCase):
                             LearningPhase.TRAINING
                             )
         
-        precisions = tally.within_class_precisions()
+        precisions = tally.within_class_precisions
         truth   = torch.tensor([1.,1.,1.,1.])
         self.assertTrue(torch.eq(precisions, truth).all())
 
@@ -228,7 +231,7 @@ class Test(unittest.TestCase):
                             self.ten_results,
                             LearningPhase.TRAINING
                             )
-        precisions = tally.within_class_precisions()
+        precisions = tally.within_class_precisions
         # Truth is actually [0.6666..., 1.,1.,1.]. So:
         # subtract truth from precision element by element.
         # The first el will be very small, the others will
@@ -265,12 +268,14 @@ class Test(unittest.TestCase):
                             self.ten_results,
                             LearningPhase.TRAINING
                             )
-        recall_tally1_2 = tally2.within_class_recalls()
+        recall_tally1_2 = tally2.within_class_recalls
+        self.assertTrue(recall_tally1_2.eq(torch.tensor([1.0000, 1.0000, 0.8000, 1.0000])).all())
         
-        mean_recall = tally2.recall()
-        self.assertEqual(mean_recall,
-                         torch.mean(recall_tally1_2)
-                         )
+        self.assertEqual(tally2.recall,
+                         metrics.recall_score(self.ten_labels_first_wrong,
+                                      torch.argmax(self.ten_results, dim=1),
+                                      average='weighted'))
+
 
     #------------------------------------
     # test_precision 
@@ -298,13 +303,17 @@ class Test(unittest.TestCase):
                             self.ten_results,
                             LearningPhase.TRAINING
                             )
-        prec_tally1_2 = tally.within_class_precisions()
+        prec_tally1_2 = tally.within_class_precisions
+        prec_rounded = torch.round(prec_tally1_2 * 10**2) / (10**2)
+        self.assertTrue(prec_rounded.eq(torch.tensor([0.6700, 1.0000, 1.0000, 1.0000])).all())
         
-        mean_precision = tally.precision()
+        mean_precision = tally.precision
+        predictions = torch.argmax(self.ten_results, dim=1)
         self.assertEqual(mean_precision,
-                         torch.mean(prec_tally1_2)
-                         )
-
+                         metrics.precision_score(self.ten_labels_first_wrong,
+                                                 predictions,
+                                                 average='weighted'
+                                                 ))
 
     #------------------------------------
     # test_accuracy_aggregation 
@@ -325,8 +334,8 @@ class Test(unittest.TestCase):
                               self.single_pred,
                               LearningPhase.TRAINING
                               )
-        acc1 = tally1.accuracy()
-        acc2 = tally2.accuracy()
+        acc1 = tally1.accuracy
+        acc2 = tally2.accuracy
         
         mean_acc = (acc1+acc2)/2
         
@@ -438,6 +447,105 @@ class Test(unittest.TestCase):
         self.assertEqual(self.tally_collection.cumulative_loss(epoch=2),
                          loss3
                          )
+
+    #------------------------------------
+    # test_collection_wide_precision 
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_collection_wide_precision(self):
+
+        # Epoch 1 result
+        _tally1 = self.tally_result(
+                              0, # Split number
+                              self.ten_labels_perfect,
+                              self.ten_results,
+                              LearningPhase.TRAINING,
+                              epoch=1
+                              )
+        # Epoch 2 result:
+        _tally2 = self.tally_result(
+                              0, # Split number
+                              self.ten_labels_first_wrong,
+                              self.ten_results,
+                              LearningPhase.TESTING,
+                              epoch=2
+                              )
+        # Second Epoch 2 result:
+        _tally3 = self.tally_result(
+                              0, # Split number
+                              self.ten_labels_first_wrong,
+                              self.ten_results,
+                              LearningPhase.TESTING,
+                              epoch=2
+                              )
+
+
+
+        # Epoch with 1 result in Training phase
+        our_res = self.tally_collection.mean_weighted_precision(epoch=1,
+                                                                learning_phase=LearningPhase.TRAINING
+                                                                ) 
+        self.assertEqual(our_res, _tally1.precision_weighted)
+
+
+        # Epoch with 2 results in Testing phase
+        true_mean_weighted_precision = statistics.mean([
+                                                        _tally2.precision, 
+                                                        _tally3.precision])
+        our_res = self.tally_collection.mean_weighted_precision(epoch=2,
+                                                                learning_phase=LearningPhase.TESTING
+                                                                ) 
+        self.assertEqual(round(our_res,2), round(true_mean_weighted_precision,2))
+
+    #------------------------------------
+    # test_collection_wide_recall 
+    #-------------------
+    
+    #********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_collection_wide_recall(self):
+
+        # Epoch 1 result
+        _tally1 = self.tally_result(
+                              0, # Split number
+                              self.ten_labels_perfect,
+                              self.ten_results,
+                              LearningPhase.TRAINING,
+                              epoch=1
+                              )
+        # Epoch 2 result:
+        _tally2 = self.tally_result(
+                              0, # Split number
+                              self.ten_labels_first_wrong,
+                              self.ten_results,
+                              LearningPhase.TESTING,
+                              epoch=2
+                              )
+        # Second Epoch 2 result:
+        _tally3 = self.tally_result(
+                              0, # Split number
+                              self.ten_labels_first_wrong,
+                              self.ten_results,
+                              LearningPhase.TESTING,
+                              epoch=2
+                              )
+
+
+
+        # Epoch with 1 result in Training phase
+        our_res = self.tally_collection.mean_weighted_recall(epoch=1,
+                                                             learning_phase=LearningPhase.TRAINING
+                                                             ) 
+        self.assertEqual(our_res, _tally1.recall_weighted)
+
+
+        # Epoch with 2 results in Testing phase
+        true_mean_weighted_recall = statistics.mean([_tally2.recall, 
+                                                     _tally3.recall])
+        our_res = self.tally_collection.mean_weighted_recall(epoch=2,
+                                                             learning_phase=LearningPhase.TESTING
+                                                             ) 
+        self.assertEqual(round(our_res,2), round(true_mean_weighted_recall,2))
 
     #------------------------------------
     # test_result_collection_generator 
@@ -591,26 +699,18 @@ class Test(unittest.TestCase):
         
         max_logits_rowise = torch.max(pred_prob_tns, dim=1)
         pred_class_ids = max_logits_rowise.indices
-        
-        # Example Confustion matrix for 16 samples,
-        # in 3 classes:
-        # 
-        #              C_1-pred, C_2-pred, C_3-pred
-        #  C_1-true        3         1        0
-        #  C_2-true        2         6        1
-        #  C_3-true        0         0        3
-        
-        # The class IDs (labels kwarg) is needed for
-        # sklearn to know about classes that were not
-        # encountered:
-        
-        conf_matrix = torch.tensor(confusion_matrix(labels_tns,       # Truth
-                                                    pred_class_ids,   # Prediction
-                                                    labels=list(range(self.num_classes)) # Class labels
-                                                    ))
+
         # Use a random loss value:
         loss = 0.14
-        tally = TrainResult(split_num, epoch, learning_phase, loss, conf_matrix)
+        tally = TrainResult(split_num, 
+                            epoch, 
+                            learning_phase, 
+                            loss, 
+                            pred_class_ids,
+                            labels_tns,
+                            self.num_classes,
+                            badly_predicted_labels=None)
+                            
         self.tally_collection.add(tally)
         return tally
 

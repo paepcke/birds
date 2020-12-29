@@ -20,7 +20,6 @@ import socket
 
 import GPUtil
 from logging_service import LoggingService
-from sklearn.metrics import confusion_matrix
 from torch import cuda
 from torch import hub
 from torch import optim
@@ -546,7 +545,7 @@ class BirdTrainer(object):
         # batch_size 2 and 4 target classes:
         #  
         #    torch.tensor([[0.1, -0.2,  .3,  .42], |
-        #                                           | <--- one batch's
+        #                                          | <--- one batch's probs
         #                  [.43,  .3, -.23, -.18]  |   for batch_size == 2 
         #
         #                  ])
@@ -557,36 +556,21 @@ class BirdTrainer(object):
             pred_classes_each_batch = torch.argmax(pred_prob_tns, dim=1)
         
         #  For a batch size of 2 we would now have:
-        #       		  tensor([[3, 0],  <-- result batch 1 above
-        #       		          [0, 0],
-        #       		          [0, 0],
-        #       		          [0, 0],
+        #                 tensor([[3, 0],  <-- result batch 1 above
+        #                         [0, 0],
+        #                         [0, 0],
+        #                         [0, 0],
         #                          ...
         #    num_fold'th row:     [2, 1]]
 
-        # Conf-matrix only handles flat pred/label inputs:
+        # Conf-matrix only handles flat pred/label inputs.
+        # The current shape is:
+        # Tensor: tensor([[0, 0],
+        #                 [0, 0],
+        #                 [0, 0],
+        #                 [1, 1]]
         predicted_class_ids = pred_classes_each_batch.flatten()
         truth_labels        = labels_tns.flatten()
-        
-        # The targets are the same shape.  
-        
-        # Example Confustion matrix for 16 samples,
-        # in 3 classes:
-        # 
-        #              C_1-pred, C_2-pred, C_3-pred
-        #  C_1-true        3         1        0
-        #  C_2-true        2         6        1
-        #  C_3-true        0         0        3
-        
-        # The class IDs (labels kwarg) is needed for
-        # sklearn to know about classes that were not
-        # encountered:
-        
-        conf_matrix = torch.tensor(confusion_matrix(
-            truth_labels,          # Truth
-            predicted_class_ids,   # Prediction
-            labels=list(range(self.num_classes)) # Class labels
-            ))
 
         # Find labels that were incorrectly predicted:
         badly_predicted_labels = truth_labels[truth_labels != predicted_class_ids]
@@ -595,13 +579,14 @@ class BirdTrainer(object):
                             self.epoch, 
                             learning_phase, 
                             loss, 
-                            conf_matrix,
+                            predicted_class_ids,
+                            truth_labels,
+                            self.num_classes,
                             badly_predicted_labels=badly_predicted_labels
                             )
         
         self.tally_collection.add(tally)
 
-        
         return tally
 
     #------------------------------------
@@ -653,21 +638,20 @@ class BirdTrainer(object):
 
         epoch_loss = self.tally_collection.cumulative_loss(epoch=epoch, 
                                                            learning_phase=LearningPhase.VALIDATING)
-        epoch_mean_precision = self.tally_collection
+        epoch_mean_weighted_precision = self.tally_collection.mean_weighted_precision()
+        epoch_conf_matrix = self.tally_collection.conf_matrix_aggregated(epoch=epoch,
+                                                                         learning_phase=LearningPhase.VALIDATING
+                                                                         )
 
         with open(self.json_filepath, 'a') as f:
             f.write(json.dumps(
                     [epoch, 
                      epoch_loss,
-                     mean_accuracy_training,
-                     mean_accuracy_validating,
-                     tally.precision.item(), 
-                     tally.accuracy.item(),
+                     mean_accuracy_training.item(),
+                     mean_accuracy_validating.item(),
+                     epoch_mean_weighted_precision.item(),
                      incorrect_paths,
-                     tally.conf_matrix.tolist()]) + "\n")
-
-
-
+                     epoch_conf_matrix.tolist()]) + "\n")
 
     #------------------------------------
     # train 
@@ -759,10 +743,10 @@ class BirdTrainer(object):
                     os.makedirs(dest_dir)
                     # ****** Wanted!!!!
 #                 self.save_model_checkpoint(dest_path,
-#                                 		   self.model,
-#                                 		   self.optimizer,
-#                                 		   self.epoch-1 if self.epoch > 0 else 0,
-#                                 		   train_epoch_results['train_epoch_loss'],
+#                                            self.model,
+#                                            self.optimizer,
+#                                            self.epoch-1 if self.epoch > 0 else 0,
+#                                            train_epoch_results['train_epoch_loss'],
 #                                            self.tallies
 #                                         )
             sys.exit(0)
