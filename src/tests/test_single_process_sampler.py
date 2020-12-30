@@ -3,7 +3,7 @@ Created on Dec 17, 2020
 
 @author: paepcke
 '''
-import os
+import os,sys
 import unittest
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '.'))

@@ -4,7 +4,7 @@ Created on Dec 6, 2020
 @author: paepcke
 '''
 import glob
-import os
+import os,sys
 from pathlib import Path
 import unittest
 
@@ -13,8 +13,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from birds_train_parallel import BirdTrainer
 
-#******TEST_ALL = True
-TEST_ALL = False
+TEST_ALL = True
+#TEST_ALL = False
 
 CURR_DIR = os.path.join(os.path.dirname(__file__))
 FILEPATH = os.path.join(CURR_DIR, 'data/')
@@ -192,7 +192,7 @@ class TestBirdsTrainingParallel(unittest.TestCase):
     # testTrain 
     #-------------------
 
-    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def testTrain(self):
         
         # Create a fully functional Training instance

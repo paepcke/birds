@@ -4,7 +4,7 @@ Created on Dec 6, 2020
 @author: paepcke
 '''
 import glob
-import os
+import os,sys
 from pathlib import Path
 import unittest
 
@@ -15,11 +15,8 @@ from training import EPOCHS, SEED, BATCH_SIZE, KERNEL_SIZE
 from training import Training
 import training
 
-
-#********
-#********
-#******TEST_ALL = True
-TEST_ALL = False
+TEST_ALL = True
+#TEST_ALL = False
 
 CURR_DIR = os.path.join(os.path.dirname(__file__))
 FILEPATH = os.path.join(CURR_DIR, 'data/')
@@ -201,7 +198,7 @@ class TestTraining(unittest.TestCase):
     # testTrain 
     #-------------------
 
-    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def testTrain(self):
         
         # Create a fully functional Training instance

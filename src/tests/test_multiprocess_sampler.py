@@ -3,12 +3,8 @@ Created on Dec 17, 2020
 
 @author: paepcke
 '''
-'''
-Created on Dec 17, 2020
 
-@author: paepcke
-'''
-import os
+import os,sys
 import unittest
 
 import torch.distributed as dist
@@ -21,8 +17,8 @@ PYTORCH_COMM_PORT = 29920
 from bird_dataset import BirdDataset
 from samplers import DistributedSKFSampler
 
-#******TEST_ALL = True
-TEST_ALL = False
+TEST_ALL = True
+#TEST_ALL = False
 
 class TestMultiProcessSampler(unittest.TestCase):
     

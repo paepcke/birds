@@ -3,7 +3,7 @@ Created on Dec 13, 2020
 
 @author: paepcke
 '''
-import os
+import os,sys
 import unittest
 
 import numpy as np

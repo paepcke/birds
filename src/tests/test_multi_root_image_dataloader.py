@@ -4,7 +4,7 @@ Created on Dec 13, 2020
 @author: paepcke
 '''
 from _collections import OrderedDict
-import os
+import os,sys
 import unittest
 
 import natsort
