@@ -4,16 +4,18 @@ Created on Dec 19, 2020
 @author: paepcke
 '''
 import json
-import os
+import os,sys
 from pathlib import Path
 import unittest
 
 import torch
 
+sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
 from birds_train_parallel import BirdTrainer 
 from utils.dottable_config import DottableConfigParser
 from utils.learning_phase import LearningPhase
-
 
 TEST_ALL = True
 #TEST_ALL = False
