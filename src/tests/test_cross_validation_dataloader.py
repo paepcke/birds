@@ -8,6 +8,9 @@ import unittest
 
 import numpy as np
 
+sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
 from bird_dataloader import CrossValidatingDataLoader, SKFSampler
 from bird_dataset import BirdDataset
 

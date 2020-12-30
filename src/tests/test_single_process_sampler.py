@@ -6,6 +6,9 @@ Created on Dec 17, 2020
 import os
 import unittest
 
+sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
 import numpy as np
 from bird_dataset import BirdDataset
 from samplers import SKFSampler

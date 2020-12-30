@@ -9,6 +9,9 @@ import unittest
 
 import natsort
 
+sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
 from multi_root_image_dataset import SingleRootImageDataset, MultiRootImageDataset
 
 

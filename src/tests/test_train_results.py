@@ -10,6 +10,9 @@ from sklearn import metrics
 #from sklearn.metrics import confusion_matrix
 import torch
 
+sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
 from birds_train_parallel import LearningPhase
 from birds_train_parallel import TrainResultCollection, TrainResult
 

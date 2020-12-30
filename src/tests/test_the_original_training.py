@@ -8,6 +8,9 @@ import os
 from pathlib import Path
 import unittest
 
+sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
 from training import EPOCHS, SEED, BATCH_SIZE, KERNEL_SIZE
 from training import Training
 import training

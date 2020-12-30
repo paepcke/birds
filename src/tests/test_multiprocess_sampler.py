@@ -13,6 +13,9 @@ import unittest
 
 import torch.distributed as dist
 
+sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
 #*****from birds_train_parallel import PYTORCH_COMM_PORT
 PYTORCH_COMM_PORT = 29920
 from bird_dataset import BirdDataset
