@@ -4,10 +4,11 @@ Created on Dec 23, 2020
 @author: paepcke
 '''
 
+import copy
 import datetime
-from sklearn.metrics import confusion_matrix
-from sklearn import metrics
 
+from sklearn import metrics
+from sklearn.metrics import confusion_matrix
 import torch
 
 import numpy as np
@@ -205,12 +206,40 @@ class TrainResultCollection(dict):
     # conf_matrix_aggregated 
     #-------------------
     
-    def conf_matrix_aggregated(self, epoch=None, learning_phase=LearningPhase.VALIDATING):
+    def conf_matrix_aggregated(self, 
+                               epoch=None, 
+                               learning_phase=LearningPhase.VALIDATING):
         
         conf_matrix_sum = torch.zeros((self.num_classes, self.num_classes), dtype=int)
         for tally in self.tallies(epoch, learning_phase):
             conf_matrix_sum += tally.conf_matrix
+        return conf_matrix_sum
 
+    #------------------------------------
+    # num_classes 
+    #-------------------
+    
+    @property
+    def num_classes(self):
+        '''
+        Return the number of target
+        classes we know about.
+        
+        @return number of target classes
+        @rtype int
+        '''
+        
+        if len(self) == 0:
+            return 0
+        try:
+            return self._num_classes
+        except AttributeError:
+            # Just use the number of classes 
+            # in the first tally instance that
+            # this collection instance contains:
+            tallies_iter = iter(self.values())
+            self._num_classes = next(tallies_iter).num_classes 
+            return self._num_classes 
 
     #******* Needs thinking and debugging
 #     #------------------------------------
@@ -300,7 +329,23 @@ class TrainResultCollection(dict):
         within the collection. 
         '''
         return sorted(set(self.keys()))
+
+    #------------------------------------
+    # create_from 
+    #-------------------
     
+    @classmethod
+    def create_from(cls, other):
+        new_inst = cls()
+        new_inst.epoch_losses_training = other.epoch_losses_training.copy()
+        new_inst.epoch_losses_validation = other.epoch_losses_validation.copy()
+        new_inst.epoch_losses_testing = other.epoch_losses_testing.copy()
+        
+        for tally in other.tallies():
+            new_inst.add(copy.deepcopy(tally))
+        
+        return new_inst
+
     #------------------------------------
     # num_tallies 
     #-------------------
@@ -405,22 +450,17 @@ class TrainResult:
         # Some of the following assignments to instance
         # variables are just straight transfers from
         # arguments to inst vars. 
-        #
-        # Other assignments create properties
-        #
-        # The funky TrainResult.foo = lambda self: self._foo
-        # adds a property for the instance var:
         
-        self.created_at = datetime.datetime.now()
+        self.created_at     = datetime.datetime.now()
         self.split_num      = split_num
         self.epoch          = epoch
         self.learning_phase = learning_phase
         self.loss           = loss
         self.badly_predicted_labels = badly_predicted_labels
-        self.num_classes = num_classes
+        self.num_classes    = num_classes
                 
         self.conf_matrix = self.compute_confusion_matrix(predicted_class_ids,
-                                                          truth_labels)
+                                                         truth_labels)
 
         # Find classes that are present in the
         # truth labels; all others will be excluded
@@ -431,33 +471,47 @@ class TrainResult:
 
         self.precision_macro = metrics.precision_score(truth_labels, 
                                                        predicted_class_ids,
-                                                       average='macro')
+                                                       average='macro',
+                                                       zero_division=0
+                                                       )
 
         self.precision_micro = metrics.precision_score(truth_labels, 
                                                        predicted_class_ids,
-                                                       average='micro')
+                                                       average='micro',
+                                                       zero_division=0
+                                                       )
 
         self.precision_weighted = metrics.precision_score(truth_labels, 
                                                           predicted_class_ids,
-                                                          average='weighted')
+                                                          average='weighted',
+                                                          zero_division=0
+                                                          )
         
         # Recall
         
         self.recall_macro = metrics.recall_score(truth_labels, 
                                                  predicted_class_ids,
-                                                 average='macro')
+                                                 average='macro',
+                                                 zero_division=0
+                                                 )
 
         self.recall_micro = metrics.recall_score(truth_labels, 
                                                  predicted_class_ids,
-                                                 average='micro')
+                                                 average='micro',
+                                                 zero_division=0
+                                                 )
 
         self.recall_weighted = metrics.recall_score(truth_labels, 
                                                     predicted_class_ids,
-                                                    average='weighted')
+                                                    average='weighted',
+                                                    zero_division=0
+                                                    )
                 
         self.f1_score_weighted = metrics.precision_score(truth_labels, 
                                                          predicted_class_ids,
-                                                         average='weighted')
+                                                         average='weighted',
+                                                         zero_division=0
+                                                         )
 
     #------------------------------------
     # compute_confusion_matrix

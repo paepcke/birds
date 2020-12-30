@@ -7,7 +7,7 @@ import statistics
 import unittest
 
 from sklearn import metrics
-from sklearn.metrics import confusion_matrix
+#from sklearn.metrics import confusion_matrix
 import torch
 
 from birds_train_parallel import LearningPhase
@@ -502,7 +502,7 @@ class Test(unittest.TestCase):
     # test_collection_wide_recall 
     #-------------------
     
-    #********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_collection_wide_recall(self):
 
         # Epoch 1 result
@@ -612,8 +612,70 @@ class Test(unittest.TestCase):
         tallies = list(self.tally_collection.tallies(epoch=2,
                                                      learning_phase=LearningPhase.TESTING))
         self.assertEqual(tallies, [_tally_ep2_lp_test1])
+
+    #------------------------------------
+    # test_collection_num_classes 
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_collection_num_classes(self):
+        '''
+        Whether collections properly ask their
+        first TrainResult instance for the number
+        of classes
+        '''
         
+        # Nothing added to collection, num_classes
+        # should be 0
+        self.assertEqual(self.tally_collection.num_classes, 0)
+                         
         
+        _tally1 = self.tally_result(
+                       0, # Split number
+                       self.ten_labels_perfect,
+                       self.ten_results,
+                       LearningPhase.TRAINING,
+                       epoch=1
+                       )
+        # Epoch 1, learning phase TRAINING
+        _tally2 = self.tally_result(
+                       1, # Split number
+                       self.ten_labels_perfect,
+                       self.ten_results,
+                       LearningPhase.TRAINING,
+                       epoch=1
+                       )
+        
+        self.assertEqual(self.tally_collection.num_classes,
+                         self.num_classes
+                         )
+
+    #------------------------------------
+    # test_copy 
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_copy(self):
+        tally1 = self.tally_result(
+                       0, # Split number
+                       self.ten_labels_perfect,
+                       self.ten_results,
+                       LearningPhase.TRAINING,
+                       epoch=1
+                       )
+        new_col = TrainResultCollection.create_from(self.tally_collection)
+        
+        # Contents of new collection should be same:
+        self.assertEqual(len(new_col), 1)
+        new_tally = list(new_col.tallies())[0]
+        
+        self.assertEqual(new_tally.split_num, tally1.split_num)
+        self.assertEqual(new_tally.epoch, tally1.epoch)
+        
+        # But the contained tallies must not be equal: 
+        self.assertNotEqual(new_tally, tally1)
+
+
     # ****** Needs thinking and debugging in result_tallying
 #     #------------------------------------
 #     # test_within_class_recall_aggregation 
@@ -713,6 +775,9 @@ class Test(unittest.TestCase):
                             
         self.tally_collection.add(tally)
         return tally
+
+        
+
 
 # ----------------- Main --------------
 

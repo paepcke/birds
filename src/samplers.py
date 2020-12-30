@@ -66,10 +66,12 @@ class SKFSampler(StratifiedKFold):
         else:
             indices = range(len(self.dataset))
 
-        #**********
-        #my_classes = [dataset.sample_id_to_class[indx] for indx in indices]
+        # Construct a list of class IDs corresponding
+        # to each of the samples in order. I.e. the list
+        # will be as long as there the number of indices
+        # computed above:
+        
         self.my_classes = [dataset.sample_id_to_class[indx] for indx in indices]
-        #***********
 
         # Stratified k-fold needs only the labels 
         # in an array; the corresponding samples each 

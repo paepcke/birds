@@ -208,7 +208,7 @@ class TestNRootsImageDataset(unittest.TestCase):
                                           ]
                                           ))
 
-        self.assertEqual(mrds.classes,
+        self.assertEqual(mrds.class_names(),
                          ['audi','bmw','DYSMEN_S','HENLES_S','diving_gear','office_supplies'] 
                          )
 

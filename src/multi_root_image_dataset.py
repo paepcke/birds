@@ -128,15 +128,11 @@ class SingleRootImageDataset:
         # Good for unittesting. Dataloaders can shuffle
         # to introduce randomness later:
         
-        self.classes = natsort.natsorted([file_entry.name 
-                                          for file_entry 
-                                          in os.scandir(filepath)
-                                          if file_entry.is_dir()
-                                          ])
+        class_paths = self.walk_data_dir(filepath)
         
-        self.class_to_id = OrderedDict({class_name : class_id 
+        self.class_to_id = OrderedDict({os.path.basename(class_name) : class_id 
                             for class_id, class_name 
-                             in enumerate(self.classes)})
+                             in enumerate(class_paths)})
         self.sample_id_to_path = OrderedDict({})
         self.sample_id_to_class = OrderedDict({})
         
@@ -152,13 +148,12 @@ class SingleRootImageDataset:
         
         # Go through the samples in each folder (i.e. class):
         
-        for sample_folder in [os.path.join(filepath, folder_name)
-                                for folder_name in self.classes]:
+        for sample_folder in class_paths:
             class_name    = os.path.basename(sample_folder)
             class_id      = self.class_to_id[class_name]
             
             # List of full paths to each sample of current class:
-            folder_content  = [os.path.join(filepath, class_name, sample_path)
+            folder_content  = [os.path.join(sample_folder, sample_path)
                                  for sample_path 
                                  in natsort.natsorted(os.listdir(sample_folder))]
             # IDs we will assign to the samples in this folder:
@@ -236,6 +231,57 @@ class SingleRootImageDataset:
 
         self._class_id_list = list(self.class_to_id.values())
         return self._class_id_list
+
+    #------------------------------------
+    # class_names 
+    #-------------------
+    
+    def class_names(self):
+        return list(self.class_to_id.keys())
+
+    #------------------------------------
+    # file_from_sample_id 
+    #-------------------
+    
+    def file_from_sample_id(self, sample_id):
+        '''
+        Given a sample_id, return the absolute
+        file path of the corresponding sample
+        in the file system.
+        
+        @param sample_id: sample ID to look up
+        @type sample_id: int
+        '''
+        return os.path.abspath(self.sample_id_to_path[sample_id])
+
+    #------------------------------------
+    # walk_data_dir
+    #-------------------
+
+    def walk_data_dir(self, filename):
+        '''
+        Given a root directory, find all directories
+        that only contain files, not directories. 
+        Return a naturally sorted , list of those
+        files-only directories. Paths will be absolute.
+        
+        The assumption is that the names of the returned
+        directories are class names. This assumption is
+        often made in torchvision packages.  
+
+        @param filename: root directory for search 
+        @type filename: str
+        @returned list of full-path directories whose
+            names are target classes.
+        @rtype [str]
+        '''
+        
+        class_names = [dir_path 
+            for dir_path, subdir_names, _filenames 
+             in os.walk(filename)
+            if len(subdir_names) == 0]
+        
+        return natsort.natsorted(class_names)
 
 
     #------------------------------------
@@ -383,9 +429,7 @@ class MultiRootImageDataset(SingleRootImageDataset):
 
         for (tmp_class_name, tmp_class_id) in tmp_dataset.class_to_id.items():
             self.class_to_id[tmp_class_name] = 1 + tmp_class_id + max_class_id
-            # Class name list:
-            self.classes.append(tmp_class_name)
-        
+
         # Same with the sample IDs: must shift the tmp
         # dataset's sample_ids to continue the emerging
         # instance's sample_ids:

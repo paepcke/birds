@@ -349,6 +349,24 @@ class CrossValidatingDataLoader(DataLoader):
         for sample_id in self.get_split_test_sample_ids():
             yield self.dataset[sample_id]
 
+    #------------------------------------
+    # file_from_sample_id 
+    #-------------------
+    
+    def file_from_sample_id(self, sample_id):
+        '''
+        Given a sample_id, return the absolute
+        file path of the corresponding sample
+        in the file system.
+        
+        We use the public dataset method.
+        
+        @param sample_id: sample ID to look up
+        @type sample_id: int
+        '''
+        return self.dataset.file_from_sample_id(sample_id)
+
+
 # -------------------- Multiprocessing Dataloader -----------
 
 class MultiprocessingDataLoader(CrossValidatingDataLoader):

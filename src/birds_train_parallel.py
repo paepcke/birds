@@ -59,10 +59,6 @@ class InterruptTraining(Exception):
 
 class BirdTrainer(object):
     
-    # Special mode for testing the code:
-    #******TESTING=False
-    #TESTING=True
-    
     # Flag for subprocess to offer model saving,
     # and quitting. Used to handle cnt-C graciously:
     STOP = False
@@ -84,9 +80,10 @@ class BirdTrainer(object):
     #-------------------
     
     def __init__(self,
-                 config_info=None,
+                 config_info,
                  root_train_test_data=None,
                  batch_size=None,
+                 checkpoint=None,   #******** load if given
                  logfile=None,
                  performance_log_dir=None,
                  seed=42,
@@ -115,8 +112,11 @@ class BirdTrainer(object):
 
         if isinstance(config_info, str):
             self.config = self.read_configuration(config_info)
-        else:
+        elif isinstance(config_info, DottableConfigParser):
             self.config = config_info
+        else:
+            print("Error: must have a config file. See config.cfg.Example in project root")
+            sys.exit(1)
 
         path_parms   = self.config['Paths']
         train_parms  = self.config['Training']
@@ -219,6 +219,24 @@ class BirdTrainer(object):
         self.optimizer = optim.SGD(self.model.parameters(), 
                                    lr=self.config.Training.getfloat('lr', 0.001), # Provide a default 
                                    momentum=self.config.Training.get('momentum', 0.9))
+        if checkpoint:
+            # Requested to continue training 
+            # from a checkpoint:
+            if not os.path.exists(checkpoint):
+                msg = f"Requested continuation from checkpoint {checkpoint}, which does not exist."
+                self.log.err(msg)
+                print(msg)
+                sys.exit(1)
+            self.log.info("Loading checkpoint...")
+            self.load_model_checkpoint(checkpoint, 
+                                       self.model, 
+                                       self.optimizer)
+            self.log.info("Loading checkpoint done")
+            self.log.info(f"Resume training at start of epoch {self.epoch}")
+        else:
+            self.epoch = None
+            self._diff_avg = None
+            self.tally_collection = None
 
         # Loss function:
         self.loss_func = nn.CrossEntropyLoss()
@@ -231,13 +249,15 @@ class BirdTrainer(object):
 
         self.log.info(f"Model resides on device: {self.device_residence(self.model)}")
 
-        self.setup_logging(logfile, self.num_classes)
-        self.setup_json_logging(performance_log_dir,
-                                self.config.Training.kernel_size, 
-                                self.config.Training.batch_size) 
+        # Note: call to setup_logging must
+        # be after checkpoint restoration above.
+        # Else tally_collection will be overwritten:
         
-        # Initialize running statistics:
-        self.tallies = TrainResultCollection()
+        self.setup_logging(logfile, self.num_classes)
+        self.setup_json_logging(self.config.Training.getint('kernel_size'), 
+                                self.config.Training.getint('batch_size'),
+                                json_log_dir=performance_log_dir
+                                ) 
 
     #------------------------------------
     # setup_gpus
@@ -616,15 +636,24 @@ class BirdTrainer(object):
             for split_tallies
              in self.tally_collection.tallies(epoch=self.epoch)
              ]
+        # We have from a above a list of individual
+        # sample_ids, each stuck in a tensor. Pull
+        # them out:
+        
+        epoch_misses = [sample_id_tensor.item() for sample_id_tensor in curr_epoch_misses]
+
+        # Get rid of duplicate samples:
+        epoch_misses_unique = set(epoch_misses)
+        
         
         # Get the basenames of the files that
         # correspond to each of the mis-classified
-        # samples:
+        # samples. 
         
-        incorrect_paths = \
-            [os.path.basename(self.dataloader.dataset.sample_id_to_path[sample_id.item()])
-            for sample_id
-             in curr_epoch_misses]
+        incorrect_paths = []
+        for sample_id in epoch_misses_unique:
+            absolute_file_path = self.dataloader.file_from_sample_id(sample_id)
+            incorrect_paths.append(os.path.basename(absolute_file_path))
 
         # Mean of accuracies among the 
         # training splits of this epoch
@@ -638,18 +667,30 @@ class BirdTrainer(object):
 
         epoch_loss = self.tally_collection.cumulative_loss(epoch=epoch, 
                                                            learning_phase=LearningPhase.VALIDATING)
-        epoch_mean_weighted_precision = self.tally_collection.mean_weighted_precision()
+        epoch_mean_weighted_precision = \
+            self.tally_collection.mean_weighted_precision(epoch,
+                                                          learning_phase=LearningPhase.VALIDATING
+                                                          )
+            
+        epoch_mean_weighted_recall = \
+            self.tally_collection.mean_weighted_recall(epoch,
+                                                       learning_phase=LearningPhase.VALIDATING
+                                                       )
+
+        # For the confusion matrix: add all 
+        # the confusion matrices from Validation
+        # runs:
         epoch_conf_matrix = self.tally_collection.conf_matrix_aggregated(epoch=epoch,
                                                                          learning_phase=LearningPhase.VALIDATING
                                                                          )
-
         with open(self.json_filepath, 'a') as f:
             f.write(json.dumps(
                     [epoch, 
                      epoch_loss,
-                     mean_accuracy_training.item(),
-                     mean_accuracy_validating.item(),
-                     epoch_mean_weighted_precision.item(),
+                     mean_accuracy_training,
+                     mean_accuracy_validating,
+                     epoch_mean_weighted_precision,
+                     epoch_mean_weighted_recall,
                      incorrect_paths,
                      epoch_conf_matrix.tolist()]) + "\n")
 
@@ -659,10 +700,18 @@ class BirdTrainer(object):
 
     def train(self):
 
-        self.epoch = 0
-        diff_avg   = 100
+        self.log.info("Begin training")
+
+        # If restarting from checkpoint:
+        # use the checkpointed epoch number:
+        self.epoch = 0 if self.epoch is None else self.epoch
+        
+        # Similarly with self._diff_avg:
+        self._diff_avg   = 100 if self._diff_avg is None else self._diff_avg
+        
         time_start = datetime.datetime.now()
         num_folds  = self.config.Training.getint('num_folds')
+
         # We will keep track of the average accuracy
         # over the splits of each epoch. The accuracies
         # dict will key off an epoch number, and hold as
@@ -676,37 +725,54 @@ class BirdTrainer(object):
         # status if verbose; default is 5 seconds:
         alive_pulse = self.config.Training.getint('show_alive', 5)
         try:
-            while (diff_avg >= 0.05 or \
+            while (self._diff_avg >= 0.05 or \
                    self.epoch <= self.config.Training.getint('min_epochs')
                    ) and \
                    self.epoch <= self.config.Training.getint('max_epochs'):
                 self.epoch += 1
-                epoch_train_loss = 0
                 split_num = 0
                 
                 # Get an iterator over all the 
-                # splits from the dataloader:
-                split_training_iterator = self.train_one_split(split_num, 
-                                                               epoch_train_loss)
+                # splits from the dataloader. 
+                # Since train_one_split() is a generator
+                # function, the first call here returns
+                # a generator object rather than running
+                # the method:
+
+                split_training_iterator = self.train_one_split()
                 
+                # Send the initial split_num to the
+                # generator; it is hanging to receive
+                # this near the top of train_one_split():
+                
+                split_training_iterator.send(None)
+
                 for split_num in range(num_folds):
                     self.optimizer.zero_grad()
                     try:
-                        next(split_training_iterator)
+                        # train_one_split() is waiting for
+                        # the next split_num in the second
+                        # yield statement of that method:
+                        split_training_iterator.send(split_num)
                     except StopIteration:
                         # Exhausted all the splits
+                        self.log.warn(f"Unexpectedly ran out of splits.")
                         break
                     self.validate_one_split(split_num)
 
                     # Time for sign of life?
                     time_now = datetime.datetime.now()
-                    if self.time_diff(time_start, time_now) >= alive_pulse and \
-                        self.config.Training.verbose:
-                        self.log.info (f"Split number {split_num} of {num_folds}")
+                    if self.time_diff(time_start, time_now) >= alive_pulse:
+                        self.log.info (f"Epoch {self.epoch}; Split number {split_num} of {num_folds}")
 
                 # Done with one epoch:
 
                 self.log.info(f"Finished epoch {self.epoch}")
+                
+                # Update the json based result record
+                # in the file system:
+                
+                self.record_json_display_results(self.epoch)
                 
                 # Compute mean accuracy over all splits
                 # of this epoch:
@@ -730,33 +796,59 @@ class BirdTrainer(object):
                                    in range(1+len(accuracies)-self.EPOCHS_FOR_PLATEAU_DETECTION,
                                             self.epoch+1
                                             )]
-                diff_avg = self.mean_diff(torch.tensor(past_accuracies))
+                self._diff_avg = self.mean_diff(torch.tensor(past_accuracies))
 
 
         except (KeyboardInterrupt, InterruptTraining):
             self.log.info("Early stopping due to keyboard intervention")
             do_save = self.offer_model_save()
             if do_save in ('y','Y','yes','Yes', ''):
-                dest_path = input("Destination path: ")
-                dest_dir  = os.path.dirname(dest_path)
-                if not os.path.exists(dest_dir):
-                    os.makedirs(dest_dir)
-                    # ****** Wanted!!!!
-#                 self.save_model_checkpoint(dest_path,
-#                                            self.model,
-#                                            self.optimizer,
-#                                            self.epoch-1 if self.epoch > 0 else 0,
-#                                            train_epoch_results['train_epoch_loss'],
-#                                            self.tallies
-#                                         )
+                have_fname = False
+                while not have_fname:
+                    dest_path = input("Destination file (ex. ~/tmp/chpt.pth; $HOME/chpt.pth): ")
+                    # Resolve '~' and environ vars: 
+                    dest_path = os.path.expandvars(os.path.expanduser(dest_path))
+                    dest_dir  = os.path.dirname(dest_path)
+                    # Create any intermediate dirs:
+                    if not os.path.exists(dest_dir):
+                        os.makedirs(dest_dir)
+                    if os.path.exists(dest_path):
+                        have_fname = input("File exists, replace?") \
+                          in ('y','Y','yes','Yes')
+                    break
+                self.save_model_checkpoint(dest_path,
+                                           self.model,
+                                           self.optimizer
+                                           )
+            self.log.info(f"Training state saved to {dest_path}")
+            self.log.info("Exiting")
             sys.exit(0)
+            
+        self.log.info("Training finished")
 
 
     #------------------------------------
     # train_one_split 
     #-------------------
 
-    def train_one_split(self, split_num, epoch_loss): 
+    def train_one_split(self): 
+        '''
+        This is a *generator* function, which 
+        trains from one split, then yields for
+        the next split_num. 
+        
+        Usage:
+             gen = self.train_one_split()
+             gen.send(None)
+             while True:
+                 gen.send(new_split_num)
+                 
+             ... till this method raises StopIteration
+             
+        The first gen.send(None) causes the first 
+        yield statement below. All subsequent yields
+        will occur in the second yield. 
+        '''
         
         # Set model to train mode:
         self.model.train(True)
@@ -764,6 +856,10 @@ class BirdTrainer(object):
         label_stack  = None
         
         loss = 0.0
+        
+        # Await the first real call,
+        # which will be via a send(split_num): 
+        split_num = yield
         
         # While loop will be exited when
         # dataloader has exhausted all batches
@@ -786,9 +882,12 @@ class BirdTrainer(object):
                 # Sit until next() is called on this 
                 # generator again. At that point we continue feeding
                 # from the same dataloader in this while
-                # loop:
+                # loop. The assignment receives a new 
+                # split_num and epoch_loss via the 'send()'
+                # function when train() calls next() on this
+                # function:
                  
-                yield
+                split_num = yield
                 
                 # Back for a new split. Prepare:
                 # Set model to train mode:
@@ -807,11 +906,12 @@ class BirdTrainer(object):
             
             outputs = self.model(batch)
             loss = self.loss_func(outputs, targets)
+            # Update the accumulating training loss
+            # for this epoch: 
             self.tally_collection.add_loss(self.epoch, 
                                            loss,
                                            LearningPhase.TRAINING
                                            )
-            epoch_loss += loss
             loss.backward()
             self.optimizer.step()
             
@@ -834,8 +934,6 @@ class BirdTrainer(object):
             # Pending STOP request?
             if BirdTrainer.STOP:
                 raise InterruptTraining()
-            
-
 
 
     #------------------------------------
@@ -883,13 +981,12 @@ class BirdTrainer(object):
                 val_sample = val_sample.to('cpu')
                 val_target = val_target.to('cpu')
                 pred_prob_tns = pred_prob_tns.to('cpu')
-
-                self.tallies = self.tally_result(split_num,
-                                                 val_target, 
-                                                 pred_prob_tns, 
-                                                 loss, 
-                                                 LearningPhase.VALIDATING
-                                                 )
+                self.tally_result(split_num,
+                                  val_target, 
+                                  pred_prob_tns, 
+                                  loss, 
+                                  LearningPhase.VALIDATING
+                                  )
 
     # ------------- Utils -----------
 
@@ -983,6 +1080,13 @@ class BirdTrainer(object):
         return (tp, tp_fp, tp_fn)
 
     #------------------------------------
+    # json_log_filename 
+    #-------------------
+    
+    def json_log_filename(self):
+        return self.json_filepath
+
+    #------------------------------------
     # set_seed  
     #-------------------
 
@@ -1030,14 +1134,14 @@ class BirdTrainer(object):
     # save_model_checkpoint 
     #-------------------
     
-    def save_model_checkpoint(self, dest_path, model, optimizer, epoch, loss, tallies):
+    def save_model_checkpoint(self, dest_path, model, optimizer):
         '''
         Save the entire current state of training.
         Re-instate that checkpoint in a new session
         by using self.load_model_checkpoint()
         
-        @param dest_path: where to save the pickled model.
-            Use .pth or .tar extension
+        @param dest_path: absolute path where to save the 
+            pickled model. Use .pth or .tar extension
         @type dest_path: str
         @param model: the model instance to save
         @type model: torch model class
@@ -1045,17 +1149,21 @@ class BirdTrainer(object):
         @type optimizer: torch optimizer class
         @param epoch: the last finished epoch 
         @type epoch: int
-        @param loss: current loss measure
-        @type loss: float
-        @param tallies: dict of running totals (recall/precision, etc.)
-        @type tallies: {str : {int/float}}
         '''
         
-        to_save = {'epoch' : epoch,
+        # Remove results from the current
+        # epoch from tally_collection:
+        
+        clean_tally_collection = TrainResultCollection.create_from(self.tally_collection)
+        for epoch, split_num, learning_phase in self.tally_collection.keys():
+            if epoch == self.epoch:
+                clean_tally_collection.pop((epoch,split_num,learning_phase))
+
+        to_save = {'epoch' : self.epoch,
                    'model_state_dict' : model.state_dict(),
                    'optimizer_state_dict' : optimizer.state_dict(),
-                   'loss' : loss,
-                   'tallies' : tallies
+                   '_diff_avg' : self._diff_avg,
+                   'tallies' : clean_tally_collection
                    }
         torch.save(to_save, dest_path)
         
@@ -1069,7 +1177,7 @@ class BirdTrainer(object):
         save_model_checkpoint() such that training 
         can resume.
         
-        @param src_path: path where the checkpoint is stored
+        @param src_path: path where the app_state is stored
         @type src_path: str
         @param fresh_model: a new, uninitialized instance of the model used
         @type fresh_model: torch model
@@ -1077,20 +1185,16 @@ class BirdTrainer(object):
         @type fresh_optimizer: torch optimizer
         @return: dict with the initialized model, 
             optimizer, last completed epoch, most recent
-            loss measure, and dict of statistics tallies (precision/recall, etc.) 
+            loss measure, and tallies collection.
         @rtype {str : *}
         '''
 
-        checkpoint = torch.load(src_path)
-        fresh_model.load_state_dict(checkpoint['model_state_dict'])
-        fresh_optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        new_state = {'model' : fresh_model,
-                     'optimizer' : fresh_optimizer, 
-                     'epoch' : checkpoint['epoch'],
-                     'loss'  : checkpoint['loss'],
-                     'tallies' : checkpoint['tallies']
-                     }
-        return new_state
+        app_state = torch.load(src_path)
+        fresh_model.load_state_dict(app_state['model_state_dict'])
+        fresh_optimizer.load_state_dict(app_state['optimizer_state_dict'])
+        self.epoch     = app_state['epoch']
+        self._diff_avg = app_state['_diff_avg']
+        self.tally_collection = app_state['tallies']
 
     #------------------------------------
     # read_configuration 
@@ -1291,7 +1395,6 @@ class BirdTrainer(object):
             # In case there already was a logging instance,
             # ensure this new logging file is set:
             self.log.log_file = default_logfile_name
-            print(f"Logging to {default_logfile_name}...")
 
         elif logfile == 'stdout':
             self.log = LoggingService()
@@ -1321,7 +1424,8 @@ class BirdTrainer(object):
         self.one_sample_ones   = torch.ones(num_classes)
         self.one_sample_zeros  = torch.zeros(num_classes)
         
-        self.tally_collection = TrainResultCollection()
+        self.tally_collection = TrainResultCollection() if self.tally_collection is None \
+            else self.tally_collection 
 
     #------------------------------------
     # setup_json_logging 
@@ -1332,9 +1436,6 @@ class BirdTrainer(object):
         now = datetime.datetime.now()
         base_filepath = (f"{now.strftime('%d-%m-%Y')}_{now.strftime('%H-%M')}_K{kernel_size}" 
                          f"_B{batch_size}.jsonl")
-        #***** Creates a subdirectory named '2' under
-        #    src/tests, rather than runs_json:
-        #***** Too many json lines written: 197
         if json_log_dir is None:
             curr_dir = os.path.dirname(__file__)
             json_log_dir = os.path.join(curr_dir, 'runs_json')
@@ -1574,9 +1675,21 @@ if __name__ == '__main__':
     
     parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
                                      formatter_class=argparse.RawTextHelpFormatter,
-                                     description="Train from a set of spectrogram snippets."
+                                     description="Train from a set of images."
                                      )
  
+ 
+    parser.add_argument('-r', '--resume',
+                        help='fully qualified file name to a previously saved checkpoint; if not provided, start training from scratch',
+                        default='');
+
+    parser.add_argument('-c', '--config',
+                        help='fully qualified file name of configuration file',
+                        default=None);
+    parser.add_argument('-d', '--data',
+                        help='directory root of sub-directories that each contain samples of one class.',
+                        default=None);
+                        
     parser.add_argument('-l', '--logfile',
                         help='fully qualified log file name to which info and error messages \n' +\
                              'are directed. Default: stdout.',
@@ -1594,23 +1707,12 @@ if __name__ == '__main__':
                         help="Used only by launch.py script! Indicate that script started via launch_training.py",
                         default=False
                         )
-    parser.add_argument('-r', '--resume',
-                        help='fully qualified file name to a previously saved checkpoint; if not provided, start training from scratch',
-                        default='');
     args = parser.parse_args();
     
-    #***********
-#     args.snippet_db_path = '/Users/paepcke/EclipseWorkspacesNew/ElephantCallAI/Spectrograms/Training//tiny_chop_info.sqlite'
-#     args.files_and_dirs  = '/Users/paepcke/EclipseWorkspacesNew/ElephantCallAI/Spectrograms/Training/Threshold_-30_MinFreq_20_MaxFreq_40_FreqCap_30_snippets_0'
-#     #args.batchsize=2
-#     args.batchsize=16
-#     args.epochs=2
-#     args.logfile =None
-    #***********
-    
     BirdTrainer(
-           args.snippet_db_path,
-           batch_size=args.batchsize,
-           started_from_launch=args.started_from_launch,
-           logfile=args.logfile
-           ).train(args.epochs,checkpoint_path=args.resume)
+            config_info=args.config,
+            root_train_test_data=args.data,
+            checkpoint=args.resume,
+            batch_size=args.batchsize,
+            logfile=args.logfile
+            ).train()
