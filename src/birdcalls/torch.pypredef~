@@ -1,0 +1,40 @@
+def sum(input: Tensor, dtype=torch.dtype) -> Tensor:
+    return Tensor
+    
+def logical_and(input: Tensor, other: Tensor, out=None) -> Tensor:
+    return Tensor
+    
+def sub(input: Tensor, other: Tensor, alpha=int) -> Tensor:
+    return Tensor
+
+def where(condition: BoolTensor, x: Union[Tensor, Scalar], y: Union[Tensor, Scalar]) -> Tensor:
+    return Tensor
+
+def tensor(data: array-like, dtype=torch.dtype, device_residence: torch.device_residence, requires_grad: bool, pin_memory: bool) -> Tensor:
+    return Tensor
+
+def max(input: Tensor, dim: int, keepdim: bool) -> Tensor:
+    return Tensor
+
+def save(obj: Object, f: file-like, pickle_module: Module, pickle_protocol: int) -> None:
+    return None
+
+def load(f: file-like, Union[function, torch.device, string, dict]) -> None:
+    return None
+
+def manual_seed(seed: int) -> torch._C.Generator:
+    return torch._C.Generator
+
+def device_residence(dev_name: string) -> torch.device_residence:
+    return torch.device_residence
+
+class no_grad(torch._DecoratorContextManager):
+    def __init__(self: torch.no_grad) -> torch.no_grad
+        return torch.no_grad
+
+    def __enter__(self: torch.no_grad) -> None:
+        return None
+
+    def __exit__(self: torch.no_grad) -> None:
+        return None
+    
