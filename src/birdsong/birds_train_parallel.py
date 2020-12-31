@@ -99,6 +99,30 @@ class BirdTrainer(object):
                  ):
 
         self.curr_dir = os.path.dirname(os.path.abspath(__file__))
+
+        # Initialize a config dict of dict with
+        # the application's configurations. Sections
+        # will be:
+        #
+        #   config['Paths']       -> dict[attr : val]
+        #   config['Training']    -> dict[attr : val]
+        #   config['Parallelism'] -> dict[attr : val]
+        #
+        # The config read method will handle config_info
+        # being None. 
+        #
+        # If config_info is a string, it is assumed to
+        # be a file with the configuration. Else it is
+        # assumed to be a DottableConfigParser
+
+        if isinstance(config_info, str):
+            self.config = self.read_configuration(config_info)
+        elif isinstance(config_info, DottableConfigParser):
+            self.config = config_info
+        else:
+            print("Error: must have a config file. See config.cfg.Example in project root")
+            sys.exit(1)
+        
         
         # Replace None args with config file values:
 
@@ -125,28 +149,6 @@ class BirdTrainer(object):
         self.started_from_launch = started_from_launch
         self.setup_gpus()
         
-        # Initialize a config dict of dict with
-        # the application's configurations. Sections
-        # will be:
-        #
-        #   config['Paths']       -> dict[attr : val]
-        #   config['Training']    -> dict[attr : val]
-        #   config['Parallelism'] -> dict[attr : val]
-        #
-        # The config read method will handle config_info
-        # being None. 
-        #
-        # If config_info is a string, it is assumed to
-        # be a file with the configuration. Else it is
-        # assumed to be a DottableConfigParser
-
-        if isinstance(config_info, str):
-            self.config = self.read_configuration(config_info)
-        elif isinstance(config_info, DottableConfigParser):
-            self.config = config_info
-        else:
-            print("Error: must have a config file. See config.cfg.Example in project root")
-            sys.exit(1)
 
         train_parms  = self.config['Training']
         
