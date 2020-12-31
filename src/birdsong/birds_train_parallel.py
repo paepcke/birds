@@ -363,14 +363,14 @@ class BirdTrainer(object):
         else:
             raise NotImplementedError("None of mpi/nccl/gloo torch backends installed.")
     
-        #****************
-        print(f"***********WORLD_SIZE: {self.world_size}")
-        print(f"***********NODE_RANK:  {self.node_rank}")
-        #****************
+        #************
+#         dist.init_process_group(backend,
+#                                 init_method=f'env://?world_size={self.world_size}&rank={self.node_rank}'
+#                                 ) 
         dist.init_process_group(backend,
-                                init_method=f'env://?world_size={self.world_size}&rank={self.node_rank}'
+                                init_method=f'env://'
                                 ) 
-
+        #************
         self.log.info("And we're off!")
 
     #------------------------------------
