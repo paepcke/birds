@@ -1501,10 +1501,29 @@ class BirdTrainer(object):
         # Internalize the promised env vars RANK and
         # WORLD_SIZE:
         try:
-            self.node_rank = int(os.environ['NODE_RANK'])
-            self.world_size = int(os.environ['WORLD_SIZE'])
-            self.master_addr = os.environ['MASTER_ADDR']
-            self.master_port = os.environ['MASTER_PORT']
+            non_initialized_vars = []
+            try:
+                self.node_rank = int(os.environ['NODE_RANK'])
+            except KeyError:
+                non_initialized_vars.append('NODE_RANK')
+            try:
+                self.world_size = int(os.environ['WORLD_SIZE'])
+            except KeyError:
+                non_initialized_vars.append('WORLD_SIZE')
+                
+            try:
+                self.master_addr = os.environ['MASTER_ADDR']
+            except KeyError:
+                non_initialized_vars.append('MASTER_ADDR')
+                
+            try:
+                self.master_port = os.environ['MASTER_PORT']
+            except KeyError:
+                non_initialized_vars.append('MASTER_PORT')
+
+            if len(non_initialized_vars) > 0:
+                raise ValueError(f"The following env vars are not initialize: {non_initialized_vars}")
+            
             # If this script was launched manually, rather
             # than through the launch.py, and WORLD_SIZE is
             # greater than 1, the init_process_group() call
