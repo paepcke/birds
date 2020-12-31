@@ -126,7 +126,7 @@ class SKFSampler(StratifiedKFold):
 
 # --------------------------- Class DistributedSKFSampler --------------
 
-class DistributedSKFSampler(StratifiedKFold):
+class DistributedSKFSampler(SKFSampler):
     '''
     Like SKFSampler, but can operate in a
     distributed environment, where samples 
@@ -174,9 +174,10 @@ class DistributedSKFSampler(StratifiedKFold):
         if not dist.is_initialized():
             raise RuntimeError("Must call dist.init_process_group() before instantiating distrib sampler")
 
-        super().__init__(n_splits=num_folds,
-                         random_state=seed if shuffle else None, 
-                         shuffle=shuffle)
+        StratifiedKFold.__init__(self,
+                                 n_splits=num_folds,
+                                 random_state=seed if shuffle else None, 
+                                 shuffle=shuffle)
         
         self.num_replicas = dist.get_world_size()
         self.rank = dist.get_rank()
@@ -241,40 +242,11 @@ class DistributedSKFSampler(StratifiedKFold):
         # this replica will work on:
 
         self.my_indices = indices[self.rank:self.total_size:self.num_replicas]
-        my_classes = [dataset.sample_id_to_class[sample_id] for sample_id in self.my_indices.tolist()]
+        self.my_classes = [dataset.sample_id_to_class[sample_id] for sample_id in self.my_indices.tolist()]
         
         self.fold_generator = self.split(np.zeros(len(dataset)), 
-                                         my_classes
+                                         self.my_classes
                                          )
-
-    #------------------------------------
-    # __len__ 
-    #-------------------
-    
-    def __len__(self):
-        '''
-        Only provide the number of the sample_ids that
-        are ours to serve.
-        '''
-        return len(self.my_indices)
-
-    #------------------------------------
-    # __iter__ 
-    #-------------------
-
-    def __iter__(self):
-        return self
-
-    #------------------------------------
-    # __next__ 
-    #-------------------
-    
-    def __next__(self):
-        try:
-            return next(self.fold_generator)
-        except StopIteration as e:
-            self.folds_served += 1
-            raise StopIteration from e 
 
     #------------------------------------
     # set_epoch 
