@@ -1,2 +1,0 @@
-["epoch", "loss", "training_accuracy", "testing_accuracy", "precision", "recall", "incorrect_paths", "confusion_matrix"]
-[1, 627.0411987304688, 0.272727, 0.0, 0.0, 0.0, ["SONG_Dysithamnusmentalis2226211.png", "SONG_Dysithamnusmentalis2508022_shift3.5700000000000003_volume9.png", "SONG_Dysithamnusmentalis2583732_shift3.93_volume-7.png", "SONG_Dysithamnusmentalis4431495.png", "SONG_Dysithamnusmentalis4889772.png", "SONG_Dysithamnusmentalis5114773.png"], [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0], [1, 0, 1, 0, 0, 0]]]

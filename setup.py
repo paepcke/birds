@@ -1,16 +1,25 @@
 import multiprocessing
 from setuptools import setup, find_packages
+from setuptools.command.test import test as setup_test
 import os
 import glob
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
+class TestCommand(setup_test):
+    """ Setuptools test command explicitly using test discovery. """
+
+    def _test_args(self):
+        yield 'discover'
+        for arg in super(TestCommand, self)._test_args():
+            yield arg    
 setup(
     name = "birdsong",
     version = "0.1",
     packages = find_packages(),
-
+    cmdclass={'test': TestCommand,},    
+    #******
     # Dependencies on other packages:
     # Couldn't get numpy install to work without
     # an out-of-band: sudo apt-get install python-dev
@@ -32,6 +41,8 @@ setup(
                         'GPUtil>=1.4.0',
                         'tensorboard>=2.4.0',
                         'natsort>=7.1.0',
+                        'Pillow>=8.0.1',
+                        'nose2>=0.9.2',
                         ],
 
     tests_require    =['pytest',
