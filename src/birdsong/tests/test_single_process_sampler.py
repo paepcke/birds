@@ -5,14 +5,15 @@ Created on Dec 17, 2020
 '''
 
 import os, sys
+import unittest
+
+from birdsong.rooted_image_dataset import SingleRootImageDataset
+from birdsong.samplers import SKFSampler
+import numpy as np
+
 packet_root = os.path.abspath(__file__.split('/')[0])
 sys.path.insert(0,packet_root)
 
-import unittest
-
-import numpy as np
-from birdsong.rooted_image_dataset import SingleRootImageDataset
-from birdsong.samplers import SKFSampler
 
 TEST_ALL = True
 #TEST_ALL = False
@@ -20,7 +21,7 @@ TEST_ALL = True
 class TestSingleProcessSampler(unittest.TestCase):
     
     CURR_DIR = os.path.dirname(__file__)
-    TEST_FILE_PATH_BIRDS = os.path.join(CURR_DIR, 'data/train')
+    TEST_FILE_PATH_BIRDS = os.path.join(CURR_DIR, 'data')
 
     #------------------------------------
     # setUP 
@@ -52,7 +53,7 @@ class TestSingleProcessSampler(unittest.TestCase):
         # Now have three folds with four samples each:
         #    12 samples across 3 folds
 
-        self.assertEqual(len(sampler), 12)
+        self.assertEqual(len(sampler), 34)
         # No folds served yet:
         self.assertEqual(sampler.folds_served, 0)
         
@@ -66,10 +67,10 @@ class TestSingleProcessSampler(unittest.TestCase):
         self.assertEqual(len(intersect), 0)
         
         # Number of train samples: 2 folds' worth:
-        self.assertEqual(len(train_sample_ids1), 8)
+        self.assertEqual(len(train_sample_ids1), 22)
         
         # Number of test samples: 1 fold's worth:
-        self.assertEqual(len(test_sample_ids1), 4)
+        self.assertEqual(len(test_sample_ids1), 12)
         
         # ---- Second fold configuration ----
         next(sampler)
@@ -194,7 +195,6 @@ class TestSingleProcessSampler(unittest.TestCase):
             self.fail("test_sample_ids5_1 and test_sample_ids4_1) should differ: both shuffle, but different seeds")
         except AssertionError:
             pass
-
 
 # ---------------- Main -----------------
 if __name__ == "__main__":

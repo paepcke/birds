@@ -16,15 +16,12 @@ import torch.distributed as dist
 #*****from birds_train_parallel import PYTORCH_COMM_PORT
 PYTORCH_COMM_PORT = 29920
 
-
-
 TEST_ALL = True
 #TEST_ALL = False
 
 class TestMultiProcessSampler(unittest.TestCase):
     
     CURR_DIR = os.path.dirname(__file__)
-    TEST_FILE_PATH_BIRDS = os.path.join(CURR_DIR, 'data/train')
 
     #------------------------------------
     # setUpClass 
@@ -36,10 +33,8 @@ class TestMultiProcessSampler(unittest.TestCase):
                                                        'bird_trainer_tst.cfg'
                                                        ))
         cls.data_path = cls.config.getpath('Paths', 
-                                           'root_train_test_data', 
+                                           'train_data_from_test_dir', 
                                            relative_to=cls.CURR_DIR)
-        
-
 
     #------------------------------------
     # setUP 
@@ -122,33 +117,35 @@ class TestMultiProcessSampler(unittest.TestCase):
         # Same number of samples must be refleced
         # in the sampler's length method: 
 
-        self.assertEqual(len(sampler), 12)
+        self.assertEqual(len(sampler), len(self.dataset))
 
 
     #------------------------------------
     # test_one_machine_two_gpus
     #-------------------
 
-    #********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    # Can't simulate multiple machines, because
+    # they hang, waiting for each other.
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
 #     def test_one_machine_two_gpu(self):
-#         
-#         rank = 0
+#          
+#         rank = 1
 #         world_size = 2
 #         self.init_multiprocessing(rank, world_size)
-#         
+#          
 #         sampler = DistributedSKFSampler(
 #             self.dataset,
 #             num_folds=3,
 #             shuffle=False
 #             )
-#         
+#          
 #         # Two GPUs: this sampler should
 #         # get 1/2 the dataset: 
 #         self.assertEqual(len(sampler.my_indices), len(self.dataset) / 2)
-#         
+#          
 #         # Same number of samples must be refleced
 #         # in the sampler's length method: 
-# 
+#  
 #         self.assertEqual(len(sampler), 12)
 
 
@@ -181,7 +178,12 @@ class TestMultiProcessSampler(unittest.TestCase):
     #-------------------
     
     def uninit_multiprocessing(self):
-        dist.destroy_process_group()
+        try:
+            dist.destroy_process_group()
+        except RuntimeError:
+            # No process group was initialized
+            # before.
+            pass
 
 
 if __name__ == "__main__":

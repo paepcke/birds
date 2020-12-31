@@ -15,6 +15,10 @@ import numpy as np
 # --------------------------- Class SKFSampler --------------
 class SKFSampler(StratifiedKFold):
     '''
+    This is an abstract class, i.e. it cannot
+    be instantiated directly. Use the DistributedSKFSampler
+    class.
+    
     Partitions dataset into num_folds
     sequences of batches. Manages serving
     batches one train fold at a time. Switch
@@ -53,11 +57,12 @@ class SKFSampler(StratifiedKFold):
         @type shuffle: bool
         '''
         super().__init__(n_splits=num_folds,
-                         random_state=seed if shuffle else None, 
-                         shuffle=shuffle)
+                 random_state=seed if shuffle else None, 
+                 shuffle=shuffle)
         
         self.dataset = dataset
         self.seed = seed
+        self.folds_served = 0
         
         if self.shuffle:
             g = torch.Generator()
@@ -78,11 +83,9 @@ class SKFSampler(StratifiedKFold):
         # have the same index as the one for each 
         # y-split (https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.StratifiedKFold.html#sklearn.model_selection.StratifiedKFold)
         
-        #***********
-        #self.fold_generator = self.split(np.zeros(len(dataset)), 
-        #                                 my_classes
-        #                                 )
-        #***********
+        self.fold_generator = self.split(np.zeros(len(dataset)), 
+                                         self.my_classes
+                                         )
 
     #------------------------------------
     # __len__ 
@@ -101,10 +104,35 @@ class SKFSampler(StratifiedKFold):
                        self.my_classes)
             ):
             yield train_and_validate_samples
+            
+    #------------------------------------
+    # __iter__ 
+    #-------------------
+
+    def __iter__(self):
+        return self
+
+    #------------------------------------
+    # __next__ 
+    #-------------------
+    
+    def __next__(self):
+        try:
+            return next(self.fold_generator)
+        except StopIteration as e:
+            self.folds_served += 1
+            raise StopIteration from e 
+
 
 # --------------------------- Class DistributedSKFSampler --------------
 
 class DistributedSKFSampler(StratifiedKFold):
+    '''
+    Like SKFSampler, but can operate in a
+    distributed environment, where samples 
+    are process in different machines and/or
+    GPUs.
+    '''
     
     #------------------------------------
     # Constructor
@@ -139,7 +167,10 @@ class DistributedSKFSampler(StratifiedKFold):
         @param drop_last: whether to discard partially filled folds
         @type drop_last: bool
         '''
-
+        
+        if len(dataset) == 0:
+            raise ValueError("Dataset is empty, nothing to sample from")
+        
         if not dist.is_initialized():
             raise RuntimeError("Must call dist.init_process_group() before instantiating distrib sampler")
 
@@ -209,8 +240,8 @@ class DistributedSKFSampler(StratifiedKFold):
         # Obtain a subset of the indices in dataset that
         # this replica will work on:
 
-        self.my_indices = indices[self.rank:self.total_size:self.num_replicas].tolist()
-        my_classes = [dataset.sample_id_to_class[sample_id] for sample_id in self.my_indices]
+        self.my_indices = indices[self.rank:self.total_size:self.num_replicas]
+        my_classes = [dataset.sample_id_to_class[sample_id] for sample_id in self.my_indices.tolist()]
         
         self.fold_generator = self.split(np.zeros(len(dataset)), 
                                          my_classes

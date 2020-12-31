@@ -115,6 +115,9 @@ class CrossValidatingDataLoader(DataLoader):
         @type sampler: {None | DistributedSKFSampler}
         '''
         
+        if len(dataset) == 0:
+            raise ValueError("Dataset is empty, nothing to load")
+        
         # Sampler will only be set if a subclass instance
         # of MultiprocessingDataLoader is being initialized.
         # Else, running single process:
