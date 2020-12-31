@@ -353,10 +353,20 @@ class BirdTrainer(object):
             self.log.info(f"Awaiting {self.world_size} nodes to run...")
         else:
             self.log.info("Awaiting master node's response...")
-        dist.init_process_group(
-            backend='nccl',
-            init_method='env://'
-        )
+            
+        if dist.is_mpi_available():
+            backend = 'mpi'
+        elif dist.is_nccl_available():
+            backend = 'nccl'
+        elif dist.is_gloo_available():
+            backend = 'gloo'
+        else:
+            raise NotImplementedError("None of mpi/nccl/gloo torch backends installed.")
+            
+        dist.init_process_group(backend,
+                                init_method=f'env://?world_size={self.world_size}&rank={self.rank}'
+                                ) 
+
         self.log.info("And we're off!")
 
     #------------------------------------
@@ -1554,7 +1564,7 @@ class BirdTrainer(object):
                     )
             raise TrainError(msg)
 
-            self.init_multiprocessing()
+        self.init_multiprocessing()
 
     #------------------------------------
     # device_residence

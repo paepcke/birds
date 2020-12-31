@@ -397,7 +397,7 @@ class MultiprocessingDataLoader(CrossValidatingDataLoader):
                  shuffle=True,
                  **kwargs
                  ):
-        
+
         self.sampler = DistributedSKFSampler(
                 dataset,
                 num_folds=num_folds,
