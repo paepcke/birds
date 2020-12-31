@@ -212,9 +212,11 @@ class BirdTrainer(object):
             # GPUSs used, single or multiple machines:
             
             self.dataloader = MultiprocessingDataLoader(dataset,
-                                                        self.world_size,
-                                                        self.node_rank, 
-                                                        batch_size=train_parms.getint('batch_size')
+                                                        shuffle=True,
+                                                        seed=seed,
+                                                        batch_size=batch_size 
+                                                            if batch_size is not None 
+                                                            else train_parms.getint('batch_size')
                                                         )
         self.num_classes = len(dataset.class_id_list())
 

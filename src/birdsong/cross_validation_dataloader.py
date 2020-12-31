@@ -7,7 +7,6 @@ Created on Dec 13, 2020
 import torch
 from torch import unsqueeze, cat
 from torch.utils.data import DataLoader
-from torch.utils.data import DistributedSampler
 
 from birdsong.samplers import SKFSampler, DistributedSKFSampler
 
@@ -391,19 +390,19 @@ class MultiprocessingDataLoader(CrossValidatingDataLoader):
 
     def __init__(self, 
                  dataset, 
-                 world_size,    # Total number of GPUs across all machines 
-                 node_rank,     # Sequence number of machine (0 for master node)
                  batch_size=32,
                  prefetch_factor=2,
                  drop_last=False,
                  num_folds=10,
+                 shuffle=True,
                  **kwargs
                  ):
         
-        self.sampler = DistributedSampler(
+        self.sampler = DistributedSKFSampler(
                 dataset,
-                num_replicas=world_size,
-                rank=node_rank,
+                num_folds=num_folds,
+                seed=42,
+                shuffle=shuffle,
                 drop_last=drop_last
                 )
 
