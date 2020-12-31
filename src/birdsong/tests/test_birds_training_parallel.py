@@ -113,11 +113,7 @@ class TestBirdsTrainingParallel(unittest.TestCase):
 
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_train(self):
-        # Mock up distributed processing:
-        os.environ['WORLD_SIZE'] = '1'   # 1 GPU or CPU
-        os.environ['RANK'] = '0'         # Master node
-        os.environ['MASTER_ADDR'] = '127.0.0.1'
-        os.environ['MASTER_PORT'] = '9000'
+        self.set_distribution_env_vars()
         trainer = BirdTrainer(self.config)
         print("Start test training a small dataset (about 3 minutes)...")
         t_start = datetime.now()
@@ -207,6 +203,7 @@ class TestBirdsTrainingParallel(unittest.TestCase):
         four_results_training = torch.unsqueeze(four_results, dim=1)
         four_truths = torch.tensor([1,2,3,4])
     
+        self.set_distribution_env_vars()
         trainer = BirdTrainer(self.config)
         tally1 = trainer.tally_result(
                     0, # Split number
@@ -310,6 +307,20 @@ class TestBirdsTrainingParallel(unittest.TestCase):
                      "confusion_matrix"])
              }
         return record_dict
+    
+    #------------------------------------
+    # set_distribution_env_vars 
+    #-------------------
+    
+    def set_distribution_env_vars(self):
+        # Mock up distributed processing:
+        os.environ['WORLD_SIZE'] = '1'   # 1 GPU or CPU
+        os.environ['RANK'] = '0'         # Master node
+        os.environ['MASTER_ADDR'] = '127.0.0.1'
+        os.environ['MASTER_PORT'] = '9000'
+
+
+
 # ----------------------- Main -----------------
 
 if __name__ == "__main__":

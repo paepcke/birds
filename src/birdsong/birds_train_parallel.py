@@ -100,6 +100,28 @@ class BirdTrainer(object):
 
         self.curr_dir = os.path.dirname(os.path.abspath(__file__))
         
+        # Replace None args with config file values:
+
+        if logfile is None:
+            logfile = self.config.getpath('Paths','logfile', 
+                                          relative_to=self.curr_dir)
+        if logfile is None:
+            self.log = LoggingService()
+        else:
+            self.log = LoggingService(logfile=logfile)
+        
+        if root_train_test_data is None:
+            root_train_test_data = self.config.getpath('Paths', 'root_train_test_data', 
+                                                       relative_to=self.curr_dir)
+        self.root_train_test_data = root_train_test_data
+        
+        if batch_size is None:
+            batch_size = self.config.getint('Training', 'batch_size')
+        self.batch_size = batch_size
+        
+        if seed is None:
+            seed = train_parms['seed']
+        
         self.started_from_launch = started_from_launch
         self.setup_gpus()
         
@@ -128,28 +150,6 @@ class BirdTrainer(object):
 
         train_parms  = self.config['Training']
         
-        # Replace None args with config file values:
-
-        if logfile is None:
-            logfile = self.config.getpath('Paths','logfile', 
-                                          relative_to=self.curr_dir)
-        if logfile is None:
-            self.log = LoggingService()
-        else:
-            self.log = LoggingService(logfile=logfile)
-        
-        if root_train_test_data is None:
-            root_train_test_data = self.config.getpath('Paths', 'root_train_test_data', 
-                                                       relative_to=self.curr_dir)
-        self.root_train_test_data = root_train_test_data
-        
-        if batch_size is None:
-            batch_size = self.config.getint('Training', 'batch_size')
-        self.batch_size = batch_size
-        
-        if seed is None:
-            seed = train_parms['seed']
-
         # Install signal handler for cnt-C:
         # It will set the class var STOP,
         # which we check periodically during
@@ -1537,6 +1537,7 @@ class BirdTrainer(object):
                 os.environ['RANK'] = '0'
                 os.environ['WORLD_SIZE'] = '1'
                 os.environ['MASTER_ADDR'] = '127.0.0.1'
+                os.environ['MASTER_PORT'] = ''
                 self.node_rank  = 0
                 self.world_size = 1
                 self.master_addr = '127.0.0.1'
