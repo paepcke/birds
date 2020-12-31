@@ -413,13 +413,10 @@ class MultiRootImageDataset(SingleRootImageDataset):
         # Resolve wildcards, like my_root/*:
         all_roots = []
 
-        for root in  roots:
-            all_roots.extend(glob.glob(root))
-
         # Filter out non-directories:
-        for root in all_roots.copy():
-            if not os.path.isdir(root):
-                all_roots.remove(root)
+        for root in roots:
+            if os.path.isdir(root):
+                all_roots.append(root)
 
         self = SingleRootImageDataset(all_roots[0], 
                                       sample_width, 

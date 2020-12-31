@@ -23,7 +23,7 @@ class TestNRootsImageDataset(unittest.TestCase):
     
     TEST_FILE_PATH_BIRDS = os.path.join(CURR_DIR, 'data/birds')
     TEST_FILE_PATH_CARS  = os.path.join(CURR_DIR, 'data/cars')
-    TEST_FILE_PATH_GLOB  = os.path.join(CURR_DIR, 'data/*')
+    TEST_FILE_PATH_GLOB  = os.path.join(CURR_DIR, 'data')
 
     #------------------------------------
     # setUpClass
@@ -200,17 +200,16 @@ class TestNRootsImageDataset(unittest.TestCase):
         
         mrds = MultiRootImageDataset(self.TEST_FILE_PATH_GLOB)
         self.assertDictEqual(mrds.class_to_id,
-                             OrderedDict([('audi', 0),
-                                          ('bmw', 1),
-                                          ('DYSMEN_S', 2),
-                                          ('HENLES_S', 3),
-                                          ('diving_gear', 4),
-                                          ('office_supplies', 5)
-                                          ]
-                                          ))
+                             OrderedDict([('DYSMEN_S', 0), 
+                                          ('HENLES_S', 1), 
+                                          ('audi', 2), 
+                                          ('bmw', 3), 
+                                          ('diving_gear', 4), 
+                                          ('office_supplies', 5)])
+                             )
 
         self.assertEqual(mrds.class_names(),
-                         ['audi','bmw','DYSMEN_S','HENLES_S','diving_gear','office_supplies'] 
+                         ['DYSMEN_S', 'HENLES_S', 'audi', 'bmw', 'diving_gear', 'office_supplies']
                          )
 
         # Spot check the 'snorkel.jpg' image file 
