@@ -1503,9 +1503,9 @@ class BirdTrainer(object):
         try:
             non_initialized_vars = []
             try:
-                self.node_rank = int(os.environ['NODE_RANK'])
+                self.node_rank = int(os.environ['RANK'])
             except KeyError:
-                non_initialized_vars.append('NODE_RANK')
+                non_initialized_vars.append('RANK')
             try:
                 self.world_size = int(os.environ['WORLD_SIZE'])
             except KeyError:
