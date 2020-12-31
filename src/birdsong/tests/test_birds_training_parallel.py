@@ -102,6 +102,7 @@ class TestBirdsTrainingParallel(unittest.TestCase):
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_training_init(self):
 
+        self.set_distribution_env_vars()
         trainer = BirdTrainer(self.config)
         self.assertEqual(trainer.get_lr(trainer.scheduler),
                          float(self.config.Training.lr)
@@ -250,6 +251,7 @@ class TestBirdsTrainingParallel(unittest.TestCase):
         
         # Make a new trainer from the old trainer's
         # saved checkpoint:
+        self.set_distribution_env_vars()
         trainer1 = BirdTrainer(self.config, 
                                checkpoint=save_file)
         self.assertEqual(trainer1.epoch, 10)
