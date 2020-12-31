@@ -113,6 +113,11 @@ class TestBirdsTrainingParallel(unittest.TestCase):
 
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_train(self):
+        # Mock up distributed processing:
+        os.environ['WORLD_SIZE'] = '1'   # 1 GPU or CPU
+        os.environ['RANK'] = '0'         # Master node
+        os.environ['MASTER_ADDR'] = '127.0.0.1'
+        os.environ['MASTER_PORT'] = '9000'
         trainer = BirdTrainer(self.config)
         print("Start test training a small dataset (about 3 minutes)...")
         t_start = datetime.now()
