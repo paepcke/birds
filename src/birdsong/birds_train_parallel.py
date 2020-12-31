@@ -214,7 +214,7 @@ class BirdTrainer(object):
             self.dataloader = MultiprocessingDataLoader(dataset,
                                                         self.world_size,
                                                         self.node_rank, 
-                                                        batch_size=train_parms[batch_size]
+                                                        batch_size=train_parms.getint('batch_size')
                                                         )
         self.num_classes = len(dataset.class_id_list())
 
