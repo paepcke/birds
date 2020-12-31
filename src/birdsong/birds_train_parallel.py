@@ -362,7 +362,11 @@ class BirdTrainer(object):
             backend = 'gloo'
         else:
             raise NotImplementedError("None of mpi/nccl/gloo torch backends installed.")
-            
+    
+        #****************
+        print(f"***********WORLD_SIZE: {self.world_size}")
+        print(f"***********NODE_RANK:  {self.node_rank}")
+        #****************
         dist.init_process_group(backend,
                                 init_method=f'env://?world_size={self.world_size}&rank={self.node_rank}'
                                 ) 
@@ -1531,7 +1535,7 @@ class BirdTrainer(object):
                 non_initialized_vars.append('MASTER_ADDR')
                 
             try:
-                self.master_port = os.environ['MASTER_PORT']
+                self.master_port = int(os.environ['MASTER_PORT'])
             except KeyError:
                 non_initialized_vars.append('MASTER_PORT')
 
