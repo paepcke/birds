@@ -283,8 +283,6 @@ class BirdTrainer(object):
             else:
                 self.local_rank = None
 
-        self.master_addr
-
         # The following call also sets self.gpu_obj
         # to a GPUtil.GPU instance, so we can check
         # on the GPU status along the way:
@@ -1525,61 +1523,67 @@ class BirdTrainer(object):
     #-------------------
     
     def setup_gpu(self, started_from_launch):
-        # We were launched via the launch.py script,
-        # with local_rank indicating the GPU device_residence
-        # to use.
-        # Internalize the promised env vars RANK and
-        # WORLD_SIZE:
-        try:
-            non_initialized_vars = []
-            try:
-                self.node_rank = int(os.environ['RANK'])
-            except KeyError:
-                non_initialized_vars.append('RANK')
-            try:
-                self.world_size = int(os.environ['WORLD_SIZE'])
-            except KeyError:
-                non_initialized_vars.append('WORLD_SIZE')
-                
-            try:
-                self.master_addr = os.environ['MASTER_ADDR']
-            except KeyError:
-                non_initialized_vars.append('MASTER_ADDR')
-                
-            try:
-                self.master_port = int(os.environ['MASTER_PORT'])
-            except KeyError:
-                non_initialized_vars.append('MASTER_PORT')
+        # If we were launched from the launch script,
+        # rather than directly from the command line,
+        # then internalize the promised instance vars
 
-            if len(non_initialized_vars) > 0:
-                raise ValueError(f"The following env vars are not initialize: {non_initialized_vars}")
-            
-            # If this script was launched manually, rather
+        if started_from_launch:
+            # Internalize the promised env vars RANK and
+            # WORLD_SIZE:
+            try:
+                non_initialized_vars = []
+                try:
+                    self.node_rank = int(os.environ['RANK'])
+                except KeyError:
+                    non_initialized_vars.append('RANK')
+                try:
+                    self.world_size = int(os.environ['WORLD_SIZE'])
+                except KeyError:
+                    non_initialized_vars.append('WORLD_SIZE')
+                    
+                try:
+                    self.master_addr = os.environ['MASTER_ADDR']
+                except KeyError:
+                    non_initialized_vars.append('MASTER_ADDR')
+                    
+                try:
+                    self.master_port = int(os.environ['MASTER_PORT'])
+                except KeyError:
+                    non_initialized_vars.append('MASTER_PORT')
+    
+                if len(non_initialized_vars) > 0:
+                    raise ValueError(f"The following env vars are not initialize: {non_initialized_vars}")
+            except KeyError as e:
+                msg = (f"\nEnvironment variable {e.args[0]} not set.\n" 
+                       "RANK, WORLD_SIZE, MASTER_ADDR, and MASTER_PORT\n"
+                       "must be set.\n"
+                       "Maybe use launch.py to run this script?"
+                        )
+                raise TrainError(msg)
+
+        else:
+            # Tis script was launched manually, rather
             # than through the launch.py, and WORLD_SIZE is
             # greater than 1, the init_process_group() call
             # later on will hang, waiting for the remaining
             # sister processes. Therefore: if launched manually,
             # set WORLD_SIZE to 1, and RANK to 0:
-            if not started_from_launch:
-                self.log.info(("Setting RANK to 0, and WORLD_SIZE to 1,\n"
-                               "b/c script was not started using launch.py()"
-                               ))
-                os.environ['RANK'] = '0'
-                os.environ['WORLD_SIZE'] = '1'
-                os.environ['MASTER_ADDR'] = '127.0.0.1'
-                os.environ['MASTER_PORT'] = ''
-                self.node_rank  = 0
-                self.world_size = 1
-                self.master_addr = '127.0.0.1'
-                self.master_port = 
+            
+            self.log.info(("Setting RANK to 0, and WORLD_SIZE to 1,\n"
+                           "b/c script was not started using launch.py()"
+                           ))
+            #***** Read config file; only 
+            #      if not gotten from there, 
+            #      do the following:
+            os.environ['RANK'] = '0'
+            os.environ['WORLD_SIZE'] = '1'
+            os.environ['MASTER_ADDR'] = '127.0.0.1'
+            os.environ['MASTER_PORT'] = '9000'
+            self.node_rank  = 0
+            self.world_size = 1
+            self.master_addr = '127.0.0.1'
+            self.master_port = '9000'
                 
-        except KeyError as e:
-            msg = (f"\nEnvironment variable {e.args[0]} not set.\n" 
-                   "RANK, WORLD_SIZE, MASTER_ADDR, and MASTER_PORT\n"
-                   "must be set.\n"
-                   "Maybe use launch.py to run this script?"
-                    )
-            raise TrainError(msg)
 
         self.init_multiprocessing(self.master_addr,
                                   self.master_port,
@@ -1587,8 +1591,6 @@ class BirdTrainer(object):
                                   self.world_size
                                   )
                                   
-                                  )
-
     #------------------------------------
     # device_residence
     #-------------------

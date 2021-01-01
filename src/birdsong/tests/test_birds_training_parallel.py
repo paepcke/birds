@@ -112,7 +112,7 @@ class TestBirdsTrainingParallel(unittest.TestCase):
     # test_train
     #-------------------
 
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_train(self):
         self.set_distribution_env_vars()
         trainer = BirdTrainer(self.config)
@@ -280,7 +280,7 @@ class TestBirdsTrainingParallel(unittest.TestCase):
     # test_process_group_init
     #-------------------
     
-    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_process_group_init(self):
         self.set_distribution_env_vars()
         trainer = BirdTrainer(self.config)
