@@ -237,7 +237,8 @@ class CrossValidatingDataLoader(DataLoader):
         # covers all samples in one split.
         # And one list of sample IDs in the 
         # test split:
-        for _i, (split_train_ids, split_test_ids) in enumerate(self.sampler.get_split()):
+        for _i, (split_train_ids, split_test_ids) \
+            in enumerate(self.sampler.get_split()):
             
             # Keep track of which split we are working
             # on. Needed only as info for client; not

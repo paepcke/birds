@@ -91,7 +91,6 @@ class BirdTrainer(object):
                  checkpoint=None,   #******** load if given
                  logfile=None,
                  performance_log_dir=None,
-                 seed=42,
                  testing_cuda_on_cpu=False,
                  started_from_launch=False,
                  unit_testing=False
@@ -142,7 +141,7 @@ class BirdTrainer(object):
         self.batch_size = batch_size
         
         self.seed = self.config.getint('Training', 'seed')
-        self.set_seed(seed)
+        self.set_seed(self.seed)
         self.started_from_launch = started_from_launch
         self.setup_gpus()
         
@@ -185,7 +184,7 @@ class BirdTrainer(object):
                                          sample_width=train_parms.getint('sample_width'),
                                          sample_height=train_parms.getint('sample_width')
                                          )
-
+        self.num_folds = self.config.Training.getint('num_folds')
         # Make an appropriate (single/multiprocessing) dataloader:
         if self.gpu_device == self.CPU_DEV:
 
@@ -200,7 +199,7 @@ class BirdTrainer(object):
                 drop_last=True,
                 shuffle=True,       # Shuffle underlying dataset at the outset (only)
                 seed=42,
-                num_folds=self.config.Training.getint('num_folds')
+                num_folds=self.num_folds
                 )
         else:
             # GPUSs used, single or multiple machines:
@@ -208,6 +207,7 @@ class BirdTrainer(object):
             self.dataloader = MultiprocessingDataLoader(dataset,
                                                         shuffle=True,
                                                         seed=seed,
+                                                        num_folds=self.num_folds,
                                                         batch_size=batch_size 
                                                             if batch_size is not None 
                                                             else train_parms.getint('batch_size')
