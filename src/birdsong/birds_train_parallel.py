@@ -148,6 +148,11 @@ class BirdTrainer(object):
 
         train_parms  = self.config['Training']
         
+        # Not worth the hassle of juggling tensor
+        # dimension to retrain the last batch if
+        # it's not completely filled:
+        self.drop_last = True
+        
         # Install signal handler for cnt-C:
         # It will set the class var STOP,
         # which we check periodically during
@@ -185,20 +190,26 @@ class BirdTrainer(object):
                                          sample_height=train_parms.getint('sample_width')
                                          )
         self.num_folds = self.config.Training.getint('num_folds')
+        
+        # In the dataloader creation, make drop_last=True 
+        # to skip the last batch if it is not full. Just 
+        # not worth the trouble dealing with unusually 
+        # dimensioned tensors:
+
         # Make an appropriate (single/multiprocessing) dataloader:
         if self.gpu_device == self.CPU_DEV:
 
             # CPU bound, single machine:
-
+            
             self.dataloader = CrossValidatingDataLoader(
                 dataset,
                 batch_size=batch_size,
                 num_workers=0,
                 pin_memory=False,
                 prefetch_factor=2,
-                drop_last=True,
+                drop_last=self.drop_last,
                 shuffle=True,       # Shuffle underlying dataset at the outset (only)
-                seed=42,
+                seed=self.seed,
                 num_folds=self.num_folds
                 )
         else:
@@ -206,8 +217,9 @@ class BirdTrainer(object):
             
             self.dataloader = MultiprocessingDataLoader(dataset,
                                                         shuffle=True,
-                                                        seed=seed,
+                                                        seed=self.seed,
                                                         num_folds=self.num_folds,
+                                                        drop_last=True,
                                                         batch_size=batch_size 
                                                             if batch_size is not None 
                                                             else train_parms.getint('batch_size')
@@ -961,6 +973,20 @@ class BirdTrainer(object):
             if output_stack is None:
                 output_stack = torch.unsqueeze(outputs, dim=0)
             else:
+                # Did we get a full batch? Output tensors
+                # of shape [batch_size, num_classes]. 
+                #     [[1st_of_batch, [logit_class1, logit_class2, ... logit_num_classes]]
+                #      [2nd_of_batch, [logit_class1, logit_class2, ... logit_num_classes]]
+                #     ]
+                have_full_batch = outputs.size() == torch.Size([self.batch_size, 
+                                                                self.num_classes])
+                if not have_full_batch and self.drop_last:
+                    # Done with this split:
+                    # Pending STOP request?
+                    if BirdTrainer.STOP:
+                        raise InterruptTraining()
+                    continue
+                    
                 output_stack = torch.cat((output_stack, torch.unsqueeze(outputs, 
                                                                         dim=0))) 
             if label_stack is None:
