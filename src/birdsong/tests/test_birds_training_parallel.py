@@ -15,8 +15,8 @@ from birdsong.birds_train_parallel import BirdTrainer
 from birdsong.utils.dottable_config import DottableConfigParser
 from birdsong.utils.learning_phase import LearningPhase
 
-TEST_ALL = True
-#TEST_ALL = False
+#*******TEST_ALL = True
+TEST_ALL = False
 
 class TestBirdsTrainingParallel(unittest.TestCase):
 
@@ -275,6 +275,28 @@ class TestBirdsTrainingParallel(unittest.TestCase):
         
         # But tally2Prime must be a *copy* of tally2:
         self.assertNotEqual(tally2Prime, tally2)
+        
+    #------------------------------------
+    # test_process_group_init
+    #-------------------
+    
+    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_process_group_init(self):
+        self.set_distribution_env_vars()
+        trainer = BirdTrainer(self.config)
+        
+        self.assertEqual(os.environ.get('WORLD_SIZE', None), '1')
+        self.assertEqual(os.environ.get('MASTER_ADDR', None), '127.0.0.1')
+        self.assertEqual(os.environ.get('MASTER_PORT', None), '9000')
+        self.assertEqual(os.environ.get('RANK', None), '0')
+                         
+        trainer.init_multiprocessing(
+                                  master_addr='127.0.0.1',
+                                  master_port=9000,
+                                  node_rank=0,
+                                  world_size=1
+            )
+
 
 # -------------------- Utils --------------
 

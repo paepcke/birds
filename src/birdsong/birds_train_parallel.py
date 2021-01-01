@@ -38,7 +38,6 @@ from birdsong.result_tallying import TrainResult, TrainResultCollection
 import torch.distributed as dist
 import torch.nn as nn
 
-
 from birdsong.utils.dottable_config import DottableConfigParser
 from birdsong.utils.learning_phase import LearningPhase
 
@@ -122,8 +121,7 @@ class BirdTrainer(object):
         else:
             print("Error: must have a config file. See config.cfg.Example in project root")
             sys.exit(1)
-        
-        
+
         # Replace None args with config file values:
 
         if logfile is None:
@@ -143,9 +141,8 @@ class BirdTrainer(object):
             batch_size = self.config.getint('Training', 'batch_size')
         self.batch_size = batch_size
         
-        if seed is None:
-            seed = train_parms['seed']
-        
+        self.seed = self.config.getint('Training', 'seed')
+        self.set_seed(seed)
         self.started_from_launch = started_from_launch
         self.setup_gpus()
         
@@ -160,9 +157,6 @@ class BirdTrainer(object):
         # save:
 
         signal.signal(signal.SIGINT, self.request_interrupt_training)
-
-        self.set_seed(seed)
-        self.seed = seed
 
         #************
 #         print(f"******WORLD_SIZE:{os.getenv('WORLD_SIZE')}")
@@ -289,6 +283,8 @@ class BirdTrainer(object):
             else:
                 self.local_rank = None
 
+        self.master_addr
+
         # The following call also sets self.gpu_obj
         # to a GPUtil.GPU instance, so we can check
         # on the GPU status along the way:
@@ -348,7 +344,12 @@ class BirdTrainer(object):
     # init_multiprocessing 
     #-------------------
 
-    def init_multiprocessing(self):
+    def init_multiprocessing(self,
+                             master_addr,
+                             master_port,
+                             node_rank,
+                             world_size
+                             ):
         if self.node_rank == 0:
             self.log.info(f"Awaiting {self.world_size} nodes to run...")
         else:
@@ -364,12 +365,23 @@ class BirdTrainer(object):
             raise NotImplementedError("None of mpi/nccl/gloo torch backends installed.")
     
         #************
-#         dist.init_process_group(backend,
-#                                 init_method=f'env://?world_size={self.world_size}&rank={self.node_rank}'
-#                                 ) 
+        # Master port seems to:
+        #   1. not picked up from the URL below, and
+        #   2. magically disappear from the environment
+        #      before this method is called, and is 
+        #      replaced with an empty string.
+        # So store the port in the env var again:
+        
+        if len(os.environ.get('master_port', '')) == 0:
+            os.environ['master_port'] = master_port
         dist.init_process_group(backend,
-                                init_method=f'env://'
+                                init_method=f'env://?world_size={world_size}&rank={node_rank}&master_port={master_port}'
                                 ) 
+#         dist.init_process_group(backend,
+#                                 world_size=1,
+#                                 rank=0,
+#                                 init_method=f'env://'
+#                                 ) 
         #************
         self.log.info("And we're off!")
 
@@ -1559,6 +1571,7 @@ class BirdTrainer(object):
                 self.node_rank  = 0
                 self.world_size = 1
                 self.master_addr = '127.0.0.1'
+                self.master_port = 
                 
         except KeyError as e:
             msg = (f"\nEnvironment variable {e.args[0]} not set.\n" 
@@ -1568,7 +1581,13 @@ class BirdTrainer(object):
                     )
             raise TrainError(msg)
 
-        self.init_multiprocessing()
+        self.init_multiprocessing(self.master_addr,
+                                  self.master_port,
+                                  self.node_rank,
+                                  self.world_size
+                                  )
+                                  
+                                  )
 
     #------------------------------------
     # device_residence

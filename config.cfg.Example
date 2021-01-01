@@ -24,6 +24,11 @@ show_alive    = 30
 
 [Parallelism]
 
+# Must be the same on all collaborating
+# machines:
+
+seed          = 42
+
 # Num of training processes running.
 # On each machine: One process per GPU
 # on that machine. Or 1 if only CPU is
@@ -46,5 +51,11 @@ quintus.stanford.edu    = 2
 # communication during parallel training.
 # Any port is OK, this is the one registered as
 # a Nintendo wifi port:
+
+# If this port is modified, ensure that
+# all participating machine's corresponding
+# entries are changed to the same new
+# port. Collaborative processes communicate
+# via this port. Can be anything available.
 
 pytorch_comm_port       = 29920
