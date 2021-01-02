@@ -230,6 +230,8 @@ class BirdTrainer(object):
         # Train the remaining 4 layers with your own
         # dataset:
         self.model = self.get_resnet18_partially_trained(self.num_classes)
+        if self.device == self.cuda:
+            self.model.cuda()
 
         if unit_testing:
             return
@@ -773,7 +775,7 @@ class BirdTrainer(object):
         if self.device == self.cuda:
             self.initial_GPU_memory = cuda.memory_allocated(self.device)
             # Reset statistics on max GPU memory use:
-            cuda.reset_max_memory_allocated() 
+            cuda.reset_peak_memory_stats()
 
         # If restarting from checkpoint:
         # use the checkpointed epoch number:
