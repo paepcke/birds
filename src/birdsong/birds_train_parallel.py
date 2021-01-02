@@ -775,7 +775,7 @@ class BirdTrainer(object):
         if self.device == self.cuda:
             self.initial_GPU_memory = cuda.memory_allocated(self.device)
             # Reset statistics on max GPU memory use:
-            cuda.reset_peak_stats() 
+            cuda.reset_max_memory_allocated() 
 
         # If restarting from checkpoint:
         # use the checkpointed epoch number:
