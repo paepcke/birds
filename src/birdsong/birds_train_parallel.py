@@ -278,26 +278,24 @@ class BirdTrainer(object):
                                 json_log_dir=performance_log_dir
                                 )
         
-        if self.device == self.cuda:
-            # A stack to allow clear_gpu() to
-            # remove all tensors from the GPU.
-            # Requires that code below always
-            # pushes and pops tensors when they
-            # are moved to, and removed from the GPU:
-            #
-            #   new_my_tensor = self.tensor_push(my_tensor)
-            #   new_my_tensor = self.tensor_pop()
-            
-            
-            self.gpu_tensor_stack = []
-        else:
-            # Stack used instead of the gpu stack.
-            # It is part a no-op in that it allows
-            # tensor_push() and tensor_pop() to be
-            # used even when no GPU is available.
-            # In that case, clear_gpu() will do nothing:
-            
-            self.cpu_tensor_stack = []
+        # A stack to allow clear_gpu() to
+        # remove all tensors from the GPU.
+        # Requires that code below always
+        # pushes and pops tensors when they
+        # are moved to, and removed from the GPU:
+        #
+        #   new_my_tensor = self.tensor_push(my_tensor)
+        #   new_my_tensor = self.tensor_pop()
+        
+        self.gpu_tensor_stack = []
+
+        # Stack used instead of the gpu stack.
+        # It is part a no-op in that it allows
+        # tensor_push() and tensor_pop() to be
+        # used even when no GPU is available.
+        # In that case, clear_gpu() will do nothing:
+        
+        self.cpu_tensor_stack = []
 
     #------------------------------------
     # setup_gpus
