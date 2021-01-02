@@ -19,10 +19,11 @@ sys.path.insert(0,packet_root)
 import socket
 hostname = socket.gethostname()
 if hostname in ('quintus', 'quatro'):
-    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/RemotePyDev"))
+    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
 
     import pydevd
     global pydevd
+    pydevd.settrace('localhost', port=5678)
 #***************** 
 
 from _collections import OrderedDict
@@ -31,7 +32,6 @@ import datetime
 import json
 import random  # Just so we can fix seed for testing
 import signal
-import socket
 
 import GPUtil
 from logging_service import LoggingService
@@ -134,17 +134,27 @@ class BirdTrainer(object):
 
         # Replace None args with config file values:
 
+        # Create temporary logging till setup_logging()
+        # is called further down:
+
         if logfile is None:
-            logfile = self.config.getpath('Paths','logfile', 
-                                          relative_to=self.curr_dir)
-        if logfile is None:
-            self.log = LoggingService()
+            try:
+                logfile = self.config.getpath('Paths','logfile', 
+                                              relative_to=self.curr_dir)
+                self.log = LoggingService(logfile=logfile)
+            except ValueError:
+                # No logfile specified in config.cfg
+                # Use stdout:
+                self.log = LoggingService()
         else:
             self.log = LoggingService(logfile=logfile)
         
         if root_train_test_data is None:
-            root_train_test_data = self.config.getpath('Paths', 'root_train_test_data', 
-                                                       relative_to=self.curr_dir)
+            try:
+                root_train_test_data = self.config.getpath('Paths', 'root_train_test_data', 
+                                                           relative_to=self.curr_dir)
+            except ValueError as e:
+                raise ValueError("Config file must contain an entry 'root_train_test_data' in section 'Paths'") from e
         self.root_train_test_data = root_train_test_data
         
         if batch_size is None:
@@ -290,7 +300,7 @@ class BirdTrainer(object):
                                 self.config.Training.getint('batch_size'),
                                 json_log_dir=performance_log_dir
                                 )
-        
+
         # A stack to allow clear_gpu() to
         # remove all tensors from the GPU.
         # Requires that code below always
@@ -416,9 +426,14 @@ class BirdTrainer(object):
         
         if len(os.environ.get('master_port', '')) == 0:
             os.environ['master_port'] = master_port
-        dist.init_process_group(backend,
-                                init_method=f'env://?world_size={world_size}&rank={node_rank}&master_port={master_port}'
-                                ) 
+        if self.node_rank == 0:
+            # This is the master process, so:
+            dist.init_process_group(backend,
+                                    init_method=f'env://?world_size={world_size}&rank={node_rank}&master_port={master_port}'
+                                    )
+            # Indicate that we need to 
+            # destroy this (Default) group:
+            self.cleanup_called = False 
         self.log.info("And we're off!")
 
     #------------------------------------
@@ -502,7 +517,8 @@ class BirdTrainer(object):
         # Initialize a string to use for moving 
         # tensors between GPU and cpu with their
         # to(device_residence=...) method:
-        self.cuda_dev = device_id 
+        self.cuda_dev = device_id
+        self.log.info(f"Running on {device_id}")
         return device_id 
 
     #------------------------------------
@@ -910,7 +926,7 @@ class BirdTrainer(object):
                                                self.optimizer
                                                )
                 self.log.info(f"Training state saved to {dest_path}")
-                self.clear_gpu()
+                self.cleanup()
                 self.log.info("Exiting")
                 sys.exit(0)
 
@@ -924,9 +940,9 @@ class BirdTrainer(object):
                     self.log.err(f"Application leaves {len(self.gpu_tensor_stack)} tensors on GPU")
                 if len(self.cpu_tensor_stack) > 0:
                     self.log.warn(f"Application used CPU, but left {len(self.cpu_tensor_stack)} tensors from push/pop regimen")
-                    max_mem = cuda.max_memory_allocated(self.device)
+                max_mem = cuda.max_memory_allocated(self.device)
                 self.log.info(f"Max GPU memory use: {self.human_readable(max_mem)}")
-                self.clear_gpu() 
+                self.cleanup()
 
         self.log.info("Training finished")
 
@@ -1834,6 +1850,21 @@ class BirdTrainer(object):
         res = (x1 - x)[:-1]
         m = torch.mean(res.float())
         return abs(float(m))
+
+    #------------------------------------
+    # cleanup 
+    #-------------------
+    
+    def cleanup(self):
+        '''
+        Recover resources taken by collaborating
+        processes. OK to call multiple times.
+        '''
+        if not self.cleanup_called:
+            if self.device == self.cuda:
+                self.clear_gpu()
+                dist.destroy_process_group()
+            self.cleanup_called = True 
 
     #------------------------------------
     # human_readable 
