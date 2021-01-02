@@ -276,7 +276,28 @@ class BirdTrainer(object):
         self.setup_json_logging(self.config.Training.getint('kernel_size'), 
                                 self.config.Training.getint('batch_size'),
                                 json_log_dir=performance_log_dir
-                                ) 
+                                )
+        
+        if self.device == self.cuda:
+            # A stack to allow clear_gpu() to
+            # remove all tensors from the GPU.
+            # Requires that code below always
+            # pushes and pops tensors when they
+            # are moved to, and removed from the GPU:
+            #
+            #   new_my_tensor = self.tensor_push(my_tensor)
+            #   new_my_tensor = self.tensor_pop()
+            
+            
+            self.gpu_tensor_stack = []
+        else:
+            # Stack used instead of the gpu stack.
+            # It is part a no-op in that it allows
+            # tensor_push() and tensor_pop() to be
+            # used even when no GPU is available.
+            # In that case, clear_gpu() will do nothing:
+            
+            self.cpu_tensor_stack = []
 
     #------------------------------------
     # setup_gpus
@@ -750,6 +771,11 @@ class BirdTrainer(object):
     def train(self):
 
         self.log.info("Begin training")
+        
+        if self.device == self.cuda:
+            self.initial_GPU_memory = cuda.memory_allocated(self.device)
+            # Reset statistics on max GPU memory use:
+            cuda.reset_peak_stats() 
 
         # If restarting from checkpoint:
         # use the checkpointed epoch number:
@@ -770,109 +796,132 @@ class BirdTrainer(object):
         
         accuracies = OrderedDict() 
 
-        # Number of seconds between showing 
-        # status if verbose; default is 5 seconds:
-        alive_pulse = self.config.Training.getint('show_alive', 5)
-        try:
-            while (self._diff_avg >= 0.05 or \
-                   self.epoch <= self.config.Training.getint('min_epochs')
-                   ) and \
-                   self.epoch <= self.config.Training.getint('max_epochs'):
-                self.epoch += 1
-                split_num = 0
+        try: # This try ensures cleanup via the 
+            #  finally expression at the end
+            # Number of seconds between showing 
+            # status if verbose; default is 5 seconds:
+            alive_pulse = self.config.Training.getint('show_alive', 5)
+            try: # This try manages cnt-C interrupts, and therefore
+                #  saving of checkpoints.
                 
-                # Get an iterator over all the 
-                # splits from the dataloader. 
-                # Since train_one_split() is a generator
-                # function, the first call here returns
-                # a generator object rather than running
-                # the method:
-
-                split_training_iterator = self.train_one_split()
-                
-                # Send the initial split_num to the
-                # generator; it is hanging to receive
-                # this near the top of train_one_split():
-                
-                split_training_iterator.send(None)
-
-                for split_num in range(num_folds):
-                    self.optimizer.zero_grad()
-                    try:
-                        # train_one_split() is waiting for
-                        # the next split_num in the second
-                        # yield statement of that method:
-                        split_training_iterator.send(split_num)
-                    except StopIteration:
-                        # Exhausted all the splits
-                        self.log.warn(f"Unexpectedly ran out of splits.")
+                # Run epochs until either the max number of
+                # epochs have occurred, or accuracy has not
+                # improved beyond 0.05 during the past
+                # self.EPOCHS_FOR_PLATEAU_DETECTION epochs:
+                  
+                while (self._diff_avg >= 0.05 or \
+                       self.epoch <= self.config.Training.getint('min_epochs')
+                       ) and \
+                       self.epoch <= self.config.Training.getint('max_epochs'):
+                    self.epoch += 1
+                    split_num = 0
+                    
+                    # Get an iterator over all the 
+                    # splits from the dataloader. 
+                    # Since train_one_split() is a generator
+                    # function, the first call here returns
+                    # a generator object rather than running
+                    # the method:
+    
+                    split_training_iterator = self.train_one_split()
+                    
+                    # Send the initial split_num to the
+                    # generator; it is hanging to receive
+                    # this near the top of train_one_split():
+                    
+                    split_training_iterator.send(None)
+    
+                    for split_num in range(num_folds):
+                        self.optimizer.zero_grad()
+                        try:
+                            # train_one_split() is waiting for
+                            # the next split_num in the second
+                            # yield statement of that method:
+                            split_training_iterator.send(split_num)
+                        except StopIteration:
+                            # Exhausted all the splits
+                            self.log.warn(f"Unexpectedly ran out of splits.")
+                            break
+                        self.validate_one_split(split_num)
+    
+                        # Time for sign of life?
+                        time_now = datetime.datetime.now()
+                        if self.time_diff(time_start, time_now) >= alive_pulse:
+                            self.log.info (f"Epoch {self.epoch}; Split number {split_num} of {num_folds}")
+    
+                    # Done with one epoch:
+    
+                    self.log.info(f"Finished epoch {self.epoch}")
+                    
+                    # Update the json based result record
+                    # in the file system:
+                    
+                    self.record_json_display_results(self.epoch)
+                    
+                    # Compute mean accuracy over all splits
+                    # of this epoch:
+                    accuracies[self.epoch] = self.tally_collection.mean_accuracy(epoch=self.epoch, 
+                                                                                 learning_phase=LearningPhase.TRAINING)
+    
+                    if self.epoch <= self.config.Training.getint('min_epochs'):
+                        # Haven't trained for the minimum of epochs:
+                        continue
+                    
+                    if self.epoch < self.EPOCHS_FOR_PLATEAU_DETECTION:
+                        # Need more epochs to discover accuracy plateau:
+                        continue
+    
+                    # Compute the mean over successive accuracy differences
+                    # after the past few epochs. Where 'few' means
+                    # EPOCHS_FOR_PLATEAU_DETECTION. The '1+' is needed
+                    # because our epochs start at 1:
+    
+                    past_accuracies = [accuracies[epoch] for epoch 
+                                       in range(1+len(accuracies)-self.EPOCHS_FOR_PLATEAU_DETECTION,
+                                                self.epoch+1
+                                                )]
+                    self._diff_avg = self.mean_diff(torch.tensor(past_accuracies))
+    
+    
+            except (KeyboardInterrupt, InterruptTraining):
+                self.log.info("Early stopping due to keyboard intervention")
+                do_save = self.offer_model_save()
+                if do_save in ('y','Y','yes','Yes', ''):
+                    have_fname = False
+                    while not have_fname:
+                        dest_path = input("Destination file (ex. ~/tmp/chpt.pth; $HOME/chpt.pth): ")
+                        # Resolve '~' and environ vars: 
+                        dest_path = os.path.expandvars(os.path.expanduser(dest_path))
+                        dest_dir  = os.path.dirname(dest_path)
+                        # Create any intermediate dirs:
+                        if not os.path.exists(dest_dir):
+                            os.makedirs(dest_dir)
+                        if os.path.exists(dest_path):
+                            have_fname = input("File exists, replace?") \
+                              in ('y','Y','yes','Yes')
                         break
-                    self.validate_one_split(split_num)
+                    self.save_model_checkpoint(dest_path,
+                                               self.model,
+                                               self.optimizer
+                                               )
+                self.log.info(f"Training state saved to {dest_path}")
+                self.clear_gpu()
+                self.log.info("Exiting")
+                sys.exit(0)
 
-                    # Time for sign of life?
-                    time_now = datetime.datetime.now()
-                    if self.time_diff(time_start, time_now) >= alive_pulse:
-                        self.log.info (f"Epoch {self.epoch}; Split number {split_num} of {num_folds}")
+        finally:
+            if self.device == self.cuda:
+                self.ending_GPU_memory = cuda.memory_allocated(self.device)
+                if self.ending_GPU_memory >= self.initial_GPU_memory:
+                    self.log.err(f"Application did not release {self.ending_GPU_memory - self.initial_GPU_memory}")
+                if len(self.gpu_tensor_stack) > 0:
+                    self.log.err(f"Application leaves {len(self.gpu_tensor_stack)} tensors on GPU")
+                if len(self.cpu_tensor_stack) > 0:
+                    self.log.warn(f"Application used CPU, but left {len(self.cpu_tensor_stack)} tensors from push/pop regimen")
+    
+                self.log.info(f"Max GPU memory use: {cuda.max_memory_allocated(self.device)} bytes")
+                self.clear_gpu() 
 
-                # Done with one epoch:
-
-                self.log.info(f"Finished epoch {self.epoch}")
-                
-                # Update the json based result record
-                # in the file system:
-                
-                self.record_json_display_results(self.epoch)
-                
-                # Compute mean accuracy over all splits
-                # of this epoch:
-                accuracies[self.epoch] = self.tally_collection.mean_accuracy(epoch=self.epoch, 
-                                                                             learning_phase=LearningPhase.TRAINING)
-
-                if self.epoch <= self.config.Training.getint('min_epochs'):
-                    # Haven't trained for the minimum of epochs:
-                    continue
-                
-                if self.epoch < self.EPOCHS_FOR_PLATEAU_DETECTION:
-                    # Need more epochs to discover accuracy plateau:
-                    continue
-
-                # Compute the mean over successive accuracy differences
-                # after the past few epochs. Where 'few' means
-                # EPOCHS_FOR_PLATEAU_DETECTION. The '1+' is needed
-                # because our epochs start at 1:
-
-                past_accuracies = [accuracies[epoch] for epoch 
-                                   in range(1+len(accuracies)-self.EPOCHS_FOR_PLATEAU_DETECTION,
-                                            self.epoch+1
-                                            )]
-                self._diff_avg = self.mean_diff(torch.tensor(past_accuracies))
-
-
-        except (KeyboardInterrupt, InterruptTraining):
-            self.log.info("Early stopping due to keyboard intervention")
-            do_save = self.offer_model_save()
-            if do_save in ('y','Y','yes','Yes', ''):
-                have_fname = False
-                while not have_fname:
-                    dest_path = input("Destination file (ex. ~/tmp/chpt.pth; $HOME/chpt.pth): ")
-                    # Resolve '~' and environ vars: 
-                    dest_path = os.path.expandvars(os.path.expanduser(dest_path))
-                    dest_dir  = os.path.dirname(dest_path)
-                    # Create any intermediate dirs:
-                    if not os.path.exists(dest_dir):
-                        os.makedirs(dest_dir)
-                    if os.path.exists(dest_path):
-                        have_fname = input("File exists, replace?") \
-                          in ('y','Y','yes','Yes')
-                    break
-                self.save_model_checkpoint(dest_path,
-                                           self.model,
-                                           self.optimizer
-                                           )
-            self.log.info(f"Training state saved to {dest_path}")
-            self.log.info("Exiting")
-            sys.exit(0)
-            
         self.log.info("Training finished")
 
 
@@ -950,12 +999,17 @@ class BirdTrainer(object):
             # Got another batch/targets pair:
             # Push sample and target tensors
             # to where the model is:
-            batch   = batch.to(self.device_residence(self.model))
-            targets = targets.to(self.device_residence(self.model))
+            batch   = self.push_tensor(batch)
+            targets = self.push_tensor(targets)
             
+            # Outputs will be on GPU if we are
+            # using one:
             outputs = self.model(batch)
+            
             loss = self.loss_func(outputs, targets)
+            
             # Update the accumulating training loss
+            
             # for this epoch: 
             self.tally_collection.add_loss(self.epoch, 
                                            loss,
@@ -965,9 +1019,11 @@ class BirdTrainer(object):
             self.optimizer.step()
             
             # Free GPU memory:
-            batch   = batch.to('cpu')
-            targets = targets.to('cpu')
+            targets = self.pop_tensor()
+            batch   = self.pop_tensor()
+            
             outputs = outputs.to('cpu')
+            
 
             # Remember performance:
             if output_stack is None:
@@ -1634,7 +1690,100 @@ class BirdTrainer(object):
         @type model: torchvision.models
         '''
         return next(model.parameters()).device
+
+    #------------------------------------
+    # push_tensor 
+    #-------------------
+
+    def push_tensor(self, tnsr):
+        '''
+        If GPU is in use, moves tnsr to 
+        the GPU, and returns that new tensor.
+        That newly moved tensor is saved in 
+        an array for tensor_pop() later.
+        
+        When no GPU is in use, return tnsr
+        unchanged, but also track the tensor
+        in a stack for subsequent tensor_pop()
+        operations
+         
+        @param tnsr: tensor to move to GPU, or
+            'pretend' to move there
+        @type tnsr: torch.Tensor
+        @return a tensor; either a newly GPU resident
+            one, or the tnsr itself
+        @raise ValueError if tnsr is not a tensor
+        '''
+        
+        if self.device != self.gpu_device:
+            self.cpu_tensor_stack.append(tnsr)
+            return tnsr
+
+
+        if not isinstance(tnsr, torch.Tensor):
+            raise ValueError(f"Attempt to push to GPU, but '{tnsr}' is not a tensor")
+
+        new_tnsr = tnsr.to('gpu')
+        self.gpu_tensor_stack.append(new_tnsr)
+        return new_tnsr
+        
+    #------------------------------------
+    # pop_tensor 
+    #-------------------
     
+    def pop_tensor(self):
+        '''
+        Returns a previously pushed tensor.
+        If a GPU is being used, moves the
+        tensor to the CPU, and returns that
+        new tensor.
+        
+        If only CPU is in use, returns a previously
+        pushed tensor, but there is no GPU/CPU
+        movement attempted.
+        
+        In both cases, popping from an empty stack
+        raises a IndexError.
+        
+        @return: a tensor; either one that was already
+            in the CPU, or one that results from moving
+            a tensor from the GPU to the CPU
+        @raises IndexError when popping from an empty stack
+        '''
+        if self.device != self.gpu_device:
+            tnsr = self.cpu_tensor_stack.pop()
+            return tnsr
+
+        if len(self.gpu_tensor_stack) == 0:
+            raise IndexError("Popping from empty tensor stack.")
+        
+        t = self.gpu_tensor_stack.pop()
+        new_t = t.to('cpu')
+        return new_t
+
+    #------------------------------------
+    # clear_gpu 
+    #-------------------
+    
+    def clear_gpu(self):
+        '''
+        Removes all of this process's data
+        from the GPU(s)
+        '''
+        if self.device != self.gpu_device:
+            return
+        
+        # Move the model off the GPU
+        self.model.cpu()
+        
+        # Move all tensors to CPU
+        while not len(self.gpu_tensor_stack) > 0:
+            self.pop_tensor()
+            
+        # Release GPU memory used by the cuda
+        # allocator:
+        cuda.empty_cache()
+
     #------------------------------------
     # time_diff 
     #-------------------

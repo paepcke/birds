@@ -133,8 +133,7 @@ class TestBirdsTrainingParallel(unittest.TestCase):
         
         # Everything should be on CPU, not GPU
         # after running:
-        self.assertEqual(trainer.device, torch.device('cpu'))
-        self.assertEqual(trainer.device_residence(trainer.model),
+        self.assertEqual(trainer.device_residence(trainer.model), 
                          torch.device('cpu'))
         
         # Expected number of results is 28:
