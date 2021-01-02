@@ -14,6 +14,17 @@ import os, sys
 packet_root = os.path.abspath(__file__.split('/')[0])
 sys.path.insert(0,packet_root)
 
+# For remote debugging via pydev and Eclipse:
+#*****************
+import socket
+hostname = socket.gethostname()
+if hostname in ('quintus', 'quatro'):
+    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/RemotePyDev"))
+
+    import pydevd
+    global pydevd
+#***************** 
+
 from _collections import OrderedDict
 import argparse
 import datetime
@@ -408,12 +419,6 @@ class BirdTrainer(object):
         dist.init_process_group(backend,
                                 init_method=f'env://?world_size={world_size}&rank={node_rank}&master_port={master_port}'
                                 ) 
-#         dist.init_process_group(backend,
-#                                 world_size=1,
-#                                 rank=0,
-#                                 init_method=f'env://'
-#                                 ) 
-        #************
         self.log.info("And we're off!")
 
     #------------------------------------
@@ -913,13 +918,14 @@ class BirdTrainer(object):
             if self.device == self.cuda:
                 self.ending_GPU_memory = cuda.memory_allocated(self.device)
                 if self.ending_GPU_memory >= self.initial_GPU_memory:
-                    self.log.err(f"Application did not release {self.ending_GPU_memory - self.initial_GPU_memory}")
+                    left_on_gpu = self.ending_GPU_memory - self.initial_GPU_memory
+                    self.log.err(f"Application did not release {self.human_readable(left_on_gpu)}")
                 if len(self.gpu_tensor_stack) > 0:
                     self.log.err(f"Application leaves {len(self.gpu_tensor_stack)} tensors on GPU")
                 if len(self.cpu_tensor_stack) > 0:
                     self.log.warn(f"Application used CPU, but left {len(self.cpu_tensor_stack)} tensors from push/pop regimen")
-    
-                self.log.info(f"Max GPU memory use: {cuda.max_memory_allocated(self.device)} bytes")
+                    max_mem = cuda.max_memory_allocated(self.device)
+                self.log.info(f"Max GPU memory use: {self.human_readable(max_mem)}")
                 self.clear_gpu() 
 
         self.log.info("Training finished")
@@ -1723,7 +1729,7 @@ class BirdTrainer(object):
         if not isinstance(tnsr, torch.Tensor):
             raise ValueError(f"Attempt to push to GPU, but '{tnsr}' is not a tensor")
 
-        new_tnsr = tnsr.to('gpu')
+        new_tnsr = tnsr.to('cuda')
         self.gpu_tensor_stack.append(new_tnsr)
         return new_tnsr
         
@@ -1777,7 +1783,7 @@ class BirdTrainer(object):
         self.model.cpu()
         
         # Move all tensors to CPU
-        while not len(self.gpu_tensor_stack) > 0:
+        while len(self.gpu_tensor_stack) > 0:
             self.pop_tensor()
             
         # Release GPU memory used by the cuda
@@ -1828,6 +1834,17 @@ class BirdTrainer(object):
         res = (x1 - x)[:-1]
         m = torch.mean(res.float())
         return abs(float(m))
+
+    #------------------------------------
+    # human_readable 
+    #-------------------
+    
+    def human_readable(self, num, suffix='B'):
+        for unit in ['','K','M','G','T','P','E','Z']:
+            if abs(num) < 1024.0:
+                return "%3.1f%s%s" % (num, unit, suffix)
+            num /= 1024.0
+        return "%.1f%s%s" % (num, 'Yi', suffix)
 
 # ---------------------- Resnet18Grayscale ---------------
 

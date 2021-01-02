@@ -116,7 +116,7 @@ class TestBirdsTrainingParallel(unittest.TestCase):
     def test_train(self):
         self.set_distribution_env_vars()
         trainer = BirdTrainer(self.config)
-        print("Start test training a small dataset (about 3 minutes)...")
+        print("Start test training a small dataset (about 3 minutes on CPU, 11sec on GPU)...")
         t_start = datetime.now()
         trainer.train()
         t_end = datetime.now()
