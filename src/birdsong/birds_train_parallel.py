@@ -1715,7 +1715,7 @@ class BirdTrainer(object):
         @raise ValueError if tnsr is not a tensor
         '''
         
-        if self.device != self.gpu_device:
+        if self.device != self.cuda:
             self.cpu_tensor_stack.append(tnsr)
             return tnsr
 
@@ -1750,7 +1750,7 @@ class BirdTrainer(object):
             a tensor from the GPU to the CPU
         @raises IndexError when popping from an empty stack
         '''
-        if self.device != self.gpu_device:
+        if self.device != self.cuda:
             tnsr = self.cpu_tensor_stack.pop()
             return tnsr
 
@@ -1770,7 +1770,7 @@ class BirdTrainer(object):
         Removes all of this process's data
         from the GPU(s)
         '''
-        if self.device != self.gpu_device:
+        if self.device != self.cuda:
             return
         
         # Move the model off the GPU
