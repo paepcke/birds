@@ -1423,17 +1423,25 @@ class BirdTrainer(object):
         # the config dict, b/c we modify config in the
         # loop:
         
-        for node_name_or_addr in config.copy()['Parallelism'].keys():
-            if node_name_or_addr   == '127.0.0.1' or\
-                node_name_or_addr.split('.')[0] == my_hostname or\
-                node_name_or_addr  == my_global_ip_addr:
-                
-                # Create entry for localhost from hostname or IP
-                # entry for the local host:
-                config['Parallelism']['localhost'] = config.Parallelism[node_name_or_addr]
-
-                # Remove the original entry (hostname or IP):
-                del config.Parallelism[node_name_or_addr]
+        # Commented because does not like modifying
+        # dict in the loop even with copying the whole
+        # config, or parts of it.
+        # Just make the correct config.cfg on each machine:
+#         new_parallel_config = copy.deepcopy(config.Parallelism)
+#         for node_name_or_addr in config.keys():
+#             if node_name_or_addr   == '127.0.0.1' or\
+#                 node_name_or_addr.split('.')[0] == my_hostname or\
+#                 node_name_or_addr  == my_global_ip_addr:
+#                  
+#                 # Create entry for localhost from hostname or IP
+#                 # entry for the local host:
+#                 new_parallel_config['localhost'] = node_name_or_addr
+#  
+#                 # Change this host's node rank to 0,
+#                 # if it's not already that in the config
+#                 # file:
+#                 new_parallel_config[node_name_or_addr] = 0
+#         config['Parallelism'] = copy.deepcopy(new_parallel_config)
 
         # If current host not in the config file at all,
         # create an entry that declares all detected GPUs on
