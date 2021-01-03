@@ -260,9 +260,9 @@ def parse_args():
     """
     
     curr_dir = os.path.dirname(__file__)
-    training_script = os.path.join(curr_dir, 'spectrogram_train_parallel.py')
+    training_script = os.path.join(curr_dir, 'birds_train_parallel.py')
     
-    # Get the help string from spectrogram_train_parallel.py:
+    # Get the help string from birds_train_parallel.py:
     proc = subprocess.run([training_script, '-h'], capture_output=True)
     # Decode needed b/c proc.stdout is byte string:
     script_help = proc.stdout.decode('utf8')
