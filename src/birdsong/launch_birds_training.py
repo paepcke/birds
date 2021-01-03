@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-from argparse import ArgumentParser, REMAINDER
+from argparse import ArgumentParser
 import argparse
 import json
 from json.decoder import JSONDecodeError
@@ -229,141 +229,189 @@ def parse_world_layout_config(other_gpu_config_file):
 
     return config_dict
 
-#------------------------------------
-# parse_args 
-#-------------------
-class BlankLinesHelpFormatter (argparse.HelpFormatter):
+# ----------------------------- BirdsTrainingArgumentsParser class -----------
+
+class BirdsTrainingArgumentsParser(ArgumentParser):
+
+    # Format helper class:
+    class BlankLinesHelpFormatter (argparse.HelpFormatter):
+        
+        def _split_lines(self, text, width):
+            if text.find('\n') == -1:
+                lines = super()._split_lines(text, width)
+            else:
+                lines = text.split('\n')
+            split_lines = []
+            for line in lines:
+                while True:
+                    try:
+                        nl_pos = line.index('\n')
+                        one_line = line[:nl_pos]
+                        split_lines.append(one_line)
+                        line = line[nl_pos+1:]
+                    except ValueError:
+                        # No more NLs:
+                        split_lines.append(line)
+                        break
+            return split_lines
+
+
+    #------------------------------------
+    # parse_args 
+    #-------------------
+
+    def parse_args(self):
+        """
+        Helper function parsing the command line options
+        for both this launcher and the distributed 
+        birds_train_parallel.py script.
+        
+        @return: a dict with keys 'script_args' and
+            'launch_args' with arg-value information
+            for each of the two destinations.
+        @rtype: {str : {str : ANY}}
+        """
     
-    def _split_lines(self, text, width):
-        if text.find('\n') == -1:
-            lines = super()._split_lines(text, width)
-        else:
-            lines = text.split('\n')
-        split_lines = []
-        for line in lines:
-            while True:
-                try:
-                    nl_pos = line.index('\n')
-                    one_line = line[:nl_pos]
-                    split_lines.append(one_line)
-                    line = line[nl_pos+1:]
-                except ValueError:
-                    # No more NLs:
-                    split_lines.append(line)
-                    break
-        return split_lines
+        curr_dir = os.path.dirname(__file__)
     
-def parse_args():
-    """
-    Helper function parsing the command line options
-    @retval ArgumentParser
-    """
-
-    curr_dir = os.path.dirname(__file__)
-
-    parser = ArgumentParser(formatter_class=BlankLinesHelpFormatter,
-                            description="PyTorch distributed training launch "
-                                        "helper to spawn multiple distributed "
-                                        "birds_train_parallel.py processes")
-
-    # Optional arguments for the launch helper
-
-
-    # Changes each process to interpret the launch script "
-    # as a python module, executing with the same behavior as"
-    # 'python -m'; his option is available, but not shown in 
-    # help for simplicity:
-    parser.add_argument("-m", "--module", default=False, action="store_true",
-			help="")
+        # Optional arguments for the launch helper
     
-    # Do not prepend the training script with 'python' - just exec
-    # it directly. Useful when the script is not a Python script,
-    # or has a #! at the top; this option is available, but
-    # not shown in help for simplicity:
-    parser.add_argument("--no_python", default=False, action="store_true",
-                        help=argparse.SUPPRESS
-                        )
     
-    parser.add_argument("--node_rank", 
-                        type=int, 
-                        default=0,
-                        help=("this machine's index into the number of machines (0 is the master); "
-                              "default: 0"
-                              )
-                       )
-    parser.add_argument("--other_gpus",
-                        default=0,
-                        help=("either: path to GPU global-config file, or total\n"
-                              "number of GPUs used on other nodes; default: 0"
-                              )
-                        )
-    parser.add_argument("--here_gpus", 
-                        type=int,
-                        help=f"number of GPUs to use on this node; default is all: {num_gpus_here}",
-                        default=num_gpus_here
-                        )
-    parser.add_argument("--master_addr", default="127.0.0.1", type=str,
-                        help="Master node (rank 0)'s address, should be either "
-                             "the IP address or the hostname of node 0, for "
-                             "single node multi-proc training, the "
-                             "--master_addr can simply be 127.0.0.1")
-    parser.add_argument("--master_port", default=29500, type=int,
-                        help="Master node (rank 0)'s free port that needs to "
-                             "be used for communication during distributed "
-                             "training")
-    parser.add_argument("-q", "--quiet", 
-                        action='store_true',
-                        help=f"do not print status and other info messages",
-                        default=False
-                        )
-    parser.add_argument('-r', '--resume',
-                        help='fully qualified file name to a previously saved checkpoint; \n'
-                             'if not provided, start training from scratch',
-                        default='');
-
-    parser.add_argument('-l', '--logfile',
-                        help='fully qualified log file name to which info and error messages \n'
-                             'are directed. Default: stdout.',
-                        default=None);
-    parser.add_argument('-b', '--batchsize',
-                        type=int,
-                        help=f'how many sample to submit to training machinery together'
-                        )
-    parser.add_argument('-e', '--epochs',
-                        type=int,
-                        help=f'how many epochs to run'
-                        )
-    # Used only by launch_birds_training.py script to indicate that 
-    # this present script was started via the launcher:
-    parser.add_argument('--started_from_launch',
-                        action='store_true',
-                        help=argparse.SUPPRESS,
-                        default=False
-                        )
-    parser.add_argument('-d', '--data',
-                        help='directory root of sub-directories that each contain samples \n'
-                             'of one class. Can be specified in config file instead',
-                        default=None)
-    parser.add_argument('config',
-                        help='fully qualified file name of configuration file',
-                        default=None)
-
-    args = parser.parse_args()
-    args.training_script = os.path.join(curr_dir, 'birds_train_parallel.py')
+        # Changes each process to interpret the launch script "
+        # as a python module, executing with the same behavior as"
+        # 'python -m'; his option is available, but not shown in 
+        # help for simplicity:
+        self.add_argument("-m", "--module", default=False, action="store_true",
+                          help=argparse.SUPPRESS)
+        
+        # Do not prepend the training script with 'python' - just exec
+        # it directly. Useful when the script is not a Python script,
+        # or has a #! at the top; this option is available, but
+        # not shown in help for simplicity:
+        self.add_argument("--no_python", default=False, action="store_true",
+                            help=argparse.SUPPRESS
+                            )
+        
+        self.add_argument("--node_rank", 
+                            type=int, 
+                            default=0,
+                            help=("this machine's index into the number of machines (0 is the master); "
+                                  "default: 0"
+                                  )
+                           )
+        self.add_argument("--other_gpus",
+                            default=0,
+                            help=("either: path to GPU global-config file, or total\n"
+                                  "number of GPUs used on other nodes; default: 0"
+                                  )
+                            )
+        self.add_argument("--here_gpus", 
+                            type=int,
+                            help=f"number of GPUs to use on this node; default is all: {num_gpus_here}",
+                            default=num_gpus_here
+                            )
+        self.add_argument("--master_addr", default="127.0.0.1", type=str,
+                            help="Master node (rank 0)'s address, should be either "
+                                 "the IP address or the hostname of node 0, for "
+                                 "single node multi-proc training, the "
+                                 "--master_addr can simply be 127.0.0.1")
+        self.add_argument("--master_port", default=29500, type=int,
+                            help="Master node (rank 0)'s free port that needs to "
+                                 "be used for communication during distributed "
+                                 "training")
+        self.add_argument("-q", "--quiet", 
+                            action='store_true',
+                            help=f"do not print status and other info messages",
+                            default=False
+                            )
+        # The following args are destined
+        # for each of the script processes:
+        self.add_argument('-r', '--resume',
+                            help='fully qualified file name to a previously saved checkpoint; \n'
+                                 'if not provided, start training from scratch',
+                            default=None);
     
-    return args
+        self.add_argument('-l', '--logfile',
+                            help='fully qualified log file name to which info and error messages \n'
+                                 'are directed. Default: stdout.',
+                            default=None);
+        self.add_argument('-b', '--batchsize',
+                            type=int,
+                            help=f'how many sample to submit to training machinery together'
+                            )
+        self.add_argument('-e', '--epochs',
+                            type=int,
+                            help=f'how many epochs to run'
+                            )
+        # Used only by launch_birds_training.py script to indicate that 
+        # this present script was started via the launcher:
+        self.add_argument('--started_from_launch',
+                            action='store_true',
+                            help=argparse.SUPPRESS,
+                            default=True
+                            )
+        self.add_argument('-d', '--data',
+                            help='directory root of sub-directories that each contain samples \n'
+                                 'of one class. Can be specified in config file instead',
+                            default=None)
+        self.add_argument('config',
+                            help='fully qualified file name of configuration file',
+                            default=None)
+    
+        args = super().parse_args()
+        args_dict = vars(args)
+        
+        # Add argument path to the script
+        # to launch multiple times:
+        args.training_script = os.path.join(curr_dir, 'birds_train_parallel.py')
+        
+        script_arg_names = ['resume', 
+                            'logfile', 
+                            'batchsize', 
+                            'epochs', 
+                            'data', 
+                            'config',
+                            
+                            'started_from_launch'
+                            ]
+        script_args = {arg_name : args_dict[arg_name]
+                          for arg_name
+                           in script_arg_names}
+        
+        launch_arg_names = set(args_dict.keys()) - set(script_arg_names)
+        launch_args = {arg_name : args_dict[arg_name]
+                          for arg_name
+                           in launch_arg_names} 
+        
+        return {'launch_args' : launch_args,
+                'script_args' : script_args
+                } 
 
 #------------------------------------
 # main
 #-------------------
 
 def main():
-    args = parse_args()
+
+    args_parser = BirdsTrainingArgumentsParser(
+        formatter_class=BirdsTrainingArgumentsParser.BlankLinesHelpFormatter,
+        description="PyTorch distributed training launch "
+        "helper to spawn multiple distributed "
+        "birds_train_parallel.py processes")
+
+    all_args = args_parser.parse_args()
+    launch_args = all_args['launch_args']
+    script_args = all_args['script_args']
+    
     
     #*********
-    print("CLI Arguments:")
-    for key in vars(args):
-        print(f"{key}: {getattr(args, key)}")
+    print("CLI Arguments for launching:")
+    for key in launch_args.keys():
+        print(f"{key}: {launch_args[key]}")
+
+    print("CLI Arguments for the train script:")
+    for key in script_args.keys():
+        print(f"{key}: {script_args[key]}")
     #*********
 
     # world size is number of processes, which is
@@ -375,9 +423,9 @@ def main():
     # that lays out which node is to use how many 
     # of its GPUs.
     
-    other_gpus = args.other_gpus
-    here_gpus  = args.here_gpus
-    node_rank  = args.node_rank
+    other_gpus = launch_args['other_gpus']
+    here_gpus  = launch_args['here_gpus']
+    node_rank  = launch_args['node_rank']
     
     world_layout = {}
     try:
@@ -431,30 +479,31 @@ def main():
 
     # If host name was provided instead of an
     # IP address, resolve that:
-    if re.search('^[\d.]*$', args.master_addr) is None:
+    if re.search('^[\d.]*$', launch_args['master_addr']) is None:
         # Got not an IP address, but something
         # with letters:
-        master_addr = socket.gethostbyname(args.master_addr)
+        master_addr = socket.gethostbyname(launch_args['master_addr'])
     else:
-        master_addr = args.master_addr 
+        master_addr = launch_args['master_addr'] 
 
     # set PyTorch distributed related environmental variables
     current_env = os.environ.copy()
     current_env["MASTER_ADDR"] = master_addr
-    current_env["MASTER_PORT"] = str(args.master_port)
+    current_env["MASTER_PORT"] = str(launch_args['master_port'])
     current_env["WORLD_SIZE"] = str(dist_world_size)
     
     processes = []
 
-    if 'OMP_NUM_THREADS' not in os.environ and args.here_gpus > 1:
+    if 'OMP_NUM_THREADS' not in os.environ and launch_args['here_gpus'] > 1:
         current_env["OMP_NUM_THREADS"] = str(1)
-        if not args.quiet:
-            print("*****************************************\n"
-                  "Setting OMP_NUM_THREADS environment variable for each process "
-                  "to be {} in default, to avoid your system being overloaded, "
-                  "please further tune the variable for optimal performance in "
-                  "your application as needed. \n"
-                  "*****************************************".format(current_env["OMP_NUM_THREADS"]))
+        if not launch_args['quiet']:
+#             print("*****************************************\n"
+#                   "Setting OMP_NUM_THREADS environment variable for each process "
+#                   "to be {} in default, to avoid your system being overloaded, "
+#                   "please further tune the variable for optimal performance in "
+#                   "your application as needed. \n"
+#                   "*****************************************".format(current_env["OMP_NUM_THREADS"]))
+            pass
 
     # All GPUs in lower ranked nodes (i.e. exclusive
     # the ones in this node:
@@ -466,34 +515,31 @@ def main():
     # the group of nodes (machines). Starting with
     # the master node, whose numbers are 0,1,...<ngpus_here>:
 
-    current_env['NODE_RANK'] = str(args.node_rank)
+    current_env['NODE_RANK'] = str(launch_args['node_rank'])
 
     for local_rank in range(0, world_layout['localhost']):
 
-        dist_rank = other_gpus * args.node_rank + local_rank
+        dist_rank = other_gpus * launch_args['node_rank'] + local_rank
 
         current_env["RANK"] = str(dist_rank)
         current_env["LOCAL_RANK"] = str(local_rank)
 
         # Spawn the process:
-        with_python = not args.no_python
+        with_python = not launch_args['no_python']
         cmd = []
         if with_python:
             cmd = [sys.executable, "-u"]
-            if args.module:
+            if launch_args['module']:
                 cmd.append("-m")
         else:
-            if args.module:
+            if launch_args['module']:
                 raise ValueError("Don't use both the '--no_python' flag and the '--module' flag at the same time.")
 
-        cmd.append(args.training_script)
-
-        # To the args for the train script processes,
-        # add --started_from_launch to let each of
-        # them know:
-        args_for_train_scripts = ['--started_from_launch'] + \
-                                 args.training_script_args
-        cmd.extend(args_for_train_scripts)
+        cmd.append(launch_args['training_script'])
+        
+        # Add the args for the script:
+        for arg_name in script_args.keys():
+            cmd.append(f"{arg_name}={script_args[arg_name]}")
 
         # Copy stdin, and give the copy to the subprocess.
         # This enables the subprocess to ask user whether
@@ -502,8 +548,8 @@ def main():
         process = subprocess.Popen(cmd, stdin=newstdin, env=current_env)
         processes.append(process)
     
-    if not args.quiet:
-        print(f"Node {args.node_rank} launch.py: Num processes launched: {len(processes)}")
+    if not launch_args['quiet']:
+        print(f"Node {launch_args['node_rank']} launch.py: Num processes launched: {len(processes)}")
         if node_rank == 0:
             print(f"Awaiting {sum(world_layout.values())} processes to finish...")
         else:

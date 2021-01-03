@@ -1867,6 +1867,10 @@ class BirdTrainer(object):
         Recover resources taken by collaborating
         processes. OK to call multiple times.
         '''
+        if self.device == self.cpu:
+            # Didn't use a GPU; nothing to clean up:
+            return
+        
         if not self.cleanup_called:
             if self.device == self.cuda:
                 self.clear_gpu()
@@ -1999,14 +2003,13 @@ if __name__ == '__main__':
                         help="Used only by launch.py script! Indicate that script started via launch_training.py",
                         default=False
                         )
-    parser.add_argument('config',
-                        help='fully qualified file name of configuration file',
-                        default=None)
     parser.add_argument('-d', '--data',
                         help='directory root of sub-directories that each contain samples \n'
                              'of one class. Can be specified in config file instead',
                         default=None)
-
+    parser.add_argument('config',
+                        help='fully qualified file name of configuration file',
+                        default=None)
 
     args = parser.parse_args();
     
