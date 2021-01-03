@@ -1,6 +1,6 @@
 [Paths]
 
-root_train_test_data = /home/data/birds/recombined_data/*
+root_train_test_data = /home/data/birds/recombined_data
 
 [Training]
 
