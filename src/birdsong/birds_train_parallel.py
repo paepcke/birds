@@ -31,7 +31,7 @@ if hostname in ('quintus', 'quatro'):
     # this module. But you can instead just
     # set normal Eclipse breakpoints:
     
-    #pydevd.settrace('localhost', port=5678)
+    pydevd.settrace('localhost', port=5678)
 #***************** 
 
 from _collections import OrderedDict
@@ -1430,10 +1430,10 @@ class BirdTrainer(object):
                 
                 # Create entry for localhost from hostname or IP
                 # entry for the local host:
-                config['Parallelism']['localhost'] = config[node_name_or_addr]
+                config['Parallelism']['localhost'] = config.Parallelism[node_name_or_addr]
 
                 # Remove the original entry (hostname or IP):
-                del config['Parallelism'][node_name_or_addr]
+                del config.Parallelism[node_name_or_addr]
 
         # If current host not in the config file at all,
         # create an entry that declares all detected GPUs on
