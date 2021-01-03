@@ -19,11 +19,19 @@ sys.path.insert(0,packet_root)
 import socket
 hostname = socket.gethostname()
 if hostname in ('quintus', 'quatro'):
+    # Point to where the pydev server 
+    # software is installed on the remote
+    # machine:
     sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
 
     import pydevd
     global pydevd
-    pydevd.settrace('localhost', port=5678)
+    
+    # Uncomment if you want to 
+    # pause before running the body
+    # below. Equivalent to a breakpoint:
+    
+    #pydevd.settrace('localhost', port=5678)
 #***************** 
 
 from _collections import OrderedDict
@@ -55,7 +63,6 @@ from birdsong.utils.learning_phase import LearningPhase
 
 #from torch.nn import BCELoss
 import faulthandler; faulthandler.enable()
-
 
 # For parallelism:
 
@@ -1971,16 +1978,10 @@ if __name__ == '__main__':
  
  
     parser.add_argument('-r', '--resume',
-                        help='fully qualified file name to a previously saved checkpoint; if not provided, start training from scratch',
+                        help='fully qualified file name to a previously saved checkpoint; \n'
+                             'if not provided, start training from scratch',
                         default='');
 
-    parser.add_argument('-c', '--config',
-                        help='fully qualified file name of configuration file',
-                        default=None);
-    parser.add_argument('-d', '--data',
-                        help='directory root of sub-directories that each contain samples of one class.',
-                        default=None);
-                        
     parser.add_argument('-l', '--logfile',
                         help='fully qualified log file name to which info and error messages \n' +\
                              'are directed. Default: stdout.',
@@ -1998,6 +1999,15 @@ if __name__ == '__main__':
                         help="Used only by launch.py script! Indicate that script started via launch_training.py",
                         default=False
                         )
+    parser.add_argument('config',
+                        help='fully qualified file name of configuration file',
+                        default=None)
+    parser.add_argument('-d', '--data',
+                        help='directory root of sub-directories that each contain samples \n'
+                             'of one class. Can be specified in config file instead',
+                        default=None)
+
+
     args = parser.parse_args();
     
     BirdTrainer(

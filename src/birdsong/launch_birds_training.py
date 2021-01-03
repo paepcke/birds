@@ -258,22 +258,32 @@ def parse_args():
     Helper function parsing the command line options
     @retval ArgumentParser
     """
-    
+
     curr_dir = os.path.dirname(__file__)
-    training_script = os.path.join(curr_dir, 'birds_train_parallel.py')
-    
-    # Get the help string from birds_train_parallel.py:
-    proc = subprocess.run([training_script, '-h'], capture_output=True)
-    # Decode needed b/c proc.stdout is byte string:
-    script_help = proc.stdout.decode('utf8')
-    
+
     parser = ArgumentParser(formatter_class=BlankLinesHelpFormatter,
                             description="PyTorch distributed training launch "
-                                        "helper utility that will spawn up "
-                                        "multiple distributed processes")
+                                        "helper to spawn multiple distributed "
+                                        "birds_train_parallel.py processes")
 
     # Optional arguments for the launch helper
 
+
+    # Changes each process to interpret the launch script "
+    # as a python module, executing with the same behavior as"
+    # 'python -m'; his option is available, but not shown in 
+    # help for simplicity:
+    parser.add_argument("-m", "--module", default=False, action="store_true",
+			help="")
+    
+    # Do not prepend the training script with 'python' - just exec
+    # it directly. Useful when the script is not a Python script,
+    # or has a #! at the top; this option is available, but
+    # not shown in help for simplicity:
+    parser.add_argument("--no_python", default=False, action="store_true",
+                        help=argparse.SUPPRESS
+                        )
+    
     parser.add_argument("--node_rank", 
                         type=int, 
                         default=0,
@@ -301,35 +311,46 @@ def parse_args():
                         help="Master node (rank 0)'s free port that needs to "
                              "be used for communication during distributed "
                              "training")
-    parser.add_argument("-m", "--module", default=False, action="store_true",
-                        help="Changes each process to interpret the launch script "
-                             "as a python module, executing with the same behavior as"
-                             "'python -m'.")
-    parser.add_argument("--no_python", default=False, action="store_true",
-                        help="Do not prepend the training script with \"python\" - just exec "
-                             "it directly. Useful when the script is not a Python script, "
-                             "or has a #! at the top."
-                        )
     parser.add_argument("-q", "--quiet", 
                         action='store_true',
                         help=f"do not print status and other info messages",
                         default=False
                         )
-    # Allow training script to run everywhere
-    # to be defaulted even though it is positional
-    # (the '?'). 
-    parser.add_argument("training_script", type=str,
-                        nargs=1,
-                        default=training_script,
-                        help=f"Default {os.path.basename(training_script)}: Add training script arguments after the above: \n"
-                             f"\n{script_help}"
-                        )
+    parser.add_argument('-r', '--resume',
+                        help='fully qualified file name to a previously saved checkpoint; \n'
+                             'if not provided, start training from scratch',
+                        default='');
 
-    # Rest of args are for the training program:
-    parser.add_argument('training_script_args', nargs=REMAINDER)
+    parser.add_argument('-l', '--logfile',
+                        help='fully qualified log file name to which info and error messages \n'
+                             'are directed. Default: stdout.',
+                        default=None);
+    parser.add_argument('-b', '--batchsize',
+                        type=int,
+                        help=f'how many sample to submit to training machinery together'
+                        )
+    parser.add_argument('-e', '--epochs',
+                        type=int,
+                        help=f'how many epochs to run'
+                        )
+    # Used only by launch_birds_training.py script to indicate that 
+    # this present script was started via the launcher:
+    parser.add_argument('--started_from_launch',
+                        action='store_true',
+                        help=argparse.SUPPRESS,
+                        default=False
+                        )
+    parser.add_argument('-d', '--data',
+                        help='directory root of sub-directories that each contain samples \n'
+                             'of one class. Can be specified in config file instead',
+                        default=None)
+    parser.add_argument('config',
+                        help='fully qualified file name of configuration file',
+                        default=None)
+
     args = parser.parse_args()
-    if type(args.training_script) == list:
-            args.training_script = args.training_script[0]
+    args.training_script = os.path.join(curr_dir, 'birds_train_parallel.py')
+    
     return args
 
 #------------------------------------
