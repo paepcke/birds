@@ -242,7 +242,7 @@ class DistributedSKFSampler(SKFSampler):
         # this replica will work on:
 
         self.my_indices = indices[self.rank:self.total_size:self.num_replicas]
-        self.my_classes = [dataset.sample_id_to_class[sample_id] 
+        self.my_classes = [dataset.sample_id_to_class[int(sample_id)] 
                               for sample_id 
                                in self.my_indices]
         

@@ -26,10 +26,10 @@ if hostname in ('quintus', 'quatro'):
 
     import pydevd
     global pydevd
-    
-    # Uncomment if you want to 
-    # pause before running the body
-    # below. Equivalent to a breakpoint:
+    # Uncomment the following if you
+    # want to break right on entry of
+    # this module. But you can instead just
+    # set normal Eclipse breakpoints:
     
     #pydevd.settrace('localhost', port=5678)
 #***************** 
@@ -1683,9 +1683,6 @@ class BirdTrainer(object):
             self.log.info(("Setting RANK to 0, and WORLD_SIZE to 1,\n"
                            "b/c script was not started using launch.py()"
                            ))
-            #***** Read config file; only 
-            #      if not gotten from there, 
-            #      do the following:
             os.environ['RANK'] = '0'
             os.environ['WORLD_SIZE'] = '1'
             os.environ['MASTER_ADDR'] = '127.0.0.1'
