@@ -4,8 +4,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 from argparse import ArgumentParser
 import argparse
 import json
-import json.decoder.JSONDecodeError as JSONError
-from json.decoder import JSONDecodeError
+from json.decoder import JSONDecodeError as JSONError
 import os
 import signal
 import socket
