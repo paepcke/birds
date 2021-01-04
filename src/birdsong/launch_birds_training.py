@@ -3,22 +3,22 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 # For remote debugging via pydev and Eclipse:
 #*****************
-import socket, sys, os
-hostname = socket.gethostname()
-if hostname in ('quintus', 'quatro'):
-    # Point to where the pydev server 
-    # software is installed on the remote
-    # machine:
-    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
-
-    import pydevd
-    global pydevd
-    # Uncomment the following if you
-    # want to break right on entry of
-    # this module. But you can instead just
-    # set normal Eclipse breakpoints:
+# import socket, sys, os
+# hostname = socket.gethostname()
+# if hostname in ('quintus', 'quatro'):
+#     # Point to where the pydev server 
+#     # software is installed on the remote
+#     # machine:
+#     sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
+#
+#     import pydevd
+#     global pydevd
+#     # Uncomment the following if you
+#     # want to break right on entry of
+#     # this module. But you can instead just
+#     # set normal Eclipse breakpoints:
     
-    pydevd.settrace('localhost', port=5678)
+#     pydevd.settrace('localhost', port=5678)
 #***************** 
 
 
@@ -32,6 +32,7 @@ import re
 import socket
 import subprocess
 import signal
+from subprocess import PIPE
 
 import GPUtil
 
@@ -220,6 +221,7 @@ def parse_world_layout_config(other_gpu_config_file):
     # to use 'localhost', '127.0.0.1', or the hostname's FQDN as
     # key in the config file for local host.
     # Get name of this machine. 
+
     my_hostname = socket.gethostname().split('.')[0]
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.connect(("google.com",80))
@@ -231,6 +233,7 @@ def parse_world_layout_config(other_gpu_config_file):
     # is referenced in the dict; if it's anything
     # other than 'localhost', replace the entry
     # with 'lcoalhost' as key:
+
     for node_name_or_addr in config_dict.copy().keys():
         if node_name_or_addr   == '127.0.0.1' or\
             node_name_or_addr.split('.')[0] == my_hostname or\
@@ -246,7 +249,8 @@ def parse_world_layout_config(other_gpu_config_file):
     for (node, num_gpus) in config_dict.items():
         if type(num_gpus) != int:
             val_type = type(num_gpus)
-            print(f"Number of GPUs at node {node} in config file {other_gpu_config_file} should be an int; was {val_type}")
+            print((f"Number of GPUs at node {node} in config file "
+                   f"{other_gpu_config_file} should be an int; was {val_type}")
             sys.exit(1)
 
     return config_dict
@@ -313,14 +317,16 @@ class BirdsTrainingArgumentsParser(ArgumentParser):
         self.add_argument("--no_python", default=False, action="store_true",
                             help=argparse.SUPPRESS
                             )
-        
-        self.add_argument("--node_rank", 
-                            type=int, 
-                            default=0,
-                            help=("this machine's index into the number of machines (0 is the master); "
-                                  "default: 0"
-                                  )
-                           )
+
+#************ Probably goes! We assign the ranks in this script        
+        # self.add_argument("--node_rank", 
+        #                     type=int, 
+        #                     default=0,
+        #                     help=("this machine's index into the number of machines (0 is the master); "
+        #                           "default: 0"
+        #                           )
+        #                    )
+#************
         self.add_argument("--other_gpus",
                             default=0,
                             help=("either: path to GPU global-config file, or total\n"
@@ -369,7 +375,7 @@ class BirdsTrainingArgumentsParser(ArgumentParser):
         # this present script was started via the launcher:
         self.add_argument('--started_from_launch',
                             action='store_true',
-                            help=argparse.SUPPRESS,
+                            #*****help=argparse.SUPPRESS,
                             default=True
                             )
         self.add_argument('-d', '--data',
@@ -387,20 +393,21 @@ class BirdsTrainingArgumentsParser(ArgumentParser):
         # to launch multiple times:
         args.training_script = os.path.join(curr_dir, 'birds_train_parallel.py')
         
-        script_arg_names = ['resume', 
+        script_option_names = ['resume', 
                             'logfile', 
                             'batchsize', 
                             'epochs', 
                             'data', 
-                            'config',
-                            
-                            'started_from_launch'
                             ]
         script_args = {arg_name : args_dict[arg_name]
                           for arg_name
-                           in script_arg_names}
+                           in script_option_names}
         
-        launch_arg_names = set(args_dict.keys()) - set(script_arg_names)
+        # Set of all args minus set of args that go
+        # to the train script must be the args intended
+        # for the this (launch) script:
+        
+        launch_arg_names = set(args_dict.keys()) - set(script_option_names)
         launch_args = {arg_name : args_dict[arg_name]
                           for arg_name
                            in launch_arg_names} 
@@ -427,13 +434,13 @@ def main():
     
     
     #*********
-    print("CLI Arguments for launching:")
-    for key in launch_args.keys():
-        print(f"{key}: {launch_args[key]}")
+    # print("CLI Arguments for launching:")
+    # for key in launch_args.keys():
+    #     print(f"{key}: {launch_args[key]}")
 
-    print("CLI Arguments for the train script:")
-    for key in script_args.keys():
-        print(f"{key}: {script_args[key]}")
+    # print("CLI Arguments for the train script:")
+    # for key in script_args.keys():
+    #     print(f"{key}: {script_args[key]}")
     #*********
 
     # world size is number of processes, which is
@@ -447,6 +454,8 @@ def main():
     
     other_gpus = launch_args['other_gpus']
     here_gpus  = launch_args['here_gpus']
+
+    #******** Likely goes away
     node_rank  = launch_args['node_rank']
     
     world_layout = {}
@@ -567,13 +576,30 @@ def main():
                 continue
             cmd.append(f"--{arg_name}={script_args[arg_name]}")
             # Finally, the obligatory arguments:
-        cmd.append = script_args['config']
+            
+        # Add the 'secret' arg that tells the training
+        # script that it was called from this launch
+        # script, and should therefore expect the various
+        # environment variables to be set:
+        
+        cmd.append('--started_from_launch')
+        
+        # Finally, the obligatory non-option arg
+        # to the training script: the configuration
+        # file:
+        
+        cmd.append(launch_args['config'])
 
         # Copy stdin, and give the copy to the subprocess.
         # This enables the subprocess to ask user whether
         # to save training state in case of a cnt-C:
         newstdin = os.fdopen(os.dup(sys.stdin.fileno()))
-        process = subprocess.Popen(cmd, stdin=newstdin, env=current_env)
+        process = subprocess.Popen(cmd,
+                                   stdin=newstdin,
+                                   env=current_env,
+                                   stdout=PIPE,
+                                   stderr=PIPE
+                                   )
         processes.append(process)
     
     if not launch_args['quiet']:
@@ -588,6 +614,14 @@ def main():
     for process in processes:
         process.wait()
         if process.returncode != 0:
+            (the_stdout, the_stderr) = process.communicate()
+            the_stdout = the_stdout.decode('utf-8')
+            the_stderr = the_stderr.decode('utf-8')
+            train_script   = launch_args['training_script']
+            msg = (f"Training script {train_script} encountered error \n"
+                   f"stderr: {the_stderr} \n"
+                   f"stdout: {the_stdout} \n")
+            print(msg)
             raise subprocess.CalledProcessError(returncode=process.returncode,
                                                 cmd=cmd)
 

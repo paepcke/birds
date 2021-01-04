@@ -11,12 +11,14 @@ code by
 '''
 
 import os, sys
+import socket
+
 packet_root = os.path.abspath(__file__.split('/')[0])
 sys.path.insert(0,packet_root)
 
 # For remote debugging via pydev and Eclipse:
 #*****************
-# import socket
+# 
 # hostname = socket.gethostname()
 # if hostname in ('quintus', 'quatro'):
 #     # Point to where the pydev server 
@@ -148,12 +150,16 @@ class BirdTrainer(object):
             try:
                 logfile = self.config.getpath('Paths','logfile', 
                                               relative_to=self.curr_dir)
+                if os.path.isdir(logfile):
+                    raise ValueError(f"Logfile argument must be a file name, not a directory ({logfile})")
                 self.log = LoggingService(logfile=logfile)
             except ValueError:
                 # No logfile specified in config.cfg
                 # Use stdout:
                 self.log = LoggingService()
         else:
+            if os.path.isdir(logfile):
+                raise ValueError(f"Logfile argument must be a file name, not a directory ({logfile})")
             self.log = LoggingService(logfile=logfile)
         
         if root_train_test_data is None:
@@ -432,7 +438,7 @@ class BirdTrainer(object):
         # So store the port in the env var again:
         
         if len(os.environ.get('master_port', '')) == 0:
-            os.environ['master_port'] = master_port
+            os.environ['master_port'] = str(master_port)
         if self.node_rank == 0:
             # This is the master process, so:
             dist.init_process_group(backend,
@@ -1457,7 +1463,10 @@ class BirdTrainer(object):
             try:
                 num_gpus = int(num_gpus)
             except ValueError:
-                print(f"Number of GPUs at node {node} in config file {conf_file} should be an int.")
+                print((f"Number of GPUs at node {node} \n"
+                       f"in config file {conf_file} should be an int. \n"
+                       f"Was '{num_gpus}'"
+                       ))
                 sys.exit(1)
             config['Parallelism'][node] = num_gpus
             
@@ -1647,8 +1656,8 @@ class BirdTrainer(object):
         # then internalize the promised instance vars
 
         if started_from_launch:
-            # Internalize the promised env vars RANK and
-            # WORLD_SIZE:
+            # Internalize the promised env vars RANK, 
+            # WORLD_SIZE, MASTER_ADDR, and MASTER_PORT:
             try:
                 non_initialized_vars = []
                 try:
@@ -1661,7 +1670,7 @@ class BirdTrainer(object):
                     non_initialized_vars.append('WORLD_SIZE')
                     
                 try:
-                    self.master_addr = os.environ['MASTER_ADDR']
+                    self.master_addr = str(os.environ['MASTER_ADDR'])
                 except KeyError:
                     non_initialized_vars.append('MASTER_ADDR')
                     
@@ -2003,9 +2012,11 @@ if __name__ == '__main__':
                         type=int,
                         help=f'how many epochs to run'
                         )
+    # Used only by launch.py script! Indicate that
+    # script started via launch_training.py:
     parser.add_argument('--started_from_launch',
                         action='store_true',
-                        help="Used only by launch.py script! Indicate that script started via launch_training.py",
+                        help=argparse.SUPPRESS,
                         default=False
                         )
     parser.add_argument('-d', '--data',
@@ -2023,5 +2034,6 @@ if __name__ == '__main__':
             root_train_test_data=args.data,
             checkpoint=args.resume,
             batch_size=args.batchsize,
-            logfile=args.logfile
+            logfile=args.logfile,
+            started_from_launch=args.started_from_launch
             ).train()
