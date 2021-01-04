@@ -1,6 +1,23 @@
 #!/usr/bin/env python3
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+from argparse import ArgumentParser
+import argparse
+import json
+import json.decoder.JSONDecodeError as JSONError
+from json.decoder import JSONDecodeError
+import os
+import signal
+import socket
+from subprocess import PIPE
+import subprocess
+import sys
+
+import GPUtil
+
+from birdsong.utils.dottable_config import DottableConfigParser
+
+
 # For remote debugging via pydev and Eclipse:
 #*****************
 # import socket, sys, os
@@ -17,26 +34,8 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 #     # want to break right on entry of
 #     # this module. But you can instead just
 #     # set normal Eclipse breakpoints:
-    
 #     pydevd.settrace('localhost', port=5678)
 #***************** 
-
-
-from argparse import ArgumentParser
-import argparse
-import json
-from json.decoder import JSONDecodeError
-import os
-import sys
-import re
-import socket
-import subprocess
-import signal
-from subprocess import PIPE
-
-import GPUtil
-
-
 r"""
 Based on torch.distributed.launch, with additions by Andreas Paepcke
 (https://github.com/pytorch/pytorch/blob/master/torch/distributed/launch.py)
@@ -182,6 +181,12 @@ will not pass ``--local_rank`` when you specify this flag.
 
 """
 
+# ------------------------ Specialty Exceptions --------
+
+class ConfigError(Exception):
+    pass
+
+
 num_gpus_here = len(GPUtil.getGPUs())
 
 #------------------------------------
@@ -250,7 +255,7 @@ def parse_world_layout_config(other_gpu_config_file):
         if type(num_gpus) != int:
             val_type = type(num_gpus)
             print((f"Number of GPUs at node {node} in config file "
-                   f"{other_gpu_config_file} should be an int; was {val_type}")
+                   f"{other_gpu_config_file} should be an int; was {val_type}"))
             sys.exit(1)
 
     return config_dict
@@ -301,52 +306,7 @@ class BirdsTrainingArgumentsParser(ArgumentParser):
         curr_dir = os.path.dirname(__file__)
     
         # Optional arguments for the launch helper
-    
-    
-        # Changes each process to interpret the launch script "
-        # as a python module, executing with the same behavior as"
-        # 'python -m'; his option is available, but not shown in 
-        # help for simplicity:
-        self.add_argument("-m", "--module", default=False, action="store_true",
-                          help=argparse.SUPPRESS)
-        
-        # Do not prepend the training script with 'python' - just exec
-        # it directly. Useful when the script is not a Python script,
-        # or has a #! at the top; this option is available, but
-        # not shown in help for simplicity:
-        self.add_argument("--no_python", default=False, action="store_true",
-                            help=argparse.SUPPRESS
-                            )
 
-#************ Probably goes! We assign the ranks in this script        
-        # self.add_argument("--node_rank", 
-        #                     type=int, 
-        #                     default=0,
-        #                     help=("this machine's index into the number of machines (0 is the master); "
-        #                           "default: 0"
-        #                           )
-        #                    )
-#************
-        self.add_argument("--other_gpus",
-                            default=0,
-                            help=("either: path to GPU global-config file, or total\n"
-                                  "number of GPUs used on other nodes; default: 0"
-                                  )
-                            )
-        self.add_argument("--here_gpus", 
-                            type=int,
-                            help=f"number of GPUs to use on this node; default is all: {num_gpus_here}",
-                            default=num_gpus_here
-                            )
-        self.add_argument("--master_addr", default="127.0.0.1", type=str,
-                            help="Master node (rank 0)'s address, should be either "
-                                 "the IP address or the hostname of node 0, for "
-                                 "single node multi-proc training, the "
-                                 "--master_addr can simply be 127.0.0.1")
-        self.add_argument("--master_port", default=29500, type=int,
-                            help="Master node (rank 0)'s free port that needs to "
-                                 "be used for communication during distributed "
-                                 "training")
         self.add_argument("-q", "--quiet", 
                             action='store_true',
                             help=f"do not print status and other info messages",
@@ -375,7 +335,7 @@ class BirdsTrainingArgumentsParser(ArgumentParser):
         # this present script was started via the launcher:
         self.add_argument('--started_from_launch',
                             action='store_true',
-                            #*****help=argparse.SUPPRESS,
+                            help=argparse.SUPPRESS,
                             default=True
                             )
         self.add_argument('-d', '--data',
@@ -390,240 +350,292 @@ class BirdsTrainingArgumentsParser(ArgumentParser):
         args_dict = vars(args)
         
         # Add argument path to the script
-        # to launch multiple times:
+        # that will be launched multiple times:
         args.training_script = os.path.join(curr_dir, 'birds_train_parallel.py')
         
         script_option_names = ['resume', 
-                            'logfile', 
-                            'batchsize', 
-                            'epochs', 
-                            'data', 
-                            ]
-        script_args = {arg_name : args_dict[arg_name]
-                          for arg_name
-                           in script_option_names}
+                               'logfile', 
+                               'batchsize', 
+                               'epochs', 
+                               'data', 
+                               ]
+        self.script_args = {arg_name : args_dict[arg_name]
+                            for arg_name
+                            in script_option_names}
         
         # Set of all args minus set of args that go
         # to the train script must be the args intended
         # for the this (launch) script:
         
         launch_arg_names = set(args_dict.keys()) - set(script_option_names)
-        launch_args = {arg_name : args_dict[arg_name]
-                          for arg_name
-                           in launch_arg_names} 
+        self.launch_args = {arg_name : args_dict[arg_name]
+                            for arg_name
+                            in launch_arg_names} 
         
-        return {'launch_args' : launch_args,
-                'script_args' : script_args
+        return {'launch_args' : self.launch_args,
+                'script_args' : self.script_args
                 } 
-
-#------------------------------------
-# main
-#-------------------
-
-def main():
-
-    args_parser = BirdsTrainingArgumentsParser(
-        formatter_class=BirdsTrainingArgumentsParser.BlankLinesHelpFormatter,
-        description="PyTorch distributed training launch "
-        "helper to spawn multiple distributed "
-        "birds_train_parallel.py processes")
-
-    all_args = args_parser.parse_args()
-    launch_args = all_args['launch_args']
-    script_args = all_args['script_args']
-    
-    
-    #*********
-    # print("CLI Arguments for launching:")
-    # for key in launch_args.keys():
-    #     print(f"{key}: {launch_args[key]}")
-
-    # print("CLI Arguments for the train script:")
-    # for key in script_args.keys():
-    #     print(f"{key}: {script_args[key]}")
-    #*********
-
-    # world size is number of processes, which is
-    # equal to number of GPUs used on all machines with
-    # lower node rank than this one, plus this node's GPUs.
-    # If args.other_gpus is an int, we assume that 
-    # all machines have the same number of GPUs. 
-    # Else the arg is the path to a config file
-    # that lays out which node is to use how many 
-    # of its GPUs.
-    
-    other_gpus = launch_args['other_gpus']
-    here_gpus  = launch_args['here_gpus']
-
-    #******** Likely goes away
-    node_rank  = launch_args['node_rank']
-    
-    world_layout = {}
-    try:
-        other_gpus   = int(other_gpus)
-    except:
-        # other_gpus is path to world layout
-        # config file.
-        pass
-    
-    if type(other_gpus) == int:
-        # Every node (machine) has same number of args:
-        # Account for all nodes that came before this one.
-        # We could just lump those together as:
-        #    other_gpus * node_rank
-        # but enumerating them matches what would be
-        # in a config file if it was used:
-        if node_rank == 0:
-            # Master node must know true sum of GPUs:
-            world_layout['others'] = other_gpus
-        else:
-            # All other nodes care only about GPUs
-            # in nodes with lower ranks than themselves:
-            for prev_node_rank in range(node_rank):
-                world_layout[prev_node_rank] = other_gpus
-        world_layout['localhost'] = here_gpus
-    else:
-        # Unequal number of GPUs used in various
-        # machines. Parse the config file, filling
-        # in world_layout with each prior node's 
-        # number of GPUs.
-        world_layout = parse_world_layout_config(other_gpus)
-
-    # Handle special case: no GPUs anywere, and
-    # we are on node 0: in that case start a single
-    # copy of the training script. If it is written
-    # properly, it will detect the absence of a GPU,
-    # and use the CPU. This happens during debugging
-    # on a laptop:
-    
-    dist_world_size = sum(world_layout.values())
-    if dist_world_size == 0 and int(node_rank) == 0:
-        world_layout['localhost'] += 1
-        dist_world_size += 1
-    
-    # If trying to launch on a node without GPUs,
-    # when GPUs are available elsewhere, refuse to
-    # start the script:
-    if world_layout['localhost'] == 0:
-        print("This machine does not have any GPU; training script not started.")
-        sys.exit(1)
-
-    # If host name was provided instead of an
-    # IP address, resolve that:
-    if re.search('^[\d.]*$', launch_args['master_addr']) is None:
-        # Got not an IP address, but something
-        # with letters:
-        master_addr = socket.gethostbyname(launch_args['master_addr'])
-    else:
-        master_addr = launch_args['master_addr'] 
-
-    # set PyTorch distributed related environmental variables
-    current_env = os.environ.copy()
-    current_env["MASTER_ADDR"] = master_addr
-    current_env["MASTER_PORT"] = str(launch_args['master_port'])
-    current_env["WORLD_SIZE"] = str(dist_world_size)
-    
-    processes = []
-
-    if 'OMP_NUM_THREADS' not in os.environ and launch_args['here_gpus'] > 1:
-        current_env["OMP_NUM_THREADS"] = str(1)
-        if not launch_args['quiet']:
-#             print("*****************************************\n"
-#                   "Setting OMP_NUM_THREADS environment variable for each process "
-#                   "to be {} in default, to avoid your system being overloaded, "
-#                   "please further tune the variable for optimal performance in "
-#                   "your application as needed. \n"
-#                   "*****************************************".format(current_env["OMP_NUM_THREADS"]))
-            pass
-
-    # All GPUs in lower ranked nodes (i.e. exclusive
-    # the ones in this node:
-    other_gpus =  sum([num_gpus for (node_name, num_gpus) 
-                       in world_layout.items() 
-                       if node_name != 'localhost']) 
-
-    # Compute a unique number for each GPU within
-    # the group of nodes (machines). Starting with
-    # the master node, whose numbers are 0,1,...<ngpus_here>:
-
-    current_env['NODE_RANK'] = str(launch_args['node_rank'])
-
-    for local_rank in range(0, world_layout['localhost']):
-
-        dist_rank = other_gpus * launch_args['node_rank'] + local_rank
-
-        current_env["RANK"] = str(dist_rank)
-        current_env["LOCAL_RANK"] = str(local_rank)
-
-        # Spawn the process:
-        with_python = not launch_args['no_python']
-        cmd = []
-        if with_python:
-            cmd = [sys.executable, "-u"]
-            if launch_args['module']:
-                cmd.append("-m")
-        else:
-            if launch_args['module']:
-                raise ValueError("Don't use both the '--no_python' flag and the '--module' flag at the same time.")
-
-        cmd.append(launch_args['training_script'])
         
-        # Add the args for the script:
-        for arg_name in script_args.keys():
-            script_arg_val = script_args[arg_name]
-            if script_arg_val in [None, 'config']:
-                # Skip over non-specified CLI args:
-                continue
-            cmd.append(f"--{arg_name}={script_args[arg_name]}")
-            # Finally, the obligatory arguments:
+# -------------------------- TrainScriptLauncher
+
+class TrainScriptLauncher:
+    
+    #------------------------------------
+    # Constructor 
+    #-------------------
+    
+    # Use distributed torch default port:
+    COMM_PORT = '5678'
+    
+    def __init__(self):
+        args_parser = BirdsTrainingArgumentsParser(
+            formatter_class=BirdsTrainingArgumentsParser.BlankLinesHelpFormatter,
+            description="PyTorch distributed training launch "
+            "helper to spawn multiple distributed "
+            "birds_train_parallel.py processes")
+    
+        all_args = args_parser.parse_args()
+        self.launch_args = all_args['launch_args']
+        self.script_args = all_args['script_args']
+        
+    #------------------------------------
+    # gather_world_layout
+    #-------------------
+    
+    def gather_world_layout(self, launch_args):
+
+        try: 
+            config_file = launch_args.config
+        except KeyError:
+            raise RuntimeError("Error: must have a config file. See config.cfg.Example in project root")
+        
+        self.config = DottableConfigParser(config_file)
+        
+        try:
+            world_map_path = self.config.Paths.world_map
+        except KeyError:
+            raise RuntimeError(f"Could not find entry for 'world_map' in config file {config_file}")
+        
+        try:
+            with open(world_map_path, 'r') as world_map_fd:
+                world_map = json.load(world_map_fd)
+        except JSONError as e:
+            raise JSONError(f"World map file at {world_map_path} contains bad JSON") from e
             
-        # Add the 'secret' arg that tells the training
-        # script that it was called from this launch
-        # script, and should therefore expect the various
-        # environment variables to be set:
+        # Now have something like:
+        # {'quintus.stanford.edu' : {
+        #     'rank' : 0,
+        #     'gpus' : 2},
+        #
+        #  'quatro.stanford.edu'  : {
+        #      'rank' : 1,
+        #      'gpus' : 2,
+        #      'devices' : [1,2]}
+        # }
         
-        cmd.append('--started_from_launch')
-        
-        # Finally, the obligatory non-option arg
-        # to the training script: the configuration
-        # file:
-        
-        cmd.append(launch_args['config'])
+        my_hostname = socket.getfqdn()
+        try:
+            # Get this machine's info (sub)dict:
+            my_world_info = world_map[my_hostname]
+        except KeyError:
+            raise ConfigError(f"World map file does not contain entry for this machine ({my_hostname})")
 
-        # Copy stdin, and give the copy to the subprocess.
-        # This enables the subprocess to ask user whether
-        # to save training state in case of a cnt-C:
-        newstdin = os.fdopen(os.dup(sys.stdin.fileno()))
-        process = subprocess.Popen(cmd,
-                                   stdin=newstdin,
-                                   env=current_env,
-                                   stdout=PIPE,
-                                   stderr=PIPE
-                                   )
-        processes.append(process)
+        self.my_rank = my_world_info['rank']
+        self.my_gpus = my_world_info['gpus']
+        try:
+            self.my_gpus_to_use = my_world_info['devices']
+        except KeyError:
+            self.my_gpus_to_use = None
+
+        am_master_node = my_world_info['rank'] == 0
+        my_ip = socket.gethostbyname(my_hostname)
+        if am_master_node:
+            self.MASTER_ADDR = my_ip
+            self.MASTER_PORT = self.COMM_PORT
+            self.RANK        = 0
+
+        # World size is number of processes, which is
+        # equal to number of GPUs used on all machines with
+        # lower node rank than this one, plus this node's GPUs.
+        
+        # Number of GPUs on this machine, plus
+        # machines with lower rank
+        world_size    = 0
+        
+        # Total number of GPUs, even including
+        # GPUs on higher rank machines  
+        self.universe_size = 0
+        
+        for machine_name in world_map.keys():
+            world_info   = world_map[machine_name]
+            machine_rank = world_info['rank']
+            machine_gpus = world_info['gpus'] 
+            
+            if machine_rank <= self.my_rank: 
+                world_size += machine_gpus
+            self.universe_size  += machine_gpus
+            
+        # Handle special case: no GPUs anywere, and
+        # we are on node 0: in that case start a single
+        # copy of the training script. If it is written
+        # properly, it will detect the absence of a GPU,
+        # and use the CPU. This happens during debugging
+        # on a laptop:
+
+        if self.universe_size == 0 and am_master_node:
+            world_size += 1
+            
+        # If trying to launch on a node without GPUs,
+        # when GPUs are available elsewhere, refuse to
+        # start the script:
+        if self.my_gpus == 0 and self.universe_size > 0:
+            raise RuntimeError("This machine does not have any GPU, but others do; training script not started.")
+        
+    #------------------------------------
+    # launch_scripts 
+    #-------------------
     
-    if not launch_args['quiet']:
-        print(f"Node {launch_args['node_rank']} launch.py: Num processes launched: {len(processes)}")
-        if node_rank == 0:
-            print(f"Awaiting {sum(world_layout.values())} processes to finish...")
-        else:
-            print(f"Awaiting {world_layout['localhost']} processes to finish...")
+    def launch_scripts(self):
+        
+        # Set PyTorch distributed related environmental variables
+        current_env = os.environ.copy()
+        
+        current_env["MASTER_ADDR"] = self.MASTER_ADDR
+        current_env["MASTER_PORT"] = str(self.MASTER_PORT)
+        current_env["WORLD_SIZE"] = str(self.world_size)
+        
+        if 'OMP_NUM_THREADS' not in os.environ and self.launch_args['here_gpus'] > 1:
+            current_env["OMP_NUM_THREADS"] = str(1)
+
+        processes = []
+        
+        # Launch as many copies of the training
+        # script as this machine has available
+        # according to the world map. 
+        #
+        # Each copy is told this machine's rank,
+        # and a running index of this machine's
+        # GPUs. This index starts with the CPUs
+        # on the master node, continues through
+        # all the GPUs on machines with lower rank
+        # than this one. The GPUs of higher ranked
+        # machines are not included:
+
+        # Compute a unique number for each GPU within
+        # the group of nodes (machines). Starting with
+        # the master node, whose numbers are 0,1,...<ngpus_here>:
+        
+        lower_machine_gpus = self.gpus_below_my_rank(self.world_map) 
     
-    # Let subprocesses deal with cnt-C (keyboard interrupt):
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
-    for process in processes:
-        process.wait()
-        if process.returncode != 0:
-            (the_stdout, the_stderr) = process.communicate()
-            the_stdout = the_stdout.decode('utf-8')
-            the_stderr = the_stderr.decode('utf-8')
-            train_script   = launch_args['training_script']
-            msg = (f"Training script {train_script} encountered error \n"
-                   f"stderr: {the_stderr} \n"
-                   f"stdout: {the_stdout} \n")
-            print(msg)
-            raise subprocess.CalledProcessError(returncode=process.returncode,
-                                                cmd=cmd)
+        # Spawn as many local training script
+        # copies as are (to-be-used) GPUs on this
+        # machine:
+        
+        start_local_gpu_rank = 1+lower_machine_gpus, 
+        for local_rank in range(start_local_gpu_rank,
+                                start_local_gpu_rank + self.my_gpus):
+
+            current_env["RANK"] = str(self.my_rank)
+            current_env["LOCAL_RANK"] = str(local_rank)
+    
+            # Spawn one training script.
+            
+            # Build the shell command line,
+            # starting with 'python -u':
+            cmd = [sys.executable, "-u"]
+    
+            cmd.append(self.launch_args['training_script'])
+
+            # Add the args for the script:
+            for arg_name in self.script_args.keys():
+                script_arg_val = self.script_args[arg_name]
+                if script_arg_val in [None, 'config']:
+                    # Skip over non-specified CLI args:
+                    continue
+                cmd.append(f"--{arg_name}={self.script_args[arg_name]}")
+
+            # Add the 'secret' arg that tells the training
+            # script that it was called from this launch
+            # script, and should therefore expect the various
+            # environment variables to be set:
+            
+            cmd.append('--started_from_launch')
+            
+            # Finally, the obligatory non-option arg
+            # to the training script: the configuration
+            # file:
+            
+            script_name = self.script_args['config']
+            cmd.append(script_name)
+                
+            # Copy stdin, and give the copy to the subprocess.
+            # This enables the subprocess to ask user whether
+            # to save training state in case of a cnt-C:
+            newstdin = os.fdopen(os.dup(sys.stdin.fileno()))
+            process = subprocess.Popen(cmd,
+                                       stdin=newstdin,
+                                       env=current_env,
+                                       stdout=PIPE,
+                                       stderr=PIPE
+                                       )
+            processes.append(process)
+        
+        if not self.launch_args['quiet']:
+            print(f"Node {self.launch_args['node_rank']} launch.py: Num processes launched: {len(processes)}")
+            if self.my_rank == 0:
+                print(f"Awaiting {self.universe_size} processes to finish...")
+            else:
+                print(f"Awaiting {self.my_gpus} processes to finish...")
+        
+        # Let subprocesses deal with cnt-C (keyboard interrupt):
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        for process in processes:
+            process.wait()
+            if process.returncode != 0:
+                (the_stdout, the_stderr) = process.communicate()
+                the_stdout = the_stdout.decode('utf-8')
+                the_stderr = the_stderr.decode('utf-8')
+                train_script   = self.launch_args['training_script']
+                msg = (f"Training script {train_script} encountered error \n"
+                       f"stderr: {the_stderr} \n"
+                       f"stdout: {the_stdout} \n")
+                print(msg)
+                raise subprocess.CalledProcessError(returncode=process.returncode,
+                                                    cmd=cmd)
+    #------------------------------------
+    # gpus_below_my_rank 
+    #-------------------
+    
+    def gpus_below_myrank(self, world_map):
+        '''
+        Given a world map like this:
+        
+        {'quintus.stanford.edu' : {
+            'rank' : 0,
+            'gpus' : 2},
+        
+         'quatro.stanford.edu'  : {
+             'rank' : 1,
+             'gpus' : 2,
+             'devices' : [1,2]}
+        }
+        
+        return the number of GPUs in machines
+        of lower rank than this one.
+        
+        @param world_map: dict layout out which machine
+            has how many GPUs
+        @type world_map: {str : {str : ANY}}
+        @return number of GPUs in machine with
+            lower rank.
+        @rtype: int
+        '''
+        
+        sum_of_gpus = 0
+        for machine in world_map.keys():
+            if world_map[machine]['rank'] < self.my_rank:
+                sum_of_gpus += world_map[machine]['gpus']
+
 
 if __name__ == "__main__":
-    main()
+    launcher = TrainScriptLauncher()

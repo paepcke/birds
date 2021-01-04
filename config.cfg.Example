@@ -1,6 +1,15 @@
 [Paths]
 
+# Relative paths are relative to
+# the script that processes this
+# config file. You training script
+# if called directly, or launch_birds_training.py
+
 root_train_test_data = /home/data/birds/recombined_data
+logfile              = ./logs/my_training.log
+# Only relevant if running multi-process.
+# See world_map.json.Example:
+world_map            = ../../world_map.json
 
 [Training]
 
@@ -46,6 +55,7 @@ seed          = 42
 
 quatro.stanford.edu     = 3
 quintus.stanford.edu    = 2
+localhost               = 2
 
 # Communication used for inter process/machine
 # communication during parallel training.
