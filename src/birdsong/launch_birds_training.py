@@ -638,3 +638,4 @@ class TrainScriptLauncher:
 
 if __name__ == "__main__":
     launcher = TrainScriptLauncher()
+    launcher.launch_scripts()
