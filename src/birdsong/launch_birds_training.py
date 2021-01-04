@@ -245,7 +245,8 @@ def parse_world_layout_config(other_gpu_config_file):
     # Values should all be ints: number of GPUs:
     for (node, num_gpus) in config_dict.items():
         if type(num_gpus) != int:
-            print(f"Number of GPUs at node {node} in config file {other_gpu_config_file} should be an int.")
+            val_type = type(num_gpus)
+            print(f"Number of GPUs at node {node} in config file {other_gpu_config_file} should be an int; was {val_type}")
             sys.exit(1)
 
     return config_dict
@@ -560,7 +561,13 @@ def main():
         
         # Add the args for the script:
         for arg_name in script_args.keys():
-            cmd.append(f"{arg_name}={script_args[arg_name]}")
+            script_arg_val = script_args[arg_name]
+            if script_arg_val in [None, 'config']:
+                # Skip over non-specified CLI args:
+                continue
+            cmd.append(f"--{arg_name}={script_args[arg_name]}")
+            # Finally, the obligatory arguments:
+        cmd.append = script_args['config']
 
         # Copy stdin, and give the copy to the subprocess.
         # This enables the subprocess to ask user whether

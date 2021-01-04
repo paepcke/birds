@@ -16,22 +16,22 @@ sys.path.insert(0,packet_root)
 
 # For remote debugging via pydev and Eclipse:
 #*****************
-import socket
-hostname = socket.gethostname()
-if hostname in ('quintus', 'quatro'):
-    # Point to where the pydev server 
-    # software is installed on the remote
-    # machine:
-    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
-
-    import pydevd
-    global pydevd
-    # Uncomment the following if you
-    # want to break right on entry of
-    # this module. But you can instead just
-    # set normal Eclipse breakpoints:
-    
-    pydevd.settrace('localhost', port=5678)
+# import socket
+# hostname = socket.gethostname()
+# if hostname in ('quintus', 'quatro'):
+#     # Point to where the pydev server 
+#     # software is installed on the remote
+#     # machine:
+#     sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
+# 
+#     import pydevd
+#     global pydevd
+#     # Uncomment the following if you
+#     # want to break right on entry of
+#     # this module. But you can instead just
+#     # set normal Eclipse breakpoints:
+#     
+#     pydevd.settrace('localhost', port=5678)
 #***************** 
 
 from _collections import OrderedDict
