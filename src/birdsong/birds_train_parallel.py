@@ -395,8 +395,6 @@ class BirdTrainer(object):
             raise NotImplementedError("None of mpi/nccl/gloo torch backends installed.")
         return backend
 
-
-
     #------------------------------------
     # to_best_device 
     #-------------------

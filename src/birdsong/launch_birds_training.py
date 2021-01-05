@@ -418,11 +418,13 @@ class TrainScriptLauncher:
         # GPUs on higher rank machines  
         self.universe_size = 0
         self.master_hostname = None
-        
+
+        # Go through the world map, machine (a.k.a. node)
+        # one at a time:
         for machine_name in self.world_map.keys():
-            world_info   = self.world_map[machine_name]
-            machine_rank = world_info['rank']
-            machine_gpus = world_info['gpus']
+            machine_info   = self.world_map[machine_name]
+            machine_rank = machine_info['rank']
+            machine_gpus = machine_info['gpus']
             if machine_rank == 0:
                 self.master_hostname = machine_name 
             
@@ -444,9 +446,6 @@ class TrainScriptLauncher:
 
         am_master_node = my_world_info['rank'] == 0
         
-        if am_master_node:
-            self.RANK        = 0
-
         # Handle special case: no GPUs anywere, and
         # we are on node 0: in that case start a single
         # copy of the training script. If it is written
@@ -501,7 +500,13 @@ class TrainScriptLauncher:
         
         lower_machine_gpus = self.gpus_below_my_rank(self.world_map) 
 
+        #***********
+        print("********Calling init_multiprocessing...")
+        #***********        
         self.init_multiprocessing()
+        #***********
+        print("********Returned from init_multiprocessing...")
+        #***********        
 
         # Make sure to destroy the just created process
         # group in a finally statement below:
@@ -627,11 +632,6 @@ class TrainScriptLauncher:
     #-------------------
 
     def init_multiprocessing(self):
-        if self.node_rank == 0:
-            self.log.info(f"Awaiting {self.world_size} nodes to run...")
-        else:
-            self.log.info("Awaiting master node's response...")
-            
         if dist.is_nccl_available():
             backend = 'nccl'           # Preferred
         elif dist.is_mpi_available():
@@ -640,32 +640,24 @@ class TrainScriptLauncher:
             backend = 'gloo'
         else:
             raise NotImplementedError("None of mpi/nccl/gloo torch backends installed.")
-    
-        # Master port seems to:
-        #   1. not picked up from the URL below, and
-        #   2. magically disappear from the environment
-        #      before this method is called, and is 
-        #      replaced with an empty string.
-        # So store the port in the env var again:
         
-        if len(os.environ.get('MASTER_PORT', '')) == 0:
-            os.environ['MASTER_PORT'] = str(master_port)
+        os.environ['MASTER_ADDR'] = str(self.MASTER_ADDR)
+        os.environ['MASTER_PORT'] = str(self.MASTER_PORT)
+        os.environ['WORLD_SIZE']  = str(self.world_size)
+        os.environ['RANK']        = str(self.my_rank)
 
         # Each process must only call init_process_group()
         # once, even if spawning multiple training scripts:
-                                            
-        if not self.init_process_group_called:
-            dist.init_process_group(backend,
-                                    init_method='env://',
-                                    world_size=self.world_size,
-                                    rank=self.node_rank
-                                    #*****init_method=f'env://?world_size={world_size}&rank={node_rank}&master_port={master_port}'
-                                    )
-            # Indicate that we need to 
-            # destroy this (Default) group:
-            self.init_process_group_called = True
-        self.log.info("And we're off!")
 
+        # dist.init_process_group(backend,
+        #                         world_size=self.world_size,
+        #                         rank=self.my_rank
+        #                         )
+        dist.init_process_group(backend,
+                                init_method='env://'
+                                )
+        
+        self.log.info("And we're off!")
 
 # --------------------- Main ---------------
 
