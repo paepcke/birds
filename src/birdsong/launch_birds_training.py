@@ -3,7 +3,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 from argparse import ArgumentParser
 import argparse
-import json
+import json5
 from json.decoder import JSONDecodeError as JSONError
 import os
 from pathlib import Path
@@ -13,8 +13,7 @@ from subprocess import PIPE
 import subprocess
 import sys
 
-import GPUtil
-import json5
+#import GPUtil
 
 from birdsong.utils.dottable_config import DottableConfigParser
 
@@ -186,7 +185,6 @@ will not pass ``--local_rank`` when you specify this flag.
 
 class ConfigError(Exception):
     pass
-
 
 #num_gpus_here = len(GPUtil.getGPUs())
 
@@ -377,7 +375,7 @@ class TrainScriptLauncher:
         
         try:
             with open(self.world_map_path, 'r') as world_map_fd:
-                world_map = json5.load(world_map_fd)
+                self.world_map = json5.load(world_map_fd)
         except JSONError as e:
             raise JSONError(f"World map file at {self.world_map_path} contains bad JSON") from e
             
@@ -395,7 +393,7 @@ class TrainScriptLauncher:
         my_hostname = socket.getfqdn()
         try:
             # Get this machine's info (sub)dict:
-            my_world_info = world_map[my_hostname]
+            my_world_info = self.world_map[my_hostname]
         except KeyError:
             raise ConfigError(f"World map file does not contain entry for this machine ({my_hostname})")
 
@@ -419,8 +417,8 @@ class TrainScriptLauncher:
         self.universe_size = 0
         self.master_hostname = None
         
-        for machine_name in world_map.keys():
-            world_info   = world_map[machine_name]
+        for machine_name in self.world_map.keys():
+            world_info   = self.world_map[machine_name]
             machine_rank = world_info['rank']
             machine_gpus = world_info['gpus']
             if machine_rank == 0:
@@ -433,12 +431,18 @@ class TrainScriptLauncher:
         if self.master_hostname is None:
             raise ConfigError(f"No machine ranked 0 in {self.world_map_path}")
         
-        self.MASTER_ADDR =  socket.gethostbyname(self.master_hostname)
+        self.MASTER_ADDR = socket.gethostbyname(self.master_hostname)
+        
+        # Common pytorch port is either in the config file,
+        # or we use the pytorch default
+        self.MASTER_PORT = self.config.getint('Parallelism',
+                                              'master_port',
+                                              self.COMM_PORT
+                                              )
 
         am_master_node = my_world_info['rank'] == 0
         
         if am_master_node:
-            self.MASTER_PORT = self.COMM_PORT
             self.RANK        = 0
 
         # Handle special case: no GPUs anywere, and
@@ -471,7 +475,8 @@ class TrainScriptLauncher:
         current_env["MASTER_PORT"] = str(self.MASTER_PORT)
         current_env["WORLD_SIZE"] = str(self.world_size)
         
-        if 'OMP_NUM_THREADS' not in os.environ and self.launch_args['here_gpus'] > 1:
+        if 'OMP_NUM_THREADS' not in os.environ and \
+            self.my_gpus > 1:
             current_env["OMP_NUM_THREADS"] = str(1)
 
         processes = []
@@ -498,7 +503,7 @@ class TrainScriptLauncher:
         # copies as are (to-be-used) GPUs on this
         # machine:
         
-        start_local_gpu_rank = 1+lower_machine_gpus, 
+        start_local_gpu_rank = 1+lower_machine_gpus
         for local_rank in range(start_local_gpu_rank,
                                 start_local_gpu_rank + self.my_gpus):
 
@@ -548,7 +553,7 @@ class TrainScriptLauncher:
             processes.append(process)
         
         if not self.launch_args['quiet']:
-            print(f"Node {self.launch_args['node_rank']} launch.py: Num processes launched: {len(processes)}")
+            print(f"Node {self.my_rank} {os.path.basename(sys.argv[0])}: Num processes launched: {len(processes)}")
             if self.my_rank == 0:
                 print(f"Awaiting {self.universe_size} processes to finish...")
             else:
@@ -573,7 +578,7 @@ class TrainScriptLauncher:
     # gpus_below_my_rank 
     #-------------------
     
-    def gpus_below_myrank(self, world_map):
+    def gpus_below_my_rank(self, world_map):
         '''
         Given a world map like this:
         
@@ -602,7 +607,10 @@ class TrainScriptLauncher:
         for machine in world_map.keys():
             if world_map[machine]['rank'] < self.my_rank:
                 sum_of_gpus += world_map[machine]['gpus']
+                
+        return sum_of_gpus
 
+# --------------------- Main ---------------
 
 if __name__ == "__main__":
     launcher = TrainScriptLauncher()
