@@ -13,6 +13,8 @@ from subprocess import PIPE
 import subprocess
 import sys
 
+import torch.distributed as dist
+
 #import GPUtil
 
 from birdsong.utils.dottable_config import DottableConfigParser
@@ -498,82 +500,92 @@ class TrainScriptLauncher:
         # the master node, whose numbers are 0,1,...<ngpus_here>:
         
         lower_machine_gpus = self.gpus_below_my_rank(self.world_map) 
-    
-        # Spawn as many local training script
-        # copies as are (to-be-used) GPUs on this
-        # machine:
+
+        self.init_multiprocessing()
+
+        # Make sure to destroy the just created process
+        # group in a finally statement below:
         
-        start_local_gpu_rank = lower_machine_gpus
-        for local_rank in range(start_local_gpu_rank,
-                                start_local_gpu_rank + self.my_gpus):
-
-            current_env["RANK"] = str(self.my_rank)
-            current_env["LOCAL_RANK"] = str(local_rank)
+        try:
+             
+            # Spawn as many local training script
+            # copies as are (to-be-used) GPUs on this
+            # machine:
+            
+            start_local_gpu_rank = lower_machine_gpus
+            for local_rank in range(start_local_gpu_rank,
+                                    start_local_gpu_rank + self.my_gpus):
     
-            # Spawn one training script.
-            
-            # Build the shell command line,
-            # starting with 'python -u':
-            cmd = [sys.executable, "-u"]
-    
-            cmd.append(self.launch_args['training_script'])
-
-            # Add the args for the script:
-            for arg_name in self.script_args.keys():
-                script_arg_val = self.script_args[arg_name]
-                if script_arg_val is None or arg_name == 'config':
-                    # Skip over non-specified CLI args:
-                    continue
-                cmd.append(f"--{arg_name}={self.script_args[arg_name]}")
-
-            # Add the 'secret' arg that tells the training
-            # script that it was called from this launch
-            # script, and should therefore expect the various
-            # environment variables to be set:
-            
-            cmd.append('--started_from_launch')
-            
-            # Finally, the obligatory non-option arg
-            # to the training script: the configuration
-            # file:
-            
-            script_name = self.script_args['config']
-            cmd.append(script_name)
+                current_env["RANK"] = str(self.my_rank)
+                current_env["LOCAL_RANK"] = str(local_rank)
+        
+                # Spawn one training script.
                 
-            # Copy stdin, and give the copy to the subprocess.
-            # This enables the subprocess to ask user whether
-            # to save training state in case of a cnt-C:
-            newstdin = os.fdopen(os.dup(sys.stdin.fileno()))
-            process = subprocess.Popen(cmd,
-                                       stdin=newstdin,
-                                       env=current_env,
-                                       stdout=PIPE,
-                                       stderr=PIPE
-                                       )
-            processes.append(process)
+                # Build the shell command line,
+                # starting with 'python -u':
+                cmd = [sys.executable, "-u"]
         
-        if not self.launch_args['quiet']:
-            print(f"Node {self.my_rank} {os.path.basename(sys.argv[0])}: Num processes launched: {len(processes)}")
-            if self.my_rank == 0:
-                print(f"Awaiting {self.universe_size} processes to finish...")
-            else:
-                print(f"Awaiting {self.my_gpus} processes to finish...")
-        
-        # Let subprocesses deal with cnt-C (keyboard interrupt):
-        signal.signal(signal.SIGINT, signal.SIG_IGN)
-        for process in processes:
-            process.wait()
-            if process.returncode != 0:
-                (the_stdout, the_stderr) = process.communicate()
-                the_stdout = the_stdout.decode('utf-8')
-                the_stderr = the_stderr.decode('utf-8')
-                train_script   = self.launch_args['training_script']
-                msg = (f"Training script {train_script} encountered error \n"
-                       f"stderr: {the_stderr} \n"
-                       f"stdout: {the_stdout} \n")
-                print(msg)
-                raise subprocess.CalledProcessError(returncode=process.returncode,
-                                                    cmd=cmd)
+                cmd.append(self.launch_args['training_script'])
+    
+                # Add the args for the script:
+                for arg_name in self.script_args.keys():
+                    script_arg_val = self.script_args[arg_name]
+                    if script_arg_val is None or arg_name == 'config':
+                        # Skip over non-specified CLI args:
+                        continue
+                    cmd.append(f"--{arg_name}={self.script_args[arg_name]}")
+    
+                # Add the 'secret' arg that tells the training
+                # script that it was called from this launch
+                # script, and should therefore expect the various
+                # environment variables to be set:
+                
+                cmd.append('--started_from_launch')
+                
+                # Finally, the obligatory non-option arg
+                # to the training script: the configuration
+                # file:
+                
+                script_name = self.script_args['config']
+                cmd.append(script_name)
+                    
+                # Copy stdin, and give the copy to the subprocess.
+                # This enables the subprocess to ask user whether
+                # to save training state in case of a cnt-C:
+                newstdin = os.fdopen(os.dup(sys.stdin.fileno()))
+                process = subprocess.Popen(cmd,
+                                           stdin=newstdin,
+                                           env=current_env,
+                                           stdout=PIPE,
+                                           stderr=PIPE
+                                           )
+                processes.append(process)
+            
+            if not self.launch_args['quiet']:
+                print(f"Node {self.my_rank} {os.path.basename(sys.argv[0])}: Num processes launched: {len(processes)}")
+                if self.my_rank == 0:
+                    print(f"Awaiting {self.universe_size} processes to finish...")
+                else:
+                    print(f"Awaiting {self.my_gpus} processes to finish...")
+            
+            # Let subprocesses deal with cnt-C (keyboard interrupt):
+            signal.signal(signal.SIGINT, signal.SIG_IGN)
+            for process in processes:
+                process.wait()
+                if process.returncode != 0:
+                    (the_stdout, the_stderr) = process.communicate()
+                    the_stdout = the_stdout.decode('utf-8')
+                    the_stderr = the_stderr.decode('utf-8')
+                    train_script   = self.launch_args['training_script']
+                    msg = (f"Training script {train_script} encountered error \n"
+                           f"stderr: {the_stderr} \n"
+                           f"stdout: {the_stdout} \n")
+                    print(msg)
+                    raise subprocess.CalledProcessError(returncode=process.returncode,
+                                                        cmd=cmd)
+        finally:
+            dist.destroy_process_group()
+                
     #------------------------------------
     # gpus_below_my_rank 
     #-------------------
@@ -609,6 +621,51 @@ class TrainScriptLauncher:
                 sum_of_gpus += world_map[machine]['gpus']
                 
         return sum_of_gpus
+
+    #------------------------------------
+    # init_multiprocessing 
+    #-------------------
+
+    def init_multiprocessing(self):
+        if self.node_rank == 0:
+            self.log.info(f"Awaiting {self.world_size} nodes to run...")
+        else:
+            self.log.info("Awaiting master node's response...")
+            
+        if dist.is_nccl_available():
+            backend = 'nccl'           # Preferred
+        elif dist.is_mpi_available():
+            backend = 'mpi'
+        elif dist.is_gloo_available():
+            backend = 'gloo'
+        else:
+            raise NotImplementedError("None of mpi/nccl/gloo torch backends installed.")
+    
+        # Master port seems to:
+        #   1. not picked up from the URL below, and
+        #   2. magically disappear from the environment
+        #      before this method is called, and is 
+        #      replaced with an empty string.
+        # So store the port in the env var again:
+        
+        if len(os.environ.get('MASTER_PORT', '')) == 0:
+            os.environ['MASTER_PORT'] = str(master_port)
+
+        # Each process must only call init_process_group()
+        # once, even if spawning multiple training scripts:
+                                            
+        if not self.init_process_group_called:
+            dist.init_process_group(backend,
+                                    init_method='env://',
+                                    world_size=self.world_size,
+                                    rank=self.node_rank
+                                    #*****init_method=f'env://?world_size={world_size}&rank={node_rank}&master_port={master_port}'
+                                    )
+            # Indicate that we need to 
+            # destroy this (Default) group:
+            self.init_process_group_called = True
+        self.log.info("And we're off!")
+
 
 # --------------------- Main ---------------
 

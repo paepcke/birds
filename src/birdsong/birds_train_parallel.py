@@ -11,7 +11,6 @@ code by
 '''
 
 import os, sys
-import socket
 
 packet_root = os.path.abspath(__file__.split('/')[0])
 sys.path.insert(0,packet_root)
@@ -19,6 +18,7 @@ sys.path.insert(0,packet_root)
 # For remote debugging via pydev and Eclipse:
 #*****************
 # 
+# import socket
 # hostname = socket.gethostname()
 # if hostname in ('quintus', 'quatro'):
 #     # Point to where the pydev server 
@@ -406,56 +406,6 @@ class BirdTrainer(object):
             item.to(device=self.cuda)
         else:
             item.to(device=self.cpu)
-
-
-    #------------------------------------
-    # init_multiprocessing 
-    #-------------------
-
-    def init_multiprocessing(self,
-                             master_addr,
-                             master_port,
-                             node_rank,
-                             world_size
-                             ):
-        if self.node_rank == 0:
-            self.log.info(f"Awaiting {self.world_size} nodes to run...")
-        else:
-            self.log.info("Awaiting master node's response...")
-            
-        if dist.is_mpi_available():
-            backend = 'mpi'
-        elif dist.is_nccl_available():
-            backend = 'nccl'
-        elif dist.is_gloo_available():
-            backend = 'gloo'
-        else:
-            raise NotImplementedError("None of mpi/nccl/gloo torch backends installed.")
-    
-        # Master port seems to:
-        #   1. not picked up from the URL below, and
-        #   2. magically disappear from the environment
-        #      before this method is called, and is 
-        #      replaced with an empty string.
-        # So store the port in the env var again:
-        
-        if len(os.environ.get('MASTER_PORT', '')) == 0:
-            os.environ['MASTER_PORT'] = str(master_port)
-
-        # Each process must only call init_process_group()
-        # once, even if spawning multiple training scripts:
-                                            
-        if not self.init_process_group_called:
-            dist.init_process_group(backend,
-                                    init_method='env://',
-                                    world_size=self.world_size,
-                                    rank=self.node_rank
-                                    #*****init_method=f'env://?world_size={world_size}&rank={node_rank}&master_port={master_port}'
-                                    )
-            # Indicate that we need to 
-            # destroy this (Default) group:
-            self.init_process_group_called = True
-        self.log.info("And we're off!")
 
     #------------------------------------
     # enable_GPU 
@@ -1690,13 +1640,6 @@ class BirdTrainer(object):
             self.master_addr = '127.0.0.1'
             self.master_port = '9000'
                 
-
-        self.init_multiprocessing(self.master_addr,
-                                  self.master_port,
-                                  self.node_rank,
-                                  self.world_size
-                                  )
-                                  
     #------------------------------------
     # device_residence
     #-------------------
@@ -1865,12 +1808,6 @@ class BirdTrainer(object):
         if self.device == self.cpu:
             # Didn't use a GPU; nothing to clean up:
             return
-        
-        if self.init_process_group_called:
-            if self.device == self.cuda:
-                self.clear_gpu()
-                dist.destroy_process_group()
-            self.init_process_group_called = False
 
     #------------------------------------
     # human_readable 
