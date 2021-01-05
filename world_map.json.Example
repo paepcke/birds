@@ -1,0 +1,27 @@
+/*
+      Layout of machines and available GPUs
+
+ For each machine:
+     o 'rank'    : The multiprocessing node rank. One
+                   serially assigned integers after the
+                   other with 0 for the master node:
+     o 'gpus'    : Number of GPUs to use on machine
+     o 'devices' : GPU device numbers: 0,1,2,...
+*/
+
+{"quintus.stanford.edu" : {
+    "rank" : 0,
+    "gpus" : 2
+ },
+
+ "quatro.stanford.edu"  : {
+     "rank" : 1,
+     "gpus" : 2,
+     "devices" : [1,2]
+ },
+ "sparky.stanford.edu"  : {
+     "rank" : 2,
+     "gpus" : 0
+ }
+}
+    
