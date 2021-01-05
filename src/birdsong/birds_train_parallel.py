@@ -250,6 +250,14 @@ class BirdTrainer(object):
                 )
         else:
             # GPUSs used, single or multiple machines:
+
+            #***********
+            print("********Calling init_multiprocessing...")
+            #***********        
+            self.init_multiprocessing()
+            #***********
+            print("********Returned from init_multiprocessing...")
+            #***********        
             
             self.dataloader = MultiprocessingDataLoader(dataset,
                                                         shuffle=True,
@@ -335,14 +343,6 @@ class BirdTrainer(object):
         
         self.cpu_tensor_stack = []
 
-        #***********
-        print("********Calling init_multiprocessing...")
-        #***********        
-        self.init_multiprocessing()
-        #***********
-        print("********Returned from init_multiprocessing...")
-        #***********        
-
     #------------------------------------
     # init_multiprocessing 
     #-------------------
@@ -357,10 +357,10 @@ class BirdTrainer(object):
         else:
             raise NotImplementedError("None of mpi/nccl/gloo torch backends installed.")
         
-        os.environ['MASTER_ADDR'] = str(self.MASTER_ADDR)
-        os.environ['MASTER_PORT'] = str(self.MASTER_PORT)
-        os.environ['WORLD_SIZE']  = str(self.world_size)
-        os.environ['RANK']        = str(self.my_rank)
+#         os.environ['MASTER_ADDR'] = str(self.MASTER_ADDR)
+#         os.environ['MASTER_PORT'] = str(self.MASTER_PORT)
+#         os.environ['WORLD_SIZE']  = str(self.world_size)
+#         os.environ['RANK']        = str(self.my_rank)
 
         # Each process must only call init_process_group()
         # once, even if spawning multiple training scripts:
