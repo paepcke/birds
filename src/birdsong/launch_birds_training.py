@@ -521,7 +521,7 @@ class TrainScriptLauncher:
             # Add the args for the script:
             for arg_name in self.script_args.keys():
                 script_arg_val = self.script_args[arg_name]
-                if script_arg_val in [None, 'config']:
+                if script_arg_val is None or arg_name == 'config':
                     # Skip over non-specified CLI args:
                     continue
                 cmd.append(f"--{arg_name}={self.script_args[arg_name]}")
