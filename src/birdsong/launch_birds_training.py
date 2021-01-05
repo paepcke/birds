@@ -503,7 +503,7 @@ class TrainScriptLauncher:
         # copies as are (to-be-used) GPUs on this
         # machine:
         
-        start_local_gpu_rank = 1+lower_machine_gpus
+        start_local_gpu_rank = lower_machine_gpus
         for local_rank in range(start_local_gpu_rank,
                                 start_local_gpu_rank + self.my_gpus):
 

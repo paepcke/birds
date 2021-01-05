@@ -177,7 +177,10 @@ class BirdTrainer(object):
         self.seed = self.config.getint('Training', 'seed')
         self.set_seed(self.seed)
         self.started_from_launch = started_from_launch
+
+        self.init_process_group_called = False
         self.setup_gpus()
+
         
 
         train_parms  = self.config['Training']
@@ -429,7 +432,6 @@ class BirdTrainer(object):
         else:
             raise NotImplementedError("None of mpi/nccl/gloo torch backends installed.")
     
-        #************
         # Master port seems to:
         #   1. not picked up from the URL below, and
         #   2. magically disappear from the environment
@@ -437,16 +439,22 @@ class BirdTrainer(object):
         #      replaced with an empty string.
         # So store the port in the env var again:
         
-        if len(os.environ.get('master_port', '')) == 0:
-            os.environ['master_port'] = str(master_port)
-        if self.node_rank == 0:
-            # This is the master process, so:
+        if len(os.environ.get('MASTER_PORT', '')) == 0:
+            os.environ['MASTER_PORT'] = str(master_port)
+
+        # Each process must only call init_process_group()
+        # once, even if spawning multiple training scripts:
+                                            
+        if not self.init_process_group_called:
             dist.init_process_group(backend,
-                                    init_method=f'env://?world_size={world_size}&rank={node_rank}&master_port={master_port}'
+                                    init_method='env://',
+                                    world_size=self.world_size,
+                                    rank=self.node_rank
+                                    #*****init_method=f'env://?world_size={world_size}&rank={node_rank}&master_port={master_port}'
                                     )
             # Indicate that we need to 
             # destroy this (Default) group:
-            self.cleanup_called = False 
+            self.init_process_group_called = True
         self.log.info("And we're off!")
 
     #------------------------------------
@@ -1858,11 +1866,11 @@ class BirdTrainer(object):
             # Didn't use a GPU; nothing to clean up:
             return
         
-        if not self.cleanup_called:
+        if self.init_process_group_called:
             if self.device == self.cuda:
                 self.clear_gpu()
                 dist.destroy_process_group()
-            self.cleanup_called = True 
+            self.init_process_group_called = False
 
     #------------------------------------
     # human_readable 
