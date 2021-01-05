@@ -467,17 +467,6 @@ class TrainScriptLauncher:
     
     def launch_scripts(self):
         
-        # Set PyTorch distributed related environmental variables
-        current_env = os.environ.copy()
-        
-        current_env["MASTER_ADDR"] = self.MASTER_ADDR
-        current_env["MASTER_PORT"] = str(self.MASTER_PORT)
-        current_env["WORLD_SIZE"] = str(self.world_size)
-        
-        if 'OMP_NUM_THREADS' not in os.environ and \
-            self.my_gpus > 1:
-            current_env["OMP_NUM_THREADS"] = str(1)
-
         processes = []
         
         # Launch as many copies of the training
@@ -496,7 +485,10 @@ class TrainScriptLauncher:
         # the group of nodes (machines). Starting with
         # the master node, whose numbers are 0,1,...<ngpus_here>:
         
-        lower_machine_gpus = self.gpus_below_my_rank(self.world_map) 
+        lower_machine_gpus = self.gpus_below_my_rank(self.world_map)
+        #**********
+        print(f"****** lower_machine_gpus: {lower_machine_gpus}")
+        #**********        
 
         # Make sure to destroy the just created process
         # group in a finally statement below:
@@ -510,9 +502,22 @@ class TrainScriptLauncher:
         for local_rank in range(start_local_gpu_rank,
                                 start_local_gpu_rank + self.my_gpus):
 
-            current_env["RANK"] = str(self.my_rank)
-            current_env["LOCAL_RANK"] = str(local_rank)
-    
+            # Set PyTorch distributed related environmental
+            # in a fresh environment unique for the
+            # script about to be spawned:
+            
+            current_env = os.environ.copy()
+            
+            current_env["MASTER_ADDR"] = self.MASTER_ADDR
+            current_env["MASTER_PORT"] = str(self.MASTER_PORT)
+            current_env["WORLD_SIZE"]  = str(self.world_size)
+            current_env["RANK"]        = str(self.my_rank)
+            current_env["LOCAL_RANK"]  = str(local_rank)
+
+            if 'OMP_NUM_THREADS' not in os.environ and \
+                self.my_gpus > 1:
+                current_env["OMP_NUM_THREADS"] = str(1)
+        
             # Spawn one training script.
             
             # Build the shell command line,
@@ -564,9 +569,16 @@ class TrainScriptLauncher:
         
         # Let subprocesses deal with cnt-C (keyboard interrupt):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
+        failed_processes = []
         for process in processes:
             process.wait()
             if process.returncode != 0:
+                failed_processes.append(process)
+            continue
+        num_failed = len(failed_processes)
+        if num_failed > 0:
+            print(f"Number of failed training scripts: {num_failed}")
+            for failed_process in failed_processes:
                 (the_stdout, the_stderr) = process.communicate()
                 the_stdout = the_stdout.decode('utf-8')
                 the_stderr = the_stderr.decode('utf-8')
@@ -575,8 +587,6 @@ class TrainScriptLauncher:
                        f"stderr: {the_stderr} \n"
                        f"stdout: {the_stdout} \n")
                 print(msg)
-                raise subprocess.CalledProcessError(returncode=process.returncode,
-                                                    cmd=cmd)
             
     #------------------------------------
     # gpus_below_my_rank 

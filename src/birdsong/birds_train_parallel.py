@@ -199,14 +199,13 @@ class BirdTrainer(object):
         signal.signal(signal.SIGINT, self.request_interrupt_training)
 
         #************
-#         print(f"******WORLD_SIZE:{os.getenv('WORLD_SIZE')}")
-#         print(f"******:RANK:{os.getenv('RANK')}")
-#         print(f"******LOCAL_RANK:{os.getenv('LOCAL_RANK')}")
-#         print(f"******:NODE_RANK:{os.getenv('NODE_RANK')}")
-#         print(f"******:MASTER_ADDR:{os.getenv('MASTER_ADDR')}")
-#         print(f"******:MASTER_PORT:{os.getenv('MASTER_PORT')}")
-#         print("****** Exiting intentionally")
-#         sys.exit()
+        print(f"******:WORLD_SIZE:{os.getenv('WORLD_SIZE')}")
+        print(f"******:RANK:{os.getenv('RANK')}")
+        print(f"******:LOCAL_RANK:{os.getenv('LOCAL_RANK')}")
+        print(f"******:MASTER_ADDR:{os.getenv('MASTER_ADDR')}")
+        print(f"******:MASTER_PORT:{os.getenv('MASTER_PORT')}")
+        print("****** Exiting intentionally")
+#        sys.exit()
         #************
 
         
@@ -348,6 +347,16 @@ class BirdTrainer(object):
     #-------------------
 
     def init_multiprocessing(self):
+
+        if self.local_rank != 0:
+            # Only the lowest ranked process
+            # on this machine calls init_process_group()
+            return
+
+        #*************
+        #raise ValueError(f"******I am rank {self.node_rank}, local_rank {self.local_rank}")
+        print(f"\n******I am rank {self.node_rank}, local_rank {self.local_rank}")
+        #*************
         if dist.is_nccl_available():
             backend = 'nccl'           # Preferred
         elif dist.is_mpi_available():
@@ -1634,6 +1643,10 @@ class BirdTrainer(object):
                 non_initialized_vars = []
                 try:
                     self.node_rank = int(os.environ['RANK'])
+                except KeyError:
+                    non_initialized_vars.append('RANK')
+                try:
+                    self.local_rank = int(os.environ['LOCAL_RANK'])
                 except KeyError:
                     non_initialized_vars.append('RANK')
                 try:
