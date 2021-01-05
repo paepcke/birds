@@ -181,7 +181,6 @@ class BirdTrainer(object):
         self.init_process_group_called = False
         self.setup_gpus()
 
-        
 
         train_parms  = self.config['Training']
         
@@ -336,6 +335,48 @@ class BirdTrainer(object):
         
         self.cpu_tensor_stack = []
 
+        #***********
+        print("********Calling init_multiprocessing...")
+        #***********        
+        self.init_multiprocessing()
+        #***********
+        print("********Returned from init_multiprocessing...")
+        #***********        
+
+    #------------------------------------
+    # init_multiprocessing 
+    #-------------------
+
+    def init_multiprocessing(self):
+        if dist.is_nccl_available():
+            backend = 'nccl'           # Preferred
+        elif dist.is_mpi_available():
+            backend = 'mpi'
+        elif dist.is_gloo_available():
+            backend = 'gloo'
+        else:
+            raise NotImplementedError("None of mpi/nccl/gloo torch backends installed.")
+        
+        os.environ['MASTER_ADDR'] = str(self.MASTER_ADDR)
+        os.environ['MASTER_PORT'] = str(self.MASTER_PORT)
+        os.environ['WORLD_SIZE']  = str(self.world_size)
+        os.environ['RANK']        = str(self.my_rank)
+
+        # Each process must only call init_process_group()
+        # once, even if spawning multiple training scripts:
+
+        # dist.init_process_group(backend,
+        #                         world_size=self.world_size,
+        #                         rank=self.my_rank
+        #                         )
+        dist.init_process_group(backend,
+                                init_method='env://'
+                                )
+    
+        self.init_process_group_called = True
+        self.log.info("And we're off!")
+
+
     #------------------------------------
     # setup_gpus
     #-------------------
@@ -385,10 +426,10 @@ class BirdTrainer(object):
         @raise NotImplementedError 
         '''
         
-        if dist.is_mpi_available():
-            backend = 'mpi'
-        elif dist.is_nccl_available():
+        if dist.is_nccl_available():
             backend = 'nccl'
+        elif dist.is_mpi_available():
+            backend = 'mpi'
         elif dist.is_gloo_available():
             backend = 'gloo'
         else:
@@ -790,7 +831,9 @@ class BirdTrainer(object):
             #  finally expression at the end
             # Number of seconds between showing 
             # status if verbose; default is 5 seconds:
+
             alive_pulse = self.config.Training.getint('show_alive', 5)
+
             try: # This try manages cnt-C interrupts, and therefore
                 #  saving of checkpoints.
                 
@@ -1806,6 +1849,9 @@ class BirdTrainer(object):
         if self.device == self.cpu:
             # Didn't use a GPU; nothing to clean up:
             return
+        
+        if self.init_process_group_called:
+            dist.destroy_process_group()
 
     #------------------------------------
     # human_readable 
