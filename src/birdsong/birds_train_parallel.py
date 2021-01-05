@@ -1409,45 +1409,18 @@ class BirdTrainer(object):
             # Config file exists, but empty:
             return(self.init_defaults(config))
 
-        # Ensure that this machine's node entry is
-        # 'localhost'. It is legal in the config file
-        # to use 'localhost', '127.0.0.1', or the hostname's FQDN as
-        # key in the config file for local host.
-        # Get name of this machine. 
-        
-        my_hostname = socket.gethostname().split('.')[0]
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect(("google.com",80))
-        
-        # Get something like ('172.24.75.114', 44572)  
-        my_global_ip_addr = s.getsockname()[0] 
-    
-        # Find whether some version of this host
-        # is referenced in the dict; if it's anything
-        # other than 'localhost', replace the entry
-        # with 'localhost' as key. Must use a copy of 
-        # the config dict, b/c we modify config in the
-        # loop:
-        
-        # Commented because does not like modifying
-        # dict in the loop even with copying the whole
-        # config, or parts of it.
-        # Just make the correct config.cfg on each machine:
-#         new_parallel_config = copy.deepcopy(config.Parallelism)
-#         for node_name_or_addr in config.keys():
-#             if node_name_or_addr   == '127.0.0.1' or\
-#                 node_name_or_addr.split('.')[0] == my_hostname or\
-#                 node_name_or_addr  == my_global_ip_addr:
-#                  
-#                 # Create entry for localhost from hostname or IP
-#                 # entry for the local host:
-#                 new_parallel_config['localhost'] = node_name_or_addr
-#  
-#                 # Change this host's node rank to 0,
-#                 # if it's not already that in the config
-#                 # file:
-#                 new_parallel_config[node_name_or_addr] = 0
-#         config['Parallelism'] = copy.deepcopy(new_parallel_config)
+#         # Ensure that this machine's node entry is
+#         # 'localhost'. It is legal in the config file
+#         # to use 'localhost', '127.0.0.1', or the hostname's FQDN as
+#         # key in the config file for local host.
+#         # Get name of this machine. 
+#         
+#         my_hostname = socket.gethostname().split('.')[0]
+#         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+#         s.connect(("google.com",80))
+#         
+#         # Get something like ('172.24.75.114', 44572)  
+#         my_global_ip_addr = s.getsockname()[0] 
 
         # If current host not in the config file at all,
         # create an entry that declares all detected GPUs on

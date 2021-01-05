@@ -34,7 +34,7 @@ setup(
                         'tensorboard>=2.4.0',
                         'natsort>=7.1.0',
                         'Pillow>=8.0.1',
-                        
+                        'json5>=0.9.5',
                         ],
 
     tests_require    =['nose2>=0.9.2',

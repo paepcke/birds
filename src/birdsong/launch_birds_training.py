@@ -6,6 +6,7 @@ import argparse
 import json
 from json.decoder import JSONDecodeError as JSONError
 import os
+from pathlib import Path
 import signal
 import socket
 from subprocess import PIPE
@@ -13,6 +14,7 @@ import subprocess
 import sys
 
 import GPUtil
+import json5
 
 from birdsong.utils.dottable_config import DottableConfigParser
 
@@ -186,78 +188,9 @@ class ConfigError(Exception):
     pass
 
 
-num_gpus_here = len(GPUtil.getGPUs())
+#num_gpus_here = len(GPUtil.getGPUs())
 
-#------------------------------------
-# parse_world_layout_config 
-#-------------------
-
-def parse_world_layout_config(other_gpu_config_file):
-    '''
-    Parse JSON config file that describes how many
-    GPUs different machines have. Expect any entries
-    like:
-    
-       {"foo.bar.com" : 4,
-        "127.0.0.1"   : 5,
-        "localhost"   : 3,
-        "172.12.145.1 : 6
-       }
-
-    Ensures there is an entry for 
-    "localhost"
-    
-    @param other_gpu_config_file:
-    @type other_gpu_config_file:
-    '''
-    try:
-        with open(other_gpu_config_file, 'r') as config_fd:
-            config_dict = json.load(config_fd)
-    except FileNotFoundError:
-        print(f"Could not find or open config file {other_gpu_config_file}")
-        sys.exit(1)
-    except JSONDecodeError as e:
-        print(f"Bad JSON in config file {other_gpu_config_file}: {repr(e)}")
-        sys.exit(1)
-
-    # Ensure that this machine's node entry is
-    # 'localhost'. It is legal in the config file
-    # to use 'localhost', '127.0.0.1', or the hostname's FQDN as
-    # key in the config file for local host.
-    # Get name of this machine. 
-
-    my_hostname = socket.gethostname().split('.')[0]
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect(("google.com",80))
-    
-    # Get something like ('172.24.75.114', 44572)  
-    my_global_ip_addr = s.getsockname()[0] 
-
-    # Find whether some version of this host
-    # is referenced in the dict; if it's anything
-    # other than 'localhost', replace the entry
-    # with 'lcoalhost' as key:
-
-    for node_name_or_addr in config_dict.copy().keys():
-        if node_name_or_addr   == '127.0.0.1' or\
-            node_name_or_addr.split('.')[0] == my_hostname or\
-            node_name_or_addr  == my_global_ip_addr:
-            
-            config_dict['localhost'] = config_dict[node_name_or_addr]
-            del config_dict[node_name_or_addr]
-
-    if 'localhost' not in config_dict.keys():
-        config_dict['localhost'] = len(GPUtil.getGPUs())
-
-    # Values should all be ints: number of GPUs:
-    for (node, num_gpus) in config_dict.items():
-        if type(num_gpus) != int:
-            val_type = type(num_gpus)
-            print((f"Number of GPUs at node {node} in config file "
-                   f"{other_gpu_config_file} should be an int; was {val_type}"))
-            sys.exit(1)
-
-    return config_dict
+TESTING = True
 
 # ----------------------------- BirdsTrainingArgumentsParser class -----------
 
@@ -361,16 +294,31 @@ class BirdsTrainingArgumentsParser(ArgumentParser):
         self.script_args = {arg_name : args_dict[arg_name]
                             for arg_name
                             in script_option_names}
+
+        # Add the obligatory, i.e. non-option
+        # argument destined for the training
+        # script (though we also use it here in
+        # the launch script:
         
-        # Set of all args minus set of args that go
-        # to the train script must be the args intended
-        # for the this (launch) script:
+        config_path = args_dict['config']
+        self.script_args['config'] = config_path
+ 
+        # Find set of all args intended for this
+        # launch script, as opposed to the training
+        # script. Compute the set via the set-difference 
+        # between all args, and the args for the train
+        # script gathered above:
         
         launch_arg_names = set(args_dict.keys()) - set(script_option_names)
         self.launch_args = {arg_name : args_dict[arg_name]
                             for arg_name
-                            in launch_arg_names} 
+                            in launch_arg_names}
+
+        # For convenience, add the config file path
+        # to the launch args as well:
         
+        self.launch_args['config'] = config_path
+       
         return {'launch_args' : self.launch_args,
                 'script_args' : self.script_args
                 } 
@@ -387,6 +335,14 @@ class TrainScriptLauncher:
     COMM_PORT = '5678'
     
     def __init__(self):
+        
+        # Convenience: directory of this
+        # script, and project root directory
+        curr_dir = Path('__file__').parent
+        proj_root = curr_dir.joinpath('../..').resolve()
+        self.curr_dir = str(curr_dir)
+        self.proj_root = str(proj_root)
+        
         args_parser = BirdsTrainingArgumentsParser(
             formatter_class=BirdsTrainingArgumentsParser.BlankLinesHelpFormatter,
             description="PyTorch distributed training launch "
@@ -396,6 +352,7 @@ class TrainScriptLauncher:
         all_args = args_parser.parse_args()
         self.launch_args = all_args['launch_args']
         self.script_args = all_args['script_args']
+        self.gather_world_layout(self.launch_args)
         
     #------------------------------------
     # gather_world_layout
@@ -404,22 +361,25 @@ class TrainScriptLauncher:
     def gather_world_layout(self, launch_args):
 
         try: 
-            config_file = launch_args.config
+            config_file = launch_args['config']
         except KeyError:
             raise RuntimeError("Error: must have a config file. See config.cfg.Example in project root")
         
         self.config = DottableConfigParser(config_file)
         
         try:
-            world_map_path = self.config.Paths.world_map
+            self.world_map_path = self.config.getpath('Paths', 
+                                                      'world_map',
+                                                      relative_to=self.proj_root
+                                                      )
         except KeyError:
             raise RuntimeError(f"Could not find entry for 'world_map' in config file {config_file}")
         
         try:
-            with open(world_map_path, 'r') as world_map_fd:
-                world_map = json.load(world_map_fd)
+            with open(self.world_map_path, 'r') as world_map_fd:
+                world_map = json5.load(world_map_fd)
         except JSONError as e:
-            raise JSONError(f"World map file at {world_map_path} contains bad JSON") from e
+            raise JSONError(f"World map file at {self.world_map_path} contains bad JSON") from e
             
         # Now have something like:
         # {'quintus.stanford.edu' : {
@@ -445,35 +405,42 @@ class TrainScriptLauncher:
             self.my_gpus_to_use = my_world_info['devices']
         except KeyError:
             self.my_gpus_to_use = None
-
-        am_master_node = my_world_info['rank'] == 0
-        my_ip = socket.gethostbyname(my_hostname)
-        if am_master_node:
-            self.MASTER_ADDR = my_ip
-            self.MASTER_PORT = self.COMM_PORT
-            self.RANK        = 0
-
+            
         # World size is number of processes, which is
         # equal to number of GPUs used on all machines with
         # lower node rank than this one, plus this node's GPUs.
         
         # Number of GPUs on this machine, plus
         # machines with lower rank
-        world_size    = 0
+        self.world_size    = 0
         
         # Total number of GPUs, even including
         # GPUs on higher rank machines  
         self.universe_size = 0
+        self.master_hostname = None
         
         for machine_name in world_map.keys():
             world_info   = world_map[machine_name]
             machine_rank = world_info['rank']
-            machine_gpus = world_info['gpus'] 
+            machine_gpus = world_info['gpus']
+            if machine_rank == 0:
+                self.master_hostname = machine_name 
             
             if machine_rank <= self.my_rank: 
-                world_size += machine_gpus
+                self.world_size += machine_gpus
             self.universe_size  += machine_gpus
-            
+
+        if self.master_hostname is None:
+            raise ConfigError(f"No machine ranked 0 in {self.world_map_path}")
+        
+        self.MASTER_ADDR =  socket.gethostbyname(self.master_hostname)
+
+        am_master_node = my_world_info['rank'] == 0
+        
+        if am_master_node:
+            self.MASTER_PORT = self.COMM_PORT
+            self.RANK        = 0
+
         # Handle special case: no GPUs anywere, and
         # we are on node 0: in that case start a single
         # copy of the training script. If it is written
@@ -482,13 +449,14 @@ class TrainScriptLauncher:
         # on a laptop:
 
         if self.universe_size == 0 and am_master_node:
-            world_size += 1
+            self.world_size += 1
             
         # If trying to launch on a node without GPUs,
         # when GPUs are available elsewhere, refuse to
         # start the script:
-        if self.my_gpus == 0 and self.universe_size > 0:
-            raise RuntimeError("This machine does not have any GPU, but others do; training script not started.")
+        if not TESTING:
+            if self.my_gpus == 0 and self.universe_size > 0:
+                raise RuntimeError("This machine does not have any GPU, but others do; training script not started.")
         
     #------------------------------------
     # launch_scripts 
