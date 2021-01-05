@@ -333,10 +333,10 @@ class TrainScriptLauncher:
     COMM_PORT = '5678'
     
     def __init__(self):
-        
+
         # Convenience: directory of this
         # script, and project root directory
-        curr_dir = Path('__file__').parent
+        curr_dir = Path(__file__).parent
         proj_root = curr_dir.joinpath('../..').resolve()
         self.curr_dir = str(curr_dir)
         self.proj_root = str(proj_root)
@@ -368,7 +368,7 @@ class TrainScriptLauncher:
         try:
             self.world_map_path = self.config.getpath('Paths', 
                                                       'world_map',
-                                                      relative_to=self.proj_root
+                                                      relative_to=self.curr_dir
                                                       )
         except KeyError:
             raise RuntimeError(f"Could not find entry for 'world_map' in config file {config_file}")
