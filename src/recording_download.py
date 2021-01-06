@@ -64,17 +64,13 @@ def get_data(birdname, in_dir, out_dir):
     dur = librosa.get_duration(audiotest, sr)
 
     # split the audio and filter
-    audio = filter_bird(birdname, audiotest, sr)
-    outfile = os.path.join(out_dir, birdname[:len(birdname) - 4]) + ".wav"
-    librosa.output.write_wav(outfile, audio, sr)
-        
-    #for i in range(0, int(dur/5)):
-    #    audio, sr = librosa.load(filepath, offset=5.0 * i, duration=5.0, sr=None)
-    #    # filter the bird audio
-    #    audio = filter_bird(birdname, audio, sr)
-    #    # output the filtered audio
-    #    outfile = os.path.join(out_dir, birdname[:len(birdname) - 4]) + str(i) + ".wav"
-    #    librosa.output.write_wav(outfile, audio, sr)
+    for i in range(0, int(dur/5)):
+        audio, sr = librosa.load(filepath, offset=5.0 * i, duration=5.0, sr=None)
+        # filter the bird audio
+        audio = filter_bird(birdname, audio, sr)
+        # output the filtered audio
+        outfile = os.path.join(out_dir, birdname[:len(birdname) - 4]) + str(i) + ".wav"
+        librosa.output.write_wav(outfile, audio, sr)
         
     
 def filter_bird(birdname, audio, sr):
@@ -90,19 +86,17 @@ def filter_bird(birdname, audio, sr):
     :returns output: the filtered recording audio time series
     """
     #bandpass
-    b, a = define_bandpass(2000, 3500, sr)
-    # below 2khz
+    b, a = define_bandpass(500, 8000, sr) # filters out anything not between 0.5 and 8khz
     output = lfilter(b, a, audio)
 
-    # normalize the volume
-    output = output / np.max(output)
-
-    # noise reduction
+    # noise reduction - easier to listen to for a human, harder for the model to classify
     # select section of data that is noise
-    noisy_part = output[0:1000]
-    return output
+    #noisy_part = output[0:1000]
     # perform noise reduction
-    #return nr.reduce_noise(audio_clip=output, noise_clip=noisy_part, verbose=True, n_grad_freq=0, n_std_thresh=2)
+    #output =  nr.reduce_noise(audio_clip=output, noise_clip=noisy_part, verbose=True, n_grad_freq=0, n_std_thresh=2)
+    
+    # normalize the volume
+    return output / np.max(output)
 
 
 def define_bandpass(lowcut, highcut, sr, order = 2):
@@ -126,7 +120,7 @@ def define_bandpass(lowcut, highcut, sr, order = 2):
     return b, a
 
 
-def create_spectrogram(birdname, instance, audio, sr, out_dir, n_mels = 128):
+def create_spectrogram(birdname, instance, audio, sr, out_dir, in_dir, n_mels=128):
     """
     Filters audio and converts it to a spectrogram which is saved.
 
@@ -144,16 +138,18 @@ def create_spectrogram(birdname, instance, audio, sr, out_dir, n_mels = 128):
     :type n_mels: int
     """
     # create a mel spectrogram
-    spectrogramfile = os.path.join(out_dir, birdname[:len(birdname) - 4]) + '.jpg'
+    spectrogramfile = os.path.join(out_dir, birdname[:len(birdname) - 4]) + '.png'
+    audio, sr = librosa.load(os.path.join(in_dir, birdname))
     mel = librosa.feature.melspectrogram(audio, sr=sr, n_mels=n_mels)
     # create a logarithmic mel spectrogram
     log_mel = librosa.power_to_db(mel, ref=np.max)
     # create an image of the spectrogram and save it as file
-    plt.figure(figsize=(12, 4))
-    librosa.display.specshow(log_mel, sr=sr, x_axis='time', y_axis='mel')
-    plt.colorbar(format='%+02.0f dB')
+    plt.figure(figsize=(6.07, 2.02))
+    librosa.display.specshow(log_mel, sr=sr, x_axis='time', y_axis='mel', cmap='gray_r')
     plt.tight_layout()
-    plt.savefig(spectrogramfile, dpi=400, bbox_inches='tight',pad_inches=0)
+    plt.axis('off')
+
+    plt.savefig(spectrogramfile, dpi=100, bbox_inches='tight', pad_inches=0, format='png', facecolor='none')
     plt.close()
 
 
@@ -166,13 +162,13 @@ if __name__ == '__main__':
         filepath_out = str(sys.argv[3])
         download = False
         for sample in os.listdir(filepath_in):
-            audio, sr = librosa.load(os.path.join(filepath_in, sample), sr=None)
+            audio, sr = librosa.load(os.path.join(filepath_in, sample))
             instance = ""
-            if sys.argv[1] == "-f":
+            if sys.argv[1] == "-f": # filter and split the data
                 get_data(sample, filepath_in, filepath_out)
-            elif sys.argv[1] == "-s":
-                create_spectrogram(sample, instance, audio, sr, filepath_out)
-            elif sys.argv[1] == "-d":
+            elif sys.argv[1] == "-s": # convert to a spectrogram
+                create_spectrogram(sample, instance, audio, sr, filepath_out, filepath_in)
+            elif sys.argv[1] == "-d": # download samples from zeno-canto
                 download = True
                 break
             else:
