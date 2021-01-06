@@ -112,14 +112,23 @@ class BirdTrainer(object):
                  logfile=None,
                  performance_log_dir=None,
                  testing_cuda_on_cpu=False,
-                 started_from_launch=False,
+                 comm_info=None,
                  unit_testing=False
                  ):
 
-        print(f"******:Script RANK Early:{os.environ['RANK']}")
-        print(f"******:Script LOCAL_RANK Early:{os.environ['LOCAL_RANK']}")
+        # If any of the comm_info parameters, 
+        # such as MASTER_ADDR are None, we ignore
+        # the comm_info, and assume local run:
         
+        if comm_info is None or None in comm_info.values():
+            started_from_launch = False
+            comm_info = {}
+        else:
+            started_from_launch = True
+            
         self.curr_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        self.comm_info = comm_info
 
         # Initialize a config dict of dict with
         # the application's configurations. Sections
@@ -200,24 +209,6 @@ class BirdTrainer(object):
         # save:
 
         signal.signal(signal.SIGINT, self.request_interrupt_training)
-
-        #************
-#         print(f"******:WORLD_SIZE:{os.getenv('WORLD_SIZE')}")
-#         print(f"******:RANK:{os.getenv('RANK')}")
-#         print(f"******:LOCAL_RANK:{os.getenv('LOCAL_RANK')}")
-#         print(f"******:MASTER_ADDR:{os.getenv('MASTER_ADDR')}")
-#         print(f"******:MASTER_PORT:{os.getenv('MASTER_PORT')}")
-#         print("****** Exiting intentionally")
-        print(f"******:Script WORLD_SIZE:{os.environ['WORLD_SIZE']}")
-        print(f"******:Script RANK:{os.environ['RANK']}")
-        print(f"******:Script LOCAL_RANK:{os.environ['LOCAL_RANK']}")
-        print(f"******:Script MASTER_ADDR:{os.environ['MASTER_ADDR']}")
-        print(f"******:Script MASTER_PORT:{os.environ['MASTER_PORT']}")
-        print("****** Exiting intentionally")
-
-#        sys.exit()
-        #************
-
         
         # Whether or not we are testing GPU related
         # code on a machine that only has a CPU.
@@ -242,7 +233,8 @@ class BirdTrainer(object):
         # dimensioned tensors:
 
         # Make an appropriate (single/multiprocessing) dataloader:
-        if self.gpu_device == self.CPU_DEV:
+        #****if self.gpu_device == self.CPU_DEV:
+        if self.device == self.CPU_DEV:
 
             # CPU bound, single machine:
             
@@ -292,7 +284,7 @@ class BirdTrainer(object):
         # Optimizer
         self.optimizer = optim.SGD(self.model.parameters(), 
                                    lr=self.config.Training.getfloat('lr', 0.001), # Provide a default 
-                                   momentum=self.config.Training.get('momentum', 0.9))
+                                   momentum=self.config.Training.getfloat('momentum', 0.9))
         if checkpoint:
             # Requested to continue training 
             # from a checkpoint:
@@ -358,14 +350,20 @@ class BirdTrainer(object):
 
     def init_multiprocessing(self):
 
-        if self.local_rank != 0:
-            # Only the lowest ranked process
-            # on this machine calls init_process_group()
-            return
+        #************
+        print(f"**** LOCAL_RANK in init_multiprocessing(): {self.comm_info['LOCAL_RANK']}")
+        #************
+        
+        #**********
+#         if self.comm_info['LOCAL_RANK'] != 0:
+#             # Only the lowest ranked process
+#             # on this machine calls init_process_group()
+#             return
+        #**********
 
         #*************
         #raise ValueError(f"******I am rank {self.node_rank}, local_rank {self.local_rank}")
-        print(f"\n******I am rank {self.node_rank}, local_rank {self.local_rank}")
+        print(f"\n******I am rank {self.comm_info['RANK']}, local_rank {self.comm_info['LOCAL_RANK']}")
         #*************
         if dist.is_nccl_available():
             backend = 'nccl'           # Preferred
@@ -375,11 +373,16 @@ class BirdTrainer(object):
             backend = 'gloo'
         else:
             raise NotImplementedError("None of mpi/nccl/gloo torch backends installed.")
+
+        # The init_process_group() method is documented
+        # as only coping with env vars:
+        #****** Try filling the init_method URL instead:
         
-#         os.environ['MASTER_ADDR'] = str(self.MASTER_ADDR)
-#         os.environ['MASTER_PORT'] = str(self.MASTER_PORT)
-#         os.environ['WORLD_SIZE']  = str(self.world_size)
-#         os.environ['RANK']        = str(self.my_rank)
+        os.environ['MASTER_ADDR'] = str(self.comm_info['MASTER_ADDR'])
+        os.environ['MASTER_PORT'] = str(self.comm_info['MASTER_PORT'])
+        os.environ['RANK']        = str(self.comm_info['RANK'])
+        os.environ['LOCAL_RANK']  = str(self.comm_info['LOCAL_RANK'])
+        os.environ['WORLD_SIZE']  = str(self.comm_info['WORLD_SIZE'])
 
         # Each process must only call init_process_group()
         # once, even if spawning multiple training scripts:
@@ -393,6 +396,10 @@ class BirdTrainer(object):
                                 )
     
         self.init_process_group_called = True
+        #************
+        print(f"****** dist.is_initialized(): {dist.is_initialized()}")
+        #************
+        
         self.log.info("And we're off!")
 
 
@@ -402,31 +409,23 @@ class BirdTrainer(object):
     
     def setup_gpus(self):
 
-        try:
-            self.local_rank = int(os.environ['LOCAL_RANK'])
-        except KeyError:
+        if not self.started_from_launch:
             # We were not called via the launch.py script.
             # Check wether there is at least one 
             # local GPU, if so, use that:
             if len(GPUtil.getGPUs()) > 0:
-                self.local_rank = 0
+                self.comm_info['LOCAL_RANK'] = 0
             else:
-                self.local_rank = None
+                self.comm_info['LOCAL_RANK'] = None
 
         # The following call also sets self.gpu_obj
         # to a GPUtil.GPU instance, so we can check
         # on the GPU status along the way:
         
-        self.gpu_device = self.enable_GPU(self.local_rank)
+        self.gpu_device = self.enable_GPU(self.comm_info['LOCAL_RANK'])
         if self.gpu_device != self.CPU_DEV and \
-            self.local_rank is not None:
+            self.comm_info['LOCAL_RANK'] is not None:
             self.setup_gpu(self.started_from_launch)
-        else:
-            # No GPU on this machine. Consider world_size
-            # to be 1, which is the CPU struggling along:
-            self.world_size = 1
-
-
 
     #------------------------------------
     # find_available_torch_backend 
@@ -1544,7 +1543,7 @@ class BirdTrainer(object):
         if logfile is None:
             default_logfile_name = os.path.join(os.path.dirname(__file__), 
                                                 'bird_train.log' if self.local_rank is None 
-                                                else f'bird_train_{self.local_rank}.log'
+                                                else f"bird_train_{self.comm_info['LOCAL_RANK']}.log"
                                                 )
             self.log = LoggingService(logfile=default_logfile_name)
             
@@ -1559,9 +1558,9 @@ class BirdTrainer(object):
             # Logfile name provided by caller. Still
             # need to disambiguate between multiple processes,
             # if appropriate:
-            if self.local_rank is not None:
+            if self.comm_info['LOCAL_RANK'] is not None:
                 (logfile_root, ext) = os.path.splitext(logfile)
-                logfile = f"{logfile_root}_{self.local_rank}{ext}"
+                logfile = f"{logfile_root}_{self.comm_info['LOCAL_RANK']}{ext}"
             self.log = LoggingService(logfile=logfile)
             # In case there already was a logging instance,
             # ensure this new logging file is set:
@@ -1643,48 +1642,12 @@ class BirdTrainer(object):
     
     def setup_gpu(self, started_from_launch):
         # If we were launched from the launch script,
-        # rather than directly from the command line,
-        # then internalize the promised instance vars
+        # the the comm_info contains all needed
+        # communications parameters.
+        # Else, we initialize defaults:
 
-        if started_from_launch:
-            # Internalize the promised env vars RANK, 
-            # WORLD_SIZE, MASTER_ADDR, and MASTER_PORT:
-            try:
-                non_initialized_vars = []
-                try:
-                    self.node_rank = int(os.environ['RANK'])
-                except KeyError:
-                    non_initialized_vars.append('RANK')
-                try:
-                    self.local_rank = int(os.environ['LOCAL_RANK'])
-                except KeyError:
-                    non_initialized_vars.append('RANK')
-                try:
-                    self.world_size = int(os.environ['WORLD_SIZE'])
-                except KeyError:
-                    non_initialized_vars.append('WORLD_SIZE')
-                    
-                try:
-                    self.master_addr = str(os.environ['MASTER_ADDR'])
-                except KeyError:
-                    non_initialized_vars.append('MASTER_ADDR')
-                    
-                try:
-                    self.master_port = int(os.environ['MASTER_PORT'])
-                except KeyError:
-                    non_initialized_vars.append('MASTER_PORT')
-    
-                if len(non_initialized_vars) > 0:
-                    raise ValueError(f"The following env vars are not initialize: {non_initialized_vars}")
-            except KeyError as e:
-                msg = (f"\nEnvironment variable {e.args[0]} not set.\n" 
-                       "RANK, WORLD_SIZE, MASTER_ADDR, and MASTER_PORT\n"
-                       "must be set.\n"
-                       "Maybe use launch.py to run this script?"
-                        )
-                raise TrainError(msg)
-
-        else:
+        if not started_from_launch:
+            
             # Tis script was launched manually, rather
             # than through the launch.py, and WORLD_SIZE is
             # greater than 1, the init_process_group() call
@@ -1695,14 +1658,11 @@ class BirdTrainer(object):
             self.log.info(("Setting RANK to 0, and WORLD_SIZE to 1,\n"
                            "b/c script was not started using launch.py()"
                            ))
-            os.environ['RANK'] = '0'
-            os.environ['WORLD_SIZE'] = '1'
-            os.environ['MASTER_ADDR'] = '127.0.0.1'
-            os.environ['MASTER_PORT'] = '9000'
-            self.node_rank  = 0
-            self.world_size = 1
-            self.master_addr = '127.0.0.1'
-            self.master_port = '9000'
+            self.comm_info['MASTER_ADDR'] = '127.0.0.1'
+            self.comm_info['MASTER_PORT'] = '5678'
+            self.comm_info['RANK']  = 0
+            self.comm_info['LOCAL_RANK']  = 0
+            self.comm_info['WORLD_SIZE'] = 1
                 
     #------------------------------------
     # device_residence
@@ -1997,13 +1957,46 @@ if __name__ == '__main__':
                         type=int,
                         help=f'how many epochs to run'
                         )
-    # Used only by launch.py script! Indicate that
-    # script started via launch_training.py:
-    parser.add_argument('--started_from_launch',
-                        action='store_true',
+    # Used only by launch.py script! Pass
+    # communication parameters:
+
+    parser.add_argument('--MASTER_ADDR',
                         help=argparse.SUPPRESS,
-                        default=False
+                        default=None
                         )
+    # Used only by launch.py script! Pass
+    # communication parameters:
+
+    parser.add_argument('--MASTER_PORT',
+                        help=argparse.SUPPRESS,
+                        type=int,
+                        default=None
+                        )
+    # Used only by launch.py script! Pass
+    # communication parameters:
+
+    parser.add_argument('--RANK',
+                        help=argparse.SUPPRESS,
+                        type=int,
+                        default=None
+                        )
+    # Used only by launch.py script! Pass
+    # communication parameters:
+
+    parser.add_argument('--LOCAL_RANK',
+                        help=argparse.SUPPRESS,
+                        type=int,
+                        default=None
+                        )
+    # Used only by launch.py script! Pass
+    # communication parameters:
+
+    parser.add_argument('--WORLD_SIZE',
+                        help=argparse.SUPPRESS,
+                        type=int,
+                        default=None
+                        )
+    
     parser.add_argument('-d', '--data',
                         help='directory root of sub-directories that each contain samples \n'
                              'of one class. Can be specified in config file instead',
@@ -2014,11 +2007,22 @@ if __name__ == '__main__':
 
     args = parser.parse_args();
     
+    comm_parm_names  = ['MASTER_ADDR', 'MASTER_PORT', 'RANK', 'LOCAL_RANK', 'WORLD_SIZE']
+    comm_info = {parm_name : getattr(args, parm_name)
+                    for parm_name
+                     in comm_parm_names
+                    }
+
+    #*********
+    print(f"**** At script entry LOCAL_RANK: {args.LOCAL_RANK}")
+    print(f"**** At script entry WORLD_SIZE: {args.WORLD_SIZE}")
+    #*********
+    
     BirdTrainer(
             config_info=args.config,
             root_train_test_data=args.data,
             checkpoint=args.resume,
             batch_size=args.batchsize,
             logfile=args.logfile,
-            started_from_launch=args.started_from_launch
+            comm_info=comm_info
             ).train()

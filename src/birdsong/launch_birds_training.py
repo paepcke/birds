@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+from _collections import OrderedDict
 from argparse import ArgumentParser
 import argparse
-import json5
 from json.decoder import JSONDecodeError as JSONError
 import os
 from pathlib import Path
@@ -13,11 +13,12 @@ from subprocess import PIPE
 import subprocess
 import sys
 
-#import GPUtil
+import json5
 
 from birdsong.utils.dottable_config import DottableConfigParser
 
 
+#import GPUtil
 # For remote debugging via pydev and Eclipse:
 # #*****************
 # import socket, sys, os
@@ -390,50 +391,27 @@ class TrainScriptLauncher:
         #      'devices' : [1,2]}
         # }
         
-        my_hostname = socket.getfqdn()
+        self.my_hostname = socket.getfqdn()
         try:
             # Get this machine's info (sub)dict:
-            my_world_info = self.world_map[my_hostname]
+            my_world_info = self.world_map[self.my_hostname]
         except KeyError:
-            raise ConfigError(f"World map file does not contain entry for this machine ({my_hostname})")
-
-        self.my_rank = my_world_info['rank']
-        self.my_gpus = my_world_info['gpus']
-        try:
-            self.my_gpus_to_use = my_world_info['devices']
-        except KeyError:
-            self.my_gpus_to_use = None
-            
-        # World size is number of processes, which is
-        # equal to number of GPUs used on all machines with
-        # lower node rank than this one, plus this node's GPUs.
+            raise ConfigError(f"World map file does not contain entry for this machine ({self.my_hostname})")
         
-        # Number of GPUs on this machine, plus
-        # machines with lower rank
-        self.world_size    = 0
+        self.compute_landscape = {}
         
-        # Total number of GPUs, even including
-        # GPUs on higher rank machines  
-        self.universe_size = 0
-        self.master_hostname = None
+        # Whether or not machine running this
+        # code is the master node:
+        self.am_master_node = False
 
-        # Go through the world map, machine (a.k.a. node)
-        # one at a time:
-        for machine_name in self.world_map.keys():
-            machine_info   = self.world_map[machine_name]
-            machine_rank = machine_info['rank']
-            machine_gpus = machine_info['gpus']
-            if machine_rank == 0:
-                self.master_hostname = machine_name 
-            
-            if machine_rank <= self.my_rank: 
-                self.world_size += machine_gpus
-            self.universe_size  += machine_gpus
-
+        # Build gpu_landscape, which maps
+        # machine names to the rank range
+        # that they occupy via the number of
+        # their GPUs: 
+        self.build_compute_landcape(self.world_map)
+        
         if self.master_hostname is None:
-            raise ConfigError(f"No machine ranked 0 in {self.world_map_path}")
-        
-        self.MASTER_ADDR = socket.gethostbyname(self.master_hostname)
+            raise ConfigError(f'No master machine in {self.world_map_path}; one entry needs to be "master" : 1')
         
         # Common pytorch port is either in the config file,
         # or we use the pytorch default
@@ -441,8 +419,6 @@ class TrainScriptLauncher:
                                               'master_port',
                                               self.COMM_PORT
                                               )
-
-        am_master_node = my_world_info['rank'] == 0
         
         # Handle special case: no GPUs anywere, and
         # we are on node 0: in that case start a single
@@ -451,8 +427,8 @@ class TrainScriptLauncher:
         # and use the CPU. This happens during debugging
         # on a laptop:
 
-        if self.universe_size == 0 and am_master_node:
-            self.world_size += 1
+        if self.WORLD_SIZE == 0 and self.am_master_node:
+            self.WORLD_SIZE += 1
             
         # If trying to launch on a node without GPUs,
         # when GPUs are available elsewhere, refuse to
@@ -485,44 +461,16 @@ class TrainScriptLauncher:
         # the group of nodes (machines). Starting with
         # the master node, whose numbers are 0,1,...<ngpus_here>:
         
-        lower_machine_gpus = self.gpus_below_my_rank(self.world_map)
-        #**********
-        print(f"****** lower_machine_gpus: {lower_machine_gpus}")
-        #**********        
-
-        # Make sure to destroy the just created process
-        # group in a finally statement below:
-        
-         
         # Spawn as many local training script
         # copies as are (to-be-used) GPUs on this
         # machine:
         
-        start_local_gpu_rank = lower_machine_gpus
-        for local_rank in range(start_local_gpu_rank,
-                                start_local_gpu_rank + self.my_gpus):
+        # This machine's range of ranks:
+        rank_range = self.gpu_landscape['self.hostname']['rank_range']
 
-            # Set PyTorch distributed related environmental
-            # in a fresh environment unique for the
-            # script about to be spawned:
-            
-            current_env = os.environ.copy()
-            
-            current_env["MASTER_ADDR"] = self.MASTER_ADDR
-            current_env["MASTER_PORT"] = str(self.MASTER_PORT)
-            current_env["WORLD_SIZE"]  = str(self.universe_size)
-            current_env["RANK"]        = str(self.my_rank)
-            current_env["LOCAL_RANK"]  = str(local_rank)
-            
-            #***********
-            print(f"******Launch Localrank: {local_rank}")
-            print(f"******Launch Localrank in ENV: {current_env['LOCAL_RANK']}")
-            #***********
+        local_rank = 0
+        for rank in rank_range: 
 
-            if 'OMP_NUM_THREADS' not in os.environ and \
-                self.my_gpus > 1:
-                current_env["OMP_NUM_THREADS"] = str(1)
-        
             # Spawn one training script.
             
             # Build the shell command line,
@@ -531,7 +479,8 @@ class TrainScriptLauncher:
     
             cmd.append(self.launch_args['training_script'])
 
-            # Add the args for the script:
+            # Add the args for the script that were
+            # in the command line:
             for arg_name in self.script_args.keys():
                 script_arg_val = self.script_args[arg_name]
                 if script_arg_val is None or arg_name == 'config':
@@ -539,23 +488,27 @@ class TrainScriptLauncher:
                     continue
                 cmd.append(f"--{arg_name}={self.script_args[arg_name]}")
 
-            # Add the 'secret' arg that tells the training
-            # script that it was called from this launch
-            # script, and should therefore expect the various
-            # environment variables to be set:
+            # Add the 'secret' args that tell the training
+            # script all the communication parameters:
             
-            cmd.append('--started_from_launch')
-            
-            #*********
-            cmd.append('--logfile=/home/paepcke/EclipseWorkspaces/birds/test.log')
-            #*********
+            cmd.extend([f"--MASTER_ADDR={self.MASTER_ADDR}",
+                        f"--MASTER_PORT={self.MASTER_PORT}",
+                        #****f"--RANK={self.my_rank}",
+                        f"--RANK={rank}",
+                        f"--LOCAL_RANK={local_rank}",
+                        f"--WORLD_SIZE={self.WORLD_SIZE}"
+                        ])
             
             # Finally, the obligatory non-option arg
             # to the training script: the configuration
             # file:
             
-            script_name = self.script_args['config']
-            cmd.append(script_name)
+            config_file_name = self.script_args['config']
+            cmd.append(config_file_name)
+            
+            #************
+            print(f"****** Launch: the cmd is {cmd}")
+            #************
                 
             # Copy stdin, and give the copy to the subprocess.
             # This enables the subprocess to ask user whether
@@ -563,17 +516,11 @@ class TrainScriptLauncher:
             newstdin = os.fdopen(os.dup(sys.stdin.fileno()))
             process = subprocess.Popen(cmd,
                                        stdin=newstdin,
-                                       #***********
-                                       #env=current_env,
-                                       env={'RANK' : str(self.my_rank),
-                                            'LOCAL_RANK' : str(local_rank),
-                                            'PYTHONPATH' : os.getenv('PYTHONPATH')
-                                            },
-                                       #***********
                                        stdout=PIPE,
                                        stderr=PIPE
                                        )
             processes.append(process)
+            local_rank += 1
         
         if not self.launch_args['quiet']:
             print(f"Node {self.my_rank} {os.path.basename(sys.argv[0])}: Num processes launched: {len(processes)}")
@@ -594,7 +541,7 @@ class TrainScriptLauncher:
         if num_failed > 0:
             print(f"Number of failed training scripts: {num_failed}")
             for failed_process in failed_processes:
-                (the_stdout, the_stderr) = process.communicate()
+                (the_stdout, the_stderr) = failed_process.communicate()
                 the_stdout = the_stdout.decode('utf-8')
                 the_stderr = the_stderr.decode('utf-8')
                 train_script   = self.launch_args['training_script']
@@ -610,15 +557,15 @@ class TrainScriptLauncher:
     def gpus_below_my_rank(self, world_map):
         '''
         Given a world map like this:
+        #****** REVISE!!!!!
         
         {'quintus.stanford.edu' : {
-            'rank' : 0,
+            'master': 1,
             'gpus' : 2},
         
          'quatro.stanford.edu'  : {
-             'rank' : 1,
-             'gpus' : 2,
-             'devices' : [1,2]}
+            'gpus' : 2,
+            'devices' : [1,2]}
         }
         
         return the number of GPUs in machines
@@ -638,6 +585,109 @@ class TrainScriptLauncher:
                 sum_of_gpus += world_map[machine]['gpus']
                 
         return sum_of_gpus
+
+    #------------------------------------
+    # build_compute_landcape
+    #-------------------
+    
+    def build_compute_landcape(self, world_map):
+
+#********** Remove?
+#        my_world_info = world_map[self.my_hostname]
+#        
+#         self.my_rank = my_world_info['rank']
+#         self.my_gpus = my_world_info['gpus']
+#         try:
+#             self.my_gpus_to_use = my_world_info['devices']
+#         except KeyError:
+#             self.my_gpus_to_use = None
+#********** Remove?
+            
+        # World size is number of processes, which is
+        # equal to number of GPUs used on all machines with
+        # lower node rank than this one, plus this node's GPUs.
+        
+        # Number of GPUs across all machines:
+        self.WORLD_SIZE    = 0
+        
+        # We will compute the rank of
+        # each GPU across all machines,
+        # starting with the master node's
+        # first GPU (or CPU) as 0:
+         
+        running_rank  = 0
+        self.master_hostname = None
+        
+        # Go through the world map, machine (a.k.a. node)
+        # one at a time, in alpha order of the machine
+        # names to ensure all copies of this script
+        # come to the same conclusions about ranks
+        
+        # Build gpu_landscape:
+        #
+        #    {'machine_name1' : {'start_rank'    : <int>,
+        #                        'num_gpus'      : <int>,
+        #                        'gpu_device_ids': [<int>,<int>,...]
+        #    {'machine_name2' : {'start_rank'    : <int>,
+        #                        'num_gpus'      : <int>,
+        #                        'gpu_device_ids': [<int>,<int>,...]
+        #    } 
+        #
+        # Also, identify the master node machine, and address
+        
+        gpu_landscape = OrderedDict({})
+        
+        for machine_name in sorted(self.world_map.keys()):
+
+            # Get dict of info about the machine:
+             
+            machine_info = self.world_map[machine_name]
+            
+            machine_gpus = machine_info['gpus'] 
+            gpu_landscape[machine_name]['num_gpus'] = machine_gpus
+            
+            # List of GPU numbers to use is optional
+            # in world_maps:
+            
+            machine_gpus_to_use = machine_info.get('devices', None)
+            if machine_gpus_to_use is None:
+                # Use all GPUs on that machine:
+                machine_gpus_to_use = list(range(machine_gpus))
+
+            self.gpu_landscape[machine_name]['gpu_device_ids'] = machine_gpus_to_use
+            
+            # Accept all kinds of affirmatives as values:
+            # for identification of the master node entry:
+            
+            is_master_node = machine_info.get('master', False) \
+                in [1, 'True', 'true', 'Yes', 'yes']
+                
+            if is_master_node:
+                self.master_hostname = machine_name
+                if machine_name == self.my_hostname:
+                    self.am_master_node = True
+                self.MASTER_ADDR = socket.gethostbyname(machine_name)
+            
+            self.WORLD_SIZE += machine_gpus
+                    
+        # Go through the machine enries in gpu_landscape, and
+        # assign rank ranges to each. Must start with 
+        # the master node, b/c it must start with rank 0:
+
+        self.gpu_landscape[self.master_hostname]['rank_range'] = \
+            list(range(self.gpu_landscape[self.master_hostname]['num_gpuse']))
+        
+        # Start assigning more ranks after 
+        # the GPUs of the master:
+        running_rank = self.gpu_landscape[self.master_hostname]['num_gpuse']
+        for machine_name in self.gpu_landscape.keys():
+            if machine_name == self.master_hostname:
+                # We already did the master node
+                continue 
+            num_gpus = self.gpu_landscape[machine_name]['num_gpus']
+            self.gpu_landscape[machine_name]['rank_range'] = \
+                list(range(running_rank, running_rank + num_gpus))
+            running_rank += num_gpus
 
 
 # --------------------- Main ---------------
