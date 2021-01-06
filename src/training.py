@@ -272,8 +272,12 @@ class Training:
                     if predicted[x] != labels[x]:
                         path[x] = path[x].split('/')[len(path[x].split('/')) - 1]
                         incorrect_paths[predicted[x]][labels[x]].append(path[x])
+<<<<<<< HEAD
+        
+=======
 
         # create a confusion matrix
+>>>>>>> 1c2a343739f2c294b0870510c1633c506aee7eb2
         confusion = np.zeros((self.model.num_class, self.model.num_class))
         for pred, truth in zip(list_predicted, list_labels):
             confusion[pred][truth] += 1
