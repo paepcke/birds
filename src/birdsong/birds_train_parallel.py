@@ -116,6 +116,9 @@ class BirdTrainer(object):
                  unit_testing=False
                  ):
 
+        print(f"******:Script RANK Early:{os.environ['RANK']}")
+        print(f"******:Script LOCAL_RANK Early:{os.environ['LOCAL_RANK']}")
+        
         self.curr_dir = os.path.dirname(os.path.abspath(__file__))
 
         # Initialize a config dict of dict with
@@ -199,12 +202,19 @@ class BirdTrainer(object):
         signal.signal(signal.SIGINT, self.request_interrupt_training)
 
         #************
-        print(f"******:WORLD_SIZE:{os.getenv('WORLD_SIZE')}")
-        print(f"******:RANK:{os.getenv('RANK')}")
-        print(f"******:LOCAL_RANK:{os.getenv('LOCAL_RANK')}")
-        print(f"******:MASTER_ADDR:{os.getenv('MASTER_ADDR')}")
-        print(f"******:MASTER_PORT:{os.getenv('MASTER_PORT')}")
+#         print(f"******:WORLD_SIZE:{os.getenv('WORLD_SIZE')}")
+#         print(f"******:RANK:{os.getenv('RANK')}")
+#         print(f"******:LOCAL_RANK:{os.getenv('LOCAL_RANK')}")
+#         print(f"******:MASTER_ADDR:{os.getenv('MASTER_ADDR')}")
+#         print(f"******:MASTER_PORT:{os.getenv('MASTER_PORT')}")
+#         print("****** Exiting intentionally")
+        print(f"******:Script WORLD_SIZE:{os.environ['WORLD_SIZE']}")
+        print(f"******:Script RANK:{os.environ['RANK']}")
+        print(f"******:Script LOCAL_RANK:{os.environ['LOCAL_RANK']}")
+        print(f"******:Script MASTER_ADDR:{os.environ['MASTER_ADDR']}")
+        print(f"******:Script MASTER_PORT:{os.environ['MASTER_PORT']}")
         print("****** Exiting intentionally")
+
 #        sys.exit()
         #************
 

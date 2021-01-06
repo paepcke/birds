@@ -19,22 +19,22 @@ from birdsong.utils.dottable_config import DottableConfigParser
 
 
 # For remote debugging via pydev and Eclipse:
-#*****************
-import socket, sys, os
-hostname = socket.gethostname()
-if hostname in ('quintus', 'quatro'):
-    # Point to where the pydev server 
-    # software is installed on the remote
-    # machine:
-    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
-
-    import pydevd
-    global pydevd
-    # Uncomment the following if you
-    # want to break right on entry of
-    # this module. But you can instead just
-    # set normal Eclipse breakpoints:
-    pydevd.settrace('localhost', port=5678)
+# #*****************
+# import socket, sys, os
+# hostname = socket.gethostname()
+# if hostname in ('quintus', 'quatro'):
+#     # Point to where the pydev server 
+#     # software is installed on the remote
+#     # machine:
+#     sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
+# 
+#     import pydevd
+#     global pydevd
+#     # Uncomment the following if you
+#     # want to break right on entry of
+#     # this module. But you can instead just
+#     # set normal Eclipse breakpoints:
+#     pydevd.settrace('localhost', port=5678)
 #***************** 
 r"""
 Based on torch.distributed.launch, with additions by Andreas Paepcke
@@ -513,6 +513,11 @@ class TrainScriptLauncher:
             current_env["WORLD_SIZE"]  = str(self.universe_size)
             current_env["RANK"]        = str(self.my_rank)
             current_env["LOCAL_RANK"]  = str(local_rank)
+            
+            #***********
+            print(f"******Launch Localrank: {local_rank}")
+            print(f"******Launch Localrank in ENV: {current_env['LOCAL_RANK']}")
+            #***********
 
             if 'OMP_NUM_THREADS' not in os.environ and \
                 self.my_gpus > 1:
@@ -541,6 +546,10 @@ class TrainScriptLauncher:
             
             cmd.append('--started_from_launch')
             
+            #*********
+            cmd.append('--logfile=/home/paepcke/EclipseWorkspaces/birds/test.log')
+            #*********
+            
             # Finally, the obligatory non-option arg
             # to the training script: the configuration
             # file:
@@ -554,9 +563,15 @@ class TrainScriptLauncher:
             newstdin = os.fdopen(os.dup(sys.stdin.fileno()))
             process = subprocess.Popen(cmd,
                                        stdin=newstdin,
-                                       env=current_env,
+                                       #***********
+                                       #env=current_env,
+                                       env={'RANK' : str(self.my_rank),
+                                            'LOCAL_RANK' : str(local_rank),
+                                            'PYTHONPATH' : os.getenv('PYTHONPATH')
+                                            },
+                                       #***********
                                        stdout=PIPE,
-                                       stderr=PIPE,
+                                       stderr=PIPE
                                        )
             processes.append(process)
         
@@ -571,29 +586,15 @@ class TrainScriptLauncher:
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         failed_processes = []
         for process in processes:
-            #***********
-            #process.wait()
-            import time
-            for _i in range(10):
-                status = process.poll()
-                print(f"Status: {status}")
-                (stdout_stream, stderr_stream) = process.communicate()
-                print(f"Script stdout: {stdout_stream}")
-                print(f"Script stderr: {stderr_stream}")
-                time.sleep(3)
-            #***********
-            
+            process.wait()
             if process.returncode != 0:
-                (stdout_stream, stderr_stream) = process.communicate()
-                print(f"Script stdout: {stdout_stream}")
-                print(f"Script stderr: {stderr_stream}")
                 failed_processes.append(process)
             continue
         num_failed = len(failed_processes)
         if num_failed > 0:
             print(f"Number of failed training scripts: {num_failed}")
             for failed_process in failed_processes:
-                (the_stdout, the_stderr) = failed_process.communicate()
+                (the_stdout, the_stderr) = process.communicate()
                 the_stdout = the_stdout.decode('utf-8')
                 the_stderr = the_stderr.decode('utf-8')
                 train_script   = self.launch_args['training_script']
