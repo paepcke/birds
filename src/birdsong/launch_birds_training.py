@@ -21,26 +21,35 @@ from birdsong.utils.dottable_config import DottableConfigParser
 #import GPUtil
 # For remote debugging via pydev and Eclipse:
 # #*****************
-import socket, sys, os
-hostname = socket.gethostname()
-#***********
-print(f"Hostname: {hostname}")
-#***********
-if hostname in ('quintus', 'quatro'):
-    # Point to where the pydev server 
-    # software is installed on the remote
-    # machine:
-    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
 
-    import pydevd
-    global pydevd
-    # Uncomment the following if you
-    # want to break right on entry of
-    # this module. But you can instead just
-    # set normal Eclipse breakpoints:
-    pydevd.settrace('localhost', port=4040)
+# hostname = socket.gethostname()
+# if hostname in ('quintus', 'quatro'):
+#     # Point to where the pydev server 
+#     # software is installed on the remote
+#     # machine:
+#     sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
+# 
+#     import pydevd
+#     global pydevd
+#     # Uncomment the following if you
+#     # want to break right on entry of
+#     # this module. But you can instead just
+#     # set normal Eclipse breakpoints:
+#     pydevd.settrace('localhost', port=4040)
 # **************** 
 r"""
+****** 
+   o This script run exactly once on each machine
+   o Starts as many copies of train script as are
+     GPUs to be used on the machine where the script
+     is started.
+   o Scripts learn from world_map whether they are
+     the master machine.
+   o RANK vs. LOCAL_RANK
+   o Coordinating process is not a separate process,
+     but simply a role taken by one of the training
+     script copies.  
+
 Based on torch.distributed.launch, with additions by Andreas Paepcke
 (https://github.com/pytorch/pytorch/blob/master/torch/distributed/launch.py)
 Many of the comments are the originals. For more relevant documentation,
@@ -227,9 +236,9 @@ class BirdsTrainingArgumentsParser(ArgumentParser):
 
     def parse_args(self):
         """
-        Helper function parsing the command line options
-        for both this launcher and the distributed 
-        birds_train_parallel.py script.
+        Helper function to parse the command line options
+        intended for this launcher and the ones destined
+        to the training script copies. 
         
         @return: a dict with keys 'script_args' and
             'launch_args' with arg-value information
@@ -338,6 +347,7 @@ class TrainScriptLauncher:
     
     def __init__(self):
 
+        self.hostname = socket.gethostname()
         # Convenience: directory of this
         # script, and project root directory
         curr_dir = Path(__file__).parent
@@ -352,8 +362,13 @@ class TrainScriptLauncher:
             "birds_train_parallel.py processes")
     
         all_args = args_parser.parse_args()
+        # Separate the args for this launch script
+        # from the args destined for the copies of
+        # the train script:
         self.launch_args = all_args['launch_args']
         self.script_args = all_args['script_args']
+        
+        # Build the gpu_landscape dict:
         self.gather_world_layout(self.launch_args)
         
     #------------------------------------
@@ -361,6 +376,18 @@ class TrainScriptLauncher:
     #-------------------
     
     def gather_world_layout(self, launch_args):
+        '''
+        # Compute a unique number for each GPU within
+        # the group of nodes (machines). Starting with
+        # the master node's first GPU as 0 (if master node
+        # has a GPU.
+        # The resulting GPU layout is assigned to
+        # variable gpu_landscape: 
+        
+        
+        @param launch_args:
+        @type launch_args:
+        '''
 
         try: 
             config_file = launch_args['config']
@@ -382,22 +409,12 @@ class TrainScriptLauncher:
                 self.world_map = json5.load(world_map_fd)
         except JSONError as e:
             raise JSONError(f"World map file at {self.world_map_path} contains bad JSON") from e
-            
-        # Now have something like:
-        # {'quintus.stanford.edu' : {
-        #     'rank' : 0,
-        #     'gpus' : 2},
-        #
-        #  'quatro.stanford.edu'  : {
-        #      'rank' : 1,
-        #      'gpus' : 2,
-        #      'devices' : [1,2]}
-        # }
-        
-        self.my_hostname = socket.getfqdn()
+                    
+        # Ensure that this machine has an
+        # entry in the world_map:
         try:
             # Get this machine's info (sub)dict:
-            my_world_info = self.world_map[self.my_hostname]
+            _my_world_info = self.world_map[self.my_hostname]
         except KeyError:
             raise ConfigError(f"World map file does not contain entry for this machine ({self.my_hostname})")
         
@@ -410,7 +427,12 @@ class TrainScriptLauncher:
         # Build gpu_landscape, which maps
         # machine names to the rank range
         # that they occupy via the number of
-        # their GPUs: 
+        # their GPUs
+        #
+        #    {machine_name1 : [1],
+        #     machine_name2 : [0],
+        #     machine_name3 : [1,2,3],        
+
         self.build_compute_landcape(self.world_map)
         
         if self.master_hostname is None:
@@ -435,7 +457,7 @@ class TrainScriptLauncher:
             
         # If trying to launch on a node without GPUs,
         # when GPUs are available elsewhere, refuse to
-        # start the script:
+        # start the script (is this needed?):
         if not TESTING:
             if self.my_gpus == 0 and self.universe_size > 0:
                 raise RuntimeError("This machine does not have any GPU, but others do; training script not started.")
@@ -445,29 +467,34 @@ class TrainScriptLauncher:
     #-------------------
     
     def launch_scripts(self):
+        '''
+        Launch (possibly) multiple copies of
+        the training script. Use world_map.json
+        to know how many, and which GPUs this
+        machine is to use.
+        
+        Each copy is told:
+        
+            o MASTER_ADDR  # Where to reach the coordinating process
+            o MASTER_PORT  # Corresponding port
+            o RANK         # The copy's sequence number, which is
+                           # Unique across all participating machines
+            o LOCAL_RANK   # Which of this machine's GPU to use (0-origin)
+            o WORLD_SIZE   # How many GPUs are used on all machines together
+
+        '''
         
         processes = []
         
-        # Launch as many copies of the training
-        # script as this machine has available
-        # according to the world map. 
-        #
-        # Each copy is told this machine's rank,
-        # and a running index of this machine's
-        # GPUs. This index starts with the CPUs
-        # on the master node, continues through
-        # all the GPUs on machines with lower rank
-        # than this one. The GPUs of higher ranked
-        # machines are not included:
-
         # Compute a unique number for each GPU within
         # the group of nodes (machines). Starting with
-        # the master node, whose numbers are 0,1,...<ngpus_here>:
-        
-        # Spawn as many local training script
-        # copies as are (to-be-used) GPUs on this
-        # machine:
-        
+        # the master node's first GPU as 0 (if master node
+        # has a GPU.
+        # The resulting GPU layout is assigned to
+        # variable gpu_landscape: 
+        #
+        #     {<machine_name> : 
+
         # This machine's range of ranks:
         rank_range = self.gpu_landscape['self.hostname']['rank_range']
 
@@ -554,71 +581,36 @@ class TrainScriptLauncher:
                 print(msg)
             
     #------------------------------------
-    # gpus_below_my_rank 
-    #-------------------
-    
-    def gpus_below_my_rank(self, world_map):
-        '''
-        Given a world map like this:
-        #****** REVISE!!!!!
-        
-        {'quintus.stanford.edu' : {
-            'master': 1,
-            'gpus' : 2},
-        
-         'quatro.stanford.edu'  : {
-            'gpus' : 2,
-            'devices' : [1,2]}
-        }
-        
-        return the number of GPUs in machines
-        of lower rank than this one.
-        
-        @param world_map: dict layout out which machine
-            has how many GPUs
-        @type world_map: {str : {str : ANY}}
-        @return number of GPUs in machine with
-            lower rank.
-        @rtype: int
-        '''
-        
-        sum_of_gpus = 0
-        for machine in world_map.keys():
-            if world_map[machine]['rank'] < self.my_rank:
-                sum_of_gpus += world_map[machine]['gpus']
-                
-        return sum_of_gpus
-
-    #------------------------------------
     # build_compute_landcape
     #-------------------
     
     def build_compute_landcape(self, world_map):
+        '''
+        # Using the world_map.json config file, build 
+        # a dict self.gpu_landscape like this:
+        #
+        #    {'machine_name1' : {'start_rank'    : <int>,
+        #                        'num_gpus'      : <int>,
+        #                        'gpu_device_ids': [<int>,<int>,...]
+        #    {'machine_name2' : {'start_rank'    : <int>,
+        #                        'num_gpus'      : <int>,
+        #                        'gpu_device_ids': [<int>,<int>,...]
+        #    } 
+        #
+        # Also sets self.master_hostname, the hostname
+        # running the one process that coordinates all others.
+        
+        @param world_map:
+        @type world_map:
+        '''
 
-#********** Remove?
-#        my_world_info = world_map[self.my_hostname]
-#        
-#         self.my_rank = my_world_info['rank']
-#         self.my_gpus = my_world_info['gpus']
-#         try:
-#             self.my_gpus_to_use = my_world_info['devices']
-#         except KeyError:
-#             self.my_gpus_to_use = None
-#********** Remove?
-            
-        # World size is number of processes, which is
-        # equal to number of GPUs used on all machines with
-        # lower node rank than this one, plus this node's GPUs.
+        # World size is the number of training script processes, 
+        # which is equal to number of GPUs used on all participating
+        # machines combined:
         
         # Number of GPUs across all machines:
         self.WORLD_SIZE    = 0
         
-        # We will compute the rank of
-        # each GPU across all machines,
-        # starting with the master node's
-        # first GPU (or CPU) as 0:
-         
-        running_rank  = 0
         self.master_hostname = None
         
         # Go through the world map, machine (a.k.a. node)
@@ -636,7 +628,11 @@ class TrainScriptLauncher:
         #                        'gpu_device_ids': [<int>,<int>,...]
         #    } 
         #
-        # Also, identify the master node machine, and address
+        # The structure is an OrderedDict(), containing
+        # machines alphabetically by name. This discipline
+        # is required so that all copies of this launch script
+        # (one copy per machine) arrive at the same ordering of
+        # GPUs: 
         
         gpu_landscape = OrderedDict({})
         
