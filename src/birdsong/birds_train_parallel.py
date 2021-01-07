@@ -11,19 +11,19 @@ code by
 '''
 
 import os, sys
+import socket
 
 packet_root = os.path.abspath(__file__.split('/')[0])
 sys.path.insert(0,packet_root)
 
 # For remote debugging via pydev and Eclipse:
+# If uncommented, will hang if started from
+# on Quatro or Quintus, and will send a trigger
+# to the Eclipse debugging service on the same
+# or different machine:
 #*****************
 # 
-import socket
-hostname = socket.gethostname()
-# #***********
-# print(f"Hostname: {hostname}")
-# #***********
-# if hostname in ('quintus', 'quatro'):
+# if self.hostname in ('quintus', 'quatro'):
 #     # Point to where the pydev server 
 #     # software is installed on the remote
 #     # machine:
@@ -113,18 +113,21 @@ class BirdTrainer(object):
                  config_info,
                  root_train_test_data=None,
                  batch_size=None,
-                 checkpoint=None,   #******** load if given
-                 logfile=None,
+                 checkpoint=None,   # Load if given path to saved
+                 logfile=None,      # ...partially trained model
                  performance_log_dir=None,
                  testing_cuda_on_cpu=False,
                  comm_info=None,
                  unit_testing=False
                  ):
 
+        # Just for informative info/error messages:
+        self.hostname = socket.gethostname()
+        
         # If any of the comm_info parameters, 
         # such as MASTER_ADDR are None, we ignore
         # the comm_info, and assume local run:
-        
+
         if comm_info is None or None in comm_info.values():
             started_from_launch = False
             comm_info = {}
@@ -238,7 +241,6 @@ class BirdTrainer(object):
         # dimensioned tensors:
 
         # Make an appropriate (single/multiprocessing) dataloader:
-        #****if self.gpu_device == self.CPU_DEV:
         if self.device == self.CPU_DEV:
 
             # CPU bound, single machine:
@@ -257,13 +259,9 @@ class BirdTrainer(object):
         else:
             # GPUSs used, single or multiple machines:
 
-            #***********
-            print("********Calling init_multiprocessing...")
-            #***********        
+            self.log.debug("********Calling init_multiprocessing...")
             self.init_multiprocessing()
-            #***********
-            print("********Returned from init_multiprocessing...")
-            #***********        
+            self.log.debug("********Returned from init_multiprocessing...")
             
             self.dataloader = MultiprocessingDataLoader(dataset,
                                                         shuffle=True,
@@ -355,21 +353,12 @@ class BirdTrainer(object):
 
     def init_multiprocessing(self):
 
-        #************
-        print(f"**** LOCAL_RANK in init_multiprocessing(): {self.comm_info['LOCAL_RANK']}")
-        #************
-        
-        #**********
-#         if self.comm_info['LOCAL_RANK'] != 0:
-#             # Only the lowest ranked process
-#             # on this machine calls init_process_group()
-#             return
-        #**********
+        self.log.debug(f"**** LOCAL_RANK in init_multiprocessing(): {self.comm_info['LOCAL_RANK']}")
+        self.log.info(f"{self.hostname}: RANK {self.comm_info['RANK']}, LOCAL_RANK {self.comm_info['LOCAL_RANK']}")
 
-        #*************
-        #raise ValueError(f"******I am rank {self.node_rank}, local_rank {self.local_rank}")
-        print(f"\n******I am rank {self.comm_info['RANK']}, local_rank {self.comm_info['LOCAL_RANK']}")
-        #*************
+        # Use NCCL as distributed backend,
+        # or another if, nccl not available:
+        
         if dist.is_nccl_available():
             backend = 'nccl'           # Preferred
         elif dist.is_mpi_available():
@@ -379,34 +368,36 @@ class BirdTrainer(object):
         else:
             raise NotImplementedError("None of mpi/nccl/gloo torch backends installed.")
 
-        # The init_process_group() method is documented
-        # as only coping with env vars:
-        #****** Try filling the init_method URL instead:
-        
+        # Environment variables for init_process_group()
         os.environ['MASTER_ADDR'] = str(self.comm_info['MASTER_ADDR'])
         os.environ['MASTER_PORT'] = str(self.comm_info['MASTER_PORT'])
         os.environ['RANK']        = str(self.comm_info['RANK'])
         os.environ['LOCAL_RANK']  = str(self.comm_info['LOCAL_RANK'])
         os.environ['WORLD_SIZE']  = str(self.comm_info['WORLD_SIZE'])
 
-        # Each process must only call init_process_group()
-        # once, even if spawning multiple training scripts:
+        # Each process must call init_process_group()
+        # exactly once. I.e. each copy of this script,
+        # serving a different GPU must call the method.
 
-        # dist.init_process_group(backend,
-        #                         world_size=self.world_size,
-        #                         rank=self.my_rank
-        #                         )
+        # If WORLD_SIZE > 1, method will hang:
+        #    o If RANK is 0, this is the master process,
+        #      and it will hang until all remaining WORLD_SIZE - 1
+        #      processes have 'called in'
+        #    o If RANK > 0, method will call in to the 
+        #      MASTER_ADDR at MASTER_PORT, which is where
+        #      the master process is listening.
+        #      After calling in, will wait for master process'
+        #      go-ahead, which will come after all WORLD_SIZE
+        #      processes have started. Whether on the same, or
+        #      other machines.
+        
         dist.init_process_group(backend,
                                 init_method='env://'
                                 )
     
         self.init_process_group_called = True
-        #************
-        print(f"****** dist.is_initialized(): {dist.is_initialized()}")
-        #************
         
         self.log.info("And we're off!")
-
 
     #------------------------------------
     # setup_gpus
@@ -2018,11 +2009,6 @@ if __name__ == '__main__':
                      in comm_parm_names
                     }
 
-    #*********
-    print(f"**** At script entry LOCAL_RANK: {args.LOCAL_RANK}")
-    print(f"**** At script entry WORLD_SIZE: {args.WORLD_SIZE}")
-    #*********
-    
     BirdTrainer(
             config_info=args.config,
             root_train_test_data=args.data,

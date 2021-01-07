@@ -1,15 +1,17 @@
 [Paths]
 
-# Relative paths are relative to
-# the script that processes this
-# config file. You training script
-# if called directly, or launch_birds_training.py
-
+# Root of the data/test files:
 root_train_test_data = /home/data/birds/recombined_data
-logfile              = ./logs/my_training.log
+
 # Only relevant if running multi-process.
-# See world_map.json.Example:
-world_map            = ../../world_map.json
+# File showing the distribution of GPUs
+# across machines, or within one machine.
+# Allows specification of which GPU(s) to
+# use on each machine
+# See file world_map.json.Example for
+# how to write this configuration
+
+world_map     = ../../world_map.json
 
 [Training]
 
