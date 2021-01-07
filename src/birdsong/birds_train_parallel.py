@@ -352,6 +352,12 @@ class BirdTrainer(object):
     #-------------------
 
     def init_multiprocessing(self):
+        '''
+        Called once by each copy of this 
+        training script. Hangs until all
+        copies of the script are ready to
+        go.
+        '''
 
         self.log.debug(f"**** LOCAL_RANK in init_multiprocessing(): {self.comm_info['LOCAL_RANK']}")
         self.log.info(f"{self.hostname}: RANK {self.comm_info['RANK']}, LOCAL_RANK {self.comm_info['LOCAL_RANK']}")
@@ -404,24 +410,46 @@ class BirdTrainer(object):
     #-------------------
     
     def setup_gpus(self):
+        
+        # If we were launched from the launch script,
+        # the the comm_info contains all needed
+        # communications parameters.
+        # Else, we initialize defaults:
 
         if not self.started_from_launch:
+            
+            # This script was launched manually, rather
+            # than through the launch.py. The init_process_group() 
+            # call later on will hang, waiting for remaining
+            # sister processes. Therefore: if launched manually,
+            # set WORLD_SIZE to 1, and RANK to 0:
+
             # We were not called via the launch.py script.
             # Check wether there is at least one 
             # local GPU, if so, use that:
+            
             if len(GPUtil.getGPUs()) > 0:
                 self.comm_info['LOCAL_RANK'] = 0
             else:
                 self.comm_info['LOCAL_RANK'] = None
 
+            self.log.info(("Setting RANK to 0, and WORLD_SIZE to 1,\n"
+                           "b/c script was not started using launch.py()"
+                           ))
+            self.comm_info['MASTER_ADDR'] = '127.0.0.1'
+            self.comm_info['MASTER_PORT'] = str(self.comm_info['MASTER_PORT'])
+            self.comm_info['RANK']  = 0
+            self.comm_info['WORLD_SIZE'] = 1
+            
+            return
+
         # The following call also sets self.gpu_obj
         # to a GPUtil.GPU instance, so we can check
         # on the GPU status along the way:
         
-        self.gpu_device = self.enable_GPU(self.comm_info['LOCAL_RANK'])
-        if self.gpu_device != self.CPU_DEV and \
-            self.comm_info['LOCAL_RANK'] is not None:
-            self.setup_gpu(self.started_from_launch)
+        local_rank = self.comm_info['LOCAL_RANK'] is not None 
+        if local_rank is not None:
+            self.gpu_device = self.enable_GPU(local_rank)
 
     #------------------------------------
     # find_available_torch_backend 
@@ -861,6 +889,13 @@ class BirdTrainer(object):
                        ) and \
                        self.epoch <= self.config.Training.getint('max_epochs'):
                     self.epoch += 1
+                    # Tell dataloader that epoch changed.
+                    # The dataloader will tell the sampler,
+                    # which will use the information to 
+                    # predictably randomize the dataset
+                    # before creating splits:
+                    
+                    self.dataloader.set_epoch(self.epoch)
                     split_num = 0
                     
                     # Get an iterator over all the 
@@ -897,7 +932,6 @@ class BirdTrainer(object):
                             self.log.info (f"Epoch {self.epoch}; Split number {split_num} of {num_folds}")
     
                     # Done with one epoch:
-    
                     self.log.info(f"Finished epoch {self.epoch}")
                     
                     # Update the json based result record
@@ -1494,7 +1528,11 @@ class BirdTrainer(object):
     
     def init_defaults(self, configparser_obj):
         '''
-        Used when no config file is provided. 
+        Used when no config file is provided.
+        Not really needed any more, as a config
+        file path is now required in the command
+        line. 
+
         Initialize the standard entries.
         
         Though not having the root of the train/test
@@ -1632,34 +1670,6 @@ class BirdTrainer(object):
                      incorrect_paths,
                      tally.conf_matrix.tolist()]) + "\n")
 
-    #------------------------------------
-    # setup_gpu 
-    #-------------------
-    
-    def setup_gpu(self, started_from_launch):
-        # If we were launched from the launch script,
-        # the the comm_info contains all needed
-        # communications parameters.
-        # Else, we initialize defaults:
-
-        if not started_from_launch:
-            
-            # Tis script was launched manually, rather
-            # than through the launch.py, and WORLD_SIZE is
-            # greater than 1, the init_process_group() call
-            # later on will hang, waiting for the remaining
-            # sister processes. Therefore: if launched manually,
-            # set WORLD_SIZE to 1, and RANK to 0:
-            
-            self.log.info(("Setting RANK to 0, and WORLD_SIZE to 1,\n"
-                           "b/c script was not started using launch.py()"
-                           ))
-            self.comm_info['MASTER_ADDR'] = '127.0.0.1'
-            self.comm_info['MASTER_PORT'] = '5678'
-            self.comm_info['RANK']  = 0
-            self.comm_info['LOCAL_RANK']  = 0
-            self.comm_info['WORLD_SIZE'] = 1
-                
     #------------------------------------
     # device_residence
     #-------------------
@@ -1825,10 +1835,6 @@ class BirdTrainer(object):
         Recover resources taken by collaborating
         processes. OK to call multiple times.
         '''
-        if self.device == self.cpu:
-            # Didn't use a GPU; nothing to clean up:
-            return
-        
         if self.init_process_group_called:
             dist.destroy_process_group()
 
@@ -2002,7 +2008,12 @@ if __name__ == '__main__':
                         default=None)
 
     args = parser.parse_args();
-    
+
+    # Build:
+    #   {'MASTER_ADDR' : args.MASTER_ADDR,
+    #    'MASTER_PORT' " args.MASTER_PORT,
+    #       ...
+    #
     comm_parm_names  = ['MASTER_ADDR', 'MASTER_PORT', 'RANK', 'LOCAL_RANK', 'WORLD_SIZE']
     comm_info = {parm_name : getattr(args, parm_name)
                     for parm_name

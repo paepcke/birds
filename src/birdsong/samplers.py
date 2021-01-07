@@ -63,29 +63,18 @@ class SKFSampler(StratifiedKFold):
         self.dataset = dataset
         self.seed = seed
         self.folds_served = 0
-        
-        if self.shuffle:
-            g = torch.Generator()
-            g.manual_seed(self.seed)
-            indices = torch.randperm(len(self.dataset), generator=g).tolist()
-        else:
-            indices = range(len(self.dataset))
+        self.epoch = 0
 
-        # Construct a list of class IDs corresponding
-        # to each of the samples in order. I.e. the list
-        # will be as long as there the number of indices
-        # computed above:
-        
-        self.my_classes = [dataset.sample_id_to_class[indx] for indx in indices]
+        self.fold_generator = self.generate_folds()
 
-        # Stratified k-fold needs only the labels 
-        # in an array; the corresponding samples each 
-        # have the same index as the one for each 
-        # y-split (https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.StratifiedKFold.html#sklearn.model_selection.StratifiedKFold)
+    #------------------------------------
+    # set_epoch 
+    #-------------------
+
+    def set_epoch(self, new_epoch):
         
-        self.fold_generator = self.split(np.zeros(len(dataset)), 
-                                         self.my_classes
-                                         )
+        self.epoch = new_epoch
+        self.fold_generator = self.generate_folds()
 
     #------------------------------------
     # __len__ 
@@ -127,6 +116,104 @@ class SKFSampler(StratifiedKFold):
             self.folds_served += 1
             raise StopIteration from e 
 
+
+    #------------------------------------
+    # generate_folds 
+    #-------------------
+    
+    def generate_folds(self):
+        '''
+        Create a new fold_generator. Called
+        by the top level training script via
+        calling set_epoch() on its dataloader 
+        
+        This method must be called at the start
+        of each  new epoch (except for epoch 0, which 
+        is taken care of in the constructor).
+        Do not call this method during the course
+        of an epoch, else samples may be reused
+        in unpredictable sequences.
+        
+        Creates a new split, after optionally 
+        shuffling the underlying dataset. No
+        shuffling occurs after that.
+        
+        The shuffle is predictable based on 
+        the seed and the epoch. All replicas
+        therefore shuffle the same way.
+        
+        Sets self.fold_generator.
+        '''
+        
+        # Keep track of how many folds
+        # we served. Just for logging, 
+        # performance analysis, and
+        # debugging:
+        
+        self.folds_served = 0
+        
+        if self.shuffle:
+            # deterministically shuffle based on epoch and seed
+            g = torch.Generator()
+            g.manual_seed(self.seed + self.epoch)
+            indices = torch.randperm(len(self.dataset), generator=g).tolist()
+        else:
+            indices = torch.tensor(range(len(self.dataset)))
+
+        if not self.drop_last:
+            # add extra samples to make it evenly divisible
+            indices += indices[:(self.total_size - len(indices))]
+        else:
+            # remove tail of data to make it evenly divisible.
+            indices = indices[:self.total_size]
+        assert len(indices) == self.total_size
+
+        
+        # Stratified k-fold needs only the sequence 
+        # of labels (i.e. target classes) for each of the samples. 
+        # (https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.StratifiedKFold.html#sklearn.model_selection.StratifiedKFold)
+        
+        # Obtain a subset of the indices into the dataset that
+        # this replica will work on. The 'rank' variable
+        # is a serial number assigned to the process running
+        # this replica of the training script. The master 
+        # process is 0, subsequent processes on the same or 
+        # other machines are 1,2,3,... 
+        #  
+        # Example:
+        #
+        #   Let indices      = [30, 0, 1, 17, 10, 6, 18, 2, 26, 22, 20, 24]
+        #          rank      = 0
+        #     num_replicas   = 3
+        #       total_size   = len(indices) = 12
+        #     num_replicas   = 3
+        #
+        #   Then the expression indices[rank:total_size:num_replicas]
+        #   produces for the three ranks (replicas of the training
+        #   script:
+        #
+        #     rank 0: [30, 17, 18, 22]
+        #     rank 1: [ 0, 10,  2, 20]
+        #     rank 2: [ 1,  6, 26, 24]
+        #
+        #   Thus each process, whether on the machine 
+        #   this process is running, or elsewhere, gets
+        #   a unique slice of the samples to train on.
+        #
+        #   For the special case of a single process on one machine being the sole
+        #   worked, the indices calculation yields the entire dataset worth of
+        #   samples for the process to work on:
+        #
+        #      [30, 0, 1, 17, 10, 6, 18, 2, 26, 22, 20, 24]
+
+        my_indices = indices[self.rank:self.total_size:self.num_replicas]
+        self.my_classes = [self.dataset.sample_id_to_class[int(sample_id)] 
+                              for sample_id 
+                               in my_indices]
+        
+        self.fold_generator = self.split(np.zeros(len(self.dataset)), 
+                                         self.my_classes
+                                         )
 
 # --------------------------- Class DistributedSKFSampler --------------
 
@@ -198,6 +285,13 @@ class DistributedSKFSampler(SKFSampler):
         
         self.epoch = 0
 
+        # There may be multiple processes (replicas)
+        # of the training script running. Of of them
+        # should be working on a subset of the dataset.
+        # The subsets should be disjoint, so the entire
+        # dataset is covered, but no sample is used
+        # by more than one replica.
+        
         # If the dataset length is evenly divisible by # of replicas, then there
         # is no need to drop any data, since the dataset will be split equally.
         
@@ -213,60 +307,8 @@ class DistributedSKFSampler(SKFSampler):
             self.num_samples = math.ceil(len(self.dataset) / self.num_replicas)
 
         self.total_size = self.num_samples * self.num_replicas
+
+        # Generate folds from the samples allocated
+        # to this process:
         
-        # Keep track of how many folds
-        # we served. Just for logging, 
-        # performance analysis, and
-        # debugging:
-        
-        self.folds_served = 0
-        
-        if self.shuffle:
-            # deterministically shuffle based on epoch and seed
-            g = torch.Generator()
-            g.manual_seed(self.seed + self.epoch)
-            indices = torch.randperm(len(self.dataset), generator=g).tolist()
-        else:
-            indices = torch.tensor(range(len(self.dataset)))
-
-        if not self.drop_last:
-            # add extra samples to make it evenly divisible
-            indices += indices[:(self.total_size - len(indices))]
-        else:
-            # remove tail of data to make it evenly divisible.
-            indices = indices[:self.total_size]
-        assert len(indices) == self.total_size
-
-        
-        # Stratified k-fold needs only the sequence 
-        # of labels (i.e. target classes) for each of the samples. 
-        # (https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.StratifiedKFold.html#sklearn.model_selection.StratifiedKFold)
-        
-        # Obtain a subset of the indices in dataset that
-        # this replica will work on:
-
-        self.my_indices = indices[self.rank:self.total_size:self.num_replicas]
-        self.my_classes = [dataset.sample_id_to_class[int(sample_id)] 
-                              for sample_id 
-                               in self.my_indices]
-        
-        self.fold_generator = self.split(np.zeros(len(dataset)), 
-                                         self.my_classes
-                                         )
-
-    #------------------------------------
-    # set_epoch 
-    #-------------------
-
-
-    def set_epoch(self, epoch: int):
-        '''
-        Sets the epoch for this sampler. When shuffle=True`, 
-        updating epoch before starting each fold ensures all replicas
-        use a different random ordering for each epoch. Otherwise, 
-        the next iteration of this sampler will yield the same ordering.
-
-        @param epoch: number of upcoming epoch
-        @type epoch: int
-        '''
-        self.epoch = epoch
+        self.fold_generator = self.generate_folds()

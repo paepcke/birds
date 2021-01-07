@@ -90,6 +90,18 @@ class TestBirdsTrainingParallel(unittest.TestCase):
         # Our own copy of the configuration:
         self.config = DottableConfigParser(self.config_file)
 
+        # The stand-alone, single process distribution
+        # parameter defaults:
+        
+        self.comm_info = {
+            'MASTER_ADDR' :'127.0.0.1',
+            'MASTER_PORT' : 4040,
+            'RANK' : 0,
+            'LOCAL_RANK'  : 0,
+            'WORLD_SIZE'  : 1
+            }
+
+
     #------------------------------------
     # tearDown 
     #-------------------
@@ -105,7 +117,9 @@ class TestBirdsTrainingParallel(unittest.TestCase):
     def test_training_init(self):
 
         self.set_distribution_env_vars()
-        trainer = BirdTrainer(self.config)
+        trainer = BirdTrainer(self.config,
+                              comm_info=self.comm_info
+                              )
         try:
             self.assertEqual(trainer.get_lr(trainer.scheduler),
                              float(self.config.Training.lr)
@@ -120,7 +134,9 @@ class TestBirdsTrainingParallel(unittest.TestCase):
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_train(self):
         self.set_distribution_env_vars()
-        trainer = BirdTrainer(self.config)
+        trainer = BirdTrainer(self.config,
+                              comm_info=self.comm_info
+                              )
         try:
             device = trainer.device
             print(f"Running on {device}")
@@ -217,7 +233,10 @@ class TestBirdsTrainingParallel(unittest.TestCase):
         four_truths = torch.tensor([1,2,3,4])
     
         self.set_distribution_env_vars()
-        trainer = BirdTrainer(self.config)
+        trainer = BirdTrainer(self.config,
+                              comm_info=self.comm_info
+                              )
+            
         try:
             tally1 = trainer.tally_result(
                         0, # Split number
@@ -269,7 +288,8 @@ class TestBirdsTrainingParallel(unittest.TestCase):
             trainer.cleanup()
 
         try:
-            trainer1 = BirdTrainer(self.config, 
+            trainer1 = BirdTrainer(self.config,
+                                   comm_info=self.comm_info,
                                    checkpoint=save_file)
             self.assertEqual(trainer1.epoch, 10)
             

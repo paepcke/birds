@@ -65,7 +65,22 @@ class CrossValidatingDataLoader(DataLoader):
               # next split
               
     The validation_samples() method is a generator that provides the content of 
-    the just exhausted split's test samples.
+    the just exhausted split's validation samples.
+    
+    NOTE: when re-setting an instance of this class
+          for a new epoch, client must call set_epoch()
+          with the new epoch number to ensure proper
+          shuffling randomness. Such a reset occurs implicitly
+          with the often used idiom:
+               
+                for i,res = enumerate(dataloader)
+        
+          The enumerate() starts the same dataloader instance
+          from the beginning. 
+          
+          If shuffle is False, set_epoch() needs not be called.
+          But doing so does no harm.
+          
     '''
 
     #------------------------------------
@@ -85,10 +100,57 @@ class CrossValidatingDataLoader(DataLoader):
                  sampler=None
                  ):
         '''
-        This instance will  
+        This instance will use cross validation
+        as it serves out samples. The client determines
+        the number of folds to use. Example for 
+        num_folds of 2:
         
-         
+         Split1:
+           TrainFold1    TrainFold2   ValidationFold  
+            sample1      sample2        sample3
+            sample4      sample5        sample6
+
+         Split2:
+           TrainFold1    TrainFold2   ValidationFold  
+            sample3      sample4        sample2
+            sample1      sample6        sample5
+            
+        This dataloader will create two sequences,
+        like this:
         
+           For use with training:   [sample1, sample4, sample2, sample5]
+           For use with validation: [sample4, sample6]
+             after the training 
+             sequence is used up
+
+        Assuming batch_size of two, this dataloader's
+        client will receive one row from each 
+        call to next():
+        
+            [[sample1, sample4],
+             [sample2, sample5],
+             [None   , None]
+             ]
+             
+        The None tuple indicates that this split has
+        been exhausted, and it is time to validate.
+        
+        The client then calls validation_samples() on
+        this dataloader instance to receive one validation
+        sample at a time. The client will predict the
+        (target) class for each of these validation samples,
+        and tally successes and failures. The client should
+        then compute the compute validation accuracy from
+        that series of successes and failures. 
+
+        Calling next() again will create a new split,
+        and again feed out the samples in the respective
+        new folds.
+        
+        The feed terminates after as many splits as there
+        are folds. Any following call to next() will raise
+        a StopIteration exception.
+
         @param dataset: underlying map-store that 
                 supplies(img_torch, label) tuples
         @type dataset: BirdDataset
@@ -259,6 +321,8 @@ class CrossValidatingDataLoader(DataLoader):
             # split:
             self.curr_test_sample_ids = split_test_ids
             
+            # Create one batch:
+            
             num_train_sample_ids = len(split_train_ids)
             num_batches = num_train_sample_ids // self.batch_size
             num_remainder_samples = num_train_sample_ids % self.batch_size
@@ -375,6 +439,23 @@ class CrossValidatingDataLoader(DataLoader):
         '''
         return self.dataset.file_from_sample_id(sample_id)
 
+    #------------------------------------
+    # set_epoch 
+    #-------------------
+
+    def set_epoch(self, new_epoch):
+        '''
+        Must be called by client every time
+        a new epoch starts. The epoch number
+        is used by the sampler to shuffle
+        the dataset before beginning to draw
+        samples.
+
+        @param new_epoch: the epoch under which the dataloader
+            is (re)started
+        @type new_epoch: int
+        '''
+        self.sampler.set_epoch(new_epoch)
 
 # -------------------- Multiprocessing Dataloader -----------
 
@@ -395,6 +476,7 @@ class MultiprocessingDataLoader(CrossValidatingDataLoader):
                  prefetch_factor=2,
                  drop_last=False,
                  num_folds=10,
+                 seed=42,
                  shuffle=True,
                  **kwargs
                  ):
@@ -402,7 +484,7 @@ class MultiprocessingDataLoader(CrossValidatingDataLoader):
         self.sampler = DistributedSKFSampler(
                 dataset,
                 num_folds=num_folds,
-                seed=42,
+                seed=seed,
                 shuffle=shuffle,
                 drop_last=drop_last
                 )
