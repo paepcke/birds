@@ -21,22 +21,25 @@ from birdsong.utils.dottable_config import DottableConfigParser
 #import GPUtil
 # For remote debugging via pydev and Eclipse:
 # #*****************
-# import socket, sys, os
-# hostname = socket.gethostname()
-# if hostname in ('quintus', 'quatro'):
-#     # Point to where the pydev server 
-#     # software is installed on the remote
-#     # machine:
-#     sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
-# 
-#     import pydevd
-#     global pydevd
-#     # Uncomment the following if you
-#     # want to break right on entry of
-#     # this module. But you can instead just
-#     # set normal Eclipse breakpoints:
-#     pydevd.settrace('localhost', port=5678)
-#***************** 
+import socket, sys, os
+hostname = socket.gethostname()
+#***********
+print(f"Hostname: {hostname}")
+#***********
+if hostname in ('quintus', 'quatro'):
+    # Point to where the pydev server 
+    # software is installed on the remote
+    # machine:
+    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
+
+    import pydevd
+    global pydevd
+    # Uncomment the following if you
+    # want to break right on entry of
+    # this module. But you can instead just
+    # set normal Eclipse breakpoints:
+    pydevd.settrace('localhost', port=4040)
+# **************** 
 r"""
 Based on torch.distributed.launch, with additions by Andreas Paepcke
 (https://github.com/pytorch/pytorch/blob/master/torch/distributed/launch.py)

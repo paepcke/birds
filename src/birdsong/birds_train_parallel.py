@@ -18,8 +18,11 @@ sys.path.insert(0,packet_root)
 # For remote debugging via pydev and Eclipse:
 #*****************
 # 
-# import socket
-# hostname = socket.gethostname()
+import socket
+hostname = socket.gethostname()
+# #***********
+# print(f"Hostname: {hostname}")
+# #***********
 # if hostname in ('quintus', 'quatro'):
 #     # Point to where the pydev server 
 #     # software is installed on the remote
@@ -32,9 +35,11 @@ sys.path.insert(0,packet_root)
 #     # want to break right on entry of
 #     # this module. But you can instead just
 #     # set normal Eclipse breakpoints:
-#     
-#     pydevd.settrace('localhost', port=5678)
-#***************** 
+#     #*************
+#     print("About to call settrace()")
+#     #*************
+#     pydevd.settrace('localhost', port=4040)
+# **************** 
 
 from _collections import OrderedDict
 import argparse

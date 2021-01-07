@@ -100,7 +100,11 @@ class SKFSampler(StratifiedKFold):
     
     def get_split(self):
         for _i, train_and_validate_samples in enumerate(
-            self.split(np.zeros(len(self.dataset)), 
+            # The zeros dim won't be used, but must
+            # match len(self.my_classes). That length
+            # may be less than the length of the dataset
+            # when processing the last split:
+            self.split(np.zeros(len(self.my_classes)), 
                        self.my_classes)
             ):
             yield train_and_validate_samples
