@@ -33,7 +33,8 @@ class SKFSampler(StratifiedKFold):
                  dataset,
                  num_folds=10,
                  seed=42,
-                 shuffle=False
+                 shuffle=False,
+                 drop_last=True
                  ):
         '''
         Arg seed, if set to an
@@ -56,6 +57,7 @@ class SKFSampler(StratifiedKFold):
             the outset
         @type shuffle: bool
         '''
+        self.drop_last = drop_last
         super().__init__(n_splits=num_folds,
                  random_state=seed if shuffle else None, 
                  shuffle=shuffle)
@@ -206,10 +208,15 @@ class SKFSampler(StratifiedKFold):
         #
         #      [30, 0, 1, 17, 10, 6, 18, 2, 26, 22, 20, 24]
 
-        my_indices = indices[self.rank:self.total_size:self.num_replicas]
+        # Assign my_indices to an instance var,
+        # even though in this file the value is only
+        # used here. Unittests probe this variable from
+        # the outside:
+         
+        self.my_indices = indices[self.rank:self.total_size:self.num_replicas]
         self.my_classes = [self.dataset.sample_id_to_class[int(sample_id)] 
                               for sample_id 
-                               in my_indices]
+                               in self.my_indices]
         
         self.fold_generator = self.split(np.zeros(len(self.dataset)), 
                                          self.my_classes

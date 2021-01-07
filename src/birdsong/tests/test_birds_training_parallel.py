@@ -17,8 +17,8 @@ from birdsong.birds_train_parallel import BirdTrainer
 from birdsong.utils.dottable_config import DottableConfigParser
 from birdsong.utils.learning_phase import LearningPhase
 
-TEST_ALL = True
-#TEST_ALL = False
+#*****TEST_ALL = True
+TEST_ALL = False
 
 class TestBirdsTrainingParallel(unittest.TestCase):
 
@@ -218,7 +218,7 @@ class TestBirdsTrainingParallel(unittest.TestCase):
     # test_model_saving 
     #-------------------
     
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_model_saving(self):
 
         four_results = torch.tensor(               # Label

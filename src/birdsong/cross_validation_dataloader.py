@@ -173,11 +173,16 @@ class CrossValidatingDataLoader(DataLoader):
             is being instantiated, and that class's __init__()
             calls super(). Leave out for singleprocess/single-GPU
             use
+        @param drop_last: whether to skip the last split if
+            the folds would not have equal numbers of samples
+        @type drop_last: bool
         @type sampler: {None | DistributedSKFSampler}
         '''
         
         if len(dataset) == 0:
             raise ValueError("Dataset is empty, nothing to load")
+
+        self.drop_last = drop_last
         
         # Sampler will only be set if a subclass instance
         # of MultiprocessingDataLoader is being initialized.
@@ -187,6 +192,7 @@ class CrossValidatingDataLoader(DataLoader):
             self.sampler = SKFSampler(dataset, 
                                       num_folds=num_folds, 
                                       shuffle=shuffle,
+                                      drop_last=drop_last,
                                       seed=seed)
         else:
             self.sampler = sampler

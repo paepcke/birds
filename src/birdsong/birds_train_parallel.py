@@ -2014,11 +2014,13 @@ if __name__ == '__main__':
     #    'MASTER_PORT' " args.MASTER_PORT,
     #       ...
     #
-    comm_parm_names  = ['MASTER_ADDR', 'MASTER_PORT', 'RANK', 'LOCAL_RANK', 'WORLD_SIZE']
-    comm_info = {parm_name : getattr(args, parm_name)
-                    for parm_name
-                     in comm_parm_names
-                    }
+
+    comm_info = {}
+    comm_info['MASTER_ADDR'] = args.MASTER_ADDR)
+    comm_info['MASTER_PORT'] = int(args.MASTER_PORT)
+    comm_info['RANK']        = int(args.RANK)
+    comm_info['LOCAL_RANK']  = int(args.LOCAL_RANK)
+    comm_info['WORLD_SIZE']  = int(args.WORLD_SIZE)
 
     BirdTrainer(
             config_info=args.config,
