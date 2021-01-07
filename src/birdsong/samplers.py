@@ -66,8 +66,60 @@ class SKFSampler(StratifiedKFold):
         self.seed = seed
         self.folds_served = 0
         self.epoch = 0
+        
+        # Since this is not the subclass DistributedSKFSampler,
+        # we know that only one process is working. 
+        # Initialize respective vars:
+        
+        self.num_replicas = 1
+        self.rank = 0
+        
+        # Initialize self.total_size:
+        self.compute_effective_total_size()
 
         self.fold_generator = self.generate_folds()
+
+
+    #------------------------------------
+    # compute_effective_total_size 
+    #-------------------
+    
+    def compute_effective_total_size(self):
+
+        '''
+        There may be multiple processes (replicas)
+        of the training script running. Each of them
+        should be working on a subset of the dataset.
+        The subsets should be disjoint, so the entire
+        dataset is covered, but no sample is used
+        by more than one replica.
+        
+        If the dataset length is evenly divisible by # of 
+        replicas, then there is no need to drop any data, 
+        since the dataset will be split equally. Otherwise,
+        depending on whether drop_last was requested, 
+        an adjustment is made to exclude the pieces of data
+        that do not fill a fold. 
+        
+        That adjustement in turn will make the effective
+        total number of samples across all machines and processes
+        slightly different from the number of samples in the
+        dataset. Compute that effective size, and initialize
+        self.total_size.
+        '''
+        
+        if self.drop_last and len(self.dataset) % self.num_replicas != 0:
+            
+            # Split to nearest available length that is evenly divisible.
+            # This is to ensure each rank receives the same amount of data when
+            # using this Sampler.
+            self.num_samples = math.ceil(
+                (len(self.dataset) - self.num_replicas) / self.num_replicas
+            )
+        else:
+            self.num_samples = math.ceil(len(self.dataset) / self.num_replicas)
+
+        self.total_size = self.num_samples * self.num_replicas
 
     #------------------------------------
     # set_epoch 
@@ -277,45 +329,14 @@ class DistributedSKFSampler(SKFSampler):
                                  random_state=seed if shuffle else None, 
                                  shuffle=shuffle)
         
+        # Get the true number of processes
+        # expected (eventually) to work on the
+        # dataset:
         self.num_replicas = dist.get_world_size()
+        
+        # This processe's serial number:
         self.rank = dist.get_rank()
         self.dataset = dataset
         self.shuffle = shuffle
         self.seed = seed
         self.drop_last = drop_last
-
-        # Epoch will be changed by client via a 
-        # call to set_epoch() before each epoch. 
-        # The number is then used when shuffling
-        # to ensure that all replicas will shuffle
-        # the same way in their respective epochs:
-        
-        self.epoch = 0
-
-        # There may be multiple processes (replicas)
-        # of the training script running. Of of them
-        # should be working on a subset of the dataset.
-        # The subsets should be disjoint, so the entire
-        # dataset is covered, but no sample is used
-        # by more than one replica.
-        
-        # If the dataset length is evenly divisible by # of replicas, then there
-        # is no need to drop any data, since the dataset will be split equally.
-        
-        if self.drop_last and len(self.dataset) % self.num_replicas != 0:
-            
-            # Split to nearest available length that is evenly divisible.
-            # This is to ensure each rank receives the same amount of data when
-            # using this Sampler.
-            self.num_samples = math.ceil(
-                (len(self.dataset) - self.num_replicas) / self.num_replicas
-            )
-        else:
-            self.num_samples = math.ceil(len(self.dataset) / self.num_replicas)
-
-        self.total_size = self.num_samples * self.num_replicas
-
-        # Generate folds from the samples allocated
-        # to this process:
-        
-        self.fold_generator = self.generate_folds()

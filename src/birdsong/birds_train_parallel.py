@@ -2016,7 +2016,7 @@ if __name__ == '__main__':
     #
 
     comm_info = {}
-    comm_info['MASTER_ADDR'] = args.MASTER_ADDR)
+    comm_info['MASTER_ADDR'] = args.MASTER_ADDR
     comm_info['MASTER_PORT'] = int(args.MASTER_PORT)
     comm_info['RANK']        = int(args.RANK)
     comm_info['LOCAL_RANK']  = int(args.LOCAL_RANK)
