@@ -72,7 +72,12 @@ class SKFSampler(StratifiedKFold):
         # Initialize respective vars:
         
         self.num_replicas = 1
+        
+        # The following  var may be updated
+        # by subclasses:
         self.rank = 0
+        
+        self.folds_served = 0
         
         # Initialize self.total_size:
         self.compute_effective_total_size()

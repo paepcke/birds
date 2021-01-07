@@ -437,7 +437,7 @@ class BirdTrainer(object):
                            "b/c script was not started using launch.py()"
                            ))
             self.comm_info['MASTER_ADDR'] = '127.0.0.1'
-            self.comm_info['MASTER_PORT'] = str(self.comm_info['MASTER_PORT'])
+            self.comm_info['MASTER_PORT'] = int(self.comm_info['MASTER_PORT'])
             self.comm_info['RANK']  = 0
             self.comm_info['WORLD_SIZE'] = 1
             
@@ -447,7 +447,7 @@ class BirdTrainer(object):
         # to a GPUtil.GPU instance, so we can check
         # on the GPU status along the way:
         
-        local_rank = self.comm_info['LOCAL_RANK'] is not None 
+        local_rank = self.comm_info['LOCAL_RANK'] 
         if local_rank is not None:
             self.gpu_device = self.enable_GPU(local_rank)
 
