@@ -352,7 +352,7 @@ class TrainScriptLauncher:
             # and call individual methods:
             return
         
-        self.hostname = socket.gethostname()
+        self.hostname = socket.getfqdn()
         # Convenience: directory of this
         # script, and project root directory
         curr_dir = Path(__file__).parent
@@ -536,9 +536,8 @@ class TrainScriptLauncher:
             config_file_name = self.script_args['config']
             cmd.append(config_file_name)
             
-            #************
-            print(f"****** Launch: the cmd is {cmd}")
-            #************
+            self.log.debug(f"****** Launch: the cmd is {cmd}")
+            
                 
             # Copy stdin, and give the copy to the subprocess.
             # This enables the subprocess to ask user whether
