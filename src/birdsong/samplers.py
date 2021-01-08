@@ -76,7 +76,6 @@ class SKFSampler(StratifiedKFold):
         # The following  var may be updated
         # by subclasses:
         self.rank = 0
-        
         self.folds_served = 0
         
         # Initialize self.total_size:
@@ -329,11 +328,18 @@ class DistributedSKFSampler(SKFSampler):
         if not dist.is_initialized():
             raise RuntimeError("Must call dist.init_process_group() before instantiating distrib sampler")
 
-        StratifiedKFold.__init__(self,
-                                 n_splits=num_folds,
-                                 random_state=seed if shuffle else None, 
-                                 shuffle=shuffle)
-        
+#         StratifiedKFold.__init__(self,
+#                                  n_splits=num_folds,
+#                                  random_state=seed if shuffle else None, 
+#                                  shuffle=shuffle)
+
+        super().__init__(dataset,
+                         num_folds=num_folds,
+                         seed=42,
+                         shuffle=False,
+                         drop_last=True
+                         )
+                                 
         # Get the true number of processes
         # expected (eventually) to work on the
         # dataset:
