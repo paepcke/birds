@@ -345,8 +345,13 @@ class TrainScriptLauncher:
     # Use distributed torch default port:
     COMM_PORT = '5678'
     
-    def __init__(self):
+    def __init__(self, unittesting=False):
 
+        if unittesting:
+            # Let unittests create an instance
+            # and call individual methods:
+            return
+        
         self.hostname = socket.gethostname()
         # Convenience: directory of this
         # script, and project root directory
@@ -404,12 +409,7 @@ class TrainScriptLauncher:
         except KeyError:
             raise RuntimeError(f"Could not find entry for 'world_map' in config file {config_file}")
         
-        try:
-            with open(self.world_map_path, 'r') as world_map_fd:
-                self.world_map = json5.load(world_map_fd)
-        except JSONError as e:
-            raise JSONError(f"World map file at {self.world_map_path} contains bad JSON") from e
-                    
+        self.world_map = self.read_world_map(self.world_map_path)                    
         # Ensure that this machine has an
         # entry in the world_map:
         try:
@@ -580,6 +580,101 @@ class TrainScriptLauncher:
                        f"stdout: {the_stdout} \n")
                 print(msg)
             
+    #------------------------------------
+    # read_world_map 
+    #-------------------
+    
+    def read_world_map(self, path):
+        '''
+        Read the JSON5 world map file, and 
+        return a corresponding dict. JSON5
+        allows something like:
+        
+        /*
+            This is a block comment.
+            Notice the lacking quote
+            chars around the keys below.
+            The are optional in JSON5
+            
+        */
+        
+        {quintus.stanford.edu : {
+            "master" : Yes
+            "gpus" : 2
+         },
+        
+         quatro.stanford.edu  : {
+             "gpus" : 2,
+             "devices" : [1,2]
+         }
+        }
+        
+        BUT: JSON5 gets angry at dots in the 
+             keys. 
+        So we first read the file, and try to find 
+        the machine names. We temporarily replace
+        them with an acceptable marker, and then 
+        convert back.
+                
+        @param path: path to world map file
+        @type path: string
+        '''
+        dot_substitute = '___'
+        
+        try:
+            # Read all the world map file lines:
+            with open(path, 'r') as world_map_fd:
+                tmp_world_map = world_map_fd.readlines()
+        except IOError as e:
+            raise IOError(f"World map file at {path} not found") from e
+
+        # Replace occurrences of '.' with dot_substitute:
+        new_text = []
+        for line in tmp_world_map:
+            new_text.append(line.replace('.', dot_substitute))
+        
+        # ... and make one string from all the lines:
+        json_str = '\n'.join(new_text)
+
+        try:
+            # Hopefully, JSON5 will eat it now:
+            world_map_almost = json5.loads(json_str)
+        except JSONError as e:
+            raise JSONError(f"World map file at {path} contains bad JSON") from e
+        
+        # Need to fix all the dot substitutions. 
+        # At this point the data structure is
+        #    { <machine_name> : {spec_attr1 : val1,
+        #                        spec_attr2 : val2,
+        #                       }
+        #    }
+
+        # Fix the machine names first:
+        mach_names_fixed = [machine_name.replace(dot_substitute, '.')
+                              for machine_name in world_map_almost.keys()]
+        
+        machine_specs_fixed = []
+        
+        # Now dig into each of the nested machine spec
+        # dicts, and fix attrs and values there:
+        for spec in world_map_almost.values():
+            # Spec is a dict nested inside the outer one:
+            spec_fixed = {key.replace(dot_substitute, '.') :
+                          val.replace(dot_substitute, '.')
+                            if isinstance(val, str) else val
+                          for key,val in spec.items()
+                          }
+            machine_specs_fixed.append(spec_fixed)
+        
+        # Put it all together:
+        world_map = {machine_name : spec_dict
+                     for machine_name, spec_dict
+                      in zip(mach_names_fixed, machine_specs_fixed)
+                     }
+        
+        return world_map
+    
+
     #------------------------------------
     # build_compute_landcape
     #-------------------
