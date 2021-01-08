@@ -219,8 +219,11 @@ class SKFSampler(StratifiedKFold):
             indices = torch.tensor(range(len(self.dataset)))
 
         if not self.drop_last:
-            # add extra samples to make it evenly divisible
-            indices += indices[:(self.total_size - len(indices))]
+            # Fill the too-short tensor of indices
+            # with indices from the start of the indices.
+            indices = torch.cat((indices, 
+                                 indices[:(self.total_size - len(indices))]),
+                                dim=0)
         else:
             # remove tail of data to make it evenly divisible.
             indices = indices[:self.total_size]

@@ -17,8 +17,8 @@ from birdsong.birds_train_parallel import BirdTrainer
 from birdsong.utils.dottable_config import DottableConfigParser
 from birdsong.utils.learning_phase import LearningPhase
 
-#*****TEST_ALL = True
-TEST_ALL = False
+TEST_ALL = True
+#TEST_ALL = False
 
 class TestBirdsTrainingParallel(unittest.TestCase):
 

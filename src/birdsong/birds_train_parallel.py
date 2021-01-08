@@ -93,10 +93,6 @@ class BirdTrainer(object):
     # and quitting. Used to handle cnt-C graciously:
     STOP = False
     
-    # Device number for CPU (as opposed to GPUs, which 
-    # are numbered as positive ints:
-    CPU_DEV = -1
-
     SECS_IN_DAY = 24*60*60
     
     # Number of differences between accuracies from 
@@ -241,7 +237,7 @@ class BirdTrainer(object):
         # dimensioned tensors:
 
         # Make an appropriate (single/multiprocessing) dataloader:
-        if self.device == self.CPU_DEV:
+        if self.device == torch.device('cpu'):
 
             # CPU bound, single machine:
             
@@ -496,7 +492,7 @@ class BirdTrainer(object):
         '''
         Returns the device_residence id (an int) of an 
         available GPU. If none is exists on this 
-        machine, returns self.CPU_DEV (-1).
+        machine, returns torch.device['cpu']
         
         Initializes self.gpu_obj, which is a CUDA
         GPU instance. 
@@ -509,7 +505,7 @@ class BirdTrainer(object):
         @param raise_gpu_unavailable: whether to raise error
             when GPUs exist on this machine, but none are available.
         @type raise_gpu_unavailable: bool
-        @return: a GPU device_residence ID, or self.CPU_DEV
+        @return: a GPU device_residence ID, or torch.device['cpu']
         @rtype: int
         @raise NoGPUAvailable: if exception requested via 
             raise_gpu_unavailable, and no GPU is available.
@@ -521,11 +517,11 @@ class BirdTrainer(object):
         # Could be (GPU available):
         #   device_residence(type='cuda', index=0)
         # or (No GPU available):
-        #   device_residence(type=self.CPU_DEV)
+        #   device_residence(type=torch.device['cpu'])
 
         gpu_objs = GPUtil.getGPUs()
         if len(gpu_objs) == 0:
-            return self.CPU_DEV
+            return torch.device['cpu']
 
         # GPUs are installed. Did caller ask for a 
         # specific GPU?
@@ -560,7 +556,7 @@ class BirdTrainer(object):
                 raise NoGPUAvailable("Even though GPUs are installed, all are already in use.")
             else:
                 # Else quietly revert to CPU
-                return self.CPU_DEV
+                return torch.device['cpu']
         
         # Get the GPU object that has the found
         # deviceID:
