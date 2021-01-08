@@ -496,7 +496,7 @@ class TrainScriptLauncher:
         #     {<machine_name> : 
 
         # This machine's range of ranks:
-        rank_range = self.gpu_landscape['self.hostname']['rank_range']
+        rank_range = self.gpu_landscape[self.hostname]['rank_range']
 
         local_rank = 0
         for rank in rank_range: 
@@ -578,8 +578,8 @@ class TrainScriptLauncher:
         # Add the 'secret' args that tell the training
         # script all the communication parameters:
         
-        cmd.extend([f"--MASTER_ADDR={script_args['MASTER_ADDR']}"
-                    f"--MASTER_PORT={script_args['MASTER_PORT']}",
+        cmd.extend([f"--MASTER_ADDR={self.MASTER_ADDR}"
+                    f"--MASTER_PORT={self.MASTER_PORT}",
                     #****f"--RANK={self.my_rank}",
                     f"--RANK={rank}",
                     f"--LOCAL_RANK={local_rank}",
