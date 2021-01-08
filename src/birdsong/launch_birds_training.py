@@ -737,6 +737,7 @@ class TrainScriptLauncher:
             machine_info = self.world_map[machine_name]
             
             machine_gpus = machine_info['gpus'] 
+            gpu_landscape[machine_name] = {}
             gpu_landscape[machine_name]['num_gpus'] = machine_gpus
             
             # List of GPU numbers to use is optional
@@ -747,7 +748,7 @@ class TrainScriptLauncher:
                 # Use all GPUs on that machine:
                 machine_gpus_to_use = list(range(machine_gpus))
 
-            self.gpu_landscape[machine_name]['gpu_device_ids'] = machine_gpus_to_use
+            gpu_landscape[machine_name]['gpu_device_ids'] = machine_gpus_to_use
             
             # Accept all kinds of affirmatives as values:
             # for identification of the master node entry:
@@ -767,20 +768,23 @@ class TrainScriptLauncher:
         # assign rank ranges to each. Must start with 
         # the master node, b/c it must start with rank 0:
 
-        self.gpu_landscape[self.master_hostname]['rank_range'] = \
-            list(range(self.gpu_landscape[self.master_hostname]['num_gpuse']))
+        gpu_landscape[self.master_hostname]['rank_range'] = \
+            list(range(gpu_landscape[self.master_hostname]['num_gpuse']))
         
         # Start assigning more ranks after 
         # the GPUs of the master:
-        running_rank = self.gpu_landscape[self.master_hostname]['num_gpuse']
-        for machine_name in self.gpu_landscape.keys():
+        running_rank = gpu_landscape[self.master_hostname]['num_gpuse']
+        for machine_name in gpu_landscape.keys():
             if machine_name == self.master_hostname:
                 # We already did the master node
                 continue 
-            num_gpus = self.gpu_landscape[machine_name]['num_gpus']
-            self.gpu_landscape[machine_name]['rank_range'] = \
+            num_gpus = gpu_landscape[machine_name]['num_gpus']
+            gpu_landscape[machine_name]['rank_range'] = \
                 list(range(running_rank, running_rank + num_gpus))
             running_rank += num_gpus
+            
+        self.gpu_landscape = gpu_landscape
+        return gpu_landscape
 
 
 # --------------------- Main ---------------
