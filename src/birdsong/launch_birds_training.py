@@ -758,7 +758,7 @@ class TrainScriptLauncher:
                 
             if is_master_node:
                 self.master_hostname = machine_name
-                if machine_name == self.my_hostname:
+                if machine_name == self.hostname:
                     self.am_master_node = True
                 self.MASTER_ADDR = socket.gethostbyname(machine_name)
             
