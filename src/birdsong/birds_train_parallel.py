@@ -988,6 +988,7 @@ class BirdTrainer(object):
 
         finally:
             if self.device == self.cuda:
+                self.model.to('cpu')
                 self.ending_GPU_memory = cuda.memory_allocated(self.device)
                 if self.ending_GPU_memory >= self.initial_GPU_memory:
                     left_on_gpu = self.ending_GPU_memory - self.initial_GPU_memory
@@ -1831,6 +1832,7 @@ class BirdTrainer(object):
         Recover resources taken by collaborating
         processes. OK to call multiple times.
         '''
+        self.clear_gpu()
         if self.init_process_group_called:
             dist.destroy_process_group()
 

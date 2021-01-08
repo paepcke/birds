@@ -218,7 +218,7 @@ class TestBirdsTrainingParallel(unittest.TestCase):
     # test_model_saving 
     #-------------------
     
-    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_model_saving(self):
 
         four_results = torch.tensor(               # Label
