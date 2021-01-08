@@ -414,9 +414,9 @@ class TrainScriptLauncher:
         # entry in the world_map:
         try:
             # Get this machine's info (sub)dict:
-            _my_world_info = self.world_map[self.my_hostname]
+            _my_world_info = self.world_map[self.hostname]
         except KeyError:
-            raise ConfigError(f"World map file does not contain entry for this machine ({self.my_hostname})")
+            raise ConfigError(f"World map file does not contain entry for this machine ({self.hostname})")
         
         self.compute_landscape = {}
         
