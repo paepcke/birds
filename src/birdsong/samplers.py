@@ -277,6 +277,7 @@ class SKFSampler(StratifiedKFold):
         self.fold_generator = self.split(np.zeros(len(self.dataset)), 
                                          self.my_classes
                                          )
+        return self.fold_generator
 
 # --------------------------- Class DistributedSKFSampler --------------
 

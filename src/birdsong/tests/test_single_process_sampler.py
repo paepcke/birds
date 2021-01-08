@@ -109,7 +109,7 @@ class TestSingleProcessSampler(unittest.TestCase):
     # test_stratified_kfold_xval_with_shuffle
     #-------------------
 
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_stratified_kfold_xval_with_shuffle(self):
         
         # First without shuffle:
