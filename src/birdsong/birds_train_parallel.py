@@ -1833,8 +1833,15 @@ class BirdTrainer(object):
         processes. OK to call multiple times.
         '''
         self.clear_gpu()
-        if self.init_process_group_called:
-            dist.destroy_process_group()
+        if self.init_process_group_called or dist.is_initialized():
+            try:
+                dist.destroy_process_group()
+            except RuntimeError as e:
+                if str(e) == "Invalid process group specified":
+                    # Weird error from distributed_c10d.py
+                    # in destroy_process_group() method.
+                    # We did our best to clean up:
+                    pass
 
     #------------------------------------
     # human_readable 
