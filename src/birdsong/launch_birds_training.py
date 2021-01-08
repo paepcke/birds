@@ -14,6 +14,7 @@ import subprocess
 import sys
 
 import json5
+from logging_service.logging_service import LoggingService
 
 from birdsong.utils.dottable_config import DottableConfigParser
 
@@ -21,7 +22,6 @@ from birdsong.utils.dottable_config import DottableConfigParser
 #import GPUtil
 # For remote debugging via pydev and Eclipse:
 # #*****************
-
 # hostname = socket.gethostname()
 # if hostname in ('quintus', 'quatro'):
 #     # Point to where the pydev server 
@@ -206,6 +206,14 @@ TESTING = True
 # ----------------------------- BirdsTrainingArgumentsParser class -----------
 
 class BirdsTrainingArgumentsParser(ArgumentParser):
+    '''
+    Helper class for command line argument
+    parsing. Main method is parse_arg(), which 
+    overrides the parent method. Knows how to 
+    separate command line args destined for this
+    launch script from the subsequent ones intended
+    for the training scripts being launched. 
+    '''
 
     # Format helper class:
     class BlankLinesHelpFormatter (argparse.HelpFormatter):
@@ -345,13 +353,17 @@ class TrainScriptLauncher:
     # Use distributed torch default port:
     COMM_PORT = '5678'
     
-    def __init__(self, unittesting=False):
+    def __init__(self,
+                 logfile=None, 
+                 unittesting=False):
 
         self.hostname = socket.getfqdn()
         if unittesting:
             # Let unittests create an instance
             # and call individual methods:
             return
+
+        self.log = LoggingService(logfile)
         
         # Convenience: directory of this
         # script, and project root directory
