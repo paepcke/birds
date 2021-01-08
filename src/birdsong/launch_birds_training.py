@@ -347,12 +347,12 @@ class TrainScriptLauncher:
     
     def __init__(self, unittesting=False):
 
+        self.hostname = socket.getfqdn()
         if unittesting:
             # Let unittests create an instance
             # and call individual methods:
             return
         
-        self.hostname = socket.getfqdn()
         # Convenience: directory of this
         # script, and project root directory
         curr_dir = Path(__file__).parent
@@ -501,48 +501,19 @@ class TrainScriptLauncher:
         local_rank = 0
         for rank in rank_range: 
 
-            # Spawn one training script.
-            
-            # Build the shell command line,
-            # starting with 'python -u':
-            cmd = [sys.executable, "-u"]
-    
-            cmd.append(self.launch_args['training_script'])
-
-            # Add the args for the script that were
-            # in the command line:
-            for arg_name in self.script_args.keys():
-                script_arg_val = self.script_args[arg_name]
-                if script_arg_val is None or arg_name == 'config':
-                    # Skip over non-specified CLI args:
-                    continue
-                cmd.append(f"--{arg_name}={self.script_args[arg_name]}")
-
-            # Add the 'secret' args that tell the training
-            # script all the communication parameters:
-            
-            cmd.extend([f"--MASTER_ADDR={self.MASTER_ADDR}",
-                        f"--MASTER_PORT={self.MASTER_PORT}",
-                        #****f"--RANK={self.my_rank}",
-                        f"--RANK={rank}",
-                        f"--LOCAL_RANK={local_rank}",
-                        f"--WORLD_SIZE={self.WORLD_SIZE}"
-                        ])
-            
-            # Finally, the obligatory non-option arg
-            # to the training script: the configuration
-            # file:
-            
-            config_file_name = self.script_args['config']
-            cmd.append(config_file_name)
-            
-            self.log.debug(f"****** Launch: the cmd is {cmd}")
-            
+            cmd = self.training_script_start_cmd(rank, 
+                                                 local_rank,
+                                                 self.launch_args,
+                                                 self.script_args
+                                                 )
                 
             # Copy stdin, and give the copy to the subprocess.
             # This enables the subprocess to ask user whether
             # to save training state in case of a cnt-C:
             newstdin = os.fdopen(os.dup(sys.stdin.fileno()))
+            
+            # Spawn one training script.
+
             process = subprocess.Popen(cmd,
                                        stdin=newstdin,
                                        stdout=PIPE,
@@ -578,7 +549,54 @@ class TrainScriptLauncher:
                        f"stderr: {the_stderr} \n"
                        f"stdout: {the_stdout} \n")
                 print(msg)
-            
+
+    #------------------------------------
+    # training_script_start_cmd 
+    #-------------------
+
+    def training_script_start_cmd(self, 
+                                  rank, 
+                                  local_rank,
+                                  launch_args,
+                                  script_args):
+
+        # Build the shell command line,
+        # starting with 'python -u':
+        cmd = [sys.executable, "-u"]
+
+        cmd.append(launch_args['training_script'])
+
+        # Add the args for the script that were
+        # in the command line:
+        for arg_name in script_args.keys():
+            script_arg_val = script_args[arg_name]
+            if script_arg_val is None or arg_name == 'config':
+                # Skip over non-specified CLI args:
+                continue
+            cmd.append(f"--{arg_name}={script_args[arg_name]}")
+
+        # Add the 'secret' args that tell the training
+        # script all the communication parameters:
+        
+        cmd.extend([f"--MASTER_ADDR={script_args['MASTER_ADDR']}"
+                    f"--MASTER_PORT={script_args['MASTER_PORT']}",
+                    #****f"--RANK={self.my_rank}",
+                    f"--RANK={rank}",
+                    f"--LOCAL_RANK={local_rank}",
+                    f"--WORLD_SIZE={self.WORLD_SIZE}"
+                    ])
+        
+        # Finally, the obligatory non-option arg
+        # to the training script: the configuration
+        # file:
+        
+        config_file_name = script_args['config']
+        cmd.append(config_file_name)
+        
+        self.log.debug(f"****** Launch: the cmd is {cmd}")
+        return cmd
+        
+
     #------------------------------------
     # read_world_map 
     #-------------------
@@ -693,6 +711,7 @@ class TrainScriptLauncher:
         #
         # Also sets self.master_hostname, the hostname
         # running the one process that coordinates all others.
+        # And sets self.WORLD_SIZE.
         
         @param world_map:
         @type world_map:
@@ -730,11 +749,11 @@ class TrainScriptLauncher:
         
         gpu_landscape = OrderedDict({})
         
-        for machine_name in sorted(self.world_map.keys()):
+        for machine_name in sorted(world_map.keys()):
 
             # Get dict of info about the machine:
              
-            machine_info = self.world_map[machine_name]
+            machine_info = world_map[machine_name]
             
             machine_gpus = machine_info['gpus'] 
             gpu_landscape[machine_name] = {}
@@ -769,11 +788,11 @@ class TrainScriptLauncher:
         # the master node, b/c it must start with rank 0:
 
         gpu_landscape[self.master_hostname]['rank_range'] = \
-            list(range(gpu_landscape[self.master_hostname]['num_gpuse']))
+            list(range(gpu_landscape[self.master_hostname]['num_gpus']))
         
         # Start assigning more ranks after 
         # the GPUs of the master:
-        running_rank = gpu_landscape[self.master_hostname]['num_gpuse']
+        running_rank = gpu_landscape[self.master_hostname]['num_gpus']
         for machine_name in gpu_landscape.keys():
             if machine_name == self.master_hostname:
                 # We already did the master node
