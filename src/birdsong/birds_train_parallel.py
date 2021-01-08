@@ -492,7 +492,7 @@ class BirdTrainer(object):
         '''
         Returns the device_residence id (an int) of an 
         available GPU. If none is exists on this 
-        machine, returns torch.device['cpu']
+        machine, returns torch.device('cpu')
         
         Initializes self.gpu_obj, which is a CUDA
         GPU instance. 
@@ -505,7 +505,7 @@ class BirdTrainer(object):
         @param raise_gpu_unavailable: whether to raise error
             when GPUs exist on this machine, but none are available.
         @type raise_gpu_unavailable: bool
-        @return: a GPU device_residence ID, or torch.device['cpu']
+        @return: a GPU device_residence ID, or torch.device('cpu')
         @rtype: int
         @raise NoGPUAvailable: if exception requested via 
             raise_gpu_unavailable, and no GPU is available.
@@ -517,11 +517,11 @@ class BirdTrainer(object):
         # Could be (GPU available):
         #   device_residence(type='cuda', index=0)
         # or (No GPU available):
-        #   device_residence(type=torch.device['cpu'])
+        #   device_residence(type=torch.device('cpu'))
 
         gpu_objs = GPUtil.getGPUs()
         if len(gpu_objs) == 0:
-            return torch.device['cpu']
+            return torch.device('cpu')
 
         # GPUs are installed. Did caller ask for a 
         # specific GPU?
@@ -556,7 +556,7 @@ class BirdTrainer(object):
                 raise NoGPUAvailable("Even though GPUs are installed, all are already in use.")
             else:
                 # Else quietly revert to CPU
-                return torch.device['cpu']
+                return torch.device('cpu')
         
         # Get the GPU object that has the found
         # deviceID:
