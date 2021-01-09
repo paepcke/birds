@@ -22,7 +22,6 @@ be used. ID origin is 0; i.e. first GPU ID is 0
 
 {quintus.stanford.edu : {
     "master" : 'Yes',
-    foo      : 1,
     "gpus" : 2
  },
 
