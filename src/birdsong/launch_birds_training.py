@@ -471,7 +471,7 @@ class TrainScriptLauncher:
         # when GPUs are available elsewhere, refuse to
         # start the script (is this needed?):
         if not TESTING:
-            if self.my_gpus == 0 and self.universe_size > 0:
+            if self.my_gpus == 0 and self.WORLD_SIZE> 0:
                 raise RuntimeError("This machine does not have any GPU, but others do; training script not started.")
         
     #------------------------------------
@@ -537,7 +537,7 @@ class TrainScriptLauncher:
         if not self.launch_args['quiet']:
             print(f"Node {self.hostname} {os.path.basename(sys.argv[0])}: Num processes launched: {len(processes)}")
             if self.am_master_node:
-                print(f"Awaiting {self.universe_size} processes to finish...")
+                print(f"Awaiting {self.WORLD_SIZE} processes to finish...")
             else:
                 print(f"Awaiting {self.my_gpus} processes to finish...")
         
@@ -592,7 +592,6 @@ class TrainScriptLauncher:
         
         cmd.extend([f"--MASTER_ADDR={self.MASTER_ADDR}"
                     f"--MASTER_PORT={self.MASTER_PORT}",
-                    #****f"--RANK={self.my_rank}",
                     f"--RANK={rank}",
                     f"--LOCAL_RANK={local_rank}",
                     f"--WORLD_SIZE={self.WORLD_SIZE}"
