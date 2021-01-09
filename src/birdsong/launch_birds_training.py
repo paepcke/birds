@@ -48,7 +48,16 @@ r"""
    o RANK vs. LOCAL_RANK
    o Coordinating process is not a separate process,
      but simply a role taken by one of the training
-     script copies.  
+     script copies.
+   o For fully qualified domain names for participating
+     machines to match entries in the world_map, each
+     host's /etc/hosts needs an entry
+     
+        127.0.0.1    my_machine.my_domain
+     
+     This means that Python's
+     
+        socket.getfqdn() should return my_machine.my_domain
 
 Based on torch.distributed.launch, with additions by Andreas Paepcke
 (https://github.com/pytorch/pytorch/blob/master/torch/distributed/launch.py)
@@ -720,9 +729,11 @@ class TrainScriptLauncher:
         #                        'gpu_device_ids': [<int>,<int>,...]
         #    } 
         #
-        # Also sets self.master_hostname, the hostname
-        # running the one process that coordinates all others.
-        # And sets self.WORLD_SIZE.
+        # Also sets 
+        #     o self.master_hostname, the hostname
+        #       running the one process that coordinates all others.
+        #     o self.WORLD_SIZE
+        #     o self.my_gpus
         
         @param world_map:
         @type world_map:
@@ -813,6 +824,7 @@ class TrainScriptLauncher:
                 list(range(running_rank, running_rank + num_gpus))
             running_rank += num_gpus
             
+        self.my_gpus = gpu_landscape[self.hostname]['num_gpus']
         self.gpu_landscape = gpu_landscape
         return gpu_landscape
 
