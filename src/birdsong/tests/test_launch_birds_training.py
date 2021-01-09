@@ -7,8 +7,10 @@ from _collections import OrderedDict
 import os
 import unittest
 
-from birdsong.launch_birds_training import TrainScriptLauncher
 from logging_service import LoggingService
+
+from birdsong.launch_birds_training import TrainScriptLauncher
+from birdsong.utils.dottable_config import DottableConfigParser
 
 
 TEST_ALL = True
@@ -17,9 +19,10 @@ TEST_ALL = True
 class TestLauncher(unittest.TestCase):
 
     def setUp(self):
-        self.curr_dir = os.path.dirname(__file__)
-
-
+        self.curr_dir    = os.path.dirname(__file__)
+        self.config_path = os.path.join(self.curr_dir, 'bird_trainer_tst.cfg')
+        self.config      = DottableConfigParser(self.config_path)
+        
     def tearDown(self):
         pass
 
@@ -56,18 +59,30 @@ class TestLauncher(unittest.TestCase):
     def test_training_script_start_cmd(self):
         
         launcher = TrainScriptLauncher(unittesting=True)
-
-        launcher.log = LoggingService()
-        config_path = os.path.join(self.curr_dir, '../../../config.cfg')
+        tst_world_map_path = os.path.join(self.curr_dir,
+                                          'world_map_for_testing.json'
+                                          )
+        world_map = launcher.read_world_map(tst_world_map_path)
+        launcher.config = self.config
+        launcher.build_compute_landcape(world_map)
+        
         rank = 0
         local_rank = 0
+        
+        # Set some instance vars that would
+        # normally be set in the the launcher's
+        # constructor:
+        
         launcher.WORLD_SIZE = 4
+        launcher.MASTER_PORT = self.config.getint('Parallelism', 'master_port')
+        launcher.log = LoggingService()
+        
         script_args = {'MASTER_ADDR' : '127.0.0.1',
                        'MASTER_PORT' : 5678,
                        'RANK'        : rank,
                        'LOCAL_RANK'  : local_rank,
                        'WORLD_SIZE'  : 4,
-                       'config'      : config_path 
+                       'config'      : self.config_path 
                        }
         
         script_path = os.path.join(self.curr_dir, '../birds_train_parallel')
