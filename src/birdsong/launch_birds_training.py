@@ -354,7 +354,6 @@ class TrainScriptLauncher:
     COMM_PORT = '5678'
     
     def __init__(self,
-                 logfile=None, 
                  unittesting=False):
 
         self.hostname = socket.getfqdn()
@@ -362,8 +361,9 @@ class TrainScriptLauncher:
             # Let unittests create an instance
             # and call individual methods:
             return
-
-        self.log = LoggingService(logfile)
+        
+        # Logging to console during launch:
+        self.log = LoggingService()
         
         # Convenience: directory of this
         # script, and project root directory
