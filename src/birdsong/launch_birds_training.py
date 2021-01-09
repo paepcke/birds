@@ -518,12 +518,13 @@ class TrainScriptLauncher:
 
         # This machine's range of ranks:
         rank_range = self.gpu_landscape[self.hostname]['rank_range']
+        this_machine_gpu_ids    = self.gpu_landscape[self.hostname]['gpu_device_ids']
 
         local_rank = 0
         for rank in rank_range: 
 
             cmd = self.training_script_start_cmd(rank, 
-                                                 local_rank,
+                                                 this_machine_gpu_ids[local_rank],
                                                  self.launch_args,
                                                  self.script_args
                                                  )
