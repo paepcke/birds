@@ -590,7 +590,7 @@ class TrainScriptLauncher:
         # Add the 'secret' args that tell the training
         # script all the communication parameters:
         
-        cmd.extend([f"--MASTER_ADDR={self.MASTER_ADDR}"
+        cmd.extend([f"--MASTER_ADDR={self.MASTER_ADDR}",
                     f"--MASTER_PORT={self.MASTER_PORT}",
                     f"--RANK={rank}",
                     f"--LOCAL_RANK={local_rank}",
