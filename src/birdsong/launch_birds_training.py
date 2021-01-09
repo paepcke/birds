@@ -535,8 +535,8 @@ class TrainScriptLauncher:
             local_rank += 1
         
         if not self.launch_args['quiet']:
-            print(f"Node {self.my_rank} {os.path.basename(sys.argv[0])}: Num processes launched: {len(processes)}")
-            if self.my_rank == 0:
+            print(f"Node {self.hostname} {os.path.basename(sys.argv[0])}: Num processes launched: {len(processes)}")
+            if self.am_master_node:
                 print(f"Awaiting {self.universe_size} processes to finish...")
             else:
                 print(f"Awaiting {self.my_gpus} processes to finish...")
