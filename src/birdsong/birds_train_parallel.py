@@ -1571,10 +1571,12 @@ class BirdTrainer(object):
     
     def setup_logging(self, logfile, num_classes):
 
+        local_rank = self.comm_info['LOCAL_RANK']
         if logfile is None:
+            
             default_logfile_name = os.path.join(os.path.dirname(__file__), 
-                                                'bird_train.log' if self.local_rank is None 
-                                                else f"bird_train_{self.comm_info['LOCAL_RANK']}.log"
+                                                'bird_train.log' if local_rank is None 
+                                                else f"bird_train_{local_rank}.log"
                                                 )
             self.log = LoggingService(logfile=default_logfile_name)
             
@@ -1589,9 +1591,9 @@ class BirdTrainer(object):
             # Logfile name provided by caller. Still
             # need to disambiguate between multiple processes,
             # if appropriate:
-            if self.comm_info['LOCAL_RANK'] is not None:
+            if local_rank is not None:
                 (logfile_root, ext) = os.path.splitext(logfile)
-                logfile = f"{logfile_root}_{self.comm_info['LOCAL_RANK']}{ext}"
+                logfile = f"{logfile_root}_{local_rank}{ext}"
             self.log = LoggingService(logfile=logfile)
             # In case there already was a logging instance,
             # ensure this new logging file is set:
