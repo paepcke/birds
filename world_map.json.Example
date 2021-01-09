@@ -21,7 +21,7 @@ be used. ID origin is 0; i.e. first GPU ID is 0
 */
 
 {quintus.stanford.edu : {
-    "master" : 'Yes'
+    "master" : 'Yes',
     "gpus" : 2
  },
 
