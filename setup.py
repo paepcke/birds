@@ -35,9 +35,10 @@ setup(
                         'natsort>=7.1.0',
                         'Pillow>=8.0.1',
                         'json5>=0.9.5',
+                        'nose2>=0.9.2',     # For testing
                         ],
 
-    tests_require    =['nose2>=0.9.2',
+    tests_require    =[
                        'testfixtures>=6.14.1',
                        ],
 
