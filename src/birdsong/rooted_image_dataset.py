@@ -141,9 +141,17 @@ class SingleRootImageDataset:
         
         class_paths = self.walk_data_dir(filepath)
         
-        self.class_to_id = OrderedDict({os.path.basename(class_name) : class_id 
-                            for class_id, class_name 
-                             in enumerate(class_paths)})
+        self.class_to_id = OrderedDict()
+        # Note: We can have images of a class
+        # spread across the class paths. Only
+        # assign a class id the first time we
+        # encounter any one class:
+         
+        for class_id, class_path in enumerate(class_paths):
+            class_name = os.path.basename(class_path) 
+            if class_name not in self.class_to_id.keys():
+                self.class_to_id[class_id] = class_name
+                
         self.sample_id_to_path = OrderedDict({})
         self.sample_id_to_class = OrderedDict({})
         
