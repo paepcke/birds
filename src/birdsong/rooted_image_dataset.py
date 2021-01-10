@@ -148,9 +148,16 @@ class SingleRootImageDataset:
         # encounter any one class:
          
         for class_id, class_path in enumerate(class_paths):
-            class_name = os.path.basename(class_path) 
-            if class_name not in self.class_to_id.keys():
-                self.class_to_id[class_id] = class_name
+            class_name = os.path.basename(class_path)
+            
+            # Add *only new* class and its ID to the class_to_id
+            # dict. Skip dirs that start with dot ('.'), such
+            # as ".DS_Store":
+            
+            if class_name not in self.class_to_id.keys() and \
+                not class_name.startswith('.'):
+                
+                self.class_to_id[class_name] = class_id
                 
         self.sample_id_to_path = OrderedDict({})
         self.sample_id_to_class = OrderedDict({})

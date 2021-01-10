@@ -13,8 +13,8 @@ from birdsong.rooted_image_dataset import SingleRootImageDataset
 from birdsong.rooted_image_dataset import MultiRootImageDataset
 
 
-TEST_ALL = True
-#TEST_ALL = False
+#*****TEST_ALL = True
+TEST_ALL = False
 
 #**************
 import socket, sys
@@ -75,20 +75,35 @@ class TestNRootsImageDataset(unittest.TestCase):
     # testStructuresCreation 
     #-------------------
 
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #*******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def testStructuresCreation(self):
         
+        #************
+        self.TEST_FILE_PATH_BIRDS = '/home/data/birds/recombined_data'
+        #************
         ds = SingleRootImageDataset(self.TEST_FILE_PATH_BIRDS)
         
         # List of (class_id, class_name) 2-tples:
-        dir_set = set(os.listdir(self.TEST_FILE_PATH_BIRDS))
+        maybe_dirty_dir_set = set(os.listdir(self.TEST_FILE_PATH_BIRDS))
+        
+        # Dataset skips dirs that start with a dot:
+        dir_set = set([dir_name 
+                         for dir_name 
+                          in maybe_dirty_dir_set
+                          if not dir_name.startswith('.')
+                          ])
+        
         class_id_assignments = enumerate(natsort.natsorted(dir_set))
         
         for class_id, class_name in class_id_assignments:
             self.assertEqual(ds.class_to_id[class_name], class_id)
 
-        self.assertEqual(ds.sample_id_to_class,self.sample_class_assignments)
-        self.assertEqual(len(ds.sample_id_to_path), len(ds.sample_id_to_class))
+        
+        self.assertEqual(ds.sample_id_to_class,
+                         self.sample_class_assignments)
+        
+        self.assertEqual(len(ds.sample_id_to_path), 
+                         len(ds.sample_id_to_class))
         
     #------------------------------------
     # testGetItem 
