@@ -16,6 +16,25 @@ from birdsong.rooted_image_dataset import MultiRootImageDataset
 TEST_ALL = True
 #TEST_ALL = False
 
+#**************
+import socket, sys
+if socket.gethostname() in ('quintus', 'quatro'):
+    # Point to where the pydev server
+    # software is installed on the remote
+    # machine:
+    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
+
+    import pydevd
+    global pydevd
+    # Uncomment the following if you
+    # want to break right on entry of
+    # this module. But you can instead just
+    # set normal Eclipse breakpoints:
+    #*************
+    print("About to call settrace()")
+    #*************
+    pydevd.settrace('localhost', port=4040)
+#***********
 
 class TestNRootsImageDataset(unittest.TestCase):
 
@@ -62,7 +81,8 @@ class TestNRootsImageDataset(unittest.TestCase):
         ds = SingleRootImageDataset(self.TEST_FILE_PATH_BIRDS)
         
         # List of (class_id, class_name) 2-tples:
-        class_id_assignments = enumerate(natsort.natsorted(os.listdir(self.TEST_FILE_PATH_BIRDS)))
+        dir_set = set(os.listdir(self.TEST_FILE_PATH_BIRDS))
+        class_id_assignments = enumerate(natsort.natsorted(dir_set))
         
         for class_id, class_name in class_id_assignments:
             self.assertEqual(ds.class_to_id[class_name], class_id)
