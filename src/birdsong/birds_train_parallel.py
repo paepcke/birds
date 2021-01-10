@@ -23,7 +23,7 @@ sys.path.insert(0,packet_root)
 # or different machine:
 #*****************
 # 
-# if self.hostname in ('quintus', 'quatro'):
+# if socket.gethostname() in ('quintus', 'quatro'):
 #     # Point to where the pydev server 
 #     # software is installed on the remote
 #     # machine:
@@ -960,7 +960,7 @@ class BirdTrainer(object):
                     self._diff_avg = self.mean_diff(torch.tensor(past_accuracies))
     
     
-            except (KeyboardInterrupt, InterruptTraining):
+            except (KeyboardInterrupt, InterruptTraining) as _e:
                 self.log.info("Early stopping due to keyboard intervention")
                 do_save = self.offer_model_save()
                 if do_save in ('y','Y','yes','Yes', ''):
