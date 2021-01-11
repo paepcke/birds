@@ -276,6 +276,8 @@ class BirdTrainer(object):
                                                             else train_parms.getint('batch_size')
                                                         )
         self.num_classes = len(dataset.class_id_list())
+        
+        self.log.debug(f"***** Number of samples in loader: {len(self.dataloader)}")
 
         # Resnet18 retain 6 layers of pretraining.
         # Train the remaining 4 layers with your own
@@ -1089,14 +1091,14 @@ class BirdTrainer(object):
             # to where the model is:
             batch   = self.push_tensor(batch)
             targets = self.push_tensor(targets)
-            self.log.debug(f"***** New batch: {batch.shape}, targets: {targets.shape}")
+            #self.log.debug(f"***** New batch: {batch.shape}, targets: {targets.shape}")
             
             # Outputs will be on GPU if we are
             # using one:
             outputs = self.model(batch)
             
             loss = self.loss_func(outputs, targets)
-            self.log.debug(f"***** Train loss epoch {self.epoch}: {loss}")
+            #self.log.debug(f"***** Train loss epoch {self.epoch}: {loss}")
             
             # Update the accumulating training loss
             
@@ -1582,7 +1584,7 @@ class BirdTrainer(object):
     # setup_logging
     #-------------------
     
-    def setup_logging(self, logfile, num_classes, logging_level=logging.Info):
+    def setup_logging(self, logfile, num_classes, logging_level=logging.INFO):
 
         local_rank = self.comm_info['LOCAL_RANK']
         if logfile is None:
@@ -2049,7 +2051,6 @@ if __name__ == '__main__':
     comm_info['LOCAL_RANK']  = int(args.LOCAL_RANK)
     comm_info['WORLD_SIZE']  = int(args.WORLD_SIZE)
 
-['critical', 'error', 'warning', 'info', 'debug', 'quiet']
     if args.logginglevel == 'critical':
         logging_level = logging.CRITICAL
     elif args.logginglevel == 'error':
@@ -2072,6 +2073,6 @@ if __name__ == '__main__':
             checkpoint=args.resume,
             batch_size=args.batchsize,
             logfile=args.logfile,
-            logging_level=logginglevel,
+            logging_level=logging_level,
             comm_info=comm_info
             ).train()
