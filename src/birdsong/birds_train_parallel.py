@@ -2049,12 +2049,29 @@ if __name__ == '__main__':
     comm_info['LOCAL_RANK']  = int(args.LOCAL_RANK)
     comm_info['WORLD_SIZE']  = int(args.WORLD_SIZE)
 
+['critical', 'error', 'warning', 'info', 'debug', 'quiet']
+    if args.logginglevel == 'critical':
+        logging_level = logging.CRITICAL
+    elif args.logginglevel == 'error':
+        logging_level = logging.ERROR
+    elif args.logginglevel == 'warning':
+        logging_level = logging.WARNING
+    elif args.logginglevel == 'info':
+        logging_level = logging.INFO
+    elif args.logginglevel == 'debug':
+        logging_level = logging.DEBUG
+    elif args.logginglevel == 'quiet':
+        logging_level = logging.NOTSET
+    else:
+        # Won't happen, b/c argparse will enforce
+        raise ValueError(f"Logging level {args.logginglevel} illegal.")
+
     BirdTrainer(
             config_info=args.config,
             root_train_test_data=args.data,
             checkpoint=args.resume,
             batch_size=args.batchsize,
             logfile=args.logfile,
-            logging_level=args.logginglevel,
+            logging_level=logginglevel,
             comm_info=comm_info
             ).train()
