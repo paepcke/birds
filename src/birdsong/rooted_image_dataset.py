@@ -290,11 +290,15 @@ class SingleRootImageDataset:
     def find_class_paths(self, root):
         '''
         Given a root directory, return a list 
-        of all directories under the root, which 
-        contain at least one image file.
+        of Path instances that correspond to all 
+        directories under the root, which contain at 
+        least one image file.
         
         The paths will be naturally sorted, and
         absolute.
+        
+        Directory names that begin with a period ('.')
+        are excluded.
 
         The assumption is that the names of the last
         path element of the returned directories are 
@@ -318,7 +322,7 @@ class SingleRootImageDataset:
             full_paths = [Path.joinpath(root_Path, file_Path).parent
                            for file_Path in file_Paths
                             if file_Path.suffix in self.IMG_EXTENSIONS
-                           and not file_Path.parent.startswith('.')
+                           and not file_Path.parent.stem.startswith('.')
                             ]
             # Using union in this loop guarantees
             # uniqeness of the gathered class names:
