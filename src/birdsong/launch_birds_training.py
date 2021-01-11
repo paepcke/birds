@@ -279,18 +279,27 @@ class BirdsTrainingArgumentsParser(ArgumentParser):
                                  'if not provided, start training from scratch',
                             default=None);
     
-        self.add_argument('-l', '--logfile',
+        self.add_argument('-f', '--logfile',
                             help='fully qualified log file name to which info and error messages \n'
-                                 'are directed. Default: stdout.',
-                            default=None);
+                                 'are directed. Default: stdout.', 
+                           default=None);
+                           
+        self.parser.add_argument('-l', '--logginglevel',                           
+                            choices=['critical', 'error', 'warning', 'info', 'debug', 'quiet'],
+                            help=f'importance of event that warrants log entries.',
+                            default='info'
+                            )
+                            
         self.add_argument('-b', '--batchsize',
                             type=int,
                             help=f'how many sample to submit to training machinery together'
                             )
+        
         self.add_argument('-e', '--epochs',
                             type=int,
                             help=f'how many epochs to run'
                             )
+        
         # Used only by launch_birds_training.py script to indicate that 
         # this present script was started via the launcher:
         self.add_argument('--started_from_launch',
@@ -298,10 +307,13 @@ class BirdsTrainingArgumentsParser(ArgumentParser):
                             help=argparse.SUPPRESS,
                             default=True
                             )
+        
         self.add_argument('-d', '--data',
                             help='directory root of sub-directories that each contain samples \n'
                                  'of one class. Can be specified in config file instead',
+                                 
                             default=None)
+        
         self.add_argument('config',
                             help='fully qualified file name of configuration file',
                             default=None)
@@ -314,7 +326,8 @@ class BirdsTrainingArgumentsParser(ArgumentParser):
         args.training_script = os.path.join(curr_dir, 'birds_train_parallel.py')
         
         script_option_names = ['resume', 
-                               'logfile', 
+                               'logfile',
+                               'logginglevel' 
                                'batchsize', 
                                'epochs', 
                                'data', 
