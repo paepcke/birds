@@ -15,8 +15,8 @@ from birdsong.rooted_image_dataset import MultiRootImageDataset
 from birdsong.rooted_image_dataset import SingleRootImageDataset
 
 
-#*****TEST_ALL = True
-TEST_ALL = False
+TEST_ALL = True
+#TEST_ALL = False
 
 #**************
 # if socket.gethostname() in ('quintus', 'quatro'):
