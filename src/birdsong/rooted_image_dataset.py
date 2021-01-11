@@ -313,6 +313,11 @@ class SingleRootImageDataset:
         
         class_paths = set([])
         for root, _dirs, files in os.walk(data_root):
+            
+            if len(files) == 0:
+                # Found only directories:
+                continue
+            
             # For convenience, turn the file paths
             # into Path objects:
             file_Paths = [Path(name) for name in files]
@@ -328,14 +333,14 @@ class SingleRootImageDataset:
             
             class_paths = class_paths.union(set(full_paths))
             
-            # Sort by the class names (not the full paths):
-            class_dict = {path.stem : path
-                             for path in class_paths
-                          }
-            sorted_by_class = natsort.natsorted(class_dict.keys())
-            class_paths_sorted = [class_dict[class_name]
-                                     for class_name in sorted_by_class
-                                  ]
+        # Sort by the class names (not the full paths):
+        class_dict = {path.stem : path
+                         for path in class_paths
+                      }
+        sorted_by_class = natsort.natsorted(class_dict.keys())
+        class_paths_sorted = [class_dict[class_name]
+                                 for class_name in sorted_by_class
+                              ]
         return class_paths_sorted
 
     #------------------------------------
