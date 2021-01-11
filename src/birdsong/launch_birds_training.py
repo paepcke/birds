@@ -35,6 +35,7 @@ if hostname in ('quintus', 'quatro'):
     # want to break right on entry of
     # this module. But you can instead just
     # set normal Eclipse breakpoints:
+    print("Calling settrace to pause in Eclipse for ")
     pydevd.settrace('localhost', port=4040)
 # **************** 
 r"""
@@ -284,7 +285,7 @@ class BirdsTrainingArgumentsParser(ArgumentParser):
                                  'are directed. Default: stdout.', 
                            default=None);
                            
-        self.parser.add_argument('-l', '--logginglevel',                           
+        self.add_argument('-l', '--logginglevel',
                             choices=['critical', 'error', 'warning', 'info', 'debug', 'quiet'],
                             help=f'importance of event that warrants log entries.',
                             default='info'
