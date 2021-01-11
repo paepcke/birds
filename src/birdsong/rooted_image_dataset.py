@@ -60,7 +60,6 @@ in the subclass MultiRootImageDataset.
 '''
 
 from _collections import OrderedDict
-import glob
 import os
 from pathlib import Path
 
@@ -287,7 +286,7 @@ class SingleRootImageDataset:
     # find_class_paths
     #-------------------
 
-    def find_class_paths(self, root):
+    def find_class_paths(self, data_root):
         '''
         Given a root directory, return a list 
         of Path instances that correspond to all 
@@ -305,31 +304,40 @@ class SingleRootImageDataset:
         class names. This assumption is often made in 
         torchvision packages.  
 
-        @param root: root directory for search 
-        @type root: str
+        @param data_root: root directory for search 
+        @type data_root: str
         @return a list of Path instances fo rfull-path 
             directories whose names are target classes.
         @rtype [pathlib.Path]
         '''
-
-        class_paths = set([])
-        for root, _dirs, files in os.walk(root):
-            # For convenience, turn the file paths
-            # into Path objects:
-            file_Paths = [Path(name) for name in files]
-            root_Path  = Path(root)
-            # Pick out files with an image extension:
-            full_paths = [Path.joinpath(root_Path, file_Path).parent
-                           for file_Path in file_Paths
-                            if file_Path.suffix in self.IMG_EXTENSIONS
-                           and not file_Path.parent.stem.startswith('.')
-                            ]
-            # Using union in this loop guarantees
-            # uniqeness of the gathered class names:
-            
-            class_paths = class_paths.union(set(full_paths))
-
-        return class_paths
+        
+        def find_class_paths(data_root):
+            class_paths = set([])
+            for root, _dirs, files in os.walk(data_root):
+                # For convenience, turn the file paths
+                # into Path objects:
+                file_Paths = [Path(name) for name in files]
+                root_Path  = Path(root)
+                # Pick out files with an image extension:
+                full_paths = [Path.joinpath(root_Path, file_Path).parent
+                               for file_Path in file_Paths
+                                if file_Path.suffix in self.IMG_EXTENSIONS
+                               and not file_Path.parent.stem.startswith('.')
+                                ]
+                # Using union in this loop guarantees
+                # uniqeness of the gathered class names:
+                
+                class_paths = class_paths.union(set(full_paths))
+                
+                # Sort by the class names (not the full paths):
+                class_dict = {path.stem : path
+                                 for path in class_paths
+                              }
+                sorted_by_class = natsort.natsorted(class_dict.keys())
+                class_paths_sorted = [class_dict[class_name]
+                                         for class_name in sorted_by_class
+                                      ]
+            return class_paths_sorted
 
     #------------------------------------
     # find_class_names 

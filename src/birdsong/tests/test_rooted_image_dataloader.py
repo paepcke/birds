@@ -88,14 +88,14 @@ class TestNRootsImageDataset(unittest.TestCase):
         self.TEST_FILE_PATH_BIRDS = '/home/data/birds/recombined_data'
         #************
         # List of (class_id, class_name) 2-tples:
+        
         maybe_dirty_dir_set = set(os.listdir(self.TEST_FILE_PATH_BIRDS))
         
         # Dataset skips dirs that start with a dot:
         dir_set = set([dir_name 
                          for dir_name 
                           in maybe_dirty_dir_set
-                          if not dir_name.startswith('.') and
-                             not self.contains_dir(dir_name)
+                          if not dir_name.startswith('.')
                           ])
         
         class_id_assignments = enumerate(natsort.natsorted(dir_set))
@@ -348,7 +348,7 @@ class TestNRootsImageDataset(unittest.TestCase):
                                                      for full_path
                                                       in full_paths
                                                       ])
-                                                      )              
+                                                      )
         return class_names
 
 # ------------------- Main ----------
