@@ -19,22 +19,22 @@ from birdsong.rooted_image_dataset import SingleRootImageDataset
 TEST_ALL = False
 
 #**************
-if socket.gethostname() in ('quintus', 'quatro'):
-    # Point to where the pydev server
-    # software is installed on the remote
-    # machine:
-    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
-
-    import pydevd
-    global pydevd
-    # Uncomment the following if you
-    # want to break right on entry of
-    # this module. But you can instead just
-    # set normal Eclipse breakpoints:
-    #*************
-    print("About to call settrace()")
-    #*************
-    pydevd.settrace('localhost', port=4040)
+# if socket.gethostname() in ('quintus', 'quatro'):
+#     # Point to where the pydev server
+#     # software is installed on the remote
+#     # machine:
+#     sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
+# 
+#     import pydevd
+#     global pydevd
+#     # Uncomment the following if you
+#     # want to break right on entry of
+#     # this module. But you can instead just
+#     # set normal Eclipse breakpoints:
+#     #*************
+#     print("About to call settrace()")
+#     #*************
+#     pydevd.settrace('localhost', port=4040)
 #***********
 
 class TestNRootsImageDataset(unittest.TestCase):
@@ -76,17 +76,11 @@ class TestNRootsImageDataset(unittest.TestCase):
     # testStructuresCreation 
     #-------------------
 
-    #*******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def testStructuresCreation(self):
         
-        #************
-        self.TEST_FILE_PATH_BIRDS = '/home/data/birds/recombined_data'
-        #************
         ds = SingleRootImageDataset(self.TEST_FILE_PATH_BIRDS)
     
-        #************
-        self.TEST_FILE_PATH_BIRDS = '/home/data/birds/recombined_data'
-        #************
         # List of (class_id, class_name) 2-tples:
         
         maybe_dirty_dir_set = set(os.listdir(self.TEST_FILE_PATH_BIRDS))
