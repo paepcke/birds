@@ -60,19 +60,20 @@ in the subclass MultiRootImageDataset.
 '''
 
 from _collections import OrderedDict
-import os
 import glob
+import os
+from pathlib import Path
 
+import natsort
 import torch
 from torchvision import transforms
 from torchvision.datasets import folder
 
 import numpy as np
 
+
 # Sorting such that numbers in strings
 # do the right thing: "foo2" after "foo10": 
-import natsort
-
 # Should actually be 1:3 but broke the system:
 SAMPLE_WIDTH  = 400 # pixels
 SAMPLE_HEIGHT = 400 # pixels
@@ -139,16 +140,17 @@ class SingleRootImageDataset:
         # Good for unittesting. Dataloaders can shuffle
         # to introduce randomness later:
         
-        class_paths = self.walk_data_dir(filepath)
+        class_paths = self.find_class_paths(filepath)
         
         self.class_to_id = OrderedDict()
+
         # Note: We can have images of a class
         # spread across the class paths. Only
         # assign a class id the first time we
         # encounter any one class:
          
         for class_id, class_path in enumerate(class_paths):
-            class_name = os.path.basename(class_path)
+            class_name = class_path.stem
             
             # Add *only new* class and its ID to the class_to_id
             # dict. Skip dirs that start with dot ('.'), such
@@ -280,33 +282,78 @@ class SingleRootImageDataset:
         '''
         return os.path.abspath(self.sample_id_to_path[sample_id])
 
+
     #------------------------------------
-    # walk_data_dir
+    # find_class_paths
     #-------------------
 
-    def walk_data_dir(self, filename):
+    def find_class_paths(self, root):
         '''
-        Given a root directory, find all directories
-        that only contain files, not directories. 
-        Return a naturally sorted , list of those
-        files-only directories. Paths will be absolute.
+        Given a root directory, return a list 
+        of all directories under the root, which 
+        contain at least one image file.
         
-        The assumption is that the names of the returned
-        directories are class names. This assumption is
-        often made in torchvision packages.  
+        The paths will be naturally sorted, and
+        absolute.
 
-        @param filename: root directory for search 
-        @type filename: str
-        @returned list of full-path directories whose
-            names are target classes.
-        @rtype [str]
+        The assumption is that the names of the last
+        path element of the returned directories are 
+        class names. This assumption is often made in 
+        torchvision packages.  
+
+        @param root: root directory for search 
+        @type root: str
+        @return a list of Path instances fo rfull-path 
+            directories whose names are target classes.
+        @rtype [pathlib.Path]
         '''
+
+        class_paths = set([])
+        for root, _dirs, files in os.walk(root):
+            # For convenience, turn the file paths
+            # into Path objects:
+            file_Paths = [Path(name) for name in files]
+            root_Path  = Path(root)
+            # Pick out files with an image extension:
+            full_paths = [Path.joinpath(root_Path, file_Path).parent
+                           for file_Path in file_Paths
+                            if file_Path.suffix in self.IMG_EXTENSIONS
+                           and not file_Path.parent.startswith('.')
+                            ]
+            # Using union in this loop guarantees
+            # uniqeness of the gathered class names:
+            
+            class_paths = class_paths.union(set(full_paths))
+
+        return class_paths
+
+    #------------------------------------
+    # find_class_names 
+    #-------------------
+
+    def find_class_names(self, dir_name):
+        '''
+        Like find_class_paths(), but only 
+        the trailing directory names of the 
+        paths, i.e. the class names, are
+        returned.
         
-        class_names = [dir_path 
-            for dir_path, subdir_names, _filenames 
-             in os.walk(filename)
-            if len(subdir_names) == 0]
-        
+        @param dir_name: root of dir to search
+        @type dir_name: str
+        @return: naturally sorted list of class names 
+        @rtype: [str]
+        '''
+        class_names = set([])
+        for root, _dirs, files in os.walk(dir_name):
+            full_paths = [os.path.join(root, file)
+                           for file in files
+                            if Path(file).suffix in self.IMG_EXTENSIONS
+                            ]
+            class_names = class_names.union(set([Path(full_path).parent.name
+                                                     for full_path
+                                                      in full_paths
+                                                      ])
+                                                      )              
         return natsort.natsorted(class_names)
 
 

@@ -5,19 +5,20 @@ Created on Dec 13, 2020
 '''
 from _collections import OrderedDict
 import os
+from pathlib import Path
+import socket, sys
 import unittest
 
 import natsort
 
-from birdsong.rooted_image_dataset import SingleRootImageDataset
 from birdsong.rooted_image_dataset import MultiRootImageDataset
+from birdsong.rooted_image_dataset import SingleRootImageDataset
 
 
 #*****TEST_ALL = True
 TEST_ALL = False
 
 #**************
-import socket, sys
 if socket.gethostname() in ('quintus', 'quatro'):
     # Point to where the pydev server
     # software is installed on the remote
@@ -53,7 +54,7 @@ class TestNRootsImageDataset(unittest.TestCase):
         cls.sample_class_assignments = \
             OrderedDict([(0, 0), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0), 
                          (6, 1), (7, 1), (8, 1), (9, 1), (10, 1), (11,1)])
-
+        cls.IMG_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif', '.tiff', '.webp')
     
     #------------------------------------
     # setUp
@@ -82,7 +83,10 @@ class TestNRootsImageDataset(unittest.TestCase):
         self.TEST_FILE_PATH_BIRDS = '/home/data/birds/recombined_data'
         #************
         ds = SingleRootImageDataset(self.TEST_FILE_PATH_BIRDS)
-        
+    
+        #************
+        self.TEST_FILE_PATH_BIRDS = '/home/data/birds/recombined_data'
+        #************
         # List of (class_id, class_name) 2-tples:
         maybe_dirty_dir_set = set(os.listdir(self.TEST_FILE_PATH_BIRDS))
         
@@ -90,7 +94,8 @@ class TestNRootsImageDataset(unittest.TestCase):
         dir_set = set([dir_name 
                          for dir_name 
                           in maybe_dirty_dir_set
-                          if not dir_name.startswith('.')
+                          if not dir_name.startswith('.') and
+                             not self.contains_dir(dir_name)
                           ])
         
         class_id_assignments = enumerate(natsort.natsorted(dir_set))
@@ -327,6 +332,24 @@ class TestNRootsImageDataset(unittest.TestCase):
             value_filter = filter(fn, the_dict.items())
             
         return [(k,v)[0] for k,v in value_filter]
+
+    #------------------------------------
+    # find_class_names
+    #-------------------
+    
+    def find_class_names(self, dir_name):
+        class_names = set([])
+        for root, _dirs, files in os.walk(dir_name):
+            full_paths = [os.path.join(root, file)
+                           for file in files
+                            if Path(file).suffix in self.IMG_EXTENSIONS
+                            ]
+            class_names = class_names.union(set([Path(full_path).parent.name
+                                                     for full_path
+                                                      in full_paths
+                                                      ])
+                                                      )              
+        return class_names
 
 # ------------------- Main ----------
 
