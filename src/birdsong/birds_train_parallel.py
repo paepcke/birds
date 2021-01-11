@@ -10,8 +10,34 @@ code by
 @author: paepcke
 '''
 
+from _collections import OrderedDict
+import argparse
+import datetime
+import json
+import logging
 import os, sys
+import random  # Just so we can fix seed for testing
+import signal
 import socket
+
+import GPUtil
+from logging_service import LoggingService
+from torch import cuda
+from torch import hub
+from torch import optim
+import torch
+from torch.utils.tensorboard import SummaryWriter
+from torchvision.models.resnet import ResNet, BasicBlock
+
+from birdsong.cross_validation_dataloader import MultiprocessingDataLoader, CrossValidatingDataLoader
+from birdsong.result_tallying import TrainResult, TrainResultCollection
+from birdsong.rooted_image_dataset import MultiRootImageDataset
+from birdsong.utils.dottable_config import DottableConfigParser
+from birdsong.utils.learning_phase import LearningPhase
+import numpy as np
+import torch.distributed as dist
+import torch.nn as nn
+
 
 packet_root = os.path.abspath(__file__.split('/')[0])
 sys.path.insert(0,packet_root)
@@ -41,31 +67,9 @@ sys.path.insert(0,packet_root)
 #     pydevd.settrace('localhost', port=4040)
 # **************** 
 
-from _collections import OrderedDict
-import argparse
-import datetime
-import json
-import random  # Just so we can fix seed for testing
-import signal
 
-import GPUtil
-from logging_service import LoggingService
-from torch import cuda
-from torch import hub
-from torch import optim
-import torch
-from torch.utils.tensorboard import SummaryWriter
-from torchvision.models.resnet import ResNet, BasicBlock
 
-from birdsong.cross_validation_dataloader import MultiprocessingDataLoader, CrossValidatingDataLoader
-from birdsong.rooted_image_dataset import MultiRootImageDataset
-import numpy as np
-from birdsong.result_tallying import TrainResult, TrainResultCollection
-import torch.distributed as dist
-import torch.nn as nn
 
-from birdsong.utils.dottable_config import DottableConfigParser
-from birdsong.utils.learning_phase import LearningPhase
 
 
 #from torch.nn import BCELoss
@@ -111,6 +115,7 @@ class BirdTrainer(object):
                  batch_size=None,
                  checkpoint=None,   # Load if given path to saved
                  logfile=None,      # ...partially trained model
+                 logging_level='info',
                  performance_log_dir=None,
                  testing_cuda_on_cpu=False,
                  comm_info=None,
@@ -177,6 +182,8 @@ class BirdTrainer(object):
             if os.path.isdir(logfile):
                 raise ValueError(f"Logfile argument must be a file name, not a directory ({logfile})")
             self.log = LoggingService(logfile=logfile)
+            
+        self.log.logging_level = logging_level
         
         if root_train_test_data is None:
             try:
@@ -1082,6 +1089,7 @@ class BirdTrainer(object):
             # to where the model is:
             batch   = self.push_tensor(batch)
             targets = self.push_tensor(targets)
+            self.log.debug(f"New batch: {batch.shape}, targets: {targets.shape}")
             
             # Outputs will be on GPU if we are
             # using one:
@@ -1571,7 +1579,7 @@ class BirdTrainer(object):
     # setup_logging
     #-------------------
     
-    def setup_logging(self, logfile, num_classes):
+    def setup_logging(self, logfile, num_classes, logging_level=logging.Info):
 
         local_rank = self.comm_info['LOCAL_RANK']
         if logfile is None:
@@ -1580,14 +1588,14 @@ class BirdTrainer(object):
                                                 'bird_train.log' if local_rank is None 
                                                 else f"bird_train_{local_rank}.log"
                                                 )
-            self.log = LoggingService(logfile=default_logfile_name)
+            self.log = LoggingService(logfile=default_logfile_name, logging_level=logging_level)
             
             # In case there already was a logging instance,
             # ensure this new logging file is set:
             self.log.log_file = default_logfile_name
 
         elif logfile == 'stdout':
-            self.log = LoggingService()
+            self.log = LoggingService(logging_level=logging_level)
             print(f"Logging to stdout...")
         else:
             # Logfile name provided by caller. Still
@@ -1596,7 +1604,7 @@ class BirdTrainer(object):
             if local_rank is not None:
                 (logfile_root, ext) = os.path.splitext(logfile)
                 logfile = f"{logfile_root}_{local_rank}{ext}"
-            self.log = LoggingService(logfile=logfile)
+            self.log = LoggingService(logfile=logfile, logging_level=logging_level)
             # In case there already was a logging instance,
             # ensure this new logging file is set:
             self.log.log_file = logfile
@@ -1960,6 +1968,13 @@ if __name__ == '__main__':
                         help='fully qualified log file name to which info and error messages \n' +\
                              'are directed. Default: stdout.',
                         default=None);
+
+    parser.add_argument('-p', '--logginglevel',
+                        choices=['critical', 'error', 'warning', 'info', 'debug', 'quiet'],
+                        help=f'importance of event that warrants log entries.',
+                        default='info'
+                        )
+
     parser.add_argument('-b', '--batchsize',
                         type=int,
                         help=f'how many sample to submit to training machinery together'
@@ -2037,5 +2052,6 @@ if __name__ == '__main__':
             checkpoint=args.resume,
             batch_size=args.batchsize,
             logfile=args.logfile,
+            logging_level=args.logginglevel,
             comm_info=comm_info
             ).train()
