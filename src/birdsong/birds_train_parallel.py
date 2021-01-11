@@ -262,9 +262,9 @@ class BirdTrainer(object):
         else:
             # GPUSs used, single or multiple machines:
 
-            self.log.debug("********Calling init_multiprocessing...")
+            self.log.debug("***** Calling init_multiprocessing...")
             self.init_multiprocessing()
-            self.log.debug("********Returned from init_multiprocessing...")
+            self.log.debug("***** Returned from init_multiprocessing...")
             
             self.dataloader = MultiprocessingDataLoader(dataset,
                                                         shuffle=True,
@@ -362,7 +362,7 @@ class BirdTrainer(object):
         go.
         '''
 
-        self.log.debug(f"**** LOCAL_RANK in init_multiprocessing(): {self.comm_info['LOCAL_RANK']}")
+        self.log.debug(f"***** LOCAL_RANK in init_multiprocessing(): {self.comm_info['LOCAL_RANK']}")
         self.log.info(f"{self.hostname}: RANK {self.comm_info['RANK']}, LOCAL_RANK {self.comm_info['LOCAL_RANK']}")
 
         # Use NCCL as distributed backend,
@@ -1089,13 +1089,14 @@ class BirdTrainer(object):
             # to where the model is:
             batch   = self.push_tensor(batch)
             targets = self.push_tensor(targets)
-            self.log.debug(f"New batch: {batch.shape}, targets: {targets.shape}")
+            self.log.debug(f"***** New batch: {batch.shape}, targets: {targets.shape}")
             
             # Outputs will be on GPU if we are
             # using one:
             outputs = self.model(batch)
             
             loss = self.loss_func(outputs, targets)
+            self.log.debug(f"***** Train loss epoch {self.epoch}: {loss}")
             
             # Update the accumulating training loss
             
@@ -1180,6 +1181,8 @@ class BirdTrainer(object):
 #                 
 #                 val_target = val_target.float()
                 loss =  self.loss_func(pred_prob_tns, val_target)
+                self.log.debug(f"***** Validation loss epoch {self.epoch}: {loss}")
+
                 self.tally_collection.add_loss(self.epoch, 
                                                loss,
                                                LearningPhase.VALIDATING
