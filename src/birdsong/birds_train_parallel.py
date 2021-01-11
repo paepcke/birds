@@ -981,7 +981,9 @@ class BirdTrainer(object):
                                                self.model,
                                                self.optimizer
                                                )
-                self.log.info(f"Training state saved to {dest_path}")
+                    self.log.info(f"Training state saved to {dest_path}")
+                else:
+                    self.log.info(f"Training aborted by user, who requested not to save the model")
                 self.cleanup()
                 self.log.info("Exiting")
                 sys.exit(0)
