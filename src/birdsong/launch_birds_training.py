@@ -328,7 +328,7 @@ class BirdsTrainingArgumentsParser(ArgumentParser):
         
         script_option_names = ['resume', 
                                'logfile',
-                               'logginglevel' 
+                               'logginglevel', 
                                'batchsize', 
                                'epochs', 
                                'data', 
@@ -431,8 +431,10 @@ class TrainScriptLauncher:
 
         try: 
             config_file = launch_args['config']
+            if not os.path.exists(config_file):
+                raise ConfigError(f"Configuration file {config_file} that was provided as command line arg does not exist.")
         except KeyError:
-            raise RuntimeError("Error: must have a config file. See config.cfg.Example in project root")
+            raise RuntimeError("Error: launch args must include a config file. See config.cfg.Example in project root")
         
         self.config = DottableConfigParser(config_file)
         
