@@ -35,7 +35,7 @@ if hostname in ('quintus', 'quatro'):
     # want to break right on entry of
     # this module. But you can instead just
     # set normal Eclipse breakpoints:
-    print("Calling settrace to pause in Eclipse for ")
+    print("Calling settrace to pause in Eclipse for debugging there. ")
     pydevd.settrace('localhost', port=4040)
 # **************** 
 r"""
@@ -369,12 +369,6 @@ class BirdsTrainingArgumentsParser(ArgumentParser):
 
 class TrainScriptLauncher:
 
-    # Time interval to wait cyclically before
-    # emptying stdout and stderr pipe from 
-    # training scripts:
-      
-    SCRIPT_PROCESS_CHECK_INTERVAL = 5 # seconds
-    
     #------------------------------------
     # Constructor 
     #-------------------
@@ -527,8 +521,6 @@ class TrainScriptLauncher:
 
         '''
         
-        processes = []
-        
         # Compute a unique number for each GPU within
         # the group of nodes (machines). Starting with
         # the master node's first GPU as 0 (if master node
@@ -543,6 +535,8 @@ class TrainScriptLauncher:
         this_machine_gpu_ids    = self.gpu_landscape[self.hostname]['gpu_device_ids']
 
         local_rank = 0
+        # Map from process object to rank (for debug msgs):
+        who_is_who = OrderedDict()
         for rank in rank_range: 
 
             cmd = self.training_script_start_cmd(rank, 
@@ -563,11 +557,11 @@ class TrainScriptLauncher:
                                        stdout=None,  # Script inherits this launch
                                        stderr=None   # ... script's stdout/stderr  
                                        )
-            processes.append(process)
+            who_is_who[process] = rank
             local_rank += 1
         
         if not self.launch_args['quiet']:
-            print(f"Node {self.hostname} {os.path.basename(sys.argv[0])}: Num processes launched: {len(processes)}")
+            print(f"Node {self.hostname} {os.path.basename(sys.argv[0])}: Num processes launched: {len(who_is_who)}")
             if self.am_master_node:
                 print(f"Awaiting {self.WORLD_SIZE} process(es) to finish...")
             else:
@@ -576,7 +570,7 @@ class TrainScriptLauncher:
         # Let subprocesses deal with cnt-C (keyboard interrupt):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         failed_processes = []
-        for process in processes:
+        for process in who_is_who.keys():
             process.wait()
             if process.returncode != 0:
                 failed_processes.append(process)
@@ -584,9 +578,10 @@ class TrainScriptLauncher:
         num_failed = len(failed_processes)
         if num_failed > 0:
             print(f"Number of failed training scripts: {num_failed}")
-            for _failed_process in failed_processes:
+            for failed_process in failed_processes:
                 train_script   = self.launch_args['training_script']
-                msg = (f"Training script {train_script} encountered error(s); see logfile")
+                script_rank    = who_is_who[failed_process]
+                msg = (f"Training script {train_script} (rank {script_rank}) encountered error(s); see logfile")
                 print(msg)
 
     #------------------------------------
