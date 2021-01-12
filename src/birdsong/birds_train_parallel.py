@@ -364,6 +364,11 @@ class BirdTrainer(object):
         go.
         '''
 
+        am_master_node = self.comm_info['RANK'] == 0
+        if not am_master_node:
+            master_node = self.comm_info['MASTER_ADDR']
+            master_port = self.comm_info['MASTER_PORT']
+            
         self.log.debug(f"***** LOCAL_RANK in init_multiprocessing(): {self.comm_info['LOCAL_RANK']}")
         self.log.info(f"{self.hostname}: RANK {self.comm_info['RANK']}, LOCAL_RANK {self.comm_info['LOCAL_RANK']}")
 
@@ -402,6 +407,8 @@ class BirdTrainer(object):
         #      processes have started. Whether on the same, or
         #      other machines.
         
+        if not am_master_node:
+            self.log.info(f"Announcing myself to master node at {master_node}:{master_port}; then await start signal...")
         dist.init_process_group(backend,
                                 init_method='env://'
                                 )
