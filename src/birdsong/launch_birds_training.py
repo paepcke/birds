@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 import signal
 import socket
-from subprocess import PIPE
+from subprocess import PIPE, TimeoutExpired
 import subprocess
 import sys
 
@@ -368,6 +368,12 @@ class BirdsTrainingArgumentsParser(ArgumentParser):
 # -------------------------- TrainScriptLauncher
 
 class TrainScriptLauncher:
+
+    # Time interval to wait cyclically before
+    # emptying stdout and stderr pipe from 
+    # training scripts:
+      
+    SCRIPT_PROCESS_CHECK_INTERVAL = 5 # seconds
     
     #------------------------------------
     # Constructor 
@@ -563,15 +569,23 @@ class TrainScriptLauncher:
         if not self.launch_args['quiet']:
             print(f"Node {self.hostname} {os.path.basename(sys.argv[0])}: Num processes launched: {len(processes)}")
             if self.am_master_node:
-                print(f"Awaiting {self.WORLD_SIZE} processes to finish...")
+                print(f"Awaiting {self.WORLD_SIZE} process(es) to finish...")
             else:
-                print(f"Awaiting {self.my_gpus} processes to finish...")
+                print(f"Awaiting {self.my_gpus} process(es) to finish...")
         
         # Let subprocesses deal with cnt-C (keyboard interrupt):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         failed_processes = []
         for process in processes:
-            process.wait()
+            try:
+                (the_stdout, the_stderr) = \
+                    process.communicate(timeout=self.SCRIPT_PROCESS_CHECK_INTERVAL)
+            except TimeoutExpired:
+                the_stdout = the_stdout.decode('utf-8')
+                the_stderr = the_stderr.decode('utf-8')
+                self.log.info(the_stdout)
+                self.log.info(the_stderr)
+                continue
             if process.returncode != 0:
                 failed_processes.append(process)
             continue
