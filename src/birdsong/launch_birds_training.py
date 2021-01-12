@@ -560,8 +560,8 @@ class TrainScriptLauncher:
 
             process = subprocess.Popen(cmd,
                                        stdin=newstdin,
-                                       stdout=PIPE,
-                                       stderr=PIPE
+                                       stdout=None,  # Script inherits this launch
+                                       stderr=None   # ... script's stdout/stderr  
                                        )
             processes.append(process)
             local_rank += 1
@@ -577,29 +577,16 @@ class TrainScriptLauncher:
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         failed_processes = []
         for process in processes:
-            try:
-                (the_stdout, the_stderr) = \
-                    process.communicate(timeout=self.SCRIPT_PROCESS_CHECK_INTERVAL)
-            except TimeoutExpired:
-                the_stdout = the_stdout.decode('utf-8')
-                the_stderr = the_stderr.decode('utf-8')
-                self.log.info(the_stdout)
-                self.log.info(the_stderr)
-                continue
+            process.wait()
             if process.returncode != 0:
                 failed_processes.append(process)
             continue
         num_failed = len(failed_processes)
         if num_failed > 0:
             print(f"Number of failed training scripts: {num_failed}")
-            for failed_process in failed_processes:
-                (the_stdout, the_stderr) = failed_process.communicate()
-                the_stdout = the_stdout.decode('utf-8')
-                the_stderr = the_stderr.decode('utf-8')
+            for _failed_process in failed_processes:
                 train_script   = self.launch_args['training_script']
-                msg = (f"Training script {train_script} encountered error \n"
-                       f"stderr: {the_stderr} \n"
-                       f"stdout: {the_stdout} \n")
+                msg = (f"Training script {train_script} encountered error(s); see logfile")
                 print(msg)
 
     #------------------------------------
