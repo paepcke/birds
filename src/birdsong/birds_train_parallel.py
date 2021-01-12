@@ -67,11 +67,6 @@ sys.path.insert(0,packet_root)
 #     pydevd.settrace('localhost', port=4040)
 # **************** 
 
-
-
-
-
-
 #from torch.nn import BCELoss
 import faulthandler; faulthandler.enable()
 
@@ -392,8 +387,8 @@ class BirdTrainer(object):
         # Environment variables for init_process_group()
         os.environ['MASTER_ADDR'] = str(self.comm_info['MASTER_ADDR'])
         os.environ['MASTER_PORT'] = str(self.comm_info['MASTER_PORT'])
-        os.environ['RANK']        = str(self.comm_info['RANK'])
-        os.environ['LOCAL_RANK']  = str(self.comm_info['LOCAL_RANK'])
+        os.environ['RANK']        = my_rank
+        os.environ['LOCAL_RANK']  = my_local_rank
         os.environ['WORLD_SIZE']  = str(self.comm_info['WORLD_SIZE'])
 
         # Each process must call init_process_group()
@@ -413,7 +408,7 @@ class BirdTrainer(object):
         #      other machines.
         
         if not am_master_node:
-            self.log.info(f"Announcing myself to master node at {master_node}:{master_port}; then await start signal...")
+            self.log.info(f"Worker {my_rank} announcing itself to master node at {master_node}:{master_port}; then will await start signal...")
         dist.init_process_group(backend,
                                 init_method='env://'
                                 )
@@ -1485,41 +1480,7 @@ class BirdTrainer(object):
         if len(config.sections()) == 0:
             # Config file exists, but empty:
             return(self.init_defaults(config))
-
-#         # Ensure that this machine's node entry is
-#         # 'localhost'. It is legal in the config file
-#         # to use 'localhost', '127.0.0.1', or the hostname's FQDN as
-#         # key in the config file for local host.
-#         # Get name of this machine. 
-#         
-#         my_hostname = socket.gethostname().split('.')[0]
-#         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-#         s.connect(("google.com",80))
-#         
-#         # Get something like ('172.24.75.114', 44572)  
-#         my_global_ip_addr = s.getsockname()[0] 
-
-        # If current host not in the config file at all,
-        # create an entry that declares all detected GPUs on
-        # this machine as usable:
-        
-        if 'localhost' not in config['Parallelism'].keys():
-            config['Parallelism']['localhost'] = len(GPUtil.getGPUs())
     
-        # Values should all be ints: number of GPUs. Ensure
-        # that they are, and convert them from str to int
-        # in the config dict:
-        for (node, num_gpus) in config['Parallelism'].items():
-            try:
-                num_gpus = int(num_gpus)
-            except ValueError:
-                print((f"Number of GPUs at node {node} \n"
-                       f"in config file {conf_file} should be an int. \n"
-                       f"Was '{num_gpus}'"
-                       ))
-                sys.exit(1)
-            config['Parallelism'][node] = num_gpus
-            
         # Do type conversion also in other entries that 
         # are standard:
         
@@ -1588,8 +1549,7 @@ class BirdTrainer(object):
             }
 
         sec_parallelism = {
-            'pytorch_comm_port'  : 29920,
-            'localhost'          : 1
+            'pytorch_comm_port'  : 5678,
             }
         
         configparser_obj['Paths'] = sec_paths
