@@ -387,8 +387,8 @@ class BirdTrainer(object):
         # Environment variables for init_process_group()
         os.environ['MASTER_ADDR'] = str(self.comm_info['MASTER_ADDR'])
         os.environ['MASTER_PORT'] = str(self.comm_info['MASTER_PORT'])
-        os.environ['RANK']        = my_rank
-        os.environ['LOCAL_RANK']  = my_local_rank
+        os.environ['RANK']        = str(my_rank)
+        os.environ['LOCAL_RANK']  = str(my_local_rank)
         os.environ['WORLD_SIZE']  = str(self.comm_info['WORLD_SIZE'])
 
         # Each process must call init_process_group()
