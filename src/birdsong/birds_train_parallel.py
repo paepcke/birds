@@ -368,9 +368,14 @@ class BirdTrainer(object):
         if not am_master_node:
             master_node = self.comm_info['MASTER_ADDR']
             master_port = self.comm_info['MASTER_PORT']
-            
+        my_rank = self.comm_info['RANK']
+        my_local_rank = self.comm_info['LOCAL_RANK']
+        
         self.log.debug(f"***** LOCAL_RANK in init_multiprocessing(): {self.comm_info['LOCAL_RANK']}")
-        self.log.info(f"{self.hostname}: RANK {self.comm_info['RANK']}, LOCAL_RANK {self.comm_info['LOCAL_RANK']}")
+        info = f"{self.hostname}: RANK {my_rank}, LOCAL_RANK {my_local_rank}"
+        if am_master_node:
+            info += ' (master node)'
+        self.log.info(info)
 
         # Use NCCL as distributed backend,
         # or another if, nccl not available:
@@ -1225,7 +1230,7 @@ class BirdTrainer(object):
         # Already requested interrupt once before?
         
         if BirdTrainer.STOP:
-            self.log_info("Quitting gracelessly after two cnt-C keys.")
+            self.log.info("Quitting gracelessly after two cnt-C keys.")
             sys.exit(1)
             
         self.log.info("Requesting training interruption; waiting for clean point to interrupt...")
