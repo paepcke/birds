@@ -1222,6 +1222,12 @@ class BirdTrainer(object):
         exception. That in turn asks user whether to
         save current training state for later resumption
         '''
+        # Already requested interrupt once before?
+        
+        if BirdTrainer.STOP:
+            self.log_info("Quitting gracelessly after two cnt-C keys.")
+            sys.exit(1)
+            
         self.log.info("Requesting training interruption; waiting for clean point to interrupt...")
         BirdTrainer.STOP = True
 
