@@ -165,34 +165,30 @@ class BirdTrainer(object):
 
         # Replace None args with config file values:
 
-        # Create temporary logging till setup_logging()
+        # Create temporary logging till setup_tallying()
         # is called further down:
 
         if logfile is None:
             try:
                 logfile = self.config.getpath('Paths','logfile', 
                                               relative_to=self.curr_dir)
-                # Add rank so each training process gets
-                # its own log output:
-                 
-                lp = Path(logfile)
-                new_logname = lp.stem + str(self.comm_info['RANK']) + lp.suffix
-                # Put the path back together, and turn 
-                # from Path instnce to string
-                logfile = str(Path.joinpath(lp.parent, new_logname))
-
-                if os.path.isdir(logfile):
-                    raise ValueError(f"Logfile argument must be a file name, not a directory ({logfile})")
-                self.log = LoggingService(logfile=logfile)
             except ValueError:
                 # No logfile specified in config.cfg
                 # Use stdout:
                 self.log = LoggingService()
-        else:
-            if os.path.isdir(logfile):
-                raise ValueError(f"Logfile argument must be a file name, not a directory ({logfile})")
-            self.log = LoggingService(logfile=logfile)
-            
+        # Add rank so each training process gets
+        # its own log output:
+         
+        lp = Path(logfile)
+        new_logname = lp.stem + str(self.comm_info['RANK']) + lp.suffix
+        # Put the path back together, and turn 
+        # from Path instnce to string
+        logfile = str(Path.joinpath(lp.parent, new_logname))
+
+        if os.path.isdir(logfile):
+            raise ValueError(f"Logfile argument must be a file name, not a directory ({logfile})")
+        self.log = LoggingService(logfile=logfile)
+
         self.log.logging_level = logging_level
         
         if root_train_test_data is None:
@@ -351,11 +347,11 @@ class BirdTrainer(object):
 
         self.log.info(f"Model resides on device: {self.device_residence(self.model)}")
 
-        # Note: call to setup_logging must
+        # Note: call to setup_tallying must
         # be after checkpoint restoration above.
         # Else tally_collection will be overwritten:
         
-        self.setup_logging(logfile, self.num_classes)
+        self.setup_tallying(self.num_classes)
         self.setup_json_logging(self.config.Training.getint('kernel_size'), 
                                 self.config.Training.getint('batch_size'),
                                 json_log_dir=performance_log_dir
@@ -1682,41 +1678,11 @@ class BirdTrainer(object):
         return configparser_obj
 
     #------------------------------------
-    # setup_logging
+    # setup_tallying
     #-------------------
     
-    def setup_logging(self, logfile, num_classes, logging_level=logging.INFO):
+    def setup_tallying(self, num_classes):
 
-        local_rank = self.comm_info['LOCAL_RANK']
-        if logfile is None:
-            
-            default_logfile_name = os.path.join(os.path.dirname(__file__), 
-                                                'bird_train.log' if local_rank is None 
-                                                else f"bird_train_{local_rank}.log"
-                                                )
-            self.log = LoggingService(logfile=default_logfile_name, logging_level=logging_level)
-            
-            # In case there already was a logging instance,
-            # ensure this new logging file is set:
-            self.log.log_file = default_logfile_name
-
-        elif logfile == 'stdout':
-            self.log = LoggingService(logging_level=logging_level)
-            print(f"Logging to stdout...")
-        else:
-            # Logfile name provided by caller. Still
-            # need to disambiguate between multiple processes,
-            # if appropriate:
-            if local_rank is not None:
-                (logfile_root, ext) = os.path.splitext(logfile)
-                logfile = f"{logfile_root}_{local_rank}{ext}"
-            self.log = LoggingService(logfile=logfile, logging_level=logging_level)
-            # In case there already was a logging instance,
-            # ensure this new logging file is set:
-            self.log.log_file = logfile
-            
-            print(f"Logging to {logfile}...")
-            
         # Likely a hack: To threshold either a batch of
         # predictions, or the prediction of a single class,
         # create a matrix of 1s and 0s from which to "where()",
@@ -2038,10 +2004,10 @@ class Resnet18Grayscale(ResNet):
         return next(self.parameters()).device
 
     #------------------------------------
-    # setup_logging 
+    # setup_tallying 
     #-------------------
     
-    def setup_logging(self):
+    def setup_tallying(self):
 
         now = datetime.datetime.now()
         self.log_filepath = now.strftime("%d-%m-%Y") + '_' + now.strftime("%H-%M") + "_K" + str(
