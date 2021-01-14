@@ -279,15 +279,17 @@ class BirdTrainer(object):
         # Resnet18 retain 6 layers of pretraining.
         # Train the remaining 4 layers with your own
         # dataset. This is the model without capability
-        # for parallel training: 
+        # for parallel training. Will be adjusted in
+        # to_app
+        #  
         
         raw_model = self.get_resnet18_partially_trained(self.num_classes)
         
-        # Wrapper to handle distributed training:
-        self.model = DDP(raw_model)
-        
-        if self.device == self.cuda:
-            self.model.cuda()
+        # Wrapper to handle distributed training, and
+        # move to GPU, if appropriate. 
+        self.model = self.prep_model(raw_model,
+                                     self.comm_info['LOCAL_RANK']
+                                     )
 
         if unit_testing:
             return
@@ -507,6 +509,33 @@ class BirdTrainer(object):
             item.to(device=self.cuda)
         else:
             item.to(device=self.cpu)
+
+    #------------------------------------
+    # prep_model 
+    #-------------------
+    
+    def prep_model(self, model, local_rank=0):
+        '''
+        Takes a (usually CPU-resident) model,
+        and:
+           o if a GPU will be used, wraps the model
+             in a DistributedDataModel instance for
+             participation in distributed data parallel
+             operations. The result will reside on 
+             GPU with ID (index) local_rank
+
+           o Without GPU in use, returns the model unchanged
+        
+        @param model: a pytorch model instance
+        @type model: pytorch.nn.model
+        @param local_rank: id of GPU
+        @type local_rank: int
+        '''
+
+        if self.device == torch.device('cuda'):
+            return DDP(model, device_ids=local_rank)
+        else:
+            return model
 
     #------------------------------------
     # enable_GPU 
@@ -1995,7 +2024,7 @@ if __name__ == '__main__':
     parser.add_argument('--RANK',
                         help=argparse.SUPPRESS,
                         type=int,
-                        default=None
+                        default=0
                         )
     # Used only by launch.py script! Pass
     # communication parameters:
@@ -2003,7 +2032,7 @@ if __name__ == '__main__':
     parser.add_argument('--LOCAL_RANK',
                         help=argparse.SUPPRESS,
                         type=int,
-                        default=None
+                        default=0
                         )
     # Used only by launch.py script! Pass
     # communication parameters:
@@ -2011,13 +2040,14 @@ if __name__ == '__main__':
     parser.add_argument('--WORLD_SIZE',
                         help=argparse.SUPPRESS,
                         type=int,
-                        default=None
+                        default=1
                         )
     
     parser.add_argument('-d', '--data',
                         help='directory root of sub-directories that each contain samples \n'
                              'of one class. Can be specified in config file instead',
                         default=None)
+    
     parser.add_argument('config',
                         help='fully qualified file name of configuration file',
                         default=None)
