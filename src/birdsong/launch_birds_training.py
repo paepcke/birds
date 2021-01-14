@@ -411,6 +411,8 @@ class TrainScriptLauncher:
         # Build the gpu_landscape dict:
         self.gather_world_layout(self.launch_args)
         
+        self.GPUS_USED_THIS_MACHINE = self.gpu_landscape['num_gpus']
+        
     #------------------------------------
     # gather_world_layout
     #-------------------
@@ -470,7 +472,7 @@ class TrainScriptLauncher:
         #     machine_name2 : [0],
         #     machine_name3 : [1,2,3],        
 
-        self.build_compute_landcape(self.world_map)
+        self.gpu_landscape = self.build_compute_landscape(self.world_map)
         
         if self.master_hostname is None:
             raise ConfigError(f'No master machine in {self.world_map_path}; one entry needs to be "master" : 1')
@@ -518,6 +520,8 @@ class TrainScriptLauncher:
                            # Unique across all participating machines
             o LOCAL_RANK   # Which of this machine's GPU to use (0-origin)
             o WORLD_SIZE   # How many GPUs are used on all machines together
+            o GPUS_USED_THIS_MACHINE # Number of GPUs *used* on this
+                                     # machine, according to the world_map.
 
         '''
         
@@ -532,7 +536,7 @@ class TrainScriptLauncher:
 
         # This machine's range of ranks:
         rank_range = self.gpu_landscape[self.hostname]['rank_range']
-        this_machine_gpu_ids    = self.gpu_landscape[self.hostname]['gpu_device_ids']
+        this_machine_gpu_ids = self.gpu_landscape[self.hostname]['gpu_device_ids']
 
         local_rank = 0
         # Map from process object to rank (for debug msgs):
@@ -589,7 +593,8 @@ class TrainScriptLauncher:
     #-------------------
 
     def training_script_start_cmd(self, 
-                                  rank, 
+                                  rank,
+                                  gpus_used_this_machine,
                                   local_rank,
                                   launch_args,
                                   script_args):
@@ -616,7 +621,8 @@ class TrainScriptLauncher:
                     f"--MASTER_PORT={self.MASTER_PORT}",
                     f"--RANK={rank}",
                     f"--LOCAL_RANK={local_rank}",
-                    f"--WORLD_SIZE={self.WORLD_SIZE}"
+                    f"--WORLD_SIZE={self.WORLD_SIZE}",
+                    f"--GPUS_USED_THIS_MACHINE={gpus_used_this_machine}"
                     ])
         
         # Finally, the obligatory non-option arg
@@ -726,10 +732,10 @@ class TrainScriptLauncher:
     
 
     #------------------------------------
-    # build_compute_landcape
+    # build_compute_landscape
     #-------------------
     
-    def build_compute_landcape(self, world_map):
+    def build_compute_landscape(self, world_map):
         '''
         # Using the world_map.json config file, build 
         # a dict self.gpu_landscape like this:
@@ -750,6 +756,9 @@ class TrainScriptLauncher:
         
         @param world_map:
         @type world_map:
+        @return: information about how many GPUs are
+            on each node
+        @rtype: OrderedDict
         '''
 
         # World size is the number of training script processes, 

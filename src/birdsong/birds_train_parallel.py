@@ -19,6 +19,7 @@ import os, sys
 import random  # Just so we can fix seed for testing
 import signal
 import socket
+import contextlib
 
 import GPUtil
 from logging_service import LoggingService
@@ -128,7 +129,10 @@ class BirdTrainer(object):
 
         if comm_info is None or None in comm_info.values():
             started_from_launch = False
-            comm_info = {}
+            # To generalize some of the code
+            # below: won't have to check for
+            # device being cuda vs. CPU
+            comm_info = {'LOCAL_RANK' : 0}
         else:
             started_from_launch = True
             
@@ -257,7 +261,22 @@ class BirdTrainer(object):
                 num_folds=self.num_folds
                 )
         else:
-            # GPUSs used, single or multiple machines:
+            # GPUSs used on *this* machine:
+            
+            num_gpus_used_here = self.comm_info['GPUS_USED_THIS_MACHINE']
+            if num_gpus_used_here is None:
+                num_gpus_used_here = cuda.device_count()
+            
+            # True batch size elicited from dataloader on
+            # each next() is multiplied by number of GPUs used
+            # on this machine, b/c DDP will distribute the samples
+            # of the received batch across the GPUs:
+            
+            discovered_batch_size = batch_size if batch_size is not None else train_parms.getint('batch_size')
+                              
+            effective_batch_size = num_gpus_used_here * discovered_batch_size
+            
+            self.log.info(f"Batches of size {effective_batch_size} will be spread over {num_gpus_used_here} GPUs")
 
             self.log.debug("***** Calling init_multiprocessing...")
             self.init_multiprocessing()
@@ -268,9 +287,7 @@ class BirdTrainer(object):
                                                         seed=self.seed,
                                                         num_folds=self.num_folds,
                                                         drop_last=True,
-                                                        batch_size=batch_size 
-                                                            if batch_size is not None 
-                                                            else train_parms.getint('batch_size')
+                                                        batch_size=effective_batch_size 
                                                         )
         self.num_classes = len(dataset.class_id_list())
         
@@ -287,10 +304,10 @@ class BirdTrainer(object):
         
         # Wrapper to handle distributed training, and
         # move to GPU, if appropriate. 
+        
         self.model = self.prep_model(raw_model,
                                      self.comm_info['LOCAL_RANK']
                                      )
-
         if unit_testing:
             return
 
@@ -322,9 +339,6 @@ class BirdTrainer(object):
         
         # Scheduler:
         self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer)
-        
-        # Move to GPU if available:
-        self.to_best_device(self.model)
 
         self.log.info(f"Model resides on device: {self.device_residence(self.model)}")
 
@@ -433,6 +447,9 @@ class BirdTrainer(object):
     
     def setup_gpus(self):
         
+        if cuda.device_count() == 0:
+            return
+        
         # If we were launched from the launch script,
         # the the comm_info contains all needed
         # communications parameters.
@@ -531,10 +548,57 @@ class BirdTrainer(object):
         @param local_rank: id of GPU
         @type local_rank: int
         '''
-
+        
         if self.device == torch.device('cuda'):
-            return DDP(model, device_ids=local_rank)
+            model.to(self.device)
+
+            # Leave out the devices and output
+            # keyword args, b/c we always work
+            # with one process per device, and
+            # DDP will use the current device:
+
+            return DDP(model,
+                       device_ids=[local_rank],
+                       output_device=local_rank
+                       )
+
+            # Leave out the devices and output
+            # keyword args, b/c we always work
+            # with one process per device, and
+            # DDP will use the current device:
+
+            return DDP(model)
+
         else:
+            # A bit of a hack, maybe, for this case of
+            # CPU-only training. The multi-GPU case
+            # (of the branch above) needs the training
+            # loop wrapped with a context available only
+            # for DDP-wrapped models:
+            #
+            #    with ddp_wrapped_model.join():
+            #        <train>
+            #
+            # CPU-only training uses just the straight
+            # model, without the DDP wrapper, so the 
+            # join() context manager is not available.
+            # Add it to the model: 
+
+            # The join() context manager needs to be
+            # added to the model instance's class
+            # no matter of which particular class the model
+            # is an instance:
+            
+            model_class  = type(model)
+            
+            # A context that does nothing:
+             
+            null_context = contextlib.nullcontext
+            
+            # New context manager for the model:
+            setattr(model_class, 'join', null_context)
+            
+            # Now model can be used as "with model.join():..." 
             return model
 
     #------------------------------------
@@ -932,85 +996,91 @@ class BirdTrainer(object):
                 # epochs have occurred, or accuracy has not
                 # improved beyond 0.05 during the past
                 # self.EPOCHS_FOR_PLATEAU_DETECTION epochs:
-                  
-                while (self._diff_avg >= 0.05 or \
-                       self.epoch <= self.config.Training.getint('min_epochs')
-                       ) and \
-                       self.epoch <= self.config.Training.getint('max_epochs'):
-                    self.epoch += 1
-                    # Tell dataloader that epoch changed.
-                    # The dataloader will tell the sampler,
-                    # which will use the information to 
-                    # predictably randomize the dataset
-                    # before creating splits:
-                    
-                    self.dataloader.set_epoch(self.epoch)
-                    split_num = 0
-                    
-                    # Get an iterator over all the 
-                    # splits from the dataloader. 
-                    # Since train_one_split() is a generator
-                    # function, the first call here returns
-                    # a generator object rather than running
-                    # the method:
-    
-                    split_training_iterator = self.train_one_split()
-                    
-                    # Send the initial split_num to the
-                    # generator; it is hanging to receive
-                    # this near the top of train_one_split():
-                    
-                    split_training_iterator.send(None)
-    
-                    for split_num in range(num_folds):
-                        self.optimizer.zero_grad()
-                        try:
-                            # train_one_split() is waiting for
-                            # the next split_num in the second
-                            # yield statement of that method:
-                            split_training_iterator.send(split_num)
-                        except StopIteration:
-                            # Exhausted all the splits
-                            self.log.warn(f"Unexpectedly ran out of splits.")
-                            break
-                        self.validate_one_split(split_num)
-    
-                        # Time for sign of life?
-                        time_now = datetime.datetime.now()
-                        if self.time_diff(time_start, time_now) >= alive_pulse:
-                            self.log.info (f"Epoch {self.epoch}; Split number {split_num} of {num_folds}")
-    
-                    # Done with one epoch:
-                    self.log.info(f"Finished epoch {self.epoch}")
-                    
-                    # Update the json based result record
-                    # in the file system:
-                    
-                    self.record_json_display_results(self.epoch)
-                    
-                    # Compute mean accuracy over all splits
-                    # of this epoch:
-                    accuracies[self.epoch] = self.tally_collection.mean_accuracy(epoch=self.epoch, 
-                                                                                 learning_phase=LearningPhase.TRAINING)
-    
-                    if self.epoch <= self.config.Training.getint('min_epochs'):
-                        # Haven't trained for the minimum of epochs:
-                        continue
-                    
-                    if self.epoch < self.EPOCHS_FOR_PLATEAU_DETECTION:
-                        # Need more epochs to discover accuracy plateau:
-                        continue
-    
-                    # Compute the mean over successive accuracy differences
-                    # after the past few epochs. Where 'few' means
-                    # EPOCHS_FOR_PLATEAU_DETECTION. The '1+' is needed
-                    # because our epochs start at 1:
-    
-                    past_accuracies = [accuracies[epoch] for epoch 
-                                       in range(1+len(accuracies)-self.EPOCHS_FOR_PLATEAU_DETECTION,
-                                                self.epoch+1
-                                                )]
-                    self._diff_avg = self.mean_diff(torch.tensor(past_accuracies))
+                
+                # This context manager ensures that models
+                # will be synchronized after each epoch.
+                # For CPU-only cases this context manager will
+                # do nothing (see prep_model()):
+                
+                with self.model.join():
+                    while (self._diff_avg >= 0.05 or \
+                           self.epoch <= self.config.Training.getint('min_epochs')
+                           ) and \
+                           self.epoch <= self.config.Training.getint('max_epochs'):
+                        self.epoch += 1
+                        # Tell dataloader that epoch changed.
+                        # The dataloader will tell the sampler,
+                        # which will use the information to 
+                        # predictably randomize the dataset
+                        # before creating splits:
+                        
+                        self.dataloader.set_epoch(self.epoch)
+                        split_num = 0
+                        
+                        # Get an iterator over all the 
+                        # splits from the dataloader. 
+                        # Since train_one_split() is a generator
+                        # function, the first call here returns
+                        # a generator object rather than running
+                        # the method:
+        
+                        split_training_iterator = self.train_one_split()
+                        
+                        # Send the initial split_num to the
+                        # generator; it is hanging to receive
+                        # this near the top of train_one_split():
+                        
+                        split_training_iterator.send(None)
+        
+                        for split_num in range(num_folds):
+                            self.optimizer.zero_grad()
+                            try:
+                                # train_one_split() is waiting for
+                                # the next split_num in the second
+                                # yield statement of that method:
+                                split_training_iterator.send(split_num)
+                            except StopIteration:
+                                # Exhausted all the splits
+                                self.log.warn(f"Unexpectedly ran out of splits.")
+                                break
+                            self.validate_one_split(split_num)
+        
+                            # Time for sign of life?
+                            time_now = datetime.datetime.now()
+                            if self.time_diff(time_start, time_now) >= alive_pulse:
+                                self.log.info (f"Epoch {self.epoch}; Split number {split_num} of {num_folds}")
+        
+                        # Done with one epoch:
+                        self.log.info(f"Finished epoch {self.epoch}")
+                        
+                        # Update the json based result record
+                        # in the file system:
+                        
+                        self.record_json_display_results(self.epoch)
+                        
+                        # Compute mean accuracy over all splits
+                        # of this epoch:
+                        accuracies[self.epoch] = self.tally_collection.mean_accuracy(epoch=self.epoch, 
+                                                                                     learning_phase=LearningPhase.TRAINING)
+        
+                        if self.epoch <= self.config.Training.getint('min_epochs'):
+                            # Haven't trained for the minimum of epochs:
+                            continue
+                        
+                        if self.epoch < self.EPOCHS_FOR_PLATEAU_DETECTION:
+                            # Need more epochs to discover accuracy plateau:
+                            continue
+        
+                        # Compute the mean over successive accuracy differences
+                        # after the past few epochs. Where 'few' means
+                        # EPOCHS_FOR_PLATEAU_DETECTION. The '1+' is needed
+                        # because our epochs start at 1:
+        
+                        past_accuracies = [accuracies[epoch] for epoch 
+                                           in range(1+len(accuracies)-self.EPOCHS_FOR_PLATEAU_DETECTION,
+                                                    self.epoch+1
+                                                    )]
+                        self._diff_avg = self.mean_diff(torch.tensor(past_accuracies))
     
     
             except (KeyboardInterrupt, InterruptTraining) as _e:
@@ -1043,6 +1113,13 @@ class BirdTrainer(object):
 
         finally:
             if self.device == self.cuda:
+                # Ensure all activity in different parts
+                # of the cuda device are done; uses the
+                # current device
+                
+                self.log.info("Synchronizing GPUs")
+                cuda.synchronize()
+                
                 self.model.to('cpu')
                 self.ending_GPU_memory = cuda.memory_allocated(self.device)
                 if self.ending_GPU_memory >= self.initial_GPU_memory:
@@ -2043,6 +2120,12 @@ if __name__ == '__main__':
                         default=1
                         )
     
+    parser.add_argument('--GPUS_USED_THIS_MACHINE',
+                        help=argparse.SUPPRESS,
+                        type=int,
+                        default=None
+                        )
+    
     parser.add_argument('-d', '--data',
                         help='directory root of sub-directories that each contain samples \n'
                              'of one class. Can be specified in config file instead',
@@ -2066,6 +2149,12 @@ if __name__ == '__main__':
     comm_info['RANK']        = int(args.RANK)
     comm_info['LOCAL_RANK']  = int(args.LOCAL_RANK)
     comm_info['WORLD_SIZE']  = int(args.WORLD_SIZE)
+    
+    # GPUS_USED_THIS_MACHINE may be None to indicate
+    # instruction to use all GPUs on this machine:
+    comm_info['GPUS_USED_THIS_MACHINE'] = \
+        None if args.GPUS_USED_THIS_MACHINE is None \
+             else int(args.GPUS_USED_THIS_MACHINE)
 
     if args.logginglevel == 'critical':
         logging_level = logging.CRITICAL

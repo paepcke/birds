@@ -64,7 +64,7 @@ class TestLauncher(unittest.TestCase):
                                           )
         world_map = launcher.read_world_map(tst_world_map_path)
         launcher.config = self.config
-        launcher.build_compute_landcape(world_map)
+        launcher.build_compute_landscape(world_map)
         
         rank = 0
         local_rank = 0
@@ -117,7 +117,7 @@ class TestLauncher(unittest.TestCase):
                                           )
         world_map = launcher.read_world_map(tst_world_map_path)
         
-        gpu_landscape = launcher.build_compute_landcape(world_map)
+        gpu_landscape = launcher.build_compute_landscape(world_map)
         
         expected = OrderedDict([('quatro.stanford.edu', 
                                  {'num_gpus': 2, 
