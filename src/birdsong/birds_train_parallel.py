@@ -70,6 +70,16 @@ sys.path.insert(0,packet_root)
 #     pydevd.settrace('localhost', port=4040)
 # **************** 
 
+#***********
+# Suppress the sklearn warnings about
+# num of samples in some class being smaller
+# than fold size. Only uncomment if using
+#   <proj_root>/src/birdsong/tests/data
+# for testing: 
+#import warnings
+#warnings.filterwarnings(action='ignore', category=UserWarning)
+#***********
+
 #from torch.nn import BCELoss
 import faulthandler; faulthandler.enable()
 
