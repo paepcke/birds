@@ -12,14 +12,15 @@ code by
 
 from _collections import OrderedDict
 import argparse
+import contextlib
 import datetime
 import json
 import logging
 import os, sys
+from pathlib import Path
 import random  # Just so we can fix seed for testing
 import signal
 import socket
-import contextlib
 
 import GPUtil
 from logging_service import LoggingService
@@ -27,6 +28,7 @@ from torch import cuda
 from torch import hub
 from torch import optim
 import torch
+from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.tensorboard import SummaryWriter
 from torchvision.models.resnet import ResNet, BasicBlock
 
@@ -38,8 +40,6 @@ from birdsong.utils.learning_phase import LearningPhase
 import numpy as np
 import torch.distributed as dist
 import torch.nn as nn
-
-from torch.nn.parallel import DistributedDataParallel as DDP
 
 
 packet_root = os.path.abspath(__file__.split('/')[0])
@@ -175,7 +175,12 @@ class BirdTrainer(object):
                 # Add rank so each training process gets
                 # its own log output:
                  
-                logfile += str(self.comm_info['RANK'])
+                lp = Path(logfile)
+                new_logname = lp.stem + str(self.comm_info['RANK']) + lp.suffix
+                # Put the path back together, and turn 
+                # from Path instnce to string
+                logfile = str(Path.joinpath(lp.parent, new_logname))
+
                 if os.path.isdir(logfile):
                     raise ValueError(f"Logfile argument must be a file name, not a directory ({logfile})")
                 self.log = LoggingService(logfile=logfile)
