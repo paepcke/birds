@@ -186,18 +186,22 @@ class BirdTrainer(object):
                 # No logfile specified in config.cfg
                 # Use stdout:
                 self.log = LoggingService()
+                
         # Add rank so each training process gets
-        # its own log output:
-         
-        lp = Path(logfile)
-        new_logname = lp.stem + str(self.comm_info['RANK']) + lp.suffix
-        # Put the path back together, and turn 
-        # from Path instnce to string
-        logfile = str(Path.joinpath(lp.parent, new_logname))
+        # its own log output file. The "logfile is None"
+        # body may have initialized logfile, so need to
+        # check for None again:
 
-        if os.path.isdir(logfile):
-            raise ValueError(f"Logfile argument must be a file name, not a directory ({logfile})")
-        self.log = LoggingService(logfile=logfile)
+        if logfile is not None:
+            lp = Path(logfile)
+            new_logname = lp.stem + str(self.comm_info['RANK']) + lp.suffix
+            # Put the path back together, and turn 
+            # from Path instnce to string
+            logfile = str(Path.joinpath(lp.parent, new_logname))
+    
+            if os.path.isdir(logfile):
+                raise ValueError(f"Logfile argument must be a file name, not a directory ({logfile})")
+            self.log = LoggingService(logfile=logfile)
 
         self.log.logging_level = logging_level
         
