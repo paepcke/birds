@@ -38,6 +38,8 @@ import numpy as np
 import torch.distributed as dist
 import torch.nn as nn
 
+from torch.nn.parallel import DistributedDataParallel as DDP
+
 
 packet_root = os.path.abspath(__file__.split('/')[0])
 sys.path.insert(0,packet_root)
@@ -276,8 +278,14 @@ class BirdTrainer(object):
 
         # Resnet18 retain 6 layers of pretraining.
         # Train the remaining 4 layers with your own
-        # dataset:
-        self.model = self.get_resnet18_partially_trained(self.num_classes)
+        # dataset. This is the model without capability
+        # for parallel training: 
+        
+        raw_model = self.get_resnet18_partially_trained(self.num_classes)
+        
+        # Wrapper to handle distributed training:
+        self.model = DDP(raw_model)
+        
         if self.device == self.cuda:
             self.model.cuda()
 
