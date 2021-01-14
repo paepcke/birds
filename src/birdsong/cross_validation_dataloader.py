@@ -202,7 +202,8 @@ class CrossValidatingDataLoader(DataLoader):
             
             # Complete the error msg according which of
             # the two failure conditions occurred:
-            msg += type(batch_size).__name__ else f"{batch_size}"
+            msg += type(batch_size).__name__ if not isinstance(batch_size, int)\
+                                           else f"{batch_size}"
             
             raise ValueError(msg)
         
