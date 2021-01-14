@@ -4,7 +4,8 @@
  For each machine:
 
    Required
-     o Number of GPUs (to use; need not be all available)
+     o Number of GPUs (to use on the entry's machine.
+                       Need not be all that are available)
      
    Required of exactly one machine's entry:
      o "master" = True

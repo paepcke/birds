@@ -411,7 +411,7 @@ class TrainScriptLauncher:
         # Build the gpu_landscape dict:
         self.gather_world_layout(self.launch_args)
         
-        self.GPUS_USED_THIS_MACHINE = self.gpu_landscape['num_gpus']
+        self.GPUS_USED_THIS_MACHINE = self.gpu_landscape['self.hostname']['num_gpus']
         
     #------------------------------------
     # gather_world_layout
@@ -498,7 +498,7 @@ class TrainScriptLauncher:
         # when GPUs are available elsewhere, refuse to
         # start the script (is this needed?):
         if not TESTING:
-            if self.my_gpus == 0 and self.WORLD_SIZE> 0:
+            if self.my_gpus == 0 and self.WORLD_SIZE > 0:
                 raise RuntimeError("This machine does not have any GPU, but others do; training script not started.")
         
     #------------------------------------
@@ -545,6 +545,7 @@ class TrainScriptLauncher:
 
             cmd = self.training_script_start_cmd(rank, 
                                                  this_machine_gpu_ids[local_rank],
+                                                 local_rank,
                                                  self.launch_args,
                                                  self.script_args
                                                  )
@@ -751,8 +752,8 @@ class TrainScriptLauncher:
         # Also sets 
         #     o self.master_hostname, the hostname
         #       running the one process that coordinates all others.
-        #     o self.WORLD_SIZE
-        #     o self.my_gpus
+        #     o self.WORLD_SIZE, number of GPUs used across all machines
+        #     o self.my_gpus, the number of GPUs on this machine
         
         @param world_map:
         @type world_map:
@@ -760,7 +761,10 @@ class TrainScriptLauncher:
             on each node
         @rtype: OrderedDict
         '''
-
+        
+        if not self.hostname in world_map.keys():
+            raise ConfigError(f"World map does not contain an entry for this machine {self.hostname}")
+        
         # World size is the number of training script processes, 
         # which is equal to number of GPUs used on all participating
         # machines combined:
