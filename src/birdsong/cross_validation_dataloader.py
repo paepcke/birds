@@ -197,8 +197,15 @@ class CrossValidatingDataLoader(DataLoader):
         else:
             self.sampler = sampler
             
-        if not isinstance(batch_size, int) and batch_size > 0:
-            raise ValueError(f"Batch size must be a positive int, not {type(batch_size)}")
+        if not isinstance(batch_size, int) or batch_size <= 0:
+            msg = f"Batch size must be a positive int, not "
+            
+            # Complete the error msg according which of
+            # the two failure conditions occurred:
+            msg += type(batch_size).__name__ else f"{batch_size}"
+            
+            raise ValueError(msg)
+        
         self.batch_size = batch_size
             
         self.num_folds   = num_folds

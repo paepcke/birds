@@ -411,7 +411,7 @@ class TrainScriptLauncher:
         # Build the gpu_landscape dict:
         self.gather_world_layout(self.launch_args)
         
-        self.GPUS_USED_THIS_MACHINE = self.gpu_landscape['self.hostname']['num_gpus']
+        self.GPUS_USED_THIS_MACHINE = self.gpu_landscape[self.hostname]['num_gpus']
         
     #------------------------------------
     # gather_world_layout
@@ -544,7 +544,7 @@ class TrainScriptLauncher:
         for rank in rank_range: 
 
             cmd = self.training_script_start_cmd(rank, 
-                                                 this_machine_gpu_ids[local_rank],
+                                                 len(this_machine_gpu_ids),
                                                  local_rank,
                                                  self.launch_args,
                                                  self.script_args

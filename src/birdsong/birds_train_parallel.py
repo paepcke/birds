@@ -172,6 +172,10 @@ class BirdTrainer(object):
             try:
                 logfile = self.config.getpath('Paths','logfile', 
                                               relative_to=self.curr_dir)
+                # Add rank so each training process gets
+                # its own log output:
+                 
+                logfile += str(self.comm_info['RANK'])
                 if os.path.isdir(logfile):
                     raise ValueError(f"Logfile argument must be a file name, not a directory ({logfile})")
                 self.log = LoggingService(logfile=logfile)
