@@ -35,7 +35,7 @@ class FileMover(object):
     # move 
     #-------------------
     
-    def move(self, move_fn=shutil.move):
+    def move(self, move_fn=shutil.move, testing=False):
         '''
         Computes random sequence of indices into
         the result of walking the srcdir subtree.
@@ -45,10 +45,25 @@ class FileMover(object):
         Moves files, and returns number of files 
         moved.
         
+        The optional move function will be used to 
+        execute a move. Args must be (src_path, dst_dir).
+        
+        If testing is True, the following intermediate
+        results will be available as instance variables
+        after execution:
+        
+            num_to_move
+            file_indices   # Indices into list of files
+                           # as discovered by os.walk
+            files_moved    # List of the files moved 
+            
+        
         @param move_fn: function to use when moving files.
             Primarily for testing without actually moving
             files
         @type move_fn: Function(src_file, dst_dir)
+        @param testing: if True, store intermediates in self
+        @type testing: bool
         @return: number of files moved
         @rtype: int
         '''
@@ -62,11 +77,11 @@ class FileMover(object):
         for _root, _dirs, files in file_iter:
             num_files += len(files)
         
-        num_to_move = np.round(100 * perc / num_files)
+        num_to_move = int(np.round(num_files * self.perc / 100))
         
         # A generator of numbers:
         rng = np.random.default_rng()
-
+        
         # Get as many ints between 0 and the
         # total number of files below srcdir
         # as the percentage of the files to 
@@ -79,11 +94,20 @@ class FileMover(object):
         file_indices = sorted(rng.choice(num_files, num_to_move, replace=False),
                               reverse=True)
         
+        if testing:
+            # Need to copy, b/c file_indices
+            # will be popped below:
+            self.file_indices = file_indices.copy()
+            self.num_to_move  = num_to_move
+        
         # Go through the same file listings
         # as when the num of files was determined
         # above. Watch for files corresponding to
         # the random numbers in file_idx:
-        
+
+        if testing:
+            files_moved = []
+            
         file_iter = os.walk(self.srcdir)
         file_idx = 0
         next_to_move = file_indices.pop()
@@ -97,12 +121,20 @@ class FileMover(object):
                 file_idx_to_move = next_to_move - file_idx
                 file_to_move = os.path.join(root, files[file_idx_to_move])
                 
-                shutil.move(file_to_move, self.dstdir)
-                next_to_move = file_indices.pop()
+                move_fn(file_to_move, self.dstdir)
+                
+                if testing:
+                    files_moved.append(file_to_move)
+                
+                try:
+                    next_to_move = file_indices.pop()
+                except IndexError:
+                    # Moved all files
+                    if testing:
+                        self.files_moved = files_moved
+                    return num_to_move
                 
             file_idx += addtl_idx_range
-
-        return num_to_move
 
 # ------------------------ Main ------------
 if __name__ == '__main__':
