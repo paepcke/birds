@@ -540,7 +540,7 @@ class TrainScriptLauncher:
 
         local_rank = 0
         # Map from process object to rank (for debug msgs):
-        who_is_who = OrderedDict()
+        self.who_is_who = OrderedDict()
         for rank in rank_range: 
 
             cmd = self.training_script_start_cmd(rank, 
@@ -562,30 +562,33 @@ class TrainScriptLauncher:
                                        stdout=None,  # Script inherits this launch
                                        stderr=None   # ... script's stdout/stderr  
                                        )
-            who_is_who[process] = rank
+            self.who_is_who[process] = rank
             local_rank += 1
         
         if not self.launch_args['quiet']:
-            print(f"Node {self.hostname} {os.path.basename(sys.argv[0])}: Num processes launched: {len(who_is_who)}")
+            print(f"Node {self.hostname} {os.path.basename(sys.argv[0])}: Num processes launched: {len(self.who_is_who)}")
             if self.am_master_node:
                 print(f"Awaiting {self.WORLD_SIZE} process(es) to finish...")
             else:
                 print(f"Awaiting {self.my_gpus} process(es) to finish...")
         
-        # Let subprocesses deal with cnt-C (keyboard interrupt):
-        signal.signal(signal.SIGINT, signal.SIG_IGN)
         failed_processes = []
-        for process in who_is_who.keys():
-            process.wait()
-            if process.returncode != 0:
-                failed_processes.append(process)
-            continue
+        try:
+            for process in self.who_is_who.keys():
+                process.wait()
+                if process.returncode != 0:
+                    failed_processes.append(process)
+                continue
+        except KeyboardInterrupt:
+            # Gently kill the training scripts:
+            self.handle_cnt_c(self.who_is_who.keys())
+            
         num_failed = len(failed_processes)
         if num_failed > 0:
             print(f"Number of failed training scripts: {num_failed}")
             for failed_process in failed_processes:
                 train_script   = self.launch_args['training_script']
-                script_rank    = who_is_who[failed_process]
+                script_rank    = self.who_is_who[failed_process]
                 msg = (f"Training script {train_script} (rank {script_rank}) encountered error(s); see logfile")
                 print(msg)
 
@@ -854,6 +857,20 @@ class TrainScriptLauncher:
         self.gpu_landscape = gpu_landscape
         return gpu_landscape
 
+    #------------------------------------
+    # handle_cnt_c 
+    #-------------------
+
+    def handle_cnt_c(self, procs):
+        '''
+        Given a list of process instances,
+        Send SIGINT (cnt-C) to them:
+        @param procs:
+        @type procs:
+        '''
+        for process in procs:
+            process.send_signal(signal.SIGINT)
+            process.wait()
 
 # --------------------- Main ---------------
 
