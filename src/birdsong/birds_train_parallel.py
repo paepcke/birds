@@ -977,6 +977,10 @@ class BirdTrainer(object):
 
         self.log.info("Begin training")
         
+        # Whether cnt-C was received and handled.
+        # If True, finally clause will do nothing:
+        hard_stop = False
+        
         if self.device == self.cuda:
             self.initial_GPU_memory = cuda.memory_allocated(self.device)
             # Reset statistics on max GPU memory use:
@@ -1128,9 +1132,12 @@ class BirdTrainer(object):
                     self.log.info(f"Training aborted by user, who requested not to save the model")
                 self.cleanup()
                 self.log.info("Exiting")
+                hard_stop = True
                 sys.exit(0)
 
         finally:
+            if hard_stop:
+                sys.exit(0)
             if self.device == self.cuda:
                 # Ensure all activity in different parts
                 # of the cuda device are done; uses the
