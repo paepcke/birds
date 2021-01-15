@@ -24,7 +24,7 @@ setup(
                         'seaborn>=0.11.0',
                         'requests>=2.24.0',
                         'torchaudio>=0.7.2',
-                        'PyQt5>=5.15.1',
+                        'PyQt5>=5.15.2',
                         'matplotlib>=3.3.0',
                         'librosa>=0.7.2',
                         'scipy>=1.5.2',
