@@ -21,6 +21,7 @@ from pathlib import Path
 import random  # Just so we can fix seed for testing
 import signal
 import socket
+from threading import Timer
 
 import GPUtil
 from logging_service import LoggingService
@@ -112,6 +113,9 @@ class BirdTrainer(object):
     # determine whether to continue training:
     
     EPOCHS_FOR_PLATEAU_DETECTION = 5
+    
+    # Shutdown delay:
+    SHUTDOWN_WAIT = 3 # seconds
 
     #------------------------------------
     # Constructor
@@ -1107,6 +1111,8 @@ class BirdTrainer(object):
     
     
             except (KeyboardInterrupt, InterruptTraining) as _e:
+                # Stop brutal-shutdown time; we will be gentle here:
+                self.shutdown_timer.cancel()
                 self.log.info("Early stopping due to keyboard intervention")
                 do_save = self.offer_model_save()
                 if do_save in ('y','Y','yes','Yes', ''):
@@ -1370,6 +1376,14 @@ class BirdTrainer(object):
             
         self.log.info("Requesting training interruption; waiting for clean point to interrupt...")
         BirdTrainer.STOP = True
+        
+        # Timeout in case program is not in
+        # the training loop, and thus won't
+        # notice the STOP flag:
+        
+        self.shutdown_timer = Timer(interval=self.SHUTDOWN_WAIT,
+                                    lambda : (print("Quitting "), sys.exit(1))
+                                    )
 
     #------------------------------------
     # offer_model_save
