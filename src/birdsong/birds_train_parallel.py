@@ -1382,7 +1382,7 @@ class BirdTrainer(object):
         # notice the STOP flag:
         
         self.shutdown_timer = Timer(interval=self.SHUTDOWN_WAIT,
-                                    lambda : (print("Quitting "), sys.exit(1))
+                                    function=lambda : (print("Quitting "), sys.exit(1))
                                     )
 
     #------------------------------------
