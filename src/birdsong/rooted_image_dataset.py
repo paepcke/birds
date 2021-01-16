@@ -179,10 +179,15 @@ class SingleRootImageDataset:
             class_name    = os.path.basename(sample_folder)
             class_id      = self.class_to_id[class_name]
             
-            # List of full paths to each sample of current class:
+            # List of full paths to each sample of current class.
+            # Exclude names that start with a dot, such as
+            # the .DS_Store that macos likes to spread around
+            # file systems:
             folder_content  = [os.path.join(sample_folder, sample_path)
                                  for sample_path 
-                                 in natsort.natsorted(os.listdir(sample_folder))]
+                                 in natsort.natsorted(os.listdir(sample_folder))
+                                 if not sample_path.startswith('.')
+                                 ]
             # IDs we will assign to the samples in this folder:
             sample_id_range = range(sample_id_start, sample_id_start + len(folder_content)) 
             
