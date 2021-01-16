@@ -290,17 +290,7 @@ class BirdTrainer(object):
             if num_gpus_used_here is None:
                 num_gpus_used_here = cuda.device_count()
             
-            # True batch size elicited from dataloader on
-            # each next() is multiplied by number of GPUs used
-            # on this machine, b/c DDP will distribute the samples
-            # of the received batch across the GPUs:
-            
-            discovered_batch_size = batch_size if batch_size is not None else train_parms.getint('batch_size')
-                              
-            effective_batch_size = num_gpus_used_here * discovered_batch_size
-            
-            self.log.info(f"Batches of size {effective_batch_size} will be spread over {num_gpus_used_here} GPUs")
-
+            batch_size = batch_size if batch_size is not None else train_parms.getint('batch_size')
             self.log.debug("***** Calling init_multiprocessing...")
             self.init_multiprocessing()
             self.log.debug("***** Returned from init_multiprocessing...")
@@ -310,7 +300,7 @@ class BirdTrainer(object):
                                                         seed=self.seed,
                                                         num_folds=self.num_folds,
                                                         drop_last=True,
-                                                        batch_size=effective_batch_size 
+                                                        batch_size=batch_size 
                                                         )
         self.num_classes = len(dataset.class_id_list())
         
@@ -1024,90 +1014,84 @@ class BirdTrainer(object):
                 # improved beyond 0.05 during the past
                 # self.EPOCHS_FOR_PLATEAU_DETECTION epochs:
                 
-                # This context manager ensures that models
-                # will be synchronized after each epoch.
-                # For CPU-only cases this context manager will
-                # do nothing (see prep_model()):
-                
-                with self.model.join():
-                    while (self._diff_avg >= 0.05 or \
-                           self.epoch <= self.config.Training.getint('min_epochs')
-                           ) and \
-                           self.epoch <= self.config.Training.getint('max_epochs'):
-                        self.epoch += 1
-                        # Tell dataloader that epoch changed.
-                        # The dataloader will tell the sampler,
-                        # which will use the information to 
-                        # predictably randomize the dataset
-                        # before creating splits:
-                        
-                        self.dataloader.set_epoch(self.epoch)
-                        split_num = 0
-                        
-                        # Get an iterator over all the 
-                        # splits from the dataloader. 
-                        # Since train_one_split() is a generator
-                        # function, the first call here returns
-                        # a generator object rather than running
-                        # the method:
-        
-                        split_training_iterator = self.train_one_split()
-                        
-                        # Send the initial split_num to the
-                        # generator; it is hanging to receive
-                        # this near the top of train_one_split():
-                        
-                        split_training_iterator.send(None)
-        
-                        for split_num in range(num_folds):
-                            self.optimizer.zero_grad()
-                            try:
-                                # train_one_split() is waiting for
-                                # the next split_num in the second
-                                # yield statement of that method:
-                                split_training_iterator.send(split_num)
-                            except StopIteration:
-                                # Exhausted all the splits
-                                self.log.warn(f"Unexpectedly ran out of splits.")
-                                break
-                            self.validate_one_split(split_num)
-        
-                            # Time for sign of life?
-                            time_now = datetime.datetime.now()
-                            if self.time_diff(time_start, time_now) >= alive_pulse:
-                                self.log.info (f"Epoch {self.epoch}; Split number {split_num} of {num_folds}")
-        
-                        # Done with one epoch:
-                        self.log.info(f"Finished epoch {self.epoch}")
-                        
-                        # Update the json based result record
-                        # in the file system:
-                        
-                        self.record_json_display_results(self.epoch)
-                        
-                        # Compute mean accuracy over all splits
-                        # of this epoch:
-                        accuracies[self.epoch] = self.tally_collection.mean_accuracy(epoch=self.epoch, 
-                                                                                     learning_phase=LearningPhase.TRAINING)
-        
-                        if self.epoch <= self.config.Training.getint('min_epochs'):
-                            # Haven't trained for the minimum of epochs:
-                            continue
-                        
-                        if self.epoch < self.EPOCHS_FOR_PLATEAU_DETECTION:
-                            # Need more epochs to discover accuracy plateau:
-                            continue
-        
-                        # Compute the mean over successive accuracy differences
-                        # after the past few epochs. Where 'few' means
-                        # EPOCHS_FOR_PLATEAU_DETECTION. The '1+' is needed
-                        # because our epochs start at 1:
-        
-                        past_accuracies = [accuracies[epoch] for epoch 
-                                           in range(1+len(accuracies)-self.EPOCHS_FOR_PLATEAU_DETECTION,
-                                                    self.epoch+1
-                                                    )]
-                        self._diff_avg = self.mean_diff(torch.tensor(past_accuracies))
+                while (self._diff_avg >= 0.05 or \
+                       self.epoch <= self.config.Training.getint('min_epochs')
+                       ) and \
+                       self.epoch <= self.config.Training.getint('max_epochs'):
+                    self.epoch += 1
+                    # Tell dataloader that epoch changed.
+                    # The dataloader will tell the sampler,
+                    # which will use the information to 
+                    # predictably randomize the dataset
+                    # before creating splits:
+                    
+                    self.dataloader.set_epoch(self.epoch)
+                    split_num = 0
+                    
+                    # Get an iterator over all the 
+                    # splits from the dataloader. 
+                    # Since train_one_split() is a generator
+                    # function, the first call here returns
+                    # a generator object rather than running
+                    # the method:
+    
+                    split_training_iterator = self.train_one_split()
+                    
+                    # Send the initial split_num to the
+                    # generator; it is hanging to receive
+                    # this near the top of train_one_split():
+                    
+                    split_training_iterator.send(None)
+    
+                    for split_num in range(num_folds):
+                        self.optimizer.zero_grad()
+                        try:
+                            # train_one_split() is waiting for
+                            # the next split_num in the second
+                            # yield statement of that method:
+                            split_training_iterator.send(split_num)
+                        except StopIteration:
+                            # Exhausted all the splits
+                            self.log.warn(f"Unexpectedly ran out of splits.")
+                            break
+                        self.validate_one_split(split_num)
+    
+                        # Time for sign of life?
+                        time_now = datetime.datetime.now()
+                        if self.time_diff(time_start, time_now) >= alive_pulse:
+                            self.log.info (f"Epoch {self.epoch}; Split number {split_num} of {num_folds}")
+    
+                    # Done with one epoch:
+                    self.log.info(f"Finished epoch {self.epoch}")
+                    
+                    # Update the json based result record
+                    # in the file system:
+                    
+                    self.record_json_display_results(self.epoch)
+                    
+                    # Compute mean accuracy over all splits
+                    # of this epoch:
+                    accuracies[self.epoch] = self.tally_collection.mean_accuracy(epoch=self.epoch, 
+                                                                                 learning_phase=LearningPhase.TRAINING)
+    
+                    if self.epoch <= self.config.Training.getint('min_epochs'):
+                        # Haven't trained for the minimum of epochs:
+                        continue
+                    
+                    if self.epoch < self.EPOCHS_FOR_PLATEAU_DETECTION:
+                        # Need more epochs to discover accuracy plateau:
+                        continue
+    
+                    # Compute the mean over successive accuracy differences
+                    # after the past few epochs. Where 'few' means
+                    # EPOCHS_FOR_PLATEAU_DETECTION. The '1+' is needed
+                    # because our epochs start at 1:
+    
+                    past_accuracies = [accuracies[epoch] for epoch 
+                                       in range(1+len(accuracies)-self.EPOCHS_FOR_PLATEAU_DETECTION,
+                                                self.epoch+1
+                                                )]
+                    self._diff_avg = self.mean_diff(torch.tensor(past_accuracies))
     
     
             except (KeyboardInterrupt, InterruptTraining) as _e:
