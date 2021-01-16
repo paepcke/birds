@@ -582,6 +582,7 @@ class TrainScriptLauncher:
         except KeyboardInterrupt:
             # Gently kill the training scripts:
             self.handle_cnt_c(self.who_is_who.keys())
+            pass # See which processes get the interrupt
             
         num_failed = len(failed_processes)
         if num_failed > 0:
@@ -869,7 +870,8 @@ class TrainScriptLauncher:
         @type procs:
         '''
         for process in procs:
-            process.send_signal(signal.SIGINT)
+            #*******process.send_signal(signal.SIGINT)
+            process.send_signal(signal.SIGTERM)
             process.wait()
 
 # --------------------- Main ---------------

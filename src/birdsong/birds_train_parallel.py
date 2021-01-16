@@ -243,7 +243,8 @@ class BirdTrainer(object):
         # to be True, offers training state
         # save:
 
-        signal.signal(signal.SIGINT, self.request_interrupt_training)
+        #******signal.signal(signal.SIGINT, self.request_interrupt_training)
+        signal.signal(signal.SIGTERM, self.request_interrupt_training)
         
         # Whether or not we are testing GPU related
         # code on a machine that only has a CPU.
