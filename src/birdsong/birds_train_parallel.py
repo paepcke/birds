@@ -1096,7 +1096,11 @@ class BirdTrainer(object):
     
             except (KeyboardInterrupt, InterruptTraining) as _e:
                 # Stop brutal-shutdown time; we will be gentle here:
-                self.shutdown_timer.cancel()
+                try:
+                    self.shutdown_timer.cancel()
+                except:
+                    # timer might not have been set, though unlikely
+                    pass
                 self.log.info("Early stopping due to keyboard intervention")
                 do_save = self.offer_model_save()
                 if do_save in ('y','Y','yes','Yes', ''):
@@ -1367,7 +1371,7 @@ class BirdTrainer(object):
         
         self.shutdown_timer = Timer(interval=self.SHUTDOWN_WAIT,
                                     function=lambda : (print("Quitting hard after timeout"), sys.exit(1))
-                                    )
+                                    ).start()
 
     #------------------------------------
     # offer_model_save
