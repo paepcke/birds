@@ -29,7 +29,7 @@ setup(
                         'librosa>=0.7.2',
                         'scipy>=1.5.2',
                         'SoundFile>=0.10.3.post1',
-                        'logging-singleton>=0.1',
+                        'logging-singleton>=1.0',
                         'GPUtil>=1.4.0',
                         'tensorboard>=2.4.0',
                         'natsort>=7.1.0',
