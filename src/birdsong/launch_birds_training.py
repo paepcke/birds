@@ -9,7 +9,6 @@ import os
 from pathlib import Path
 import signal
 import socket
-from subprocess import PIPE, TimeoutExpired
 import subprocess
 import sys
 
@@ -535,8 +534,9 @@ class TrainScriptLauncher:
         #     {<machine_name> : 
 
         # This machine's range of ranks:
-        rank_range = self.gpu_landscape[self.hostname]['rank_range']
-        this_machine_gpu_ids = self.gpu_landscape[self.hostname]['gpu_device_ids']
+        rank_range              = self.gpu_landscape[self.hostname]['rank_range']
+        this_machine_gpu_ids    = self.gpu_landscape[self.hostname]['gpu_device_ids']
+        min_rank_this_machine   = self.gpu_landscape['start_rank']
 
         local_rank = 0
         # Map from process object to rank (for debug msgs):
@@ -546,6 +546,7 @@ class TrainScriptLauncher:
             cmd = self.training_script_start_cmd(rank, 
                                                  len(this_machine_gpu_ids),
                                                  local_rank,
+                                                 min_rank_this_machine,
                                                  self.launch_args,
                                                  self.script_args
                                                  )
@@ -601,8 +602,34 @@ class TrainScriptLauncher:
                                   rank,
                                   gpus_used_this_machine,
                                   local_rank,
+                                  min_rank_this_machine,
                                   launch_args,
                                   script_args):
+        '''
+        From provided information, creates a legal 
+        command string for starting the training script.
+        
+        @param rank: rank of the script; i.e. it's process' place
+            in the sequence of all train script processes
+            across all machines
+        @type rank: int
+        @param gpus_used_this_machine: number of GPU devices to 
+            be used, according to the world_map; may be less than
+            number of available GPUs
+        @type gpus_used_this_machine: int
+        @param local_rank: index into the local sequence of GPUs
+            for for the GPU that the script is to use
+        @type local_rank: int
+        @param min_rank_this_machine: the lowest of the ranks among
+            the training scripts on this machine
+        @type min_rank_this_machine: int
+        @param launch_args: command line arguments intended for the
+            launch script, as opposed to being destined for the 
+            train script
+        @type launch_args: {str : Any}
+        @param script_args: additional args for the train script
+        @type script_args: {str : Any}
+        '''
 
         # Build the shell command line,
         # starting with 'python -u':
@@ -626,6 +653,7 @@ class TrainScriptLauncher:
                     f"--MASTER_PORT={self.MASTER_PORT}",
                     f"--RANK={rank}",
                     f"--LOCAL_RANK={local_rank}",
+                    f"--MIN_RANK_THIS_MACHINE={min_rank_this_machine}",
                     f"--WORLD_SIZE={self.WORLD_SIZE}",
                     f"--GPUS_USED_THIS_MACHINE={gpus_used_this_machine}"
                     ])
@@ -831,7 +859,12 @@ class TrainScriptLauncher:
                 self.master_hostname = machine_name
                 if machine_name == self.hostname:
                     self.am_master_node = True
-                self.MASTER_ADDR = socket.gethostbyname(machine_name)
+                try:
+                    self.MASTER_ADDR = socket.gethostbyname(machine_name)
+                except socket.gaierror: 
+                    # For machines that have no 
+                    # findable IP address:
+                    self.MASTER_ADDR = '127.0.0.1'
             
             self.WORLD_SIZE += machine_gpus
                     

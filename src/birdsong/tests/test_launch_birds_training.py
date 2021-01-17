@@ -6,6 +6,7 @@ Created on Jan 8, 2021
 from _collections import OrderedDict
 import os
 import unittest
+import socket 
 
 from logging_service import LoggingService
 
@@ -17,6 +18,10 @@ TEST_ALL = True
 #TEST_ALL = False
 
 class TestLauncher(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.full_host_name = socket.getfqdn()
 
     def setUp(self):
         self.curr_dir    = os.path.dirname(__file__)
@@ -41,7 +46,6 @@ class TestLauncher(unittest.TestCase):
         
         expected = {'quintus.stanford.edu' : {
                             "master" : 'Yes',
-                            "foo"    : 1,
                             "gpus"   : 2
                             },
                     'quatro.stanford.edu'  : {
@@ -63,11 +67,14 @@ class TestLauncher(unittest.TestCase):
                                           'world_map_for_testing.json'
                                           )
         world_map = launcher.read_world_map(tst_world_map_path)
+        world_map = self.substitute_local_hostname(world_map)
         launcher.config = self.config
         launcher.build_compute_landscape(world_map)
         
         rank = 0
         local_rank = 0
+        min_rank_this_machine = 0
+        gpus_to_use = 2 # The entry of this machine in the world map
         
         # Set some instance vars that would
         # normally be set in the the launcher's
@@ -82,6 +89,7 @@ class TestLauncher(unittest.TestCase):
                        'RANK'        : rank,
                        'LOCAL_RANK'  : local_rank,
                        'WORLD_SIZE'  : 4,
+                       'MIN_RANK_THIS_MACHINE' : min_rank_this_machine,
                        'config'      : self.config_path 
                        }
         
@@ -91,6 +99,8 @@ class TestLauncher(unittest.TestCase):
         
         start_cmd = launcher.training_script_start_cmd(rank, 
                                                        local_rank,
+                                                       gpus_to_use,
+                                                       min_rank_this_machine,
                                                        launch_args,
                                                        script_args
                                                        )
@@ -130,6 +140,29 @@ class TestLauncher(unittest.TestCase):
 
         self.assertDictEqual(gpu_landscape, expected)
 
+# ------------------ Utils ---------------
+
+    def substitute_local_hostname(self, world_map):
+        '''
+        Replace the hard-coded name 'quintus.stanford.edu'
+        in the test world map with the name of the current
+        machine. Else some of the methods being tested will
+        complain that the local machine is not represented
+        in the map.
+        
+        @param world_map: a world_map that contains the
+            hard coded key 'quintus.stanford.edu'
+        @type world_map: {str : {str : Any}}
+        @return: modified world map
+        @rtype: {str : {str : Any}}
+        '''
+        
+        world_map[self.full_host_name] = world_map['quintus.stanford.edu']
+        del world_map['quintus.stanford.edu']
+        return world_map
+        
+
+# ------------------ Main ---------------
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']
     unittest.main()

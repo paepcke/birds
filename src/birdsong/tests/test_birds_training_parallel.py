@@ -98,6 +98,7 @@ class TestBirdsTrainingParallel(unittest.TestCase):
             'MASTER_PORT' : 4040,
             'RANK' : 0,
             'LOCAL_RANK'  : 0,
+            'MIN_RANK_THIS_MACHINE' : 0,
             'WORLD_SIZE'  : 1
             }
 

@@ -127,7 +127,7 @@ class BirdTrainer(object):
                  batch_size=None,
                  checkpoint=None,   # Load if given path to saved
                  logfile=None,      # ...partially trained model
-                 logging_level='info',
+                 logging_level=logging.INFO,
                  performance_log_dir=None,
                  testing_cuda_on_cpu=False,
                  comm_info=None,
@@ -153,6 +153,12 @@ class BirdTrainer(object):
         self.curr_dir = os.path.dirname(os.path.abspath(__file__))
         
         self.comm_info = comm_info
+        self.rank = self.comm_info['RANK']
+        # The lowest rank of the processes on this
+        # machine. Used for cases like downloads to
+        # local file system that should only be done
+        # by one process in a machine: 
+        self.local_leader_rank = self.comm_info['MIN_RANK_THIS_MACHINE']
 
         # Initialize a config dict of dict with
         # the application's configurations. Sections
@@ -1103,6 +1109,9 @@ class BirdTrainer(object):
                     # timer might not have been set, though unlikely
                     pass
                 self.log.info("Early stopping due to keyboard intervention")
+                if self.rank != self.local_leader_rank:
+                    self.log.info(f"Leaving model save to process {self.local_leader_rank}")
+                    sys.exit(0)
                 do_save = self.offer_model_save()
                 if do_save in ('y','Y','yes','Yes', ''):
                     have_fname = False
@@ -1137,8 +1146,7 @@ class BirdTrainer(object):
                 # Ensure all activity in different parts
                 # of the cuda device are done; uses the
                 # current device
-                
-                self.log.info("Synchronizing GPUs")
+                self.log.info("Synchronizing stream in current GPU")
                 cuda.synchronize()
                 
                 self.model.to('cpu')
@@ -1372,7 +1380,8 @@ class BirdTrainer(object):
         
         self.shutdown_timer = Timer(interval=self.SHUTDOWN_WAIT,
                                     function=lambda : (print("Quitting hard after timeout"), sys.exit(1))
-                                    ).start()
+                                    )
+        self.shutdown_timer.start()
 
     #------------------------------------
     # offer_model_save
@@ -1482,7 +1491,37 @@ class BirdTrainer(object):
 
     def get_resnet18_partially_trained(self, num_classes, num_layers_to_retain=6):
         
-        model = hub.load('pytorch/vision:v0.6.0', 'resnet18', pretrained=False)
+        
+        # Let the local leader download
+        # the model from the Internet,
+        # in case it is not already cached
+        # locally:
+        
+        # Case 1: not on a GPU machine:
+        if self.device == torch.device('cpu'):
+            model = hub.load('pytorch/vision:v0.6.0', 'resnet18', pretrained=True)
+            
+        # Case2a: GPU machine, and this is this machine's 
+        #         leader process. So it is reponsible for
+        #         downloading the model if it is not cached:
+        elif self.rank == self.local_leader_rank:
+            self.log.info(f"Procss with rank {self.rank} on {self.hostname} loading model")
+            model = hub.load('pytorch/vision:v0.6.0', 'resnet18', pretrained=True)
+            # Allow the others on this machine
+            # to load the model (guaranteed to 
+            # be locally cached now):
+            self.log.info(f"Procss with rank {self.rank} on {self.hostname} waiting for others to laod model")
+            dist.barrier()
+        # Case 2b: GPU machine, but not the local leader. Just
+        #          wait for the local leader to be done downloading:
+        else:
+            # Wait for leader to download the
+            # model for everyone on this machine:
+            self.log.info(f"Procss with rank {self.rank} on {self.hostname} waiting for leader to laod model")
+            dist.barrier()
+            # Get the cached version:
+            self.log.info(f"Procss with rank {self.rank} on {self.hostname} laoding model")
+            model = hub.load('pytorch/vision:v0.6.0', 'resnet18', pretrained=True)
         
         # Freeze the bottom num_layers_to_retain layers:
         for (i, child) in enumerate(model.children()):
@@ -2110,6 +2149,13 @@ if __name__ == '__main__':
                         type=int,
                         default=0
                         )
+        # Used only by launch.py script! Pass
+    # communication parameters:
+    parser.add_argument('--MIN_RANK_THIS_MACHINE',
+                        help=argparse.SUPPRESS,
+                        type=int,
+                        default=0
+                        )
     # Used only by launch.py script! Pass
     # communication parameters:
 
@@ -2147,6 +2193,7 @@ if __name__ == '__main__':
     comm_info['MASTER_PORT'] = int(args.MASTER_PORT)
     comm_info['RANK']        = int(args.RANK)
     comm_info['LOCAL_RANK']  = int(args.LOCAL_RANK)
+    comm_info['MIN_RANK_THIS_MACHINE'] = int(args.MIN_RANK_THIS_MACHINE)
     comm_info['WORLD_SIZE']  = int(args.WORLD_SIZE)
     
     # GPUS_USED_THIS_MACHINE may be None to indicate
