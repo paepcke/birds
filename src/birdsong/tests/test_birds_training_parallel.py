@@ -338,7 +338,11 @@ class TestBirdsTrainingParallel(unittest.TestCase):
             # But tally2Prime must be a *copy* of tally2:
             self.assertNotEqual(tally2Prime, tally2)
         finally:
-            trainer1.cleanup()
+            try:
+                trainer1.cleanup()
+            except (UnboundLocalError, NameError):
+                # Error before trainer1 was created:
+                pass
             
 # -------------------- Utils --------------
 
@@ -379,11 +383,12 @@ class TestBirdsTrainingParallel(unittest.TestCase):
     #-------------------
     
     def set_distribution_env_vars(self):
+        my_addr = socket.getfqdn()        
         # Mock up distributed processing:
         os.environ['WORLD_SIZE'] = '1'   # 1 GPU or CPU
         os.environ['RANK'] = '0'         # Master node
-        os.environ['MASTER_ADDR'] = '127.0.0.1'
-        os.environ['MASTER_PORT'] = '9000'
+        os.environ['MASTER_ADDR'] = my_addr
+        os.environ['MASTER_PORT'] = '5678'
 
 
 

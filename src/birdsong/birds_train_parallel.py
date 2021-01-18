@@ -298,7 +298,12 @@ class BirdTrainer(object):
                 num_gpus_used_here = cuda.device_count()
             
             batch_size = batch_size if batch_size is not None else train_parms.getint('batch_size')
-            self.log.debug("***** Calling init_multiprocessing...")
+
+            master_addr_in_environ = os.environ["MASTER_ADDR"]
+            master_port_in_environ = os.environ["MASTER_PORT"]
+
+            self.log.debug(f"***** Calling init_multiprocessing (master: {master_addr_in_environ}:{master_port_in_environ}...")            
+
             self.init_multiprocessing()
             self.log.debug("***** Returned from init_multiprocessing...")
             
