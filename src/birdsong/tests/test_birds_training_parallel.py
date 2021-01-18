@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import unittest
 from datetime import datetime
+import socket
 
 import torch
 
@@ -22,7 +23,7 @@ TEST_ALL = True
 
 #*****************
 #
-import sys, socket
+# import sys
 # if socket.gethostname() in ('quintus', 'quatro'):
 #     # Point to where the pydev server
 #     # software is installed on the remote
@@ -151,6 +152,7 @@ class TestBirdsTrainingParallel(unittest.TestCase):
                              )
         finally:
             trainer.cleanup()
+            self.clear_socket()
 
     #------------------------------------
     # test_train
@@ -238,6 +240,7 @@ class TestBirdsTrainingParallel(unittest.TestCase):
                          )
         finally:
             trainer.cleanup()
+            self.clear_socket()
 
     #------------------------------------
     # test_model_saving 
@@ -311,6 +314,7 @@ class TestBirdsTrainingParallel(unittest.TestCase):
             self.set_distribution_env_vars()
         finally:
             trainer.cleanup()
+            self.clear_socket()
 
         try:
             trainer1 = BirdTrainer(self.config,
@@ -389,6 +393,29 @@ class TestBirdsTrainingParallel(unittest.TestCase):
         os.environ['RANK'] = '0'         # Master node
         os.environ['MASTER_ADDR'] = my_addr
         os.environ['MASTER_PORT'] = '5678'
+
+
+    #------------------------------------
+    # clear_socket 
+    #-------------------
+    
+    def clear_socket(self):
+        '''
+        The tests above run in rapid succession,
+        not giving enough time for the MASTER_PORT
+        socket to complete its wait time before being
+        usable again. Fix that problem:
+        '''
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        except Exception:
+            pass
+    
+        try:
+            # Make address reusable:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        except Exception:
+            pass
 
 
 
