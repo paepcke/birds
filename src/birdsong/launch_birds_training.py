@@ -874,14 +874,17 @@ class TrainScriptLauncher:
 
         gpu_landscape[self.master_hostname]['rank_range'] = \
             list(range(gpu_landscape[self.master_hostname]['num_gpus']))
+        gpu_landscape[self.master_hostname]['start_rank'] = 0
         
         # Start assigning more ranks after 
         # the GPUs of the master:
+
         running_rank = gpu_landscape[self.master_hostname]['num_gpus']
         for machine_name in gpu_landscape.keys():
             if machine_name == self.master_hostname:
                 # We already did the master node
-                continue 
+                continue
+            gpu_landscape[machine_name]['start_rank'] = running_rank
             num_gpus = gpu_landscape[machine_name]['num_gpus']
             gpu_landscape[machine_name]['rank_range'] = \
                 list(range(running_rank, running_rank + num_gpus))
