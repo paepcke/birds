@@ -43,7 +43,7 @@ TEST_ALL = True
 
 class TestBirdsTrainingParallel(unittest.TestCase):
 
-    DEFAULT_COMM_PORT = 5678
+    DEFAULT_COMM_PORT = '9012' 
 
     #------------------------------------
     # setUpClass 
@@ -51,6 +51,7 @@ class TestBirdsTrainingParallel(unittest.TestCase):
     
     @classmethod
     def setUpClass(cls):
+
         cls.curr_dir = os.path.dirname(__file__)
         cls.json_logdir = os.path.join(cls.curr_dir,'runs_json')
         if os.path.exists(cls.json_logdir):
@@ -141,9 +142,15 @@ class TestBirdsTrainingParallel(unittest.TestCase):
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_train(self):
         self.set_distribution_env_vars()
-        trainer = BirdTrainer(self.config,
-                              comm_info=self.comm_info
-                              )
+        try:
+            trainer = BirdTrainer(self.config,
+                                  comm_info=self.comm_info
+                                  )
+        except Exception as e:
+            print(f"****train: {repr(e)}")
+            print(f"****MASTER_PORT: {os.environ['MASTER_PORT']}")
+            raise
+
         try:
             device = trainer.device
             print(f"Running on {device}")
@@ -266,6 +273,19 @@ class TestBirdsTrainingParallel(unittest.TestCase):
         os.environ['WORLD_SIZE'] = '1'   # 1 GPU or CPU
         os.environ['RANK'] = '0'         # Master node
         os.environ['MASTER_ADDR'] = my_addr
+
+        # The nose2 test framework runs the tests in
+        # parallel. So all BirdTrainer instances need
+        # to operate on a different port We use:
+        #    test_birds_training_parallell_initialization.py: 5678
+        #    test_birds_training_parallell_train.py         : 9012
+        #    test_birds_training_parallel_save_model.py     : 3456
+        # respectively 
+        
+        os.environ['MASTER_PORT'] = '9012'
+
+
+        
         os.environ['MASTER_PORT'] = '5678'
 
 

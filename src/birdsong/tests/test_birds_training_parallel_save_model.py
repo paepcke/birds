@@ -42,7 +42,7 @@ TEST_ALL = True
 
 class TestBirdsTrainingParallel(unittest.TestCase):
 
-    DEFAULT_COMM_PORT = 5678
+    DEFAULT_COMM_PORT = 3456
 
     #------------------------------------
     # setUpClass 
@@ -50,6 +50,7 @@ class TestBirdsTrainingParallel(unittest.TestCase):
     
     @classmethod
     def setUpClass(cls):
+
         cls.curr_dir = os.path.dirname(__file__)
         cls.json_logdir = os.path.join(cls.curr_dir,'runs_json')
         if os.path.exists(cls.json_logdir):
@@ -152,9 +153,14 @@ class TestBirdsTrainingParallel(unittest.TestCase):
         four_truths = torch.tensor([1,2,3,4])
     
         self.set_distribution_env_vars()
-        trainer = BirdTrainer(self.config,
-                              comm_info=self.comm_info
-                              )
+        try:
+            trainer = BirdTrainer(self.config,
+                                  comm_info=self.comm_info
+                                  )
+        except Exception as e:
+            print(f"****save mode: {repr(e)}")
+            print(f"****MASTER_PORT: {os.environ['MASTER_PORT']}")
+            raise
             
         try:
             tally1 = trainer.tally_result(
@@ -207,6 +213,9 @@ class TestBirdsTrainingParallel(unittest.TestCase):
             trainer.cleanup()
 
         try:
+            # Need yet another port for this
+            # trainer to avoid getter "addr in use":
+            os.environ['MASTER_PORT'] = '7890'
             trainer1 = BirdTrainer(self.config,
                                    comm_info=self.comm_info,
                                    checkpoint=save_file)
@@ -282,7 +291,17 @@ class TestBirdsTrainingParallel(unittest.TestCase):
         os.environ['WORLD_SIZE'] = '1'   # 1 GPU or CPU
         os.environ['RANK'] = '0'         # Master node
         os.environ['MASTER_ADDR'] = my_addr
-        os.environ['MASTER_PORT'] = '5678'
+
+        # The nose2 test framework runs the tests in
+        # parallel. So all BirdTrainer instances need
+        # to operate on a different port We use:
+        #    test_birds_training_parallell_initialization.py: 5678
+        #    test_birds_training_parallell_train.py         : 9012
+        #    test_birds_training_parallel_save_model.py     : 3456
+        # respectively 
+        
+        os.environ['MASTER_PORT'] = '3456'
+        
 
 # ----------------------- Main -----------------
 
