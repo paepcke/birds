@@ -215,10 +215,14 @@ class TestBirdsTrainingParallel(unittest.TestCase):
         try:
             # Need yet another port for this
             # trainer to avoid getter "addr in use":
+
             os.environ['MASTER_PORT'] = '7890'
+            self.comm_info['MASTER_PORT'] = 7890
+
             trainer1 = BirdTrainer(self.config,
                                    comm_info=self.comm_info,
                                    checkpoint=save_file)
+
             self.assertEqual(trainer1.epoch, 10)
             
             # Tally2 should be in the new trainer's
