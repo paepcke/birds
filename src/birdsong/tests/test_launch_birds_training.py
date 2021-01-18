@@ -157,6 +157,9 @@ class TestLauncher(unittest.TestCase):
         @rtype: {str : {str : Any}}
         '''
         
+        if self.full_host_name == 'quintus.stanford.edu':
+            # We happen to be on the quintus machine...
+            return world_map
         world_map[self.full_host_name] = world_map['quintus.stanford.edu']
         del world_map['quintus.stanford.edu']
         return world_map

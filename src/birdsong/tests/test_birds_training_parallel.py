@@ -5,9 +5,6 @@ Created on Dec 19, 2020
 '''
 
 
-#************
-import time
-#************
 import json
 import os
 from pathlib import Path
@@ -26,25 +23,27 @@ TEST_ALL = True
 #*****************
 #
 import sys, socket
-if socket.gethostname() in ('quintus', 'quatro'):
-    # Point to where the pydev server
-    # software is installed on the remote
-    # machine:
-    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
-
-    import pydevd
-    global pydevd
-    # Uncomment the following if you
-    # want to break right on entry of
-    # this module. But you can instead just
-    # set normal Eclipse breakpoints:
-    #*************
-    print("About to call settrace()")
-    #*************
-    pydevd.settrace('localhost', port=4040)
+# if socket.gethostname() in ('quintus', 'quatro'):
+#     # Point to where the pydev server
+#     # software is installed on the remote
+#     # machine:
+#     sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
+# 
+#     import pydevd
+#     global pydevd
+#     # Uncomment the following if you
+#     # want to break right on entry of
+#     # this module. But you can instead just
+#     # set normal Eclipse breakpoints:
+#     #*************
+#     print("About to call settrace()")
+#     #*************
+#     pydevd.settrace('localhost', port=4040)
 # ****************
 
 class TestBirdsTrainingParallel(unittest.TestCase):
+
+    DEFAULT_COMM_PORT = 5678
 
     #------------------------------------
     # setUpClass 
@@ -119,7 +118,7 @@ class TestBirdsTrainingParallel(unittest.TestCase):
         
         self.comm_info = {
             'MASTER_ADDR' :'127.0.0.1',
-            'MASTER_PORT' : 4040,
+            'MASTER_PORT' : self.DEFAULT_COMM_PORT,
             'RANK' : 0,
             'LOCAL_RANK'  : 0,
             'MIN_RANK_THIS_MACHINE' : 0,
@@ -152,96 +151,93 @@ class TestBirdsTrainingParallel(unittest.TestCase):
                              )
         finally:
             trainer.cleanup()
-            #*********
-            time.sleep(1)
-            #*********
 
     #------------------------------------
     # test_train
     #-------------------
-#*****************
-#     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-#     def test_train(self):
-#         self.set_distribution_env_vars()
-#         trainer = BirdTrainer(self.config,
-#                               comm_info=self.comm_info
-#                               )
-#         try:
-#             device = trainer.device
-#             print(f"Running on {device}")
-#             predicted_time = f"about 3 minutes"\
-#                 if device == trainer.cpu\
-#               else f"about 15 seconds" 
-#             print(f"Start test training a small dataset ({predicted_time})...")
-#             t_start = datetime.now()
-#             trainer.train()
-#             t_end = datetime.now()
-#             delta = t_end - t_start
-#             print(f"Done training checking result ({str(delta)})")
-#         
-#             # With this mini dataset, we converge
-#             # to plateau after epoch 7:
-#             # We don't know how many epoch will run,
-#             # b/c that depends on when accuracy levels
-#             # out. Which depends on the outcome of 
-#             # shuffling.
-#             #self.assertEqual(trainer.epoch, 7)
-#             
-#             # Everything should be on CPU, not GPU
-#             # after running:
-#             self.assertEqual(trainer.device_residence(trainer.model), 
-#                              torch.device('cpu'))
-#             
-#             # Expected number of results is 28:
-#             #   4 results (3 train + 1 validation) for the splits
-#             #   in each of the 7 epochs: 4*7=28
-#             
-#             expected_intermediate_results = trainer.epoch * 2 * trainer.dataloader.num_folds
-#             self.assertEqual(len(trainer.tally_collection),
-#                              expected_intermediate_results
-#                              )
-#             
-#             # Our test dataset has 6 target classes:
-#             self.assertEqual(trainer.num_classes, 6)
-#             
-#             # The JSON log record file:
-#             
-#             # Very superficial check of json results
-#             # log file: get last line:
-#             
-#             with open(trainer.json_log_filename()) as f:
-#                 for line in f:
-#                     pass
-#                 last_line = line
-#             # Last line should look like this:
-#             # [5, 86.2037582397461, 0.407407, 0.0, 0.0, 0.0, ["audi2.jpg", "audi3.jpg", "audi4.jpg", "audi6.jpg"], [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0], [1, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0], [2, 0, 0, 0, 0, 0]]]
-#             last_entry = json.loads(last_line)
-#             
-#             # Last_entry is list; turn into dict: 
-#             measures = self.json_record_from_list(last_entry)
-#             
-#             # First number is the last epoch:
-#             self.assertEqual(measures['epoch'], trainer.epoch)
-#             
-#             # Next five elements should be floats:
-#             for measure_name in ['loss', 
-#                                  'training_accuracy',
-#                                  'testing_accuracy',
-#                                  'precision',
-#                                  'recall'
-#                                  ]:
-#                 measure_type = type(measures[measure_name])
-#                 self.assertEqual(measure_type, float)
-#             
-#             incorrect_paths_type = type(measures['incorrect_paths'])
-#             self.assertEqual(incorrect_paths_type, list)
-#     
-#             conf_matrix = torch.tensor(measures['confusion_matrix'])
-#             self.assertEqual(conf_matrix.shape,
-#                              (trainer.num_classes, trainer.num_classes) 
-#                          )
-#         finally:
-#             trainer.cleanup()
+
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_train(self):
+        self.set_distribution_env_vars()
+        trainer = BirdTrainer(self.config,
+                              comm_info=self.comm_info
+                              )
+        try:
+            device = trainer.device
+            print(f"Running on {device}")
+            predicted_time = f"about 3 minutes"\
+                if device == trainer.cpu\
+              else f"about 15 seconds" 
+            print(f"Start test training a small dataset ({predicted_time})...")
+            t_start = datetime.now()
+            trainer.train()
+            t_end = datetime.now()
+            delta = t_end - t_start
+            print(f"Done training checking result ({str(delta)})")
+         
+            # With this mini dataset, we converge
+            # to plateau after epoch 7:
+            # We don't know how many epoch will run,
+            # b/c that depends on when accuracy levels
+            # out. Which depends on the outcome of 
+            # shuffling.
+            #self.assertEqual(trainer.epoch, 7)
+             
+            # Everything should be on CPU, not GPU
+            # after running:
+            self.assertEqual(trainer.device_residence(trainer.model), 
+                             torch.device('cpu'))
+             
+            # Expected number of results is 28:
+            #   4 results (3 train + 1 validation) for the splits
+            #   in each of the 7 epochs: 4*7=28
+             
+            expected_intermediate_results = trainer.epoch * 2 * trainer.dataloader.num_folds
+            self.assertEqual(len(trainer.tally_collection),
+                             expected_intermediate_results
+                             )
+             
+            # Our test dataset has 6 target classes:
+            self.assertEqual(trainer.num_classes, 6)
+             
+            # The JSON log record file:
+             
+            # Very superficial check of json results
+            # log file: get last line:
+             
+            with open(trainer.json_log_filename()) as f:
+                for line in f:
+                    pass
+                last_line = line
+            # Last line should look like this:
+            # [5, 86.2037582397461, 0.407407, 0.0, 0.0, 0.0, ["audi2.jpg", "audi3.jpg", "audi4.jpg", "audi6.jpg"], [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0], [1, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0], [2, 0, 0, 0, 0, 0]]]
+            last_entry = json.loads(last_line)
+             
+            # Last_entry is list; turn into dict: 
+            measures = self.json_record_from_list(last_entry)
+             
+            # First number is the last epoch:
+            self.assertEqual(measures['epoch'], trainer.epoch)
+             
+            # Next five elements should be floats:
+            for measure_name in ['loss', 
+                                 'training_accuracy',
+                                 'testing_accuracy',
+                                 'precision',
+                                 'recall'
+                                 ]:
+                measure_type = type(measures[measure_name])
+                self.assertEqual(measure_type, float)
+             
+            incorrect_paths_type = type(measures['incorrect_paths'])
+            self.assertEqual(incorrect_paths_type, list)
+     
+            conf_matrix = torch.tensor(measures['confusion_matrix'])
+            self.assertEqual(conf_matrix.shape,
+                             (trainer.num_classes, trainer.num_classes) 
+                         )
+        finally:
+            trainer.cleanup()
 
     #------------------------------------
     # test_model_saving 
@@ -315,10 +311,6 @@ class TestBirdsTrainingParallel(unittest.TestCase):
             self.set_distribution_env_vars()
         finally:
             trainer.cleanup()
-            #*********
-            time.sleep(1)
-            #*********
-            
 
         try:
             trainer1 = BirdTrainer(self.config,
@@ -347,10 +339,7 @@ class TestBirdsTrainingParallel(unittest.TestCase):
             self.assertNotEqual(tally2Prime, tally2)
         finally:
             trainer1.cleanup()
-            #*********
-            time.sleep(1)
-            #*********
-
+            
 # -------------------- Utils --------------
 
     def json_record_from_list(self, record_list):

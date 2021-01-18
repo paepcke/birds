@@ -242,14 +242,14 @@ class BirdTrainer(object):
         # it's not completely filled:
         self.drop_last = True
         
-        # Install signal handler for cnt-C:
+        # Install signal handler for SIGTERM,
+        # which is issued by launch_birds_training.py
         # It will set the class var STOP,
         # which we check periodically during
         # training and evaluation. When seen
         # to be True, offers training state
         # save:
 
-        #******signal.signal(signal.SIGINT, self.request_interrupt_training)
         signal.signal(signal.SIGTERM, self.request_interrupt_training)
         
         # Whether or not we are testing GPU related
