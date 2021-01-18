@@ -58,7 +58,7 @@ sys.path.insert(0,packet_root)
 #     # software is installed on the remote
 #     # machine:
 #     sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
-# 
+
 #     import pydevd
 #     global pydevd
 #     # Uncomment the following if you
@@ -299,8 +299,8 @@ class BirdTrainer(object):
             
             batch_size = batch_size if batch_size is not None else train_parms.getint('batch_size')
 
-            master_addr_in_environ = os.environ["MASTER_ADDR"]
-            master_port_in_environ = os.environ["MASTER_PORT"]
+            master_addr_in_environ = self.comm_info["MASTER_ADDR"]
+            master_port_in_environ = self.comm_info["MASTER_PORT"]
 
             self.log.debug(f"***** Calling init_multiprocessing (master: {master_addr_in_environ}:{master_port_in_environ}...")            
 

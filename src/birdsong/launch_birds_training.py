@@ -27,7 +27,7 @@ from birdsong.utils.dottable_config import DottableConfigParser
 #     # software is installed on the remote
 #     # machine:
 #     sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
-#  
+ 
 #     import pydevd
 #     global pydevd
 #     # Uncomment the following if you
@@ -536,7 +536,7 @@ class TrainScriptLauncher:
         # This machine's range of ranks:
         rank_range              = self.gpu_landscape[self.hostname]['rank_range']
         this_machine_gpu_ids    = self.gpu_landscape[self.hostname]['gpu_device_ids']
-        min_rank_this_machine   = self.gpu_landscape['start_rank']
+        min_rank_this_machine   = self.gpu_landscape[self.hostname]['start_rank']
 
         local_rank = 0
         # Map from process object to rank (for debug msgs):
