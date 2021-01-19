@@ -916,6 +916,11 @@ class TrainScriptLauncher:
                                  reverse=True)
 
         for process in procs_terminate:
+            # If process is no longer running,
+            # forget about it:
+            if process.poll is not None:
+                # Process dead:
+                continue
             process.send_signal(signal.SIGTERM)
             process.wait()
 
