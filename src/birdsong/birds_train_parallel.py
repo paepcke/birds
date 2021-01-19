@@ -1113,18 +1113,24 @@ class BirdTrainer(object):
                 except:
                     # timer might not have been set, though unlikely
                     pass
+                
                 self.log.info("Early stopping due to keyboard intervention")
                 if self.rank != self.local_leader_rank:
-                    self.log.info(f"Leaving model save to process {self.local_leader_rank}")
+                    self.log.info(f"Leaving model saving to process {self.local_leader_rank}")
                     sys.exit(0)
+
                 do_save = self.offer_model_save()
                 if do_save in ('y','Y','yes','Yes', ''):
                     have_fname = False
                     while not have_fname:
-                        dest_path = input("Destination file (ex. ~/tmp/chpt.pth; $HOME/chpt.pth): ")
-                        # Resolve '~' and environ vars: 
-                        dest_path = os.path.expandvars(os.path.expanduser(dest_path))
-                        dest_dir  = os.path.dirname(dest_path)
+                        dest_path = input("Destination file with '~' or '$' (/tmp/checkpoint.pth): ")
+                        if len(dest_path) > 0:
+                            # Resolve '~' and environ vars: 
+                            dest_path = os.path.expandvars(os.path.expanduser(dest_path))
+                            dest_dir  = os.path.dirname(dest_path)
+                        else:
+                            dest_path = '/tmp/checkpoint.pth)'
+                            
                         # Create any intermediate dirs:
                         if not os.path.exists(dest_dir):
                             os.makedirs(dest_dir)
@@ -1132,6 +1138,7 @@ class BirdTrainer(object):
                             have_fname = input("File exists, replace?") \
                               in ('y','Y','yes','Yes')
                         break
+                    
                     self.save_model_checkpoint(dest_path,
                                                self.model,
                                                self.optimizer
