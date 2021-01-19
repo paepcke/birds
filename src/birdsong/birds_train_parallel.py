@@ -195,7 +195,7 @@ class BirdTrainer(object):
             except ValueError:
                 # No logfile specified in config.cfg
                 # Use stdout:
-                self.log = LoggingService()
+                self.log = LoggingService(msg_identifier=f"Rank {self.rank}")
                 
         # Add rank so each training process gets
         # its own log output file. The "logfile is None"
@@ -211,7 +211,7 @@ class BirdTrainer(object):
     
             if os.path.isdir(logfile):
                 raise ValueError(f"Logfile argument must be a file name, not a directory ({logfile})")
-            self.log = LoggingService(logfile=logfile)
+            self.log = LoggingService(logfile=logfile, msg_identifier=f"Rank {self.rank}")
 
         self.log.logging_level = logging_level
         
@@ -1113,10 +1113,13 @@ class BirdTrainer(object):
                 except:
                     # timer might not have been set, though unlikely
                     pass
+                    
                 self.log.info("Early stopping due to keyboard intervention")
+
                 if self.rank != self.local_leader_rank:
                     self.log.info(f"Leaving model save to process {self.local_leader_rank}")
                     sys.exit(0)
+                    
                 do_save = self.offer_model_save()
                 if do_save in ('y','Y','yes','Yes', ''):
                     have_fname = False
@@ -1165,7 +1168,10 @@ class BirdTrainer(object):
                     self.log.warn(f"Application used CPU, but left {len(self.cpu_tensor_stack)} tensors from push/pop regimen")
                 max_mem = cuda.max_memory_allocated(self.device)
                 self.log.info(f"Max GPU memory use: {self.human_readable(max_mem)}")
+                
                 self.cleanup()
+                self.log.info(f"Process with node{self.rank} exiting.")
+                sys.exit(0)
 
         self.log.info("Training finished")
 
@@ -1246,7 +1252,10 @@ class BirdTrainer(object):
             # to where the model is:
             batch   = self.push_tensor(batch)
             targets = self.push_tensor(targets)
+            #********
             #self.log.debug(f"***** New batch: {batch.shape}, targets: {targets.shape}")
+            self.log.info(f"***** New batch: {batch.shape}, targets: {targets.shape}")
+            #********
             
             # Outputs will be on GPU if we are
             # using one:
@@ -1263,6 +1272,10 @@ class BirdTrainer(object):
                                            LearningPhase.TRAINING
                                            )
             loss.backward()
+            #********
+            #????
+            torch.distributed.braodcast(self.model.state_dict, self.rank)
+            #********
             self.optimizer.step()
             
             # Free GPU memory:

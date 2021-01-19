@@ -582,7 +582,7 @@ class TrainScriptLauncher:
                 continue
         except KeyboardInterrupt:
             # Gently kill the training scripts:
-            self.handle_cnt_c(self.who_is_who.keys())
+            self.handle_cnt_c()
             pass # See which processes get the interrupt
             
         num_failed = len(failed_processes)
@@ -898,15 +898,24 @@ class TrainScriptLauncher:
     # handle_cnt_c 
     #-------------------
 
-    def handle_cnt_c(self, procs):
+    def handle_cnt_c(self):
         '''
         Given a list of process instances,
         Send SIGINT (cnt-C) to them:
         @param procs:
         @type procs:
         '''
-        for process in procs:
-            #*******process.send_signal(signal.SIGINT)
+        # Line processes up, highest rank first,
+        # master process last:
+        
+        procs_terminate = sorted([proc
+                                   for proc
+                                    in self.who_is_who.keys()
+                                  ],
+                                 key=lambda obj: self.who_is_who[obj],
+                                 reverse=True)
+
+        for process in procs_terminate:
             process.send_signal(signal.SIGTERM)
             process.wait()
 
