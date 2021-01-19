@@ -333,6 +333,9 @@ class BirdTrainer(object):
         self.model = self.prep_model(raw_model,
                                      self.comm_info['LOCAL_RANK']
                                      )
+        #**********
+        self.log.info(f"type(model): {type(self.model)}")
+        #**********
         if unit_testing:
             return
 
@@ -1061,7 +1064,11 @@ class BirdTrainer(object):
                             # train_one_split() is waiting for
                             # the next split_num in the second
                             # yield statement of that method:
+                            # *********
+                            #with self.model.join():
+                            #    split_training_iterator.send(split_num)
                             split_training_iterator.send(split_num)
+                            # *********                            
                         except StopIteration:
                             # Exhausted all the splits
                             self.log.warn(f"Unexpectedly ran out of splits.")
@@ -1258,7 +1265,6 @@ class BirdTrainer(object):
             batch   = self.push_tensor(batch)
             targets = self.push_tensor(targets)
             #********
-            #self.log.debug(f"***** New batch: {batch.shape}, targets: {targets.shape}")
             self.log.info(f"***** New batch: {batch.shape}, targets: {targets.shape}")
             #********
             
@@ -1276,10 +1282,12 @@ class BirdTrainer(object):
                                            loss,
                                            LearningPhase.TRAINING
                                            )
+            #**********
+            #self.log.info(f"***** Enter backward.")
+            #**********
             loss.backward()
             #********
-            #????
-            torch.distributed.braodcast(self.model.state_dict, self.rank)
+            #self.log.info(f"***** Exit backward.")
             #********
             self.optimizer.step()
             
