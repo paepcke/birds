@@ -46,7 +46,7 @@ class MinimalDDPLauncher:
         procs = []
         for i in range(world_size):
             print(f"Starting {demo_fn}[{i}] of {world_size}")
-            procs.append(subprocess.Popen(['python3', demo_fn, i, world_size]))
+            procs.append(subprocess.Popen([demo_fn, i, world_size]))
 
 # ------------------------ Main ------------
 if __name__ == '__main__':
