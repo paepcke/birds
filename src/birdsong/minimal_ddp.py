@@ -18,23 +18,23 @@ import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 #*****************
-# import socket 
-# if socket.gethostname() in ('quintus', 'quatro'):
-#     # Point to where the pydev server 
-#     # software is installed on the remote
-#     # machine:
-#     sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
+import socket 
+if socket.gethostname() in ('quintus', 'quatro'):
+    # Point to where the pydev server 
+    # software is installed on the remote
+    # machine:
+    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
 
-#     import pydevd
-#     global pydevd
-#     # Uncomment the following if you
-#     # want to break right on entry of
-#     # this module. But you can instead just
-#     # set normal Eclipse breakpoints:
-#     #*************
-#     print("About to call settrace()")
-#     #*************
-#     pydevd.settrace('localhost', port=4040)
+    import pydevd
+    global pydevd
+    # Uncomment the following if you
+    # want to break right on entry of
+    # this module. But you can instead just
+    # set normal Eclipse breakpoints:
+    #*************
+    print("About to call settrace()")
+    #*************
+    pydevd.settrace('localhost', port=4040)
 # **************** 
 
 class MinimalDDP:
@@ -66,6 +66,10 @@ class MinimalDDP:
     
         self.cleanup()
 
+    def cleanup(self):
+        dist.destroy_process_group()
+        print(f"Rank {rank} is done.")
+
 class ToyModel(nn.Module):
     def __init__(self):
         super(ToyModel, self).__init__()
@@ -79,7 +83,7 @@ class ToyModel(nn.Module):
 # ------------------------ Main ------------
 if __name__ == '__main__':
 
-    rank       = sys.argv[1]
-    world_size = sys.argv[2]
+    rank       = int(sys.argv[1])
+    world_size = int(sys.argv[2])
     min_ddp = MinimalDDP()
     min_ddp.demo_basic(rank, world_size)
