@@ -95,7 +95,7 @@ class CrossValidatingDataLoader(DataLoader):
                  num_workers=0,
                  pin_memory=False,
                  prefetch_factor=2,
-                 drop_last=False,
+                 drop_last=True,
                  num_folds=10,
                  sampler=None
                  ):
@@ -488,7 +488,7 @@ class MultiprocessingDataLoader(CrossValidatingDataLoader):
                  dataset, 
                  batch_size=32,
                  prefetch_factor=2,
-                 drop_last=False,
+                 drop_last=True,
                  num_folds=10,
                  seed=42,
                  shuffle=True,
