@@ -18,23 +18,23 @@ import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 #*****************
-import socket 
-if socket.gethostname() in ('quintus', 'quatro'):
-    # Point to where the pydev server 
-    # software is installed on the remote
-    # machine:
-    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
+# import socket 
+# if socket.gethostname() in ('quintus', 'quatro'):
+#     # Point to where the pydev server 
+#     # software is installed on the remote
+#     # machine:
+#     sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
 
-    import pydevd
-    global pydevd
-    # Uncomment the following if you
-    # want to break right on entry of
-    # this module. But you can instead just
-    # set normal Eclipse breakpoints:
-    #*************
-    print("About to call settrace()")
-    #*************
-    pydevd.settrace('localhost', port=4040)
+#     import pydevd
+#     global pydevd
+#     # Uncomment the following if you
+#     # want to break right on entry of
+#     # this module. But you can instead just
+#     # set normal Eclipse breakpoints:
+#     #*************
+#     print("About to call settrace()")
+#     #*************
+#     pydevd.settrace('localhost', port=4040)
 # **************** 
 
 class MinimalDDP:
@@ -57,14 +57,48 @@ class MinimalDDP:
     
         loss_fn = nn.MSELoss()
         optimizer = optim.SGD(ddp_model.parameters(), lr=0.001)
-    
-        optimizer.zero_grad()
-        outputs = ddp_model(torch.randn(20, 10))
-        labels = torch.randn(20, 5).to(rank)
-        loss_fn(outputs, labels).backward()
-        optimizer.step()
-    
+
+        before = []
+        after  = []
+        for epoch in range(2):      # 2 Epochs
+            for i in range(5):      # 5 Random datapoint/targets
+                optimizer.zero_grad()
+                outputs = ddp_model(torch.randn(20, 10))
+                labels = torch.randn(20, 5).to(rank)
+                
+                before.append(model.named_parameters())
+                loss_fn(outputs, labels).backward()
+                after.append(model.named_parameters())
+
+                optimizer.step()
+                             
+        dist.barrier()
+
+        if rank == 0:
+            print("Rank0: saving arrays of before and after models.")
+            torch.save([list(_before)
+                         for _before in before],
+                       '/home/paepcke/tmp/before_models.pth')
+            torch.save([list(_after)
+                         for _after in after],
+                       '/home/paepcke/tmp/after_models.pth')
+                             
         self.cleanup()
+
+    def report_model_parm_diffs(self):
+        print(f"Saving tensors for rank {rank}")
+        for i, one_before in enumerate(before):
+            torch.save(one_before, f"/home/paepcke/tmp/PytorchComm/before_rank{rank}_{i}.pth")
+    
+        for i, one_after in enumerate(after):
+            torch.save(one_after, f"/home/paepcke/tmp/PytorchComm/after_rank{rank}_{i}.pth")
+        print(f"Done saving tensors for rank {rank}")
+
+    def compare_model_parameters(self, model, other):
+        for parms1, parms_other in zip(model.parameters(), other.parameters()):
+            if parms1.data.ne(parms_other.data).sum() > 0:
+                return False
+        return True        
 
     def cleanup(self):
         dist.destroy_process_group()
