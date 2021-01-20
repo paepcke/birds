@@ -81,9 +81,9 @@ class MinimalDDP:
                 outputs = outputs.cuda(rank)
                 labels  = labels.cuda(rank)
                 
-                before.append(copy.deepcopy(model))
+                before.append(copy.deepcopy(ddp_model))
                 loss_fn(outputs, labels).backward()
-                after.append(copy.deepcopy(model))
+                after.append(copy.deepcopy(ddp_model))
 
                 optimizer.step()
 
