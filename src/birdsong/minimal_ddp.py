@@ -8,6 +8,7 @@ import os
 import sys
 import tempfile
 import subprocess
+import copy
 
 import torch
 import torch.distributed as dist
@@ -18,23 +19,23 @@ import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 #*****************
-# import socket 
-# if socket.gethostname() in ('quintus', 'quatro'):
-#     # Point to where the pydev server 
-#     # software is installed on the remote
-#     # machine:
-#     sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
+import socket 
+if socket.gethostname() in ('quintus', 'quatro'):
+    # Point to where the pydev server 
+    # software is installed on the remote
+    # machine:
+    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
 
-#     import pydevd
-#     global pydevd
-#     # Uncomment the following if you
-#     # want to break right on entry of
-#     # this module. But you can instead just
-#     # set normal Eclipse breakpoints:
-#     #*************
-#     print("About to call settrace()")
-#     #*************
-#     pydevd.settrace('localhost', port=4040)
+    import pydevd
+    global pydevd
+    # Uncomment the following if you
+    # want to break right on entry of
+    # this module. But you can instead just
+    # set normal Eclipse breakpoints:
+    #*************
+    print("About to call settrace()")
+    #*************
+    pydevd.settrace('localhost', port=4040)
 # **************** 
 
 class MinimalDDP:
@@ -66,9 +67,9 @@ class MinimalDDP:
                 outputs = ddp_model(torch.randn(20, 10))
                 labels = torch.randn(20, 5).to(rank)
                 
-                before.append(model.named_parameters())
+                before.append(copy.deepcopy(model))
                 loss_fn(outputs, labels).backward()
-                after.append(model.named_parameters())
+                after.append(copy.deepcopy(model))
 
                 optimizer.step()
                              
