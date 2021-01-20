@@ -79,15 +79,18 @@ class MinimalDDP:
         before = []
         after  = []
         
+        batch_size  = 32
+        batch_shape = [batch_size,3,400,400]
+        num_classes = 15
+        
         for epoch in range(self.epochs):
             print(f"Rank{self.rank}: start epoch {epoch}")
             for sample_id in range(self.samples):
                 
                 optimizer.zero_grad()
-                outputs = ddp_model(torch.randn(20, 10).to(self.rank))
-                labels  = torch.randn(20, 5).to(self.rank)
                 
-                
+                outputs = ddp_model(torch.randn(batch_shape).to(self.rank))
+                labels  = torch.randn(batch_size, num_classes).to(self.rank)
                 
                 # If checking parameter changes/sync:
                 # Copy and save model copies before and
@@ -122,7 +125,8 @@ class MinimalDDP:
         # change, and are synchronized
         # as expected:
         
-        self.report_model_diffs()
+        if self.rank == 0:
+            self.report_model_diffs()
 
             
 
