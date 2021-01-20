@@ -56,7 +56,8 @@ class MinimalDDP:
             for _i in range(self.samples):
                 
                 optimizer.zero_grad()
-                outputs = ddp_model(torch.randn(20, 10).to(rank))
+                #******outputs = ddp_model(torch.randn(20, 10).to(rank))
+                outputs = model(torch.randn(20, 10).to(rank))
                 labels = torch.randn(20, 5).to(rank)
                 
                 # Copy and save model copies before and
