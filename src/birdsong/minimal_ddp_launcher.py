@@ -1,17 +1,13 @@
 import subprocess
-import os,sys
-import argparse
+import os
 
 class MinimalDDPLauncher:
    
-    def run_demo(self, demo_script, world_size, goal):
+    def run_demo(self, demo_script, world_size):
         procs = []
-        for rank in range(world_size):
-            print(f"Starting {demo_script}[{rank}] of {world_size}")
-            procs.append(subprocess.Popen([demo_script, 
-                                           str(rank), 
-                                           str(goal)
-                                           ]))
+        for i in range(world_size):
+            print(f"Starting {demo_script}[{i}] of {world_size}")
+            procs.append(subprocess.Popen([demo_script, str(i), str(world_size)]))
             
         for proc in procs:
             proc.wait()
@@ -19,18 +15,8 @@ class MinimalDDPLauncher:
 # ------------------------ Main ------------
 if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
-                                     formatter_class=argparse.RawTextHelpFormatter,
-                                     description="Test model parameter values or process drift"
-                                     )
-
-    parser.add_argument('goal', choices=['parameters', 'drift'])
-    
-    args = parser.parse_args();
-
     curr_dir = os.path.dirname(__file__)
     script_path = os.path.join(curr_dir, 'minimal_ddp.py')
     
     launcher = MinimalDDPLauncher()
-    world_size = 2
-    launcher.run_demo(script_path, world_size, goal=args.goal)
+    launcher.run_demo(script_path, 2)

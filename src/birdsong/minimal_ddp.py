@@ -1,73 +1,46 @@
 #!/usr/bin/env python
 
-import argparse
-import copy
 import os
 import sys
+import copy
 
 import torch
-from torch.nn.parallel import DistributedDataParallel as DDP
-
 import torch.distributed as dist
 import torch.nn as nn
 import torch.optim as optim
 
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 class MinimalDDP:
     '''Test whether DDP really does something'''
     
-    #------------------------------------
-    # Constructor 
-    #-------------------
-    
-    def __init__(self, rank, test_goal):
-        '''If set to 'parameters', save models
-           after each iteration, and after the
-           run, check how parms change.
-           
-           If set to 'drift', run many iterations,
-           and observe two instances drift apart.
-           
-           Should differentiate between rank and
-           local_rank. In this case they happen to
-           be the same values.
-        '''
-
-        print(f"Test goal: {test_goal}")
-        if test_goal == 'drift':
-            self.epochs  = 20
-            self.samples = 500
-        else:
-            self.epochs  = 2
-            self.samples = 3
-
-        self.test_goal = test_goal
-        self.rank = rank
+    epochs  = 2
+    samples = 3
 
     #------------------------------------
     # setup
     #-------------------
 
-    def setup(self, world_size):
+    def setup(self, rank, world_size):
         os.environ['MASTER_ADDR'] = 'localhost'
         os.environ['MASTER_PORT'] = '12355'
 
         # initialize the process group
-        dist.init_process_group("nccl", rank=self.rank, world_size=world_size)
+        dist.init_process_group("nccl", rank=rank, world_size=world_size)
 
     #------------------------------------
     # demo_basic
     #-------------------
 
-    def demo_basic(self, world_size, model_save_dir='/tmp'):
+    def demo_basic(self, rank, world_size, model_save_dir='/tmp'):
         '''The action: train model; save intermediate states'''
             
-        print(f"Running basic DDP example on rank {self.rank}.")
-        self.setup(world_size)
+        print(f"Running basic DDP example on rank {rank}.")
+        self.setup(rank, world_size)
     
         # create model and move it to GPU with id rank
-        model = ToyModel().to(self.rank)
-        ddp_model = DDP(model, device_ids=[self.rank])
+        model = ToyModel().to(rank)
+        ddp_model = DDP(model, device_ids=[rank])
     
         loss_fn = nn.MSELoss()
         optimizer = optim.SGD(ddp_model.parameters(), lr=0.001)
@@ -79,31 +52,18 @@ class MinimalDDP:
         before = []
         after  = []
         
-        batch_size  = 32
-        batch_shape = [batch_size,3,400,400]
-        num_classes = 15
-        
-        for epoch in range(self.epochs):
-            print(f"Rank{self.rank}: start epoch {epoch}")
-            for sample_id in range(self.samples):
+        for _epoch in range(self.epochs):
+            for _i in range(self.samples):
                 
                 optimizer.zero_grad()
+                outputs = ddp_model(torch.randn(20, 10).to(rank))
+                labels = torch.randn(20, 5).to(rank)
                 
-                outputs = ddp_model(torch.randn(batch_shape).to(self.rank))
-                labels  = torch.randn(batch_size, num_classes).to(self.rank)
-                
-                # If checking parameter changes/sync:
                 # Copy and save model copies before and
                 # after back prop:
-                if self.test_goal == 'parameters' or \
-                    (epoch == self.epochs - 1 and sample_id == self.samples - 1):
-                    before.append(copy.deepcopy(ddp_model))
-                    
+                before.append(copy.deepcopy(ddp_model))
                 loss_fn(outputs, labels).backward()
-                
-                if self.test_goal == 'parameters' or \
-                    (epoch == self.epochs - 1 and sample_id == self.samples - 1):                
-                    after.append(copy.deepcopy(ddp_model))
+                after.append(copy.deepcopy(ddp_model))
 
                 optimizer.step()
 
@@ -111,41 +71,39 @@ class MinimalDDP:
                 outputs.cpu()
                 labels.cpu()
 
-        if self.test_goal == 'parameters':
-            dist.barrier()
-            # Save the state_dirs of all before-prop
-            # and after-prop model copies; each in its
-            # own file:
-            self.save_model_arrs(before, after, model_save_dir)
+        dist.barrier()
+
+        # Save the state_dirs of all before-prop
+        # and after-prop model copies; each in its
+        # own file:
+        self.save_model_arrs(rank, before, after, model_save_dir)
         
         self.cleanup()
-
-        # Using the saved files, 
-        # verify that model parameters
-        # change, and are synchronized
-        # as expected:
         
-        if self.rank == 0:
-            self.report_model_diffs()
-
+        if rank == 0:
+            # Using the saved files, 
+            # verify that model parameters
+            # change, and are synchronized
+            # as expected:
             
+            self.report_model_diffs()
 
     #------------------------------------
     # save_model_arrs 
     #-------------------
     
-    def save_model_arrs(self, before_arr, after_arr, model_save_dir):
+    def save_model_arrs(self, rank, before_arr, after_arr, model_save_dir):
         '''Save state_dict of modesl in arrays to files'''
         
-        print(f"Proc{self.rank}: saving arrays of before and after models.")
+        print(f"Proc{rank}: saving arrays of before and after models.")
         
         for i, (model_before, model_after) in enumerate(zip(before_arr, after_arr)):
             model_before.cpu()
             model_after.cpu()
             torch.save(model_before.state_dict(),
-                       os.path.join(model_save_dir, f"before_models_r{self.rank}_{i}.pth"))
+                       os.path.join(model_save_dir, f"before_models_r{rank}_{i}.pth"))
             torch.save(model_after.state_dict(),
-                       os.path.join(model_save_dir, f"after_models_r{self.rank}_{i}.pth"))
+                       os.path.join(model_save_dir, f"after_models_r{rank}_{i}.pth"))
 
     #------------------------------------
     # report_model_diffs 
@@ -155,12 +113,7 @@ class MinimalDDP:
         '''Check that model parms changed or 
             were synched as expected '''
         
-        if self.test_goal == 'parameters':
-            model_arrs_len = self.epochs * self.samples
-        else:
-            # For drift experiment, only last pre/post 
-            # model was saved
-            model_arrs_len = 1
+        model_arrs_len = self.epochs * self.samples
         
         # Among GPUs, model parms should differ
         # before backprop... 
@@ -210,7 +163,7 @@ class MinimalDDP:
         if afters_differ_among_GPUs:
             print("Bad: backward does not seem to broadcast parms")
         else:
-            print("Good: corresponding post-backward model parms match exactly across processes")
+            print("Good: corresponding post-backward model parms match exactly across processes")            
 
         # Within one GPU, model parms before and 
         # after back prop should be different.
@@ -226,7 +179,7 @@ class MinimalDDP:
 
     def cleanup(self):
         dist.destroy_process_group()
-        print(f"Rank {self.rank} is done.")
+        print(f"Rank {rank} is done.")
         
 # ------------------------ Toy Model ----------
 
@@ -243,18 +196,8 @@ class ToyModel(nn.Module):
 # ------------------------ Main ------------
 if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
-                                     formatter_class=argparse.RawTextHelpFormatter,
-                                     description="Test model parameter values or process drift"
-                                     )
-
-    parser.add_argument('rank', type=int)
-    parser.add_argument('goal', choices=['parameters', 'drift'])
-    args = parser.parse_args();
-
-    test_goal      = args.goal
-    world_size     = 2 
+    rank           = int(sys.argv[1])
+    world_size     = 2 # int(sys.argv[2])
     model_save_dir = '/tmp'
-    min_ddp = MinimalDDP(args.rank, args.goal)
-    # min_ddp = MinimalDDP('drift')
-    min_ddp.demo_basic(world_size, model_save_dir)
+    min_ddp = MinimalDDP()
+    min_ddp.demo_basic(rank, world_size, model_save_dir)
