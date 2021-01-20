@@ -94,12 +94,6 @@ class MinimalDDP:
             torch.save(one_after, f"/home/paepcke/tmp/PytorchComm/after_rank{rank}_{i}.pth")
         print(f"Done saving tensors for rank {rank}")
 
-    def compare_model_parameters(self, model, other):
-        for parms1, parms_other in zip(model.parameters(), other.parameters()):
-            if parms1.data.ne(parms_other.data).sum() > 0:
-                return False
-        return True        
-
     def cleanup(self):
         dist.destroy_process_group()
         print(f"Rank {rank} is done.")
