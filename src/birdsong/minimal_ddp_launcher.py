@@ -5,9 +5,9 @@ class MinimalDDPLauncher:
    
     def run_demo(self, demo_script, world_size):
         procs = []
-        for i in range(world_size):
-            print(f"Starting {demo_script}[{i}] of {world_size}")
-            procs.append(subprocess.Popen([demo_script, str(i), str(world_size)]))
+        for rank in range(world_size):
+            print(f"Starting {demo_script}[{rank}] of {world_size}")
+            procs.append(subprocess.Popen([demo_script, str(rank), str(world_size)]))
             
         for proc in procs:
             proc.wait()

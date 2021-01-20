@@ -197,7 +197,7 @@ class ToyModel(nn.Module):
 if __name__ == '__main__':
 
     rank           = int(sys.argv[1])
-    world_size     = 2 # int(sys.argv[2])
+    world_size     = 2
     model_save_dir = '/tmp'
     min_ddp = MinimalDDP()
     min_ddp.demo_basic(rank, world_size, model_save_dir)
