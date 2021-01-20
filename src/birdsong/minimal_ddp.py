@@ -35,8 +35,8 @@ class MinimalDDP:
 
         print(f"Test goal: {test_goal}")
         if test_goal == 'drift':
-            self.epochs  = 5
-            self.samples = 50
+            self.epochs  = 20
+            self.samples = 500
         else:
             self.epochs  = 2
             self.samples = 3
@@ -81,7 +81,7 @@ class MinimalDDP:
         
         for epoch in range(self.epochs):
             print(f"Rank{self.rank}: start epoch {epoch}")
-            for _i in range(self.samples):
+            for sample_id in range(self.samples):
                 
                 optimizer.zero_grad()
                 outputs = ddp_model(torch.randn(20, 10).to(self.rank))
@@ -92,12 +92,14 @@ class MinimalDDP:
                 # If checking parameter changes/sync:
                 # Copy and save model copies before and
                 # after back prop:
-                if self.test_goal == 'parameters':
+                if self.test_goal == 'parameters' or \
+                    (epoch == self.epochs - 1 and sample_id == self.samples - 1):
                     before.append(copy.deepcopy(ddp_model))
                     
                 loss_fn(outputs, labels).backward()
                 
-                if self.test_goal == 'parameters':
+                if self.test_goal == 'parameters' or \
+                    (epoch == self.epochs - 1 and sample_id == self.samples - 1):                
                     after.append(copy.deepcopy(ddp_model))
 
                 optimizer.step()
@@ -116,12 +118,15 @@ class MinimalDDP:
         self.cleanup()
 
         if self.test_goal == 'parameters' and self.rank == 0:
-                    # Using the saved files, 
+            # Using the saved files, 
             # verify that model parameters
             # change, and are synchronized
             # as expected:
             
             self.report_model_diffs()
+
+        elif self.rank == 0:
+            
 
     #------------------------------------
     # save_model_arrs 
