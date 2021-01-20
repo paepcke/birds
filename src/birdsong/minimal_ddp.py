@@ -78,13 +78,19 @@ class MinimalDDP:
                 optimizer.zero_grad()
                 outputs = ddp_model(torch.randn(20, 10))
                 labels = torch.randn(20, 5).to(rank)
+                outputs = outputs.cuda(rank)
+                labels  = labels.cuda(rank)
                 
                 before.append(copy.deepcopy(model))
                 loss_fn(outputs, labels).backward()
                 after.append(copy.deepcopy(model))
 
                 optimizer.step()
-                             
+
+                # Clean GPU memory:
+                outputs.cpu()
+                labels.cpu()
+                
         dist.barrier()
 
         self.save_model_arrs(rank, before, after, model_save_dir)
@@ -116,8 +122,16 @@ class MinimalDDP:
     def report_model_diffs(self, model_save_dir):
         
         model_arrs_len = self.epochs * self.samples
-        befores_differ = True
-        afters_differ  = False
+        
+        # Among GPUs, model parms should differ
+        # before backprop... 
+        befores_differ_among_GPUs   = True    # that's the hope
+        # ... but be synched by DDP after
+        afters_differ_among_GPUs    = False   # that's the hope
+        
+        # Wihin a single GPU, the model should be 
+        # changed by the backprop:
+        befores_differ_from_afters  = True    # that's the hope
         
         for i in range(model_arrs_len):
             before_path_r0 = os.path.join(model_save_dir, f"before_models_r0_{i}.pth")
@@ -132,24 +146,36 @@ class MinimalDDP:
             after_state0 = torch.load(after_path_r0)
             after_state1 = torch.load(after_path_r1)
             
+            # The between-GPUs test:
             for (param_tns0, param_tns1) in zip(before_state0, before_state1):
-                if before_state0[param_tns0].eq(before_state1[param_tns1]):
-                    befores_differ = False
+                if before_state0[param_tns0].eq(before_state1[param_tns1]).all():
+                    befores_differ_among_GPUs = False
             
             for (param_tns0, param_tns1) in zip(after_state0, after_state1):
-                if after_state0[param_tns0].ne(after_state1[param_tns1]):
-                    afters_differ = False
-
-        if befores_differ:
+                if after_state0[param_tns0].ne(after_state1[param_tns1]).any():
+                    afters_differ_among_GPUs = False
+                    
+            # The within-GPUs test:
+            for (param_tns_pre, param_tns_post) in zip(before_state0, after_state0):
+                if before_state0[param_tns_pre].eq(before_state0[param_tns_post]).all():
+                    befores_differ_from_afters = False
+            
+        if befores_differ_among_GPUs:
             print("Good: corresponding pre-backward model parms differ")
         else:
             print("Suspicious: corresponding pre-backward model parms match exactly")
             
-        if afters_differ:
+        if afters_differ_among_GPUs:
             print("Bad: backward does not seem to broadcast parms")
         else:
             print("Good: corresponding post-backward model parms match exactly")
 
+        # Within one GPU, model parms before and 
+        # after back prop should be different.
+        if befores_differ_from_afters:
+            print("Good: back prop does change model parms")
+        else:
+            print("Suspicious: back prop has no impact on model parms") 
 
 
     #------------------------------------
