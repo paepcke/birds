@@ -117,15 +117,13 @@ class MinimalDDP:
         
         self.cleanup()
 
-        if self.test_goal == 'parameters' and self.rank == 0:
-            # Using the saved files, 
-            # verify that model parameters
-            # change, and are synchronized
-            # as expected:
-            
-            self.report_model_diffs()
+        # Using the saved files, 
+        # verify that model parameters
+        # change, and are synchronized
+        # as expected:
+        
+        self.report_model_diffs()
 
-        elif self.rank == 0:
             
 
     #------------------------------------
@@ -153,7 +151,12 @@ class MinimalDDP:
         '''Check that model parms changed or 
             were synched as expected '''
         
-        model_arrs_len = self.epochs * self.samples
+        if self.test_goal == 'parameters':
+            model_arrs_len = self.epochs * self.samples
+        else:
+            # For drift experiment, only last pre/post 
+            # model was saved
+            model_arrs_len = 1
         
         # Among GPUs, model parms should differ
         # before backprop... 
