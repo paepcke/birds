@@ -236,13 +236,13 @@ if __name__ == '__main__':
                                      description="Test model parameter values or process drift"
                                      )
 
-    parser.add_argument('-r', '--rank', type=int)
-    parser.add_argument('-g', '--goal', choices=['parameters', 'drift'])
+    parser.add_argument('rank', type=int)
+    parser.add_argument('goal', choices=['parameters', 'drift'])
     args = parser.parse_args();
 
     test_goal      = args.goal
     world_size     = 2 
     model_save_dir = '/tmp'
-    min_ddp = MinimalDDP(test_goal)
+    min_ddp = MinimalDDP(args.rank, args.goal)
     # min_ddp = MinimalDDP('drift')
-    min_ddp.demo_basic(args.rank, world_size, model_save_dir)
+    min_ddp.demo_basic(world_size, model_save_dir)

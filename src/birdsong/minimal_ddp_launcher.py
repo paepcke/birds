@@ -1,5 +1,6 @@
 import subprocess
-import os
+import os,sys
+import argparse
 
 class MinimalDDPLauncher:
    
@@ -8,8 +9,8 @@ class MinimalDDPLauncher:
         for rank in range(world_size):
             print(f"Starting {demo_script}[{rank}] of {world_size}")
             procs.append(subprocess.Popen([demo_script, 
-                                           f"--rank={rank}"), 
-                                           f"--goal={goal}"),
+                                           rank, 
+                                           goal
                                            ]))
             
         for proc in procs:
@@ -23,7 +24,7 @@ if __name__ == '__main__':
                                      description="Test model parameter values or process drift"
                                      )
 
-    parser.add_argument('-g', '--goal', choices=['parameters', 'drift'])
+    parser.add_argument('goal', choices=['parameters', 'drift'])
     
     args = parser.parse_args();
 
