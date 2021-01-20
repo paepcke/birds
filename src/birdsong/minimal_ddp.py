@@ -1,44 +1,18 @@
 #!/usr/bin/env python
-'''
-Created on Jan 19, 2021
 
-@author: paepcke
-'''
 import os
 import sys
-import tempfile
-import subprocess
 import copy
 
 import torch
 import torch.distributed as dist
 import torch.nn as nn
 import torch.optim as optim
-import torch.multiprocessing as mp
 
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-#*****************
-import socket 
-if socket.gethostname() in ('quintus', 'quatro'):
-    # Point to where the pydev server 
-    # software is installed on the remote
-    # machine:
-    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
-
-    import pydevd
-    global pydevd
-    # Uncomment the following if you
-    # want to break right on entry of
-    # this module. But you can instead just
-    # set normal Eclipse breakpoints:
-    #*************
-    print("About to call settrace()")
-    #*************
-    pydevd.settrace('localhost', port=4040)
-# **************** 
-
 class MinimalDDP:
+    '''Test whether DDP really does something'''
     
     epochs  = 2
     samples = 3
@@ -58,7 +32,8 @@ class MinimalDDP:
     # demo_basic
     #-------------------
 
-    def demo_basic(self, rank, world_size, model_save_dir):
+    def demo_basic(self, rank, world_size, model_save_dir='/tmp'):
+        '''The action: train model; save intermediate states'''
             
         print(f"Running basic DDP example on rank {rank}.")
         self.setup(rank, world_size)
@@ -70,17 +45,22 @@ class MinimalDDP:
         loss_fn = nn.MSELoss()
         optimizer = optim.SGD(ddp_model.parameters(), lr=0.001)
 
+        # For saving model copies
+        # before and after back prop
+        # for each loop iteration:
+        
         before = []
         after  = []
+        
         for _epoch in range(self.epochs):
             for _i in range(self.samples):
                 
                 optimizer.zero_grad()
-                outputs = ddp_model(torch.randn(20, 10))
+                outputs = ddp_model(torch.randn(20, 10).to(rank))
                 labels = torch.randn(20, 5).to(rank)
-                outputs = outputs.cuda(rank)
-                labels  = labels.cuda(rank)
                 
+                # Copy and save model copies before and
+                # after back prop:
                 before.append(copy.deepcopy(ddp_model))
                 loss_fn(outputs, labels).backward()
                 after.append(copy.deepcopy(ddp_model))
@@ -90,20 +70,30 @@ class MinimalDDP:
                 # Clean GPU memory:
                 outputs.cpu()
                 labels.cpu()
-                
+
         dist.barrier()
 
+        # Save the state_dirs of all before-prop
+        # and after-prop model copies; each in its
+        # own file:
         self.save_model_arrs(rank, before, after, model_save_dir)
+        
         self.cleanup()
         
         if rank == 0:
-            self.report_model_diffs(model_save_dir)
+            # Using the saved files, 
+            # verify that model parameters
+            # change, and are synchronized
+            # as expected:
+            
+            self.report_model_diffs()
 
     #------------------------------------
     # save_model_arrs 
     #-------------------
     
     def save_model_arrs(self, rank, before_arr, after_arr, model_save_dir):
+        '''Save state_dict of modesl in arrays to files'''
         
         print(f"Proc{rank}: saving arrays of before and after models.")
         
@@ -119,7 +109,9 @@ class MinimalDDP:
     # report_model_diffs 
     #-------------------
 
-    def report_model_diffs(self, model_save_dir):
+    def report_model_diffs(self, model_save_dir='/tmp'):
+        '''Check that model parms changed or 
+            were synched as expected '''
         
         model_arrs_len = self.epochs * self.samples
         
@@ -149,15 +141,18 @@ class MinimalDDP:
             # The between-GPUs test:
             for (param_tns0, param_tns1) in zip(before_state0, before_state1):
                 if before_state0[param_tns0].eq(before_state1[param_tns1]).all():
+                    # Dang!
                     befores_differ_among_GPUs = False
             
             for (param_tns0, param_tns1) in zip(after_state0, after_state1):
                 if after_state0[param_tns0].ne(after_state1[param_tns1]).any():
+                    # Dang!
                     afters_differ_among_GPUs = False
                     
             # The within-GPUs test:
             for (param_tns_pre, param_tns_post) in zip(before_state0, after_state0):
                 if before_state0[param_tns_pre].eq(before_state0[param_tns_post]).all():
+                    # Dang!
                     befores_differ_from_afters = False
             
         if befores_differ_among_GPUs:
@@ -179,28 +174,14 @@ class MinimalDDP:
 
 
     #------------------------------------
-    # compare_model_parameters 
+    # cleanup 
     #-------------------
-
-    def compare_model_parameters(self, model, other):
-        for parms1, parms_other in zip(model.parameters(), other.parameters()):
-            if parms1.data.ne(parms_other.data).sum() > 0:
-                return False
-        return True        
-        
-        
-        
-        print(f"Saving tensors for rank {rank}")
-        for i, one_before in enumerate(before):
-            torch.save(one_before, f"/home/paepcke/tmp/PytorchComm/before_rank{rank}_{i}.pth")
-    
-        for i, one_after in enumerate(after):
-            torch.save(one_after, f"/home/paepcke/tmp/PytorchComm/after_rank{rank}_{i}.pth")
-        print(f"Done saving tensors for rank {rank}")
 
     def cleanup(self):
         dist.destroy_process_group()
         print(f"Rank {rank} is done.")
+        
+# ------------------------ Toy Model ----------
 
 class ToyModel(nn.Module):
     def __init__(self):
