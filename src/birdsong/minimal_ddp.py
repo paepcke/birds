@@ -111,7 +111,7 @@ class MinimalDDP:
             # Save the state_dirs of all before-prop
             # and after-prop model copies; each in its
             # own file:
-            self.save_model_arrs(self.rank, before, after, model_save_dir)
+            self.save_model_arrs(before, after, model_save_dir)
         
         self.cleanup()
 
@@ -191,14 +191,14 @@ class MinimalDDP:
                     befores_differ_from_afters = False
             
         if befores_differ_among_GPUs:
-            print("Good: corresponding pre-backward model parms differ")
+            print("Good: corresponding pre-backward model parms in processes differ")
         else:
-            print("Suspicious: corresponding pre-backward model parms match exactly")
+            print("Suspicious: corresponding pre-backward model parms match exactly across all processes")
             
         if afters_differ_among_GPUs:
             print("Bad: backward does not seem to broadcast parms")
         else:
-            print("Good: corresponding post-backward model parms match exactly")
+            print("Good: corresponding post-backward model parms match exactly across processes")
 
         # Within one GPU, model parms before and 
         # after back prop should be different.

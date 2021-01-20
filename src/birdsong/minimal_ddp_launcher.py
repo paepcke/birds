@@ -9,8 +9,8 @@ class MinimalDDPLauncher:
         for rank in range(world_size):
             print(f"Starting {demo_script}[{rank}] of {world_size}")
             procs.append(subprocess.Popen([demo_script, 
-                                           rank, 
-                                           goal
+                                           str(rank), 
+                                           str(goal)
                                            ]))
             
         for proc in procs:
