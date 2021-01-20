@@ -39,6 +39,13 @@ if socket.gethostname() in ('quintus', 'quatro'):
 # **************** 
 
 class MinimalDDP:
+    
+    epochs  = 2
+    samples = 3
+
+    #------------------------------------
+    # setup
+    #-------------------
 
     def setup(self, rank, world_size):
         os.environ['MASTER_ADDR'] = 'localhost'
@@ -47,7 +54,11 @@ class MinimalDDP:
         # initialize the process group
         dist.init_process_group("nccl", rank=rank, world_size=world_size)
 
-    def demo_basic(self, rank, world_size):
+    #------------------------------------
+    # demo_basic
+    #-------------------
+
+    def demo_basic(self, rank, world_size, model_save_dir):
             
         print(f"Running basic DDP example on rank {rank}.")
         self.setup(rank, world_size)
@@ -61,8 +72,9 @@ class MinimalDDP:
 
         before = []
         after  = []
-        for epoch in range(2):      # 2 Epochs
-            for i in range(5):      # 5 Random datapoint/targets
+        for _epoch in range(self.epochs):
+            for _i in range(self.samples):
+                
                 optimizer.zero_grad()
                 outputs = ddp_model(torch.randn(20, 10))
                 labels = torch.randn(20, 5).to(rank)
@@ -75,18 +87,83 @@ class MinimalDDP:
                              
         dist.barrier()
 
-        if rank == 0:
-            print("Rank0: saving arrays of before and after models.")
-            torch.save([list(_before)
-                         for _before in before],
-                       '/home/paepcke/tmp/before_models.pth')
-            torch.save([list(_after)
-                         for _after in after],
-                       '/home/paepcke/tmp/after_models.pth')
-                             
+        self.save_model_arrs(rank, before, after, model_save_dir)
         self.cleanup()
+        
+        if rank == 0:
+            self.report_model_diffs(model_save_dir)
 
-    def report_model_parm_diffs(self):
+    #------------------------------------
+    # save_model_arrs 
+    #-------------------
+    
+    def save_model_arrs(self, rank, before_arr, after_arr, model_save_dir):
+        
+        print(f"Proc{rank}: saving arrays of before and after models.")
+        
+        for i, (model_before, model_after) in enumerate(zip(before_arr, after_arr)):
+            model_before.cpu()
+            model_after.cpu()
+            torch.save(model_before.state_dict(),
+                       os.path.join(model_save_dir, f"before_models_r{rank}_{i}.pth"))
+            torch.save(model_after.state_dict(),
+                       os.path.join(model_save_dir, f"after_models_r{rank}_{i}.pth"))
+
+    #------------------------------------
+    # report_model_diffs 
+    #-------------------
+
+    def report_model_diffs(self, model_save_dir):
+        
+        model_arrs_len = self.epochs * self.samples
+        befores_differ = True
+        afters_differ  = False
+        
+        for i in range(model_arrs_len):
+            before_path_r0 = os.path.join(model_save_dir, f"before_models_r0_{i}.pth")
+            before_path_r1 = os.path.join(model_save_dir, f"before_models_r1_{i}.pth")
+            
+            after_path_r0 = os.path.join(model_save_dir, f"after_models_r0_{i}.pth")
+            after_path_r1 = os.path.join(model_save_dir, f"after_models_r1_{i}.pth")
+            
+            before_state0 = torch.load(before_path_r0)
+            before_state1 = torch.load(before_path_r1)
+            
+            after_state0 = torch.load(after_path_r0)
+            after_state1 = torch.load(after_path_r1)
+            
+            for (param_tns0, param_tns1) in zip(before_state0, before_state1):
+                if before_state0[param_tns0].eq(before_state1[param_tns1]):
+                    befores_differ = False
+            
+            for (param_tns0, param_tns1) in zip(after_state0, after_state1):
+                if after_state0[param_tns0].ne(after_state1[param_tns1]):
+                    afters_differ = False
+
+        if befores_differ:
+            print("Good: corresponding pre-backward model parms differ")
+        else:
+            print("Suspicious: corresponding pre-backward model parms match exactly")
+            
+        if afters_differ:
+            print("Bad: backward does not seem to broadcast parms")
+        else:
+            print("Good: corresponding post-backward model parms match exactly")
+
+
+
+    #------------------------------------
+    # compare_model_parameters 
+    #-------------------
+
+    def compare_model_parameters(self, model, other):
+        for parms1, parms_other in zip(model.parameters(), other.parameters()):
+            if parms1.data.ne(parms_other.data).sum() > 0:
+                return False
+        return True        
+        
+        
+        
         print(f"Saving tensors for rank {rank}")
         for i, one_before in enumerate(before):
             torch.save(one_before, f"/home/paepcke/tmp/PytorchComm/before_rank{rank}_{i}.pth")
@@ -112,7 +189,8 @@ class ToyModel(nn.Module):
 # ------------------------ Main ------------
 if __name__ == '__main__':
 
-    rank       = int(sys.argv[1])
-    world_size = int(sys.argv[2])
+    rank           = int(sys.argv[1])
+    world_size     = 2 # int(sys.argv[2])
+    model_save_dir = f"/home/paepcke/tmp/PytorchComm/"
     min_ddp = MinimalDDP()
-    min_ddp.demo_basic(rank, world_size)
+    min_ddp.demo_basic(rank, world_size, model_save_dir)
