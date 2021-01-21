@@ -25,22 +25,37 @@ from threading import Timer
 
 import GPUtil
 from logging_service import LoggingService
+
+# Needed to make Eclipse's type engine happy.
+# I would prefer using torch.cuda, etc in the 
+# code, but Eclipse then marks those as errors
+# even though the code runs fine in Eclipse. 
+# Some cases are solved in the torch.pypredef
+# file, but I don't know how to type-hint the
+# following few:
+
 from torch import cuda
 from torch import hub
 from torch import optim
+from torch import device
+from torch import no_grad
+from torch import Size
+from torch import Tensor
+
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.tensorboard import SummaryWriter
 from torchvision.models.resnet import ResNet, BasicBlock
 
 from birdsong.cross_validation_dataloader import MultiprocessingDataLoader, CrossValidatingDataLoader
-from birdsong.result_tallying import TrainResult, TrainResultCollection
+from birdsong.result_tallying import TrainResult, TrainResultCollection, EpochSummary
 from birdsong.rooted_image_dataset import MultiRootImageDataset
 from birdsong.utils.dottable_config import DottableConfigParser
 from birdsong.utils.learning_phase import LearningPhase
 import numpy as np
 import torch.distributed as dist
 import torch.nn as nn
+from birdsong.utils import learning_phase
 
 
 packet_root = os.path.abspath(__file__.split('/')[0])
@@ -146,7 +161,10 @@ class BirdTrainer(object):
             # To generalize some of the code
             # below: won't have to check for
             # device being cuda vs. CPU
-            comm_info = {'LOCAL_RANK' : 0}
+            comm_info = {'LOCAL_RANK' : 0,
+                         'RANK' : 0,
+                         'MIN_RANK_THIS_MACHINE' : 0
+                         }
         else:
             started_from_launch = True
             
@@ -259,9 +277,9 @@ class BirdTrainer(object):
         
         self.testing_cuda_on_cpu = testing_cuda_on_cpu
 
-        self.device = torch.device('cuda' if cuda.is_available() else 'cpu')
-        self.cuda   = torch.device('cuda')
-        self.cpu    = torch.device('cpu')
+        self.device = device('cuda' if cuda.is_available() else 'cpu')
+        self.cuda   = device('cuda')
+        self.cpu    = device('cpu')
         
         dataset  = MultiRootImageDataset(self.root_train_test_data,
                                          sample_width=train_parms.getint('sample_width'),
@@ -275,7 +293,7 @@ class BirdTrainer(object):
         # dimensioned tensors:
 
         # Make an appropriate (single/multiprocessing) dataloader:
-        if self.device == torch.device('cpu'):
+        if self.device == device('cpu'):
 
             # CPU bound, single machine:
             
@@ -379,6 +397,7 @@ class BirdTrainer(object):
                                 self.config.Training.getint('batch_size'),
                                 json_log_dir=performance_log_dir
                                 )
+        self.setup_tensorboard()
 
         # A stack to allow clear_gpu() to
         # remove all tensors from the GPU.
@@ -550,7 +569,7 @@ class BirdTrainer(object):
     #-------------------
     
     def to_best_device(self, item):
-        if self.device == torch.device('cuda'):
+        if self.device == device('cuda'):
             item.to(device=self.cuda)
         else:
             item.to(device=self.cpu)
@@ -577,7 +596,7 @@ class BirdTrainer(object):
         @type local_rank: int
         '''
         
-        if self.device == torch.device('cuda'):
+        if self.device == device('cuda'):
             model.to(self.device)
 
             # Leave out the devices and output
@@ -637,7 +656,7 @@ class BirdTrainer(object):
         '''
         Returns the device_residence id (an int) of an 
         available GPU. If none is exists on this 
-        machine, returns torch.device('cpu')
+        machine, returns device('cpu')
         
         Initializes self.gpu_obj, which is a CUDA
         GPU instance. 
@@ -650,7 +669,7 @@ class BirdTrainer(object):
         @param raise_gpu_unavailable: whether to raise error
             when GPUs exist on this machine, but none are available.
         @type raise_gpu_unavailable: bool
-        @return: a GPU device_residence ID, or torch.device('cpu')
+        @return: a GPU device_residence ID, or device('cpu')
         @rtype: int
         @raise NoGPUAvailable: if exception requested via 
             raise_gpu_unavailable, and no GPU is available.
@@ -662,11 +681,11 @@ class BirdTrainer(object):
         # Could be (GPU available):
         #   device_residence(type='cuda', index=0)
         # or (No GPU available):
-        #   device_residence(type=torch.device('cpu'))
+        #   device_residence(type=device('cpu'))
 
         gpu_objs = GPUtil.getGPUs()
         if len(gpu_objs) == 0:
-            return torch.device('cpu')
+            return device('cpu')
 
         # GPUs are installed. Did caller ask for a 
         # specific GPU?
@@ -701,7 +720,7 @@ class BirdTrainer(object):
                 raise NoGPUAvailable("Even though GPUs are installed, all are already in use.")
             else:
                 # Else quietly revert to CPU
-                return torch.device('cpu')
+                return device('cpu')
         
         # Get the GPU object that has the found
         # deviceID:
@@ -857,8 +876,21 @@ class BirdTrainer(object):
         if learning_phase == LearningPhase.TRAINING:
             pred_classes_each_batch = torch.argmax(pred_prob_tns, dim=2)
         else:
-            pred_classes_each_batch = torch.argmax(pred_prob_tns, dim=1)
-        
+            # Turn something like:
+            # tensor(
+            #  [[[ -9.6347,  30.7077,  12.9497, -13.9641,  -9.8286,  -8.1160]],
+            #   [[ -8.9195,  29.1933,  11.8827, -13.0813,  -9.9640,  -8.1645]],
+            #            ...
+            # into a simple:
+            # tensor(
+            #  [
+            #   [ -9.6347,  30.7077,  12.9497, -13.9641,  -9.8286,  -8.1160],
+            #   [ -8.9195,  29.1933,  11.8827, -13.0813,  -9.9640,  -8.1645],
+            #                   ...
+            
+            tns_probs = torch.squeeze(pred_prob_tns)
+            pred_classes_each_batch = torch.argmax(tns_probs, dim=1)
+
         #  For a batch size of 2 we would now have:
         #                 tensor([[3, 0],  <-- result batch 1 above
         #                         [0, 0],
@@ -939,44 +971,28 @@ class BirdTrainer(object):
             absolute_file_path = self.dataloader.file_from_sample_id(sample_id)
             incorrect_paths.append(os.path.basename(absolute_file_path))
 
-        # Mean of accuracies among the 
-        # training splits of this epoch
-        mean_accuracy_training = \
-           self.tally_collection.mean_accuracy(epoch, 
-                                               learning_phase=LearningPhase.TRAINING)
-           
-        mean_accuracy_validating = \
-           self.tally_collection.mean_accuracy(epoch, 
-                                               learning_phase=LearningPhase.VALIDATING)
-
-        epoch_loss = self.tally_collection.cumulative_loss(epoch=epoch, 
-                                                           learning_phase=LearningPhase.VALIDATING)
-        epoch_mean_weighted_precision = \
-            self.tally_collection.mean_weighted_precision(epoch,
-                                                          learning_phase=LearningPhase.VALIDATING
-                                                          )
-            
-        epoch_mean_weighted_recall = \
-            self.tally_collection.mean_weighted_recall(epoch,
-                                                       learning_phase=LearningPhase.VALIDATING
-                                                       )
-
-        # For the confusion matrix: add all 
-        # the confusion matrices from Validation
-        # runs:
-        epoch_conf_matrix = self.tally_collection.conf_matrix_aggregated(epoch=epoch,
-                                                                         learning_phase=LearningPhase.VALIDATING
-                                                                         )
+        epoch_summary = EpochSummary(self.tally_collection, epoch)
         with open(self.json_filepath, 'a') as f:
             f.write(json.dumps(
                     [epoch, 
-                     epoch_loss,
-                     mean_accuracy_training,
-                     mean_accuracy_validating,
-                     epoch_mean_weighted_precision,
-                     epoch_mean_weighted_recall,
+                     epoch_summary.epoch_loss,
+                     epoch_summary.mean_accuracy_training,
+                     epoch_summary.mean_accuracy_validating,
+                     epoch_summary.epoch_mean_weighted_precision,
+                     epoch_summary.epoch_mean_weighted_recall,
                      incorrect_paths,
-                     epoch_conf_matrix.tolist()]) + "\n")
+                     epoch_summary.epoch_conf_matrix.tolist()]) + "\n")
+
+    #------------------------------------
+    # record_tensorboard_results 
+    #-------------------
+    
+    def record_tensorboard_results(self, epoch):
+        
+        epoch_results = EpochSummary(self.tally_collection, epoch)
+        for measure_name, val in epoch_results.items():
+            if type(val) in (float, int, str):
+                self.writer.add_scalar(measure_name, val, global_step=epoch)
 
     #------------------------------------
     # train 
@@ -1087,6 +1103,7 @@ class BirdTrainer(object):
                     # in the file system:
                     
                     self.record_json_display_results(self.epoch)
+                    self.record_tensorboard_results(self.epoch)
                     
                     # Compute mean accuracy over all splits
                     # of this epoch:
@@ -1297,45 +1314,31 @@ class BirdTrainer(object):
             
             outputs = outputs.to('cpu')
             
-
-            # Remember performance:
-            if output_stack is None:
-                output_stack = torch.unsqueeze(outputs, dim=0)
-            else:
-                # Did we get a full batch? Output tensors
-                # of shape [batch_size, num_classes]. 
-                #     [[1st_of_batch, [logit_class1, logit_class2, ... logit_num_classes]]
-                #      [2nd_of_batch, [logit_class1, logit_class2, ... logit_num_classes]]
-                #     ]
-                have_full_batch = outputs.size() == torch.Size([self.batch_size, 
-                                                                self.num_classes])
-                if not have_full_batch and self.drop_last:
-                    # Done with this split:
-                    # Pending STOP request?
-                    if BirdTrainer.STOP:
-                        raise InterruptTraining()
-                    continue
-                    
-                output_stack = torch.cat((output_stack, torch.unsqueeze(outputs, 
-                                                                        dim=0))) 
-            if label_stack is None:
-                label_stack = torch.unsqueeze(targets, dim=0)
-            else:
-                label_stack = torch.cat((label_stack, torch.unsqueeze(targets, 
-                                                                      dim=0)))
+                
+            output_stack, label_stack = \
+                self.remember_output_and_label(outputs, 
+                                               targets, 
+                                               output_stack, 
+                                               label_stack,
+                                               learning_phase=LearningPhase.TRAINING
+                                               )
             # Pending STOP request?
             if BirdTrainer.STOP:
                 raise InterruptTraining()
-
+            
 
     #------------------------------------
     # validate_one_split 
     #-------------------
 
-    def validate_one_split(self, split_num):
+    def validate_one_split(self, split_num):\
+    
+        output_stack = None
+        label_stack  = None
+    
         # Model to eval mode:
         self.model.eval()
-        with torch.no_grad():
+        with no_grad():
             for (val_sample, val_target) in self.dataloader.validation_samples():
                 # Push sample and target tensors
                 # to where the model is; but during
@@ -1375,12 +1378,106 @@ class BirdTrainer(object):
                 val_sample = val_sample.to('cpu')
                 val_target = val_target.to('cpu')
                 pred_prob_tns = pred_prob_tns.to('cpu')
-                self.tally_result(split_num,
-                                  val_target, 
-                                  pred_prob_tns, 
-                                  loss, 
-                                  LearningPhase.VALIDATING
-                                  )
+                output_stack, label_stack = \
+                   self.remember_output_and_label(pred_prob_tns, 
+                                                  val_target, 
+                                                  output_stack, 
+                                                  label_stack,
+                                                  learning_phase=LearningPhase.VALIDATING)
+                
+            self.tally_result(split_num,
+                              label_stack,
+                              output_stack,
+                              loss, 
+                              LearningPhase.VALIDATING
+                              )
+
+    #------------------------------------
+    # remember_output_and_label 
+    #-------------------
+    
+    def remember_output_and_label(self, 
+                                  outputs, 
+                                  targets, 
+                                  output_stack=None, 
+                                  label_stack=None,
+                                  learning_phase=LearningPhase.TRAINING):
+        '''
+        Both training and validation run through a loop
+        of batches. Not every single iteration's results
+        need to be represented in the performance logs.
+        Instead, the output-prob/correct-label pairs are
+        accumulated in an output_stack and label_stack,
+        respectively.
+        
+        This method adds one ouput/label pair to their
+        respective stacks. The tally_result() method will
+        be called after the end of each split, and it will
+        expect the two stacks.
+        
+        Clients are responsible for setting output_stack and
+        label_stack to None after each split. They are also 
+        responsible for preserving the returned values for the
+        next call to this method. I.e. this method does not
+        store output_stack or label_stack anywhere.
+        
+        @param outputs: an output tensor from the model 
+        @type outputs: Tensor [batch_size x num_classes]
+        @param targets: correct label for each sample in batch
+        @type targets: Tensor [batch_size x 1]
+        @param output_stack: current (partially filled) stack
+            of model outputs
+        @type output_stack: [Tensor]
+        @param label_stack: current (partially filled) stack 
+            of labels
+        @type label_stack:[Tensor]
+        @param learning_phase: whether currently training or validating 
+        @type learning_phase: LearningPhase
+        @return: tuple of updated (output_stack, label_stack)
+        '''
+        
+        # If training we expect one row for
+        # each member of one batch:
+        if learning_phase == LearningPhase.TRAINING:
+            expected_num_rows = self.batch_size
+            
+        # But if validating, it's as if batch_size is 1:
+        # a single result for the single sample fed into 
+        # the model under validation:
+
+        elif learning_phase == LearningPhase.VALIDATING:
+            expected_num_rows = 1
+    
+        else:
+            raise ValueError(f"Method remember_output_and_label() called with wrong phase: {learning_phase}")
+
+        # Remember performance:
+        if output_stack is None:
+            # First time, create the stack
+            output_stack = torch.unsqueeze(outputs, dim=0)
+        else:
+            # Did we get a full batch? Output tensors
+            # of shape [batch_size, num_classes]. 
+            #     [[1st_of_batch, [logit_class1, logit_class2, ... logit_num_classes]]
+            #      [2nd_of_batch, [logit_class1, logit_class2, ... logit_num_classes]]
+            #     ]
+            have_full_batch = outputs.size() == Size([expected_num_rows,
+                                                      self.num_classes])
+            if not have_full_batch and self.drop_last:
+                # Done with this split:
+                return (output_stack, label_stack)
+                
+            output_stack = torch.cat((output_stack, torch.unsqueeze(outputs, 
+                                                                    dim=0))) 
+        if label_stack is None:
+            label_stack = torch.unsqueeze(targets, dim=0)
+        else:
+            label_stack = torch.cat((label_stack, torch.unsqueeze(targets, 
+                                                                  dim=0)))
+
+        return (output_stack, label_stack)
+        
+
 
     # ------------- Utils -----------
 
@@ -1529,7 +1626,7 @@ class BirdTrainer(object):
         # locally:
         
         # Case 1: not on a GPU machine:
-        if self.device == torch.device('cpu'):
+        if self.device == device('cpu'):
             model = hub.load('pytorch/vision:v0.6.0', 'resnet18', pretrained=True)
             
         # Case2a: GPU machine, and this is this machine's 
@@ -1792,6 +1889,35 @@ class BirdTrainer(object):
             else self.tally_collection 
 
     #------------------------------------
+    # setup_tensorboard 
+    #-------------------
+    
+    def setup_tensorboard(self, logdir=None, comment=''):
+        '''
+        Initialize tensorboard. To easily compare experiments,
+        use runs/exp1, runs/exp2, etc.
+        
+        Comment is only used if logdir is None. It is a 
+        suffix to the automatically generated log directory 
+        
+        @param logdir: if not provided, uses 
+            runs/CURRENT_DATETIME_HOSTNAME
+        @type logdir: str
+        @param comment: suffix to directory name 
+        @type comment: str
+        '''
+
+        if logdir is None and len(comment) == 0:
+            logdir = os.path.join(os.path.dirname(__file__), 'runs')
+
+        # Default dest dir: ./runs
+        self.writer = SummaryWriter(log_dir=logdir, comment=comment)
+
+        self.log.info(f"Tensorboard info will be in {logdir}")
+        
+
+
+    #------------------------------------
     # setup_json_logging 
     #-------------------
     
@@ -1892,7 +2018,7 @@ class BirdTrainer(object):
             return tnsr
 
 
-        if not isinstance(tnsr, torch.Tensor):
+        if not isinstance(tnsr, Tensor):
             raise ValueError(f"Attempt to push to GPU, but '{tnsr}' is not a tensor")
 
         new_tnsr = tnsr.to('cuda')
@@ -2031,6 +2157,8 @@ class BirdTrainer(object):
                 return "%3.1f%s%s" % (num, unit, suffix)
             num /= 1024.0
         return "%.1f%s%s" % (num, 'Yi', suffix)
+
+
 
 # ---------------------- Resnet18Grayscale ---------------
 
@@ -2199,7 +2327,7 @@ if __name__ == '__main__':
     parser.add_argument('--GPUS_USED_THIS_MACHINE',
                         help=argparse.SUPPRESS,
                         type=int,
-                        default=None
+                        default=0
                         )
     
     parser.add_argument('-d', '--data',
@@ -2224,7 +2352,8 @@ if __name__ == '__main__':
     comm_info['MASTER_PORT'] = int(args.MASTER_PORT)
     comm_info['RANK']        = int(args.RANK)
     comm_info['LOCAL_RANK']  = int(args.LOCAL_RANK)
-    comm_info['MIN_RANK_THIS_MACHINE'] = int(args.MIN_RANK_THIS_MACHINE)
+    comm_info['MIN_RANK_THIS_MACHINE'] = int(args.MIN_RANK_THIS_MACHINE),
+    comm_info['GPUS_USED_THIS_MACHINE'] = int(args.GPUS_USED_THIS_MACHINE)
     comm_info['WORLD_SIZE']  = int(args.WORLD_SIZE)
     
     # GPUS_USED_THIS_MACHINE may be None to indicate

@@ -1,3 +1,5 @@
+import typing
+
 def sum(input: Tensor, dtype=torch.dtype) -> Tensor:
     return Tensor
     
@@ -34,51 +36,49 @@ def manual_seed(seed: int) -> torch._C.Generator:
 def device_residence(dev_name: string) -> torch.device_residence:
     return torch.device_residence
 
-def randperm(n : int, dtype=torch.dtype, layout=torch.strided, device=torch.device, requires_grad=bool):
+def randperm(n : int, dtype=torch.dtype, layout=torch.strided, device=torch.device, requires_grad=bool) -> Tensor:
     return Tensor
 
-def ones(size: int, dtype: torch.dtype, layout: torch.layout, device: torch.device, requires_grad: bool):
+def ones(size: int, dtype: torch.dtype, layout: torch.layout, device: torch.device, requires_grad: bool) -> Tensor:
     return Tensor
 
-def zeros(size: int, dtype: torch.dtype, layout: torch.layout, device: torch.device, requires_grad: bool):
+def zeros(size: int, dtype: torch.dtype, layout: torch.layout, device: torch.device, requires_grad: bool) -> Tensor:
     return Tensor
 
-def diagonal(input: Tensor, offset=int, dim1=int, dim2=int
+def diagonal(input: Tensor, offset=int, dim1=int, dim2=int) -> Tensor:
     return Tensor
 
-def stack(tensors: Sequence[Tensor], dim=int):
+def stack(tensors: Sequence[Tensor], dim=int) -> Tensor:
     return Tensor
 
-def eq(input: Tensor, other: Tensor):
+def eq(input: Tensor, other: Tensor) -> Tensor:
     return Tensor
 
-def equal(input: Tensor, other: Tensor):
+def equal(input: Tensor, other: Tensor) -> Tensor:
     return Tensor
 
-def mean(input: Tensor):
+def mean(input: Tensor) -> Tensor:
     return Tensor
 
-def float(input: Tensor):
+def float(input: Tensor) -> float:
     return float
 
-def isnan(input: Tensor):
+def isnan(input: Tensor) -> Tensor:
     return Tensor
 
-def argmax(input: Tensor):
+def argmax(input: Tensor) -> Tensor:
     return Tensor
 
-def round(intput:Tensor):
+def round(intput:Tensor) -> Tensor:
     return Tensor
 
-class no_grad(torch._DecoratorContextManager):
-    def __init__(self: torch.no_grad) -> torch.no_grad
-        return torch.no_grad
+def size(Tensor) -> torch.Size:
+    return Size
 
-    def __enter__(self: torch.no_grad) -> None:
-        return None
+typing.Generator[None, None, None]:
 
-    def __exit__(self: torch.no_grad) -> None:
-        return None
 
-class device()
-class Generator()
+Type[device]:
+Type[Generator]:
+Type[Tensor]:
+

@@ -410,6 +410,8 @@ class TrainScriptLauncher:
         # Build the gpu_landscape dict:
         self.gather_world_layout(self.launch_args)
         
+        
+        
         self.GPUS_USED_THIS_MACHINE = self.gpu_landscape[self.hostname]['num_gpus']
         
     #------------------------------------
@@ -834,8 +836,12 @@ class TrainScriptLauncher:
             # Get dict of info about the machine:
              
             machine_info = world_map[machine_name]
-            
-            machine_gpus = machine_info['gpus'] 
+
+            try:
+                machine_gpus = machine_info['gpus']
+            except KeyError:
+                print("World map must include a 'gpus' entry; the value may be 0")
+                 
             gpu_landscape[machine_name] = {}
             gpu_landscape[machine_name]['num_gpus'] = machine_gpus
             
@@ -870,25 +876,32 @@ class TrainScriptLauncher:
                     
         # Go through the machine enries in gpu_landscape, and
         # assign rank ranges to each. Must start with 
-        # the master node, b/c it must start with rank 0:
+        # the master node, b/c it must start with rank 0.
+        # For the master node, it is possible that it has
+        # no GPUs
 
-        gpu_landscape[self.master_hostname]['rank_range'] = \
-            list(range(gpu_landscape[self.master_hostname]['num_gpus']))
-        gpu_landscape[self.master_hostname]['start_rank'] = 0
-        
+        master_info = gpu_landscape[self.master_hostname] 
+        master_info ['rank_range'] = list(range(master_info['num_gpus']))
+        master_info['start_rank'] = 0
+        if len(master_info ['rank_range']) == 0:
+            # Master only has a GPU:
+            master_info ['rank_range'] = [0]
+
         # Start assigning more ranks after 
         # the GPUs of the master:
 
-        running_rank = gpu_landscape[self.master_hostname]['num_gpus']
+        running_rank = master_info['rank_range'][-1] + 1
+        
         for machine_name in gpu_landscape.keys():
             if machine_name == self.master_hostname:
                 # We already did the master node
                 continue
-            gpu_landscape[machine_name]['start_rank'] = running_rank
-            num_gpus = gpu_landscape[machine_name]['num_gpus']
-            gpu_landscape[machine_name]['rank_range'] = \
-                list(range(running_rank, running_rank + num_gpus))
-            running_rank += num_gpus
+            mach_info = gpu_landscape[machine_name] 
+            mach_info['start_rank'] = running_rank
+            num_gpus = mach_info['num_gpus']
+            range_bound = running_rank + (num_gpus if num_gpus > 0 else 1)
+            mach_info['rank_range'] = list(range(running_rank, range_bound))
+            running_rank += (num_gpus if num_gpus > 0 else 1)
             
         self.my_gpus = gpu_landscape[self.hostname]['num_gpus']
         self.gpu_landscape = gpu_landscape
