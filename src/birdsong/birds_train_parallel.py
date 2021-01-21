@@ -55,6 +55,7 @@ from birdsong.utils.learning_phase import LearningPhase
 import numpy as np
 import torch.distributed as dist
 import torch.nn as nn
+from birdsong.utils import learning_phase
 
 
 packet_root = os.path.abspath(__file__.split('/')[0])
@@ -160,7 +161,10 @@ class BirdTrainer(object):
             # To generalize some of the code
             # below: won't have to check for
             # device being cuda vs. CPU
-            comm_info = {'LOCAL_RANK' : 0}
+            comm_info = {'LOCAL_RANK' : 0,
+                         'RANK' : 0,
+                         'MIN_RANK_THIS_MACHINE' : 0
+                         }
         else:
             started_from_launch = True
             
@@ -393,6 +397,7 @@ class BirdTrainer(object):
                                 self.config.Training.getint('batch_size'),
                                 json_log_dir=performance_log_dir
                                 )
+        self.setup_tensorboard()
 
         # A stack to allow clear_gpu() to
         # remove all tensors from the GPU.
@@ -871,8 +876,21 @@ class BirdTrainer(object):
         if learning_phase == LearningPhase.TRAINING:
             pred_classes_each_batch = torch.argmax(pred_prob_tns, dim=2)
         else:
-            pred_classes_each_batch = torch.argmax(pred_prob_tns, dim=1)
-        
+            # Turn something like:
+            # tensor(
+            #  [[[ -9.6347,  30.7077,  12.9497, -13.9641,  -9.8286,  -8.1160]],
+            #   [[ -8.9195,  29.1933,  11.8827, -13.0813,  -9.9640,  -8.1645]],
+            #            ...
+            # into a simple:
+            # tensor(
+            #  [
+            #   [ -9.6347,  30.7077,  12.9497, -13.9641,  -9.8286,  -8.1160],
+            #   [ -8.9195,  29.1933,  11.8827, -13.0813,  -9.9640,  -8.1645],
+            #                   ...
+            
+            tns_probs = torch.squeeze(pred_prob_tns)
+            pred_classes_each_batch = torch.argmax(tns_probs, dim=1)
+
         #  For a batch size of 2 we would now have:
         #                 tensor([[3, 0],  <-- result batch 1 above
         #                         [0, 0],
@@ -973,7 +991,8 @@ class BirdTrainer(object):
         
         epoch_results = EpochSummary(self.tally_collection, epoch)
         for measure_name, val in epoch_results.items():
-            self.writer.add_scalar(measure_name, val, global_step=epoch)
+            if type(val) in (float, int, str):
+                self.writer.add_scalar(measure_name, val, global_step=epoch)
 
     #------------------------------------
     # train 
@@ -1295,43 +1314,28 @@ class BirdTrainer(object):
             
             outputs = outputs.to('cpu')
             
-
-            # Remember performance:
-            if output_stack is None:
-                # First time, create the stack
-                output_stack = torch.unsqueeze(outputs, dim=0)
-            else:
-                # Did we get a full batch? Output tensors
-                # of shape [batch_size, num_classes]. 
-                #     [[1st_of_batch, [logit_class1, logit_class2, ... logit_num_classes]]
-                #      [2nd_of_batch, [logit_class1, logit_class2, ... logit_num_classes]]
-                #     ]
-                have_full_batch = outputs.size() == Size([self.batch_size,
-                                                                self.num_classes])
-                if not have_full_batch and self.drop_last:
-                    # Done with this split:
-                    # Pending STOP request?
-                    if BirdTrainer.STOP:
-                        raise InterruptTraining()
-                    continue
-                    
-                output_stack = torch.cat((output_stack, torch.unsqueeze(outputs, 
-                                                                        dim=0))) 
-            if label_stack is None:
-                label_stack = torch.unsqueeze(targets, dim=0)
-            else:
-                label_stack = torch.cat((label_stack, torch.unsqueeze(targets, 
-                                                                      dim=0)))
+                
+            output_stack, label_stack = \
+                self.remember_output_and_label(outputs, 
+                                               targets, 
+                                               output_stack, 
+                                               label_stack,
+                                               learning_phase=LearningPhase.TRAINING
+                                               )
             # Pending STOP request?
             if BirdTrainer.STOP:
                 raise InterruptTraining()
-
+            
 
     #------------------------------------
     # validate_one_split 
     #-------------------
 
-    def validate_one_split(self, split_num):
+    def validate_one_split(self, split_num):\
+    
+        output_stack = None
+        label_stack  = None
+    
         # Model to eval mode:
         self.model.eval()
         with no_grad():
@@ -1374,12 +1378,106 @@ class BirdTrainer(object):
                 val_sample = val_sample.to('cpu')
                 val_target = val_target.to('cpu')
                 pred_prob_tns = pred_prob_tns.to('cpu')
-                self.tally_result(split_num,
-                                  val_target, 
-                                  pred_prob_tns, 
-                                  loss, 
-                                  LearningPhase.VALIDATING
-                                  )
+                output_stack, label_stack = \
+                   self.remember_output_and_label(pred_prob_tns, 
+                                                  val_target, 
+                                                  output_stack, 
+                                                  label_stack,
+                                                  learning_phase=LearningPhase.VALIDATING)
+                
+            self.tally_result(split_num,
+                              label_stack,
+                              output_stack,
+                              loss, 
+                              LearningPhase.VALIDATING
+                              )
+
+    #------------------------------------
+    # remember_output_and_label 
+    #-------------------
+    
+    def remember_output_and_label(self, 
+                                  outputs, 
+                                  targets, 
+                                  output_stack=None, 
+                                  label_stack=None,
+                                  learning_phase=LearningPhase.TRAINING):
+        '''
+        Both training and validation run through a loop
+        of batches. Not every single iteration's results
+        need to be represented in the performance logs.
+        Instead, the output-prob/correct-label pairs are
+        accumulated in an output_stack and label_stack,
+        respectively.
+        
+        This method adds one ouput/label pair to their
+        respective stacks. The tally_result() method will
+        be called after the end of each split, and it will
+        expect the two stacks.
+        
+        Clients are responsible for setting output_stack and
+        label_stack to None after each split. They are also 
+        responsible for preserving the returned values for the
+        next call to this method. I.e. this method does not
+        store output_stack or label_stack anywhere.
+        
+        @param outputs: an output tensor from the model 
+        @type outputs: Tensor [batch_size x num_classes]
+        @param targets: correct label for each sample in batch
+        @type targets: Tensor [batch_size x 1]
+        @param output_stack: current (partially filled) stack
+            of model outputs
+        @type output_stack: [Tensor]
+        @param label_stack: current (partially filled) stack 
+            of labels
+        @type label_stack:[Tensor]
+        @param learning_phase: whether currently training or validating 
+        @type learning_phase: LearningPhase
+        @return: tuple of updated (output_stack, label_stack)
+        '''
+        
+        # If training we expect one row for
+        # each member of one batch:
+        if learning_phase == LearningPhase.TRAINING:
+            expected_num_rows = self.batch_size
+            
+        # But if validating, it's as if batch_size is 1:
+        # a single result for the single sample fed into 
+        # the model under validation:
+
+        elif learning_phase == LearningPhase.VALIDATING:
+            expected_num_rows = 1
+    
+        else:
+            raise ValueError(f"Method remember_output_and_label() called with wrong phase: {learning_phase}")
+
+        # Remember performance:
+        if output_stack is None:
+            # First time, create the stack
+            output_stack = torch.unsqueeze(outputs, dim=0)
+        else:
+            # Did we get a full batch? Output tensors
+            # of shape [batch_size, num_classes]. 
+            #     [[1st_of_batch, [logit_class1, logit_class2, ... logit_num_classes]]
+            #      [2nd_of_batch, [logit_class1, logit_class2, ... logit_num_classes]]
+            #     ]
+            have_full_batch = outputs.size() == Size([expected_num_rows,
+                                                      self.num_classes])
+            if not have_full_batch and self.drop_last:
+                # Done with this split:
+                return (output_stack, label_stack)
+                
+            output_stack = torch.cat((output_stack, torch.unsqueeze(outputs, 
+                                                                    dim=0))) 
+        if label_stack is None:
+            label_stack = torch.unsqueeze(targets, dim=0)
+        else:
+            label_stack = torch.cat((label_stack, torch.unsqueeze(targets, 
+                                                                  dim=0)))
+
+        return (output_stack, label_stack)
+        
+
 
     # ------------- Utils -----------
 
@@ -1809,7 +1907,7 @@ class BirdTrainer(object):
         @type comment: str
         '''
 
-        if logdir is None and comment is None:
+        if logdir is None and len(comment) == 0:
             logdir = os.path.join(os.path.dirname(__file__), 'runs')
 
         # Default dest dir: ./runs
@@ -2229,7 +2327,7 @@ if __name__ == '__main__':
     parser.add_argument('--GPUS_USED_THIS_MACHINE',
                         help=argparse.SUPPRESS,
                         type=int,
-                        default=None
+                        default=0
                         )
     
     parser.add_argument('-d', '--data',
@@ -2254,7 +2352,8 @@ if __name__ == '__main__':
     comm_info['MASTER_PORT'] = int(args.MASTER_PORT)
     comm_info['RANK']        = int(args.RANK)
     comm_info['LOCAL_RANK']  = int(args.LOCAL_RANK)
-    comm_info['MIN_RANK_THIS_MACHINE'] = int(args.MIN_RANK_THIS_MACHINE)
+    comm_info['MIN_RANK_THIS_MACHINE'] = int(args.MIN_RANK_THIS_MACHINE),
+    comm_info['GPUS_USED_THIS_MACHINE'] = int(args.GPUS_USED_THIS_MACHINE)
     comm_info['WORLD_SIZE']  = int(args.WORLD_SIZE)
     
     # GPUS_USED_THIS_MACHINE may be None to indicate

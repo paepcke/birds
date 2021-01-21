@@ -16,6 +16,9 @@ def where(condition: BoolTensor, x: Union[Tensor, Scalar], y: Union[Tensor, Scal
 def unsqueeze(input: Tensor, dim: int):
     return Tensor
 
+def squeeze(input: Tensor, dim: int):
+    return Tensor
+
 def cat(tensors: Sequence[Tensor], dim: int):
     return Tensor
 
@@ -72,6 +75,10 @@ def argmax(input: Tensor):
 
 def round(intput:Tensor):
     return Tensor
+
+# These below don't seem to work.
+# Must import them from torch directly:
+# e.g.  from torch import no_grad
 
 <class no_grad(torch._DecoratorContextManager):
     def __init__(self: torch.no_grad) -> torch.no_grad
