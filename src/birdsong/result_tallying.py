@@ -10,12 +10,14 @@ sys.path.insert(0,packet_root)
 
 import copy
 import datetime
+from collections import UserDict
 
 from sklearn import metrics
 from sklearn.metrics import confusion_matrix
 import torch
 
 import numpy as np
+
 from birdsong.utils.learning_phase import LearningPhase
 
 
@@ -39,6 +41,16 @@ class TrainResultCollection(dict):
     #-------------------
 
     def tallies(self, epoch=None, learning_phase=None):
+        '''
+        Retrieve tallies, optionally filtering by
+        epoch and/or learning phase.
+        
+        @param epoch: epoch to filter by
+        @type epoch: int
+        @param learning_phase: learning phase to filter by
+        @type learning_phase: LearningPhase {TRAINING | VALIDATING | TESTING}
+
+        '''
         
         all_tallies = self.values()
         if epoch is not None:
@@ -404,13 +416,79 @@ class TrainResultCollection(dict):
         return loss_dict
         
 
+# ---------------------- class EpochSummary ---------------
+
+class EpochSummary(UserDict):
+    '''
+    Constructs and stores all measurements
+    from one epoch. Uses a given tally collection
+    for its computational work.
+    
+    Behaves like a dict.
+    '''
+
+    #------------------------------------
+    # Constructor
+    #-------------------
+    
+    def __init__(self, tally_collection, epoch):
+        '''
+        Given a filled-in tally_collection, filter
+        the measurements by the given epoch. The
+        resulting instance acts like a dict with 
+        the following keys:
+        
+           o mean_accuracy_training
+           o mean_accuracy_validating
+           o epoch_loss
+           o epoch_mean_weighted_precision
+           o epoch_mean_weighted_recall
+           o epoch_conf_matrix
+        
+        @param tally_collection:
+        @type tally_collection:
+        @param epoch:
+        @type epoch:
+        '''
+
+        super().__init__()
+        
+        # Mean of accuracies among the 
+        # training splits of this epoch
+        self['mean_accuracy_training'] = \
+           tally_collection.mean_accuracy(epoch, 
+                                               learning_phase=LearningPhase.TRAINING)
+           
+        self['mean_accuracy_validating'] = \
+           tally_collection.mean_accuracy(epoch, 
+                                               learning_phase=LearningPhase.VALIDATING)
+
+        self['epoch_loss'] = self.tally_collection.cumulative_loss(epoch=epoch, 
+                                                           learning_phase=LearningPhase.VALIDATING)
+        self['epoch_mean_weighted_precision'] = \
+           tally_collection.mean_weighted_precision(epoch,
+                                                          learning_phase=LearningPhase.VALIDATING
+                                                          )
+            
+        self['epoch_mean_weighted_recall'] = \
+           tally_collection.mean_weighted_recall(epoch,
+                                                       learning_phase=LearningPhase.VALIDATING
+                                                       )
+
+        # For the confusion matrix: add all 
+        # the confusion matrices from Validation
+        # runs:
+        self['epoch_conf_matrix'] = tally_collection.conf_matrix_aggregated(epoch=epoch,
+                                                                         learning_phase=LearningPhase.VALIDATING
+                                                                         )
+
 
 # ----------------------- Class Train Results -----------
 
 class TrainResult:
     '''
     Instances of this class hold results from training,
-    validating, and testing.
+    validating, and testing for each split.
     
     See also class TrainResultCollection, which 
     holds TrainResult instances, and provides
@@ -433,7 +511,7 @@ class TrainResult:
         '''
         Organize results from one train, validate,
         or test split.
-        #****** Add the new args
+
         @param split_num: split number within current epoch
         @type split_num: int
         @param epoch: current epoch
@@ -443,9 +521,10 @@ class TrainResult:
         @type learning_phase: LearningPhase
         @param loss: result of loss function
         @type loss: Tensor
-        @param conf_matrix: confusion matrix containing counts
-            of correctly and incorrectly predicted labels
-        @type conf_matrix: Tensor
+        @param predicted_class_ids:
+        @type predicted_class_ids:
+        @param num_classes: number of target classes
+        @type num_classes: int
         @param badly_predicted_labels: optionally, the labels that
             were incorrectly predicted
         @type badly_predicted_labels: Tensor
