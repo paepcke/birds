@@ -463,7 +463,7 @@ class EpochSummary(UserDict):
            tally_collection.mean_accuracy(epoch, 
                                                learning_phase=LearningPhase.VALIDATING)
 
-        self['epoch_loss'] = self.tally_collection.cumulative_loss(epoch=epoch, 
+        self['epoch_loss'] = tally_collection.cumulative_loss(epoch=epoch, 
                                                            learning_phase=LearningPhase.VALIDATING)
         self['epoch_mean_weighted_precision'] = \
            tally_collection.mean_weighted_precision(epoch,
@@ -482,7 +482,15 @@ class EpochSummary(UserDict):
                                                                          learning_phase=LearningPhase.VALIDATING
                                                                          )
 
-
+        # Maybe not greatest style but:
+        # Allow clients to use dot notation in addition
+        # to dict format:
+        #     my_epoch_summary.epoch_loss
+        # in addition to: 
+        #     my_epoch_summary['epoch_loss']
+        for instVarName,instVarValue in list(self.items()):
+            setattr(self, instVarName, instVarValue)
+ 
 # ----------------------- Class Train Results -----------
 
 class TrainResult:
