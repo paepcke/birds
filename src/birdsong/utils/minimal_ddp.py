@@ -63,9 +63,9 @@ class MinimalDDP:
                 # after back prop:
                 before.append(copy.deepcopy(ddp_model))
                 loss_fn(outputs, labels).backward()
-                after.append(copy.deepcopy(ddp_model))
 
                 optimizer.step()
+                after.append(copy.deepcopy(ddp_model))
 
                 # Clean GPU memory:
                 outputs.cpu()
