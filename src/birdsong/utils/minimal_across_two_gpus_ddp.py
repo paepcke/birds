@@ -101,7 +101,7 @@ class MinimalDDP:
                     if before_parm.ne(after_parm).any():
                         states_equal = False
 
-                print(f"Before states across gpus are {('equal' if states_equal else 'different')}")
+                print(f"At rank{rank}: Before states across gpus are {('equal' if states_equal else 'different')}")
 
 
                 # After states should be the same:
@@ -111,7 +111,7 @@ class MinimalDDP:
                     if after_parm_other.ne(after_parm).any():
                         states_equal = False
 
-                print(f"After states across gpus are {('equal' if states_equal else 'different')}")
+                print(f"At rank{rank}: After states across gpus are {('equal' if states_equal else 'different')}")
 
                 # Clean GPU memory:
                 outputs.cpu()
