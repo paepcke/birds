@@ -67,8 +67,10 @@ class MinimalDDP:
         loss_fn = nn.MSELoss()
         optimizer = optim.SGD(ddp_model.parameters(), lr=0.001)
 
-        for _epoch in range(self.epochs):
-            for _i in range(self.batches):
+        dist.barrier()
+        
+        for epoch_num in range(self.epochs):
+            for batch_num in range(self.batches):
                 
                 optimizer.zero_grad()
                 outputs = ddp_model(randn(20, 10).to(rank))
@@ -76,7 +78,8 @@ class MinimalDDP:
                 
                 before_model = ddp_model.cpu()
                 before_state = copy.deepcopy(before_model.state_dict())
-                torch.save(before_state, f"/tmp/before_rank{rank}.pth")
+                if rank == 1:
+                    torch.save(before_state, f"/tmp/before_rank1.pth")
                 ddp_model.to(rank)
                 
                 loss_fn(outputs, labels).backward()
@@ -84,24 +87,25 @@ class MinimalDDP:
 
                 after_model = ddp_model.cpu()
                 after_state = after_model.state_dict()
-                torch.save(after_state, f"/tmp/after_rank{rank}.pth")
+                if rank == 1:
+                    torch.save(after_state, f"/tmp/after_rank1.pth")
                 ddp_model.to(rank)
                                 
                 dist.barrier()
                 
                 # Read the other's before/after states:
-                other_rank = 1-rank
-                other_before_state = torch.load(f"/tmp/before_rank{other_rank}.pth")
-                other_after_state  = torch.load(f"/tmp/after_rank{other_rank}.pth")                
+                if rank == 0:
+                    other_before_state = torch.load(f"/tmp/before_rank1.pth")
+                    other_after_state  = torch.load(f"/tmp/after_rank1.pth")                
                 
                 # Before states should be different:
                 states_equal = True
-                for before_parm, after_parm in zip(other_before_state.values(),
-                                                   before_state.values()):
-                    if before_parm.ne(after_parm).any():
+                for before_parm, other_before_parm in zip(other_before_state.values(),
+                                                          before_state.values()):
+                    if before_parm.ne(other_before_parm).any():
                         states_equal = False
 
-                print(f"At rank{rank}: Before states across gpus are {('equal' if states_equal else 'different')}")
+                print(f"Epoch{epoch_num} batch{batch_num}: Before states across gpus are {('equal' if states_equal else 'different')}")
 
 
                 # After states should be the same:
@@ -111,7 +115,7 @@ class MinimalDDP:
                     if after_parm_other.ne(after_parm).any():
                         states_equal = False
 
-                print(f"At rank{rank}: After states across gpus are {('equal' if states_equal else 'different')}")
+                print(f"Epoch{epoch_num} batch{batch_num}: After states across gpus are {('equal' if states_equal else 'different')}")
 
                 # Clean GPU memory:
                 outputs.cpu()
