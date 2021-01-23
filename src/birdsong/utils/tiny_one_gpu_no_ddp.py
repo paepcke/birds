@@ -10,7 +10,6 @@ import os
 import sys
 import copy
 
-import torch.distributed as dist
 import torch.nn as nn
 import torch.optim as optim
 
@@ -57,22 +56,16 @@ class TinyNoDDP:
         loss_fn = nn.MSELoss()
         optimizer = optim.SGD(model.parameters(), lr=0.001)
 
-        # For saving model copies
-        # before and after back prop
-        # for each loop iteration:
-        
-        before = []
-        after  = []
-        
         for _epoch in range(self.epochs):
             for _i in range(self.batches):
                 
                 optimizer.zero_grad()
+                # Batch size twenty, ten features:
                 outputs = model(randn(20, 10).to(0))
+                # Five classes: 
                 labels = randn(20, 5).to(0)
                 
-                # Copy and save model copies before and
-                # after back prop:
+                # Copy and save model copies before back prop:
                 before_model = model.cpu()
                 before_state = copy.deepcopy(before_model.state_dict())
                 model.to(0)
@@ -82,42 +75,18 @@ class TinyNoDDP:
                 
                 after_model = model.cpu()
                 after_state = after_model.state_dict()
+                states_equal = True
+                for before_parm, after_parm in zip(before_state.values(),
+                                                   after_state.values()):
+                    if before_parm.ne(after_parm).any():
+                        states_equal = False
                 model.to(0)
+                print(f"Before and after are {('equal' if states_equal else 'different')}")
                 
                 # Clean GPU memory:
                 outputs.cpu()
                 labels.cpu()
-
-        self.report_result(before, after)
         
-    #------------------------------------
-    # report_result 
-    #-------------------
-    
-    def report_result(self, before_arr, after_arr):
-        '''Save state_dict of modesl in arrays to files'''
-        
-        # For each epoch
-        for i in range(len(before_arr)):
-            before_state = before_arr[i]
-            after_state  = before_arr[i]
-            
-            # Start pessimistic:
-            are_equal = True
-            msg = f"Loop {i}: before/after states are "
-            
-            for before_tns, after_tns in zip(before_state.values(),
-                                             after_state.values() 
-                                             ):
-                if before_tns.ne(after_tns).any():
-                    are_equal = False
-                
-            if are_equal:
-                msg += "equal"
-            else:
-                msg += "different"
-            print(msg)
-
 # ------------------------ Toy Model ----------
 
 class ToyModel(nn.Module):
@@ -133,5 +102,4 @@ class ToyModel(nn.Module):
 # ------------------------ Main ------------
 if __name__ == '__main__':
 
-    min_ddp = TinyNoDDP()
-    min_ddp.demo_basic()
+    TinyNoDDP().demo_basic()
