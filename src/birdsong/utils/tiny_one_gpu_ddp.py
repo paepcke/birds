@@ -33,7 +33,7 @@ if socket.gethostname() in ('quintus', 'quatro'):
     pydevd.settrace('localhost', port=4040)
 #****************
 
-class TinyDDP:
+class MinimalDDP:
     '''Test whether DDP really does something'''
     
     epochs  = 2
@@ -122,4 +122,4 @@ if __name__ == '__main__':
 
     rank           = 0
     world_size     = 1
-    min_ddp = TinyDDP().demo_basic(rank, world_size)
+    min_ddp = MinimalDDP().demo_basic(rank, world_size)
