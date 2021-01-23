@@ -98,24 +98,24 @@ class MinimalDDP:
                     other_before_state = torch.load(f"/tmp/before_rank1.pth")
                     other_after_state  = torch.load(f"/tmp/after_rank1.pth")                
                 
-                # Before states should be different:
-                states_equal = True
-                for before_parm, other_before_parm in zip(other_before_state.values(),
-                                                          before_state.values()):
-                    if before_parm.ne(other_before_parm).any():
-                        states_equal = False
+                    # Before states should be different:
+                    states_equal = True
+                    for before_parm, other_before_parm in zip(other_before_state.values(),
+                                                              before_state.values()):
+                        if before_parm.ne(other_before_parm).any():
+                            states_equal = False
+    
+                    print(f"Epoch{epoch_num} batch{batch_num}: Before states across gpus are {('equal' if states_equal else 'different')}")
 
-                print(f"Epoch{epoch_num} batch{batch_num}: Before states across gpus are {('equal' if states_equal else 'different')}")
 
-
-                # After states should be the same:
-                states_equal = True
-                for after_parm_other, after_parm in zip(other_after_state.values(),
-                                                   after_state.values()):
-                    if after_parm_other.ne(after_parm).any():
-                        states_equal = False
-
-                print(f"Epoch{epoch_num} batch{batch_num}: After states across gpus are {('equal' if states_equal else 'different')}")
+                    # After states should be the same:
+                    states_equal = True
+                    for after_parm_other, after_parm in zip(other_after_state.values(),
+                                                       after_state.values()):
+                        if after_parm_other.ne(after_parm).any():
+                            states_equal = False
+    
+                    print(f"Epoch{epoch_num} batch{batch_num}: After states across gpus are {('equal' if states_equal else 'different')}")
 
                 # Clean GPU memory:
                 outputs.cpu()
