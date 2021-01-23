@@ -12,27 +12,6 @@ from torch import randn
 
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-#*****************
-#
-import socket
-if socket.gethostname() in ('quintus', 'quatro'):
-    # Point to where the pydev server
-    # software is installed on the remote
-    # machine:
-    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
-
-    import pydevd
-    global pydevd
-    # Uncomment the following if you
-    # want to break right on entry of
-    # this module. But you can instead just
-    # set normal Eclipse breakpoints:
-    #*************
-    print("About to call settrace()")
-    #*************
-    pydevd.settrace('localhost', port=4040)
-#****************
-
 class MinimalDDP:
     '''Test whether DDP really does something'''
     
@@ -54,10 +33,9 @@ class MinimalDDP:
     # demo_basic
     #-------------------
 
-    def demo_basic(self, rank, world_size, model_save_dir='/tmp'):
-        '''The action: train model; save intermediate states'''
+    def demo_basic(self, rank, world_size):
             
-        print(f"Running basic DDP example on rank {rank}.")
+        print(f"Running basic DDP on two GPUs same machine: rank {rank}.")
         self.setup(rank, world_size)
     
         # create model and move it to GPU with id rank
@@ -76,6 +54,7 @@ class MinimalDDP:
                 outputs = ddp_model(randn(20, 10).to(rank))
                 labels = randn(20, 5).to(rank)
                 
+                #********* Begin Portion of Interest ******
                 before_model = ddp_model.cpu()
                 before_state = copy.deepcopy(before_model.state_dict())
                 if rank == 1:
@@ -117,6 +96,7 @@ class MinimalDDP:
     
                     print(f"Epoch{epoch_num} batch{batch_num}: After states across gpus are {('equal' if states_equal else 'different')}")
 
+                #********* End Portion of Interest ******
                 # Clean GPU memory:
                 outputs.cpu()
                 labels.cpu()
