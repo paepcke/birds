@@ -56,6 +56,7 @@ import numpy as np
 import torch.distributed as dist
 import torch.nn as nn
 from birdsong.utils import learning_phase
+from birdsong.class_weight_discovery import ClassWeightDiscovery
 
 
 packet_root = os.path.abspath(__file__.split('/')[0])
@@ -116,6 +117,13 @@ class InterruptTraining(Exception):
 
 
 class BirdTrainer(object):
+
+    # Optimizers and loss functions that
+    # can be chosen in config file:
+    
+    available_optimizers = ['Adam', 'RMSprop', 'SGD']
+    available_loss_fns   = ['MSELoss', 'CrossEntropyLoss']
+
     
     # Flag for subprocess to offer model saving,
     # and quitting. Used to handle cnt-C graciously:
@@ -357,10 +365,8 @@ class BirdTrainer(object):
         if unit_testing:
             return
 
-        # Optimizer
-        self.optimizer = optim.SGD(self.model.parameters(), 
-                                   lr=self.config.Training.getfloat('lr', 0.001), # Provide a default 
-                                   momentum=self.config.Training.getfloat('momentum', 0.9))
+        self.optimizer = self.select_optimizer(self.config, self.model)
+        
         if checkpoint:
             # Requested to continue training 
             # from a checkpoint:
@@ -381,7 +387,7 @@ class BirdTrainer(object):
             self.tally_collection = None
 
         # Loss function:
-        self.loss_func = nn.CrossEntropyLoss()
+        self.loss_func = self.select_loss_function(self.config)
         
         # Scheduler:
         self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer)
@@ -732,6 +738,89 @@ class BirdTrainer(object):
         self.cuda_dev = device_id
         self.log.info(f"Running on {device_id}")
         return device_id 
+
+
+    #------------------------------------
+    # select_loss_function
+    #-------------------
+    
+    def select_loss_function(self, config):
+
+        try:
+            loss_fn_name = config['optimizer']
+        except KeyError:
+            
+            # Loss function not specified in config file
+            # Use default:
+            
+            self.optimizer = optim.SGD(self.model.parameters(), 
+                                       lr=self.config.Training.getfloat('lr', 0.001), # Provide a default 
+                                       momentum=self.config.Training.getfloat('momentum', 0.9))
+            return self.optimizer
+
+        # Have name in optimizer. Is it one that we support?
+        # Be case insensitive:
+        if loss_fn_name.lower() not in [fn.lower() for fn in self.available_loss_fns]:
+            self.log.err(f"Loss function '{loss_fn_name}' in config file not implemented; use {self.available_loss_fns}")
+            sys.exit(1)
+        
+        if loss_fn_name.lower() == 'sgd':
+            
+            # 'sum' is default: sum squared error for each
+            # class, then divice by num of classes:
+            loss_fn = nn.MSELoss(reduction='sum')
+            return loss_fn
+
+        if loss_fn_name.lower() == 'crossentropyloss':
+            if config.Training.getbool('weights', None):
+                weights = ClassWeightDiscovery.get_weights(config.root_train_test_data)
+            else:
+                weights = None
+            loss_fn = nn.CrossEntropyLoss(weight=weights)
+            return loss_fn 
+
+    #------------------------------------
+    # select_optimizer 
+    #-------------------
+    
+    def select_optimizer(self, config, model):
+
+        lr = config.Training.getfloat('lr', 0.001)
+        momentum = config.Training.getfloat('momentum', 0.9)
+        
+        try:
+            optimizer_name = config['optimizer']
+        except KeyError:
+            # Not specified in config file; use default:
+            optimizer = optim.SGD(model.parameters(), 
+                                  lr=lr,
+                                  momentum=momentum)
+            return optimizer
+        
+        # Make case insensitive:
+        optimizer_name_low = optimizer_name.lower()
+        
+        if optimizer_name_low not in [opt_name.lower() 
+                                      for opt_name 
+                                      in self.available_optimizers]:
+            self.log.err(f"Optimizer '{optimizer_name}' in config file not implemented; use {self.available_optimizers}")
+            sys.exit(1)
+            
+        if optimizer_name_low == 'adam':
+            optimizer = optim.Adam(model.parameters(),lr=lr)
+            return optimizer
+        
+        if optimizer_name_low == 'SGD':
+            self.optimizer = optim.SGD(model.parameters(), 
+                                       lr=lr,
+                                       momentum=momentum)
+            return optimizer
+
+        if optimizer_name_low == 'rmsprop':
+            self.optimizer = optim.RMSprop(model.parameters(), 
+                                           lr=lr,
+                                           momentum=momentum)
+            return optimizer
 
     #------------------------------------
     # gpu_obj_from_devid 
@@ -1307,6 +1396,10 @@ class BirdTrainer(object):
             #self.log.info(f"***** Exit backward.")
             #********
             self.optimizer.step()
+            
+            #********
+            #*****self.scheduler.step()
+            #********
             
             # Free GPU memory:
             targets = self.pop_tensor()
