@@ -12,6 +12,27 @@ from torch import randn
 
 from torch.nn.parallel import DistributedDataParallel as DDP
 
+#*****************
+#
+import socket
+if socket.gethostname() in ('quintus', 'quatro'):
+    # Point to where the pydev server
+    # software is installed on the remote
+    # machine:
+    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
+
+    import pydevd
+    global pydevd
+    # Uncomment the following if you
+    # want to break right on entry of
+    # this module. But you can instead just
+    # set normal Eclipse breakpoints:
+    #*************
+    print("About to call settrace()")
+    #*************
+    pydevd.settrace('localhost', port=4040)
+#****************
+
 class MinimalDDP:
     '''Test whether DDP really does something'''
     
@@ -62,6 +83,11 @@ class MinimalDDP:
                 ddp_model.to(rank)
                 
                 loss_fn(outputs, labels).backward()
+                #******
+                for param in ddp_model.parameters():
+                    dist.all_reduce(param.grad.data, op=dist.reduce_op.SUM)
+                    param.grad.data /= world_size 
+                #******
                 optimizer.step()
 
                 after_model = ddp_model.cpu()
