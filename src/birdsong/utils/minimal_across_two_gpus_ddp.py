@@ -85,7 +85,9 @@ class MinimalDDP:
                 loss_fn(outputs, labels).backward()
                 #******
                 for param in ddp_model.parameters():
-                    dist.all_reduce(param.grad.data, op=dist.reduce_op.SUM)
+                    dist.all_reduce(param.grad.data, 
+                                    op=dist.reduce_op.SUM,
+                                    async_op=False)
                     param.grad.data /= world_size 
                 #******
                 optimizer.step()
