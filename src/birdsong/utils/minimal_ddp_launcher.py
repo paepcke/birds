@@ -1,5 +1,5 @@
 import subprocess
-import os
+import os, sys
 
 class MinimalDDPLauncher:
    
@@ -15,8 +15,11 @@ class MinimalDDPLauncher:
 # ------------------------ Main ------------
 if __name__ == '__main__':
 
+    if len(sys.argv) < 2:
+        print("Usage: {minimal_within_two_gpus_ddp.py | minimal_across_two_gpus_ddp.py}")
+        sys.exit(1) 
     curr_dir = os.path.dirname(__file__)
-    script_path = os.path.join(curr_dir, 'minimal_ddp.py')
+    script_path = os.path.join(curr_dir, sys.argv[1])
     
     launcher = MinimalDDPLauncher()
     launcher.run_demo(script_path, 2)
