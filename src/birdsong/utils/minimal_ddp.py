@@ -32,7 +32,7 @@ if socket.gethostname() in ('quintus', 'quatro'):
     pydevd.settrace('localhost', port=4040)
 #****************
 
-class MinimalDDP:
+class TinyDDP:
     '''Test whether DDP really does something'''
     
     epochs  = 2
@@ -97,7 +97,7 @@ class MinimalDDP:
         # Save the state_dirs of all before-prop
         # and after-prop model copies; each in its
         # own file:
-        self.save_model_arrs(rank, before, after, model_save_dir)
+        self.report_result(rank, before, after, model_save_dir)
         
         self.cleanup()
         
@@ -110,10 +110,10 @@ class MinimalDDP:
             self.report_model_diffs()
 
     #------------------------------------
-    # save_model_arrs 
+    # report_result 
     #-------------------
     
-    def save_model_arrs(self, rank, before_arr, after_arr, model_save_dir):
+    def report_result(self, rank, before_arr, after_arr, model_save_dir):
         '''Save state_dict of modesl in arrays to files'''
         
         print(f"Proc{rank}: saving arrays of before and after models.")
@@ -220,5 +220,5 @@ if __name__ == '__main__':
     rank           = int(sys.argv[1])
     world_size     = 2
     model_save_dir = '/tmp'
-    min_ddp = MinimalDDP()
+    min_ddp = TinyDDP()
     min_ddp.demo_basic(rank, world_size, model_save_dir)

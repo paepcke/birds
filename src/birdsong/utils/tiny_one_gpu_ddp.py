@@ -4,10 +4,11 @@ import os
 import sys
 import copy
 
-import torch
 import torch.distributed as dist
 import torch.nn as nn
 import torch.optim as optim
+
+from torch import randn
 
 from torch.nn.parallel import DistributedDataParallel as DDP
 
@@ -32,7 +33,7 @@ if socket.gethostname() in ('quintus', 'quatro'):
     pydevd.settrace('localhost', port=4040)
 #****************
 
-class MinimalDDP:
+class TinyDDP:
     '''Test whether DDP really does something'''
     
     epochs  = 2
@@ -77,8 +78,8 @@ class MinimalDDP:
             for _i in range(self.samples):
                 
                 optimizer.zero_grad()
-                outputs = ddp_model(torch.randn(20, 10).to(rank))
-                labels = torch.randn(20, 5).to(rank)
+                outputs = ddp_model(randn(20, 10).to(rank))
+                labels = randn(20, 5).to(rank)
                 
                 # Copy and save model copies before and
                 # after back prop:
@@ -98,30 +99,35 @@ class MinimalDDP:
                 outputs.cpu()
                 labels.cpu()
 
-        dist.barrier()
-
-        # Save the state_dirs of all before-prop
-        # and after-prop model copies; each in its
-        # own file:
-        self.save_model_arrs(before, after, model_save_dir)
+        self.report_result(before, after)
         
         self.cleanup()
 
     #------------------------------------
-    # save_model_arrs 
+    # report_result 
     #-------------------
     
-    def save_model_arrs(self, before_arr, after_arr, model_save_dir):
+    def report_result(self, before_arr, after_arr):
         '''Save state_dict of modesl in arrays to files'''
         
-        print(f"Proc{rank}: saving arrays of before and after models.")
-        
-        for i, (before_state, after_state) in enumerate(zip(before_arr, after_arr)):
-            msg = f"Loop {i}: before/after states are "
-            if before_state.eq(after_state):
+        for i in range(len(before_arr)):
+            before_state = before_arr[i]
+            after_state  = before_arr[i]
+            
+            # Start pessimistic:
+            are_equal = True
+            for before_tns, after_tns in zip(before_state.values(),
+                                             after_state.values() 
+                                             ):
+                msg = f"Loop {i}: before/after states are "
+                if before_tns.ne(after_tns).any():
+                    are_equal = False
+                
+            if are_equal:
                 msg += "equal"
             else:
                 msg += "different"
+            print(msg)
 
     #------------------------------------
     # cleanup 
@@ -129,7 +135,7 @@ class MinimalDDP:
 
     def cleanup(self):
         dist.destroy_process_group()
-        print(f"Rank {rank} is done.")
+        print(f"Done.")
         
 # ------------------------ Toy Model ----------
 
@@ -148,6 +154,5 @@ if __name__ == '__main__':
 
     rank           = 0
     world_size     = 1
-    model_save_dir = '/tmp'
-    min_ddp = MinimalDDP()
+    min_ddp = TinyDDP()
     min_ddp.demo_basic(rank, world_size, model_save_dir)
