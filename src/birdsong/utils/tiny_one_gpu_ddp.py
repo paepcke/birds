@@ -67,13 +67,6 @@ class TinyDDP:
         loss_fn = nn.MSELoss()
         optimizer = optim.SGD(ddp_model.parameters(), lr=0.001)
 
-        # For saving model copies
-        # before and after back prop
-        # for each loop iteration:
-        
-        before = []
-        after  = []
-        
         for _epoch in range(self.epochs):
             for _i in range(self.samples):
                 
@@ -81,55 +74,28 @@ class TinyDDP:
                 outputs = ddp_model(randn(20, 10).to(rank))
                 labels = randn(20, 5).to(rank)
                 
-                # Copy and save model copies before and
-                # after back prop:
                 before_model = ddp_model.cpu()
-                before.append(copy.deepcopy(before_model.state_dict()))
-                ddp_model.cuda(0)
-                
-                loss_fn(outputs, labels).backward()
+                before_state = copy.deepcopy(before_model.state_dict())
+                ddp_model.to(rank)
 
+                loss_fn(outputs, labels).backward()
                 optimizer.step()
                 
                 after_model = ddp_model.cpu()
-                after.append(copy.deepcopy(after_model.state_dict()))
-                ddp_model.cuda(0)
+                after_state = after_model.state_dict()
+                states_equal = True
+                for before_parm, after_parm in zip(before_state.values(),
+                                                   after_state.values()):
+                    if before_parm.ne(after_parm).any():
+                        states_equal = False
+                ddp_model.to(rank)
+                print(f"Before and after are {('equal' if states_equal else 'different')}")
                 
                 # Clean GPU memory:
                 outputs.cpu()
                 labels.cpu()
 
-        self.report_result(before, after)
-        
         self.cleanup()
-
-    #------------------------------------
-    # report_result 
-    #-------------------
-    
-    def report_result(self, before_arr, after_arr):
-        '''Save state_dict of modesl in arrays to files'''
-        
-        # For each epoch
-        for i in range(len(before_arr)):
-            before_state = before_arr[i]
-            after_state  = before_arr[i]
-            
-            # Start pessimistic:
-            are_equal = True
-            msg = f"Loop {i}: before/after states are "
-            
-            for before_tns, after_tns in zip(before_state.values(),
-                                             after_state.values() 
-                                             ):
-                if before_tns.ne(after_tns).any():
-                    are_equal = False
-                
-            if are_equal:
-                msg += "equal"
-            else:
-                msg += "different"
-            print(msg)
 
     #------------------------------------
     # cleanup 
@@ -156,5 +122,4 @@ if __name__ == '__main__':
 
     rank           = 0
     world_size     = 1
-    min_ddp = TinyDDP()
-    min_ddp.demo_basic(rank, world_size)
+    min_ddp = TinyDDP().demo_basic(rank, world_size)
