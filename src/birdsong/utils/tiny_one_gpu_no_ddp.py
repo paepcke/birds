@@ -41,7 +41,7 @@ class TinyNoDDP:
     '''Test whether DDP really does something'''
     
     epochs  = 2
-    samples = 3
+    batches = 3
 
     #------------------------------------
     # demo_basic
@@ -65,7 +65,7 @@ class TinyNoDDP:
         after  = []
         
         for _epoch in range(self.epochs):
-            for _i in range(self.samples):
+            for _i in range(self.batches):
                 
                 optimizer.zero_grad()
                 outputs = model(randn(20, 10).to(0))
@@ -74,15 +74,14 @@ class TinyNoDDP:
                 # Copy and save model copies before and
                 # after back prop:
                 before_model = model.cpu()
-                before.append(copy.deepcopy(before_model.state_dict()))
+                before_state = copy.deepcopy(before_model.state_dict())
                 model.to(0)
                 
                 loss_fn(outputs, labels).backward()
-
                 optimizer.step()
                 
                 after_model = model.cpu()
-                after.append(copy.deepcopy(after_model.state_dict()))
+                after_state = after_model.state_dict()
                 model.to(0)
                 
                 # Clean GPU memory:
@@ -91,8 +90,6 @@ class TinyNoDDP:
 
         self.report_result(before, after)
         
-        self.cleanup()
-
     #------------------------------------
     # report_result 
     #-------------------
@@ -121,14 +118,6 @@ class TinyNoDDP:
                 msg += "different"
             print(msg)
 
-    #------------------------------------
-    # cleanup 
-    #-------------------
-
-    def cleanup(self):
-        dist.destroy_process_group()
-        print(f"Done.")
-        
 # ------------------------ Toy Model ----------
 
 class ToyModel(nn.Module):
