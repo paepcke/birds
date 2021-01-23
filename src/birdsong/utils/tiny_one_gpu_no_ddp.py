@@ -1,3 +1,9 @@
+'''
+Created on Jan 22, 2021
+
+@author: paepcke
+'''
+
 #!/usr/bin/env python
 
 import os
@@ -9,8 +15,6 @@ import torch.nn as nn
 import torch.optim as optim
 
 from torch import randn
-
-from torch.nn.parallel import DistributedDataParallel as DDP
 
 #*****************
 #
@@ -33,39 +37,25 @@ if socket.gethostname() in ('quintus', 'quatro'):
     pydevd.settrace('localhost', port=4040)
 #****************
 
-class TinyDDP:
+class TinyNoDDP:
     '''Test whether DDP really does something'''
     
     epochs  = 2
     samples = 3
 
     #------------------------------------
-    # setup
-    #-------------------
-
-    def setup(self, rank, world_size):
-        os.environ['MASTER_ADDR'] = 'localhost'
-        os.environ['MASTER_PORT'] = '12355'
-
-        # initialize the process group
-        dist.init_process_group("nccl", rank=rank, world_size=world_size)
-
-    #------------------------------------
     # demo_basic
     #-------------------
 
-    def demo_basic(self, rank, world_size, model_save_dir='/tmp'):
+    def demo_basic(self):
         '''The action: train model; save intermediate states'''
             
-        print(f"Running basic DDP example on rank {rank}.")
-        self.setup(rank, world_size)
+        print(f"Running basic non-DDP example")
     
-        # create model and move it to GPU with id rank
-        model = ToyModel().to(rank)
-        ddp_model = DDP(model, device_ids=[rank])
+        model = ToyModel().to(0)
     
         loss_fn = nn.MSELoss()
-        optimizer = optim.SGD(ddp_model.parameters(), lr=0.001)
+        optimizer = optim.SGD(model.parameters(), lr=0.001)
 
         # For saving model copies
         # before and after back prop
@@ -78,22 +68,22 @@ class TinyDDP:
             for _i in range(self.samples):
                 
                 optimizer.zero_grad()
-                outputs = ddp_model(randn(20, 10).to(rank))
-                labels = randn(20, 5).to(rank)
+                outputs = model(randn(20, 10).to(0))
+                labels = randn(20, 5).to(0)
                 
                 # Copy and save model copies before and
                 # after back prop:
-                before_model = ddp_model.cpu()
+                before_model = model.cpu()
                 before.append(copy.deepcopy(before_model.state_dict()))
-                ddp_model.cuda(0)
+                model.to(0)
                 
                 loss_fn(outputs, labels).backward()
 
                 optimizer.step()
                 
-                after_model = ddp_model.cpu()
+                after_model = model.cpu()
                 after.append(copy.deepcopy(after_model.state_dict()))
-                ddp_model.cuda(0)
+                model.to(0)
                 
                 # Clean GPU memory:
                 outputs.cpu()
@@ -154,7 +144,5 @@ class ToyModel(nn.Module):
 # ------------------------ Main ------------
 if __name__ == '__main__':
 
-    rank           = 0
-    world_size     = 1
-    min_ddp = TinyDDP()
-    min_ddp.demo_basic(rank, world_size)
+    min_ddp = TinyNoDDP()
+    min_ddp.demo_basic()
