@@ -419,7 +419,7 @@ class BirdTrainer(object):
             exp_info = (f"Exp_lr_{self.config.Training.lr}_",
                         f"bs_{self.config.Training.batch_size}_",
                         f"folds_{self.config.Training.num_folds}_"
-                        f"gpus_here_{self.comm_info.GPUS_USED_THIS_MACHINE}"
+                        f"gpus_here_{self.comm_info['GPUS_USED_THIS_MACHINE']}"
                         )
             self.setup_tensorboard(dir_suffix=exp_info)
 
