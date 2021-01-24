@@ -416,10 +416,12 @@ class BirdTrainer(object):
                                 json_log_dir=performance_log_dir
                                 )
         if self.rank == 0:
-            exp_info = (f"LR_{self.config.Training.lr}_"
-                        f"Batch_{self.config.Training.batch_size}"
+            exp_info = (f"Exp_lr_{self.config.Training.lr}_",
+                        f"bs_{self.config.Training.batch_size}_",
+                        f"folds_{self.config.Training.num_folds}_"
+                        f"gpus_here_{self.comm_info.GPUS_USED_THIS_MACHINE}"
                         )
-            self.setup_tensorboard()
+            self.setup_tensorboard(dir_suffix=exp_info)
 
         # A stack to allow clear_gpu() to
         # remove all tensors from the GPU.
@@ -1090,13 +1092,31 @@ class BirdTrainer(object):
     # record_tensorboard_results 
     #-------------------
     
-    def record_tensorboard_results(self, epoch):
+    def record_tensorboard_results(self, epoch, learning_phase):
         
         epoch_results = EpochSummary(self.tally_collection, epoch)
-        for measure_name, val in epoch_results.items():
+        
+        writer = self.writer_train \
+                    if learning_phase == LearningPhase.TRAINING \
+                  else self.writer.val
+        
+        if learning_phase == LearningPhase.TRAINING:
+            quantities_to_report = ['mean_accuracy_training'
+                                    ]
+        elif learning_phase == LearningPhase.VALIDATING:
+            quantities_to_report = ['mean_accuracy_validating',
+                                    'epoch_loss',
+                                    'epoch_mean_weighted_precision',
+                                    'epoch_mean_weighted_recall'
+                                    ]
+        results = {measure_name : epoch_results[measure_val]
+                   for measure_name, measure_val
+                    in quantities_to_report 
+                   }
+        for measure_name, val in results.items():
             if type(val) in (float, int, str):
                 try:
-                    self.writer.add_scalar(measure_name, val, global_step=epoch)
+                    writer.add_scalar(measure_name, val, global_step=epoch)
                 except AttributeError:
                     self.log.err(f"No tensorboard writer in process {self.rank}")
 
@@ -2006,7 +2026,7 @@ class BirdTrainer(object):
     # setup_tensorboard 
     #-------------------
     
-    def setup_tensorboard(self, logdir=None, comment=''):
+    def setup_tensorboard(self, logdir=None, dir_suffix=''):
         '''
         Initialize tensorboard. To easily compare experiments,
         use runs/exp1, runs/exp2, etc.
@@ -2017,15 +2037,30 @@ class BirdTrainer(object):
         @param logdir: if not provided, uses 
             runs/CURRENT_DATETIME_HOSTNAME
         @type logdir: str
-        @param comment: suffix to directory name 
-        @type comment: str
+        @param dir_suffix: suffix to directory name 
+        @type dir_suffix: str
         '''
 
-        if logdir is None and len(comment) == 0:
+        dir_suffix_train = ''
+        dir_suffix_val   = ''
+        logdir_train     = ''
+        logdir_val       = ''
+        
+        if logdir is None and len(dir_suffix) == 0:
             logdir = os.path.join(os.path.dirname(__file__), 'runs')
-
+        
+        if len(dir_suffix) > 0:
+            dir_suffix_train = dir_suffix + '_train'
+            dir_suffix_val   = dir_suffix + '_val'
+        elif logdir is not None:
+            logdir_train = logdir + '_train'
+            logdir_val = logdir + '_val'
+            
         # Default dest dir: ./runs
-        self.writer = SummaryWriter(log_dir=logdir, comment=comment)
+        self.writer_train = SummaryWriter(log_dir_=logdir_train, 
+                                          comment=dir_suffix_train)
+        self.writer_val   = SummaryWriter(log_dir_=logdir_val, 
+                                          comment=dir_suffix_val)
 
         self.log.info(f"Tensorboard info will be in {logdir}")
         

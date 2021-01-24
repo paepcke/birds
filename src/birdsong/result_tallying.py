@@ -457,31 +457,30 @@ class EpochSummary(UserDict):
         # training splits of this epoch
         self['mean_accuracy_training'] = \
            tally_collection.mean_accuracy(epoch, 
-                                               learning_phase=LearningPhase.TRAINING)
+                                          learning_phase=LearningPhase.TRAINING)
            
         self['mean_accuracy_validating'] = \
            tally_collection.mean_accuracy(epoch, 
-                                               learning_phase=LearningPhase.VALIDATING)
+                                          learning_phase=LearningPhase.VALIDATING)
 
         self['epoch_loss'] = tally_collection.cumulative_loss(epoch=epoch, 
-                                                           learning_phase=LearningPhase.VALIDATING)
+                                                              learning_phase=LearningPhase.VALIDATING)
         self['epoch_mean_weighted_precision'] = \
            tally_collection.mean_weighted_precision(epoch,
-                                                          learning_phase=LearningPhase.VALIDATING
-                                                          )
+                                                    learning_phase=LearningPhase.VALIDATING
+                                                    )
             
         self['epoch_mean_weighted_recall'] = \
            tally_collection.mean_weighted_recall(epoch,
-                                                       learning_phase=LearningPhase.VALIDATING
-                                                       )
+                                                 learning_phase=LearningPhase.VALIDATING
+                                                 )
 
         # For the confusion matrix: add all 
         # the confusion matrices from Validation
         # runs:
         self['epoch_conf_matrix'] = tally_collection.conf_matrix_aggregated(epoch=epoch,
-                                                                         learning_phase=LearningPhase.VALIDATING
-                                                                         )
-
+                                                                            learning_phase=LearningPhase.VALIDATING
+                                                                            )
         # Maybe not greatest style but:
         # Allow clients to use dot notation in addition
         # to dict format:
