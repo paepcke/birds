@@ -122,7 +122,9 @@ class BirdTrainer(object):
     # can be chosen in config file:
     
     available_optimizers = ['Adam', 'RMSprop', 'SGD']
-    available_loss_fns   = ['MSELoss', 'CrossEntropyLoss']
+    
+    # Currently only CrossEntropyLoss is supported
+    # available_loss_fns   = ['MSELoss', 'CrossEntropyLoss']
 
     
     # Flag for subprocess to offer model saving,
