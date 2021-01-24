@@ -748,16 +748,14 @@ class BirdTrainer(object):
     def select_loss_function(self, config):
 
         try:
-            loss_fn_name = config['optimizer']
+            loss_fn_name = config['loss_fn']
         except KeyError:
             
             # Loss function not specified in config file
             # Use default:
             
-            self.optimizer = optim.SGD(self.model.parameters(), 
-                                       lr=self.config.Training.getfloat('lr', 0.001), # Provide a default 
-                                       momentum=self.config.Training.getfloat('momentum', 0.9))
-            return self.optimizer
+            self.loss_fn = nn.MSELoss(reduction='mean')
+            return self.loss_fn
 
         # Have name in optimizer. Is it one that we support?
         # Be case insensitive:
@@ -765,11 +763,11 @@ class BirdTrainer(object):
             self.log.err(f"Loss function '{loss_fn_name}' in config file not implemented; use {self.available_loss_fns}")
             sys.exit(1)
         
-        if loss_fn_name.lower() == 'sgd':
+        if loss_fn_name.lower() == 'mseloss':
             
             # 'sum' is default: sum squared error for each
             # class, then divice by num of classes:
-            loss_fn = nn.MSELoss(reduction='sum')
+            loss_fn = nn.MSELoss(reduction='mean')
             return loss_fn
 
         if loss_fn_name.lower() == 'crossentropyloss':
