@@ -416,6 +416,9 @@ class BirdTrainer(object):
                                 json_log_dir=performance_log_dir
                                 )
         if self.rank == 0:
+            exp_info = (f"LR_{self.config.Training.lr}_"
+                        f"Batch_{self.config.Training.batch_size}"
+                        )
             self.setup_tensorboard()
 
         # A stack to allow clear_gpu() to
@@ -1383,7 +1386,7 @@ class BirdTrainer(object):
             batch   = self.push_tensor(batch)
             targets = self.push_tensor(targets)
             #********
-            self.log.info(f"***** New batch: {batch.shape}, targets: {targets.shape}")
+            #self.log.info(f"***** New batch: {batch.shape}, targets: {targets.shape}")
             #********
             
             # Outputs will be on GPU if we are
