@@ -41,6 +41,7 @@ from torch import device
 from torch import no_grad
 from torch import Size
 from torch import Tensor
+from torch.distributed import  reduce_op
 
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -1388,13 +1389,13 @@ class BirdTrainer(object):
                                            loss,
                                            LearningPhase.TRAINING
                                            )
-            #**********
-            #self.log.info(f"***** Enter backward.")
-            #**********
             loss.backward()
-            #********
-            #self.log.info(f"***** Exit backward.")
-            #********
+            for param in self.model.parameters():
+                dist.all_reduce(param.grad.data, 
+                                op=reduce_op.SUM,
+                                async_op=False)
+                param.grad.data /= self.comm_info['WORLD_SIZE']
+            
             self.optimizer.step()
             
             #********
