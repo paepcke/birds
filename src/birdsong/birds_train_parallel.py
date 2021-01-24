@@ -1402,10 +1402,12 @@ class BirdTrainer(object):
                                            )
             loss.backward()
             for param in self.model.parameters():
-                dist.all_reduce(param.grad.data, 
-                                op=reduce_op.SUM,
-                                async_op=False)
-                param.grad.data /= self.comm_info['WORLD_SIZE']
+                # Skip the frozen layers:
+                if param.grad is not None:
+                    dist.all_reduce(param.grad.data, 
+                                    op=reduce_op.SUM,
+                                    async_op=False)
+                    param.grad.data /= self.comm_info['WORLD_SIZE']
             
             self.optimizer.step()
             
