@@ -392,7 +392,7 @@ class BirdTrainer(object):
         #self.loss_func = self.select_loss_function(self.config)
 
         if self.config.getboolean('Training', 'weighted', True):
-            weights = ClassWeightDiscovery.get_weights(self.config.root_train_test_data)
+            weights = ClassWeightDiscovery.get_weights(self.config.Paths.root_train_test_data)
         else:
             weights = None
         self.loss_fn = nn.CrossEntropyLoss(weight=weights)
