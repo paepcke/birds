@@ -389,7 +389,7 @@ class BirdTrainer(object):
             self.tally_collection = None
 
         # Loss function:
-        #self.loss_func = self.select_loss_function(self.config)
+        #self.loss_fn = self.select_loss_function(self.config)
 
         if self.config.getboolean('Training', 'weighted', True):
             weights = ClassWeightDiscovery.get_weights(self.config.Paths.root_train_test_data)
@@ -1386,7 +1386,7 @@ class BirdTrainer(object):
             # using one:
             outputs = self.model(batch)
             
-            loss = self.loss_func(outputs, targets)
+            loss = self.loss_fn(outputs, targets)
             #self.log.debug(f"***** Train loss epoch {self.epoch}: {loss}")
             
             # Update the accumulating training loss
@@ -1467,7 +1467,7 @@ class BirdTrainer(object):
 #                 # equal datatypes for prediction and targets:
 #                 
 #                 val_target = val_target.float()
-                loss =  self.loss_func(pred_prob_tns, val_target)
+                loss =  self.loss_fn(pred_prob_tns, val_target)
                 self.log.debug(f"***** Validation loss epoch {self.epoch}: {loss}")
 
                 self.tally_collection.add_loss(self.epoch, 
