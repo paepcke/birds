@@ -1095,7 +1095,10 @@ class BirdTrainer(object):
         epoch_results = EpochSummary(self.tally_collection, epoch)
         for measure_name, val in epoch_results.items():
             if type(val) in (float, int, str):
-                self.writer.add_scalar(measure_name, val, global_step=epoch)
+                try:
+                    self.writer.add_scalar(measure_name, val, global_step=epoch)
+                except AttributeError:
+                    self.log.err(f"No tensorboard writer in process {self.rank}")
 
     #------------------------------------
     # train 
@@ -1207,7 +1210,8 @@ class BirdTrainer(object):
                     # in the file system:
                     
                     self.record_json_display_results(self.epoch)
-                    self.record_tensorboard_results(self.epoch)
+                    if self.rank == 0:
+                        self.record_tensorboard_results(self.epoch)
                     
                     # Compute mean accuracy over all splits
                     # of this epoch:
