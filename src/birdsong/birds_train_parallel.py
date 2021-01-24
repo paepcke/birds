@@ -395,10 +395,10 @@ class BirdTrainer(object):
             weights = ClassWeightDiscovery.get_weights(self.config.Paths.root_train_test_data)
             # Put weights to the device where the model
             # was placed: CPU, or GPU_n:
-            weights.to(self.device_residence(self.model))
+            device_resident_weights = weights.to(self.device_residence(self.model))
         else:
             weights = None
-        self.loss_fn = nn.CrossEntropyLoss(weight=weights)
+        self.loss_fn = nn.CrossEntropyLoss(weight=device_resident_weights)
         
         
         # Scheduler:
