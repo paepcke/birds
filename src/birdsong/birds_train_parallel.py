@@ -98,7 +98,6 @@ if socket.gethostname() in ('quintus', 'quatro'):
 #warnings.filterwarnings(action='ignore', category=UserWarning)
 #***********
 
-#from torch.nn import BCELoss
 import faulthandler; faulthandler.enable()
 
 # For parallelism:
@@ -388,7 +387,14 @@ class BirdTrainer(object):
             self.tally_collection = None
 
         # Loss function:
-        self.loss_func = self.select_loss_function(self.config)
+        #self.loss_func = self.select_loss_function(self.config)
+
+        if self.config.Training.getbool('weighted', True):
+            weights = ClassWeightDiscovery.get_weights(self.config.root_train_test_data)
+        else:
+            weights = None
+        self.loss_fn = nn.CrossEntropyLoss(weight=weights)
+        
         
         # Scheduler:
         self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer)
