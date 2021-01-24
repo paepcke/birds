@@ -103,7 +103,12 @@ class DottableConfigParser(DottableMap):
 
         if val is None and default is None:
             raise ValueError(f"Config section {section} option {option} are None, and no default provided")
-            
+        
+        # If the default was given as 
+        # True or False, just return that
+        # value:
+        if type(val) == bool:
+            return val
         val_lower = val.lower()
         if val_lower in self.truth_values: 
             return True

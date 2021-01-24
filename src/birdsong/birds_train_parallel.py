@@ -391,7 +391,7 @@ class BirdTrainer(object):
         # Loss function:
         #self.loss_func = self.select_loss_function(self.config)
 
-        if self.config.Training.getbool('weighted', True):
+        if self.config.getboolean('Training', 'weighted', True):
             weights = ClassWeightDiscovery.get_weights(self.config.root_train_test_data)
         else:
             weights = None
