@@ -393,6 +393,9 @@ class BirdTrainer(object):
 
         if self.config.getboolean('Training', 'weighted', True):
             weights = ClassWeightDiscovery.get_weights(self.config.Paths.root_train_test_data)
+            # Put weights to the device where the model
+            # was placed: CPU, or GPU_n:
+            weights.to(self.device_residence(self.model))
         else:
             weights = None
         self.loss_fn = nn.CrossEntropyLoss(weight=weights)
@@ -412,7 +415,8 @@ class BirdTrainer(object):
                                 self.config.Training.getint('batch_size'),
                                 json_log_dir=performance_log_dir
                                 )
-        self.setup_tensorboard()
+        if self.rank == 0:
+            self.setup_tensorboard()
 
         # A stack to allow clear_gpu() to
         # remove all tensors from the GPU.
