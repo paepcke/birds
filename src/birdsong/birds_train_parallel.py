@@ -1461,7 +1461,7 @@ class BirdTrainer(object):
                                            LearningPhase.TRAINING
                                            )
             loss.backward()
-            if self.device != device('cpu'):
+            if self.comm_info['WORLD_SIZE'] > 1 and self.device != device('cpu'):
                 #**********
                 # Force synchronicity across all GPUs
                 # before averaging the gradients:
