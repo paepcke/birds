@@ -1462,6 +1462,12 @@ class BirdTrainer(object):
                                            )
             loss.backward()
             if self.device != device('cpu'):
+                #**********
+                # Force synchronicity across all GPUs
+                # before averaging the gradients:
+                dist.barrier()
+                #**********
+                
                 # Average the model weights across
                 # all GPUs:
                 for param in self.model.parameters():
@@ -1471,9 +1477,6 @@ class BirdTrainer(object):
                                         op=reduce_op.SUM,
                                         async_op=False)
                         param.grad.data /= self.comm_info['WORLD_SIZE']
-                #**********
-                dist.barrier()
-                #**********
             self.optimizer.step()
             
             #********
