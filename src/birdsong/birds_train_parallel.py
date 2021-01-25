@@ -392,7 +392,13 @@ class BirdTrainer(object):
         #self.loss_fn = self.select_loss_function(self.config)
 
         if self.config.getboolean('Training', 'weighted', True):
-            weights = ClassWeightDiscovery.get_weights(self.config.Paths.root_train_test_data)
+            # Get path to samples, relative to current
+            # dir, if the file path in the config file 
+            # is relative:
+            class_root = self.config.getpath('Paths',
+                                             'root_train_test_data',
+                                             relative_to = self.curr_dir)
+            weights = ClassWeightDiscovery.get_weights(class_root)
             # Put weights to the device where the model
             # was placed: CPU, or GPU_n:
             device_resident_weights = weights.to(self.device_residence(self.model))
@@ -416,12 +422,13 @@ class BirdTrainer(object):
                                 json_log_dir=performance_log_dir
                                 )
         if self.rank == 0:
-            exp_info = (f"Exp_lr_{self.config.Training.lr}_",
-                        f"bs_{self.config.Training.batch_size}_",
-                        f"folds_{self.config.Training.num_folds}_"
+            exp_info = (f"Exp_lr_{self.config.Training.lr}_" +
+                        f"bs_{self.config.Training.batch_size}_" +
+                        f"folds_{self.config.Training.num_folds}_" +
                         f"gpus_here_{self.comm_info['GPUS_USED_THIS_MACHINE']}"
                         )
-            self.setup_tensorboard(dir_suffix=exp_info)
+
+            self.setup_tensorboard(logdir=exp_info)
 
         # A stack to allow clear_gpu() to
         # remove all tensors from the GPU.
@@ -1080,7 +1087,7 @@ class BirdTrainer(object):
         with open(self.json_filepath, 'a') as f:
             f.write(json.dumps(
                     [epoch, 
-                     epoch_summary.epoch_loss,
+                     epoch_summary.epoch_loss_val,
                      epoch_summary.mean_accuracy_training,
                      epoch_summary.mean_accuracy_validating,
                      epoch_summary.epoch_mean_weighted_precision,
@@ -1092,33 +1099,44 @@ class BirdTrainer(object):
     # record_tensorboard_results 
     #-------------------
     
-    def record_tensorboard_results(self, epoch, learning_phase):
+    def record_tensorboard_results(self, epoch):
         
         epoch_results = EpochSummary(self.tally_collection, epoch)
         
-        writer = self.writer_train \
-                    if learning_phase == LearningPhase.TRAINING \
-                  else self.writer.val
+        training_quantities_to_report = ['mean_accuracy_training',
+                                         'epoch_loss_train',
+                                         ]
+
+        validation_quantities_to_report = ['mean_accuracy_validating',
+                                           'epoch_loss_val',
+                                           'epoch_mean_weighted_precision',
+                                           'epoch_mean_weighted_recall'
+                                           ]
+        train_results = {measure_name : epoch_results[measure_name]
+                         for measure_name
+                         in training_quantities_to_report
+                         }
+
+        validation_results = {measure_name : epoch_results[measure_name]
+                              for measure_name
+                              in validation_quantities_to_report
+                              }
         
-        if learning_phase == LearningPhase.TRAINING:
-            quantities_to_report = ['mean_accuracy_training'
-                                    ]
-        elif learning_phase == LearningPhase.VALIDATING:
-            quantities_to_report = ['mean_accuracy_validating',
-                                    'epoch_loss',
-                                    'epoch_mean_weighted_precision',
-                                    'epoch_mean_weighted_recall'
-                                    ]
-        results = {measure_name : epoch_results[measure_val]
-                   for measure_name, measure_val
-                    in quantities_to_report 
-                   }
-        for measure_name, val in results.items():
+        for measure_name, val in train_results.items():
             if type(val) in (float, int, str):
                 try:
-                    writer.add_scalar(measure_name, val, global_step=epoch)
+                    self.writer_train.add_scalar(measure_name, val, 
+                                                 global_step=epoch)
                 except AttributeError:
-                    self.log.err(f"No tensorboard writer in process {self.rank}")
+                    self.log.err(f"No train result tensorboard writer in process {self.rank}")
+
+        for measure_name, val in validation_results.items():
+            if type(val) in (float, int, str):
+                try:
+                    self.writer_val.add_scalar(measure_name, val, 
+                                               global_step=epoch)
+                except AttributeError:
+                    self.log.err(f"No validation result tensorboard writer in process {self.rank}")
 
     #------------------------------------
     # train 
@@ -1428,13 +1446,16 @@ class BirdTrainer(object):
                                            LearningPhase.TRAINING
                                            )
             loss.backward()
-            for param in self.model.parameters():
-                # Skip the frozen layers:
-                if param.grad is not None:
-                    dist.all_reduce(param.grad.data, 
-                                    op=reduce_op.SUM,
-                                    async_op=False)
-                    param.grad.data /= self.comm_info['WORLD_SIZE']
+            if self.device != device('cpu'):
+                # Average the model weights across
+                # all GPUs:
+                for param in self.model.parameters():
+                    # Skip the frozen layers:
+                    if param.grad is not None:
+                        dist.all_reduce(param.grad.data, 
+                                        op=reduce_op.SUM,
+                                        async_op=False)
+                        param.grad.data /= self.comm_info['WORLD_SIZE']
             
             self.optimizer.step()
             
@@ -2026,13 +2047,43 @@ class BirdTrainer(object):
     # setup_tensorboard 
     #-------------------
     
-    def setup_tensorboard(self, logdir=None, dir_suffix=''):
+    def setup_tensorboard(self, 
+                          logdir=None, 
+                          relative_to=None):
         '''
         Initialize tensorboard. To easily compare experiments,
         use runs/exp1, runs/exp2, etc.
         
-        Comment is only used if logdir is None. It is a 
-        suffix to the automatically generated log directory 
+        Support for interaction between logdir and relative_to
+        is a bit excessive. I went overboard. In summary, 
+        the easiest call might be something like:
+  
+            self.setup_tensorboard('Exp_lr0.001_bs_64')
+            
+        for which case tensorboard log activity goes to:
+        
+                  script_dir + /runs + Exp_lr0.001_bs_64
+                  
+        with the directories created automatically. 
+        
+        
+        For more detailed control:
+
+            o logdir None and relative_to None:
+                 script_dir + /runs
+            o logdir None and relative_to NOT None:
+                 relative_to
+            o logdir NOT None and relative_to None:
+	            o logdir absolute: 
+	                 relative_to ignored
+	            o logdir relative, relative_to None:
+	                 script_dir + /runs + logdir
+	        o logdir NOT None and relative_to NOT None:
+	            o logdir absolute: 
+	                 relative_to ignored
+	            o logdir relative
+	                 logdir + relative_to
+
         
         @param logdir: if not provided, uses 
             runs/CURRENT_DATETIME_HOSTNAME
@@ -2040,31 +2091,34 @@ class BirdTrainer(object):
         @param dir_suffix: suffix to directory name 
         @type dir_suffix: str
         '''
+        
+        if logdir is None and relative_to is None:
+            logdir = os.path.join(self.curr_dir, 'runs')
+        elif logdir is None and relative_to is not None:
+            logdir = relative_to
+        # Most conventient case:
+        elif logdir is not None and relative_to is None:
+            if os.path.isabs(logdir):
+                logdir = logdir
+            else:
+                logdir = os.path.join(self.curr_dir, 'runs', logdir)
+        elif logdir is not None and relative_to is not None:
+            os.path.join(relative_to, logdir)
 
-        dir_suffix_train = ''
-        dir_suffix_val   = ''
-        logdir_train     = ''
-        logdir_val       = ''
+        logdir_train     = os.path.join(logdir, 'train')
+        logdir_val       = os.path.join(logdir, 'validate')
         
-        if logdir is None and len(dir_suffix) == 0:
-            logdir = os.path.join(os.path.dirname(__file__), 'runs')
+        if not os.path.isdir(logdir_train):
+            os.makedirs(logdir_train)
+        if not os.path.isdir(logdir_val):
+            os.makedirs(logdir_val)
         
-        if len(dir_suffix) > 0:
-            dir_suffix_train = dir_suffix + '_train'
-            dir_suffix_val   = dir_suffix + '_val'
-        elif logdir is not None:
-            logdir_train = logdir + '_train'
-            logdir_val = logdir + '_val'
-            
         # Default dest dir: ./runs
-        self.writer_train = SummaryWriter(log_dir_=logdir_train, 
-                                          comment=dir_suffix_train)
-        self.writer_val   = SummaryWriter(log_dir_=logdir_val, 
-                                          comment=dir_suffix_val)
-
-        self.log.info(f"Tensorboard info will be in {logdir}")
-        
-
+        self.writer_train = SummaryWriter(log_dir=logdir_train) 
+        self.writer_val   = SummaryWriter(log_dir=logdir_val) 
+                                          
+        self.log.info(f"Tensorboard train log will be in {logdir_train}")
+        self.log.info(f"Tensorboard validation log will be in {logdir_val}")
 
     #------------------------------------
     # setup_json_logging 
