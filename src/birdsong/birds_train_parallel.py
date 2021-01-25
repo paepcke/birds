@@ -1471,7 +1471,9 @@ class BirdTrainer(object):
                                         op=reduce_op.SUM,
                                         async_op=False)
                         param.grad.data /= self.comm_info['WORLD_SIZE']
-            
+                #**********
+                dist.barrier()
+                #**********
             self.optimizer.step()
             
             #********
