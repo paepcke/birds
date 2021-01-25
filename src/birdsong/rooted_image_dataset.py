@@ -60,6 +60,7 @@ in the subclass MultiRootImageDataset.
 '''
 
 from _collections import OrderedDict
+import glob
 import os
 from pathlib import Path
 
@@ -68,9 +69,9 @@ import torch
 from torchvision import transforms
 from torchvision.datasets import folder
 
+from birdsong.utils.file_utils import FileUtils
 import numpy as np
 
-from birdsong.utils.file_utils import FileUtils
 
 # Sorting such that numbers in strings
 # do the right thing: "foo2" after "foo10": 
@@ -400,21 +401,21 @@ class MultiRootImageDataset(SingleRootImageDataset):
         if type(roots) != list:
             roots = [roots]
 
-        # Resolve wildcards, like my_root/*:
-        all_roots = []
+        for root_dir in roots:
+            if not os.path.isdir(root_dir):
+                raise TypeError(f"Only directories may be roots for target classes; got {root_dir}")
 
-        # Filter out non-directories:
-        for root in roots:
-            if os.path.isdir(root):
-                all_roots.append(root)
-
-        self = SingleRootImageDataset(all_roots[0], 
+        # Make a dataset from classes/samples 
+        # under the first root dir: 
+        self = SingleRootImageDataset(roots[0], 
                                       sample_width, 
                                       sample_height)
         self.sample_width  = sample_width
         self.sample_height = sample_height
 
-        for one_root in all_roots[1:]:
+        # Add to the initial dataset the classes/samples
+        # under the remaining root dirs:
+        for one_root in roots[1:]:
             cls.extend_dataset(self, one_root)
             
         return self
