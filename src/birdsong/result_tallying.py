@@ -440,7 +440,8 @@ class EpochSummary(UserDict):
         
            o mean_accuracy_training
            o mean_accuracy_validating
-           o epoch_loss
+           o epoch_loss_train
+           o epoch_loss_val
            o epoch_mean_weighted_precision
            o epoch_mean_weighted_recall
            o epoch_conf_matrix
@@ -463,7 +464,9 @@ class EpochSummary(UserDict):
            tally_collection.mean_accuracy(epoch, 
                                           learning_phase=LearningPhase.VALIDATING)
 
-        self['epoch_loss'] = tally_collection.cumulative_loss(epoch=epoch, 
+        self['epoch_loss_train'] = tally_collection.cumulative_loss(epoch=epoch, 
+                                                              learning_phase=LearningPhase.TRAINING)
+        self['epoch_loss_val']   = tally_collection.cumulative_loss(epoch=epoch, 
                                                               learning_phase=LearningPhase.VALIDATING)
         self['epoch_mean_weighted_precision'] = \
            tally_collection.mean_weighted_precision(epoch,
@@ -484,7 +487,7 @@ class EpochSummary(UserDict):
         # Maybe not greatest style but:
         # Allow clients to use dot notation in addition
         # to dict format:
-        #     my_epoch_summary.epoch_loss
+        #     my_epoch_summary.epoch_loss_train
         # in addition to: 
         #     my_epoch_summary['epoch_loss']
         for instVarName,instVarValue in list(self.items()):
