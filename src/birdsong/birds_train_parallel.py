@@ -96,6 +96,19 @@ if socket.gethostname() in ('quintus', 'quatro'):
 # for testing: 
 #import warnings
 #warnings.filterwarnings(action='ignore', category=UserWarning)
+# Pytorch uses a deprecated method: 
+#    "torch.distributed.reduce_op is deprecated, please use..."
+# in module torch/distributed/distributed_c10d.py
+# Suppress that one warning:
+#
+import warnings
+
+# The message kwarg takes a regex:
+warnings.filterwarnings('ignore', 
+                        message='torch.distributed.reduce_op is deprecated*', 
+                        category=UserWarning, 
+                        append=False)
+
 #***********
 
 import faulthandler; faulthandler.enable()
