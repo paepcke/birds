@@ -5,7 +5,9 @@ Created on Jan 21, 2021
 '''
 
 import os
+import sys
 
+from logging_service.logging_service import LoggingService
 import natsort
 import torch
 
@@ -36,7 +38,6 @@ class ClassWeightDiscovery(object):
     to the natural-sorted classes. 
     '''
 
-
     @classmethod
     def get_weights(cls, file_root):
         '''
@@ -63,15 +64,18 @@ class ClassWeightDiscovery(object):
         #   'class2' : <num_samples>,
         #         ...
         #   } 
-        class_populations = {os.path.basename(class_dir) : len(list(os.listdir(class_dir)))
+        class_populations = {class_dir.stem : len(list(class_dir.iterdir()))
                         		for class_dir in dirs
-                        		if not os.path.basename(class_dir).startswith('.')
+                        		if not str(class_dir).startswith('.')
                         		}
-
+        if len(class_populations) == 0:
+            LoggingService().err(f"No target classes found under {file_root}")
+            sys.exit(1)
         majority_class_population = max(class_populations.values())
         sorted_classes = natsort.natsorted(class_populations.keys())
-        weights = [class_populations[class_name] / majority_class_population
-                     for class_name in sorted_classes
-                     ]
+        weights = []
+        for class_name in sorted_classes:
+            weights.append(class_populations[class_name] / majority_class_population)
+
         return torch.tensor(weights) 
 
