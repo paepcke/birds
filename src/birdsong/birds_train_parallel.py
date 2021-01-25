@@ -435,7 +435,9 @@ class BirdTrainer(object):
                                 json_log_dir=performance_log_dir
                                 )
         if self.rank == 0:
-            exp_info = (f"Exp_lr_{self.config.Training.lr}_" +
+            timestamp = datetime.datetime.now()
+            time_str  = timestamp.isoformat()
+            exp_info = (f"Exp{time_str}_lr_{self.config.Training.lr}_" +
                         f"bs_{self.config.Training.batch_size}_" +
                         f"folds_{self.config.Training.num_folds}_" +
                         f"gpus_here_{self.comm_info['GPUS_USED_THIS_MACHINE']}"
