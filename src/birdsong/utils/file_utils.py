@@ -45,6 +45,11 @@ class FileUtils(object):
         @rtype [pathlib.Path]
         '''
         
+        # If path is relative, compute abs
+        # path relative to current dir:
+        if not os.path.isabs(data_root):
+            data_root = os.path.join(os.path.dirname(__file__), 
+                                     data_root)
         class_paths = set([])
         for root, _dirs, files in os.walk(data_root):
             
@@ -56,12 +61,14 @@ class FileUtils(object):
             # into Path objects:
             file_Paths = [Path(name) for name in files]
             root_Path  = Path(root)
+            
             # Pick out files with an image extension:
-            full_paths = [Path.joinpath(root_Path, file_Path).parent
-                           for file_Path in file_Paths
-                            if file_Path.suffix in cls.IMG_EXTENSIONS
-                           and not file_Path.parent.stem.startswith('.')
-                            ]
+            full_paths = []
+            for file_path in file_Paths:
+                if file_path.suffix in cls.IMG_EXTENSIONS \
+                   and not file_path.parent.stem.startswith('.'):
+                    full_paths.append(Path.joinpath(root_Path, file_path).parent)
+            
             # Using union in this loop guarantees
             # uniqeness of the gathered class names:
             
