@@ -155,6 +155,21 @@ class DottableConfigParser(DottableMap):
     #-------------------
     
     def getpath(self, section, option, relative_to=None, default=None):
+        '''
+        Access configuration section/option. The value is
+        understood to be a path. If relative_to is a path,
+        the relative_to path is path-joined with the
+        config value
+        
+        @param section: config section
+        @type section: str
+        @param option: config option within the section 
+        @type option: str
+        @param relative_to: a path or None
+        @type relative_to: {str | None}
+        @param default: if section and/or option do not exist 
+        @type default: {None | str}
+        '''
         try:
             if relative_to is None:
                 val = self[section][option]
