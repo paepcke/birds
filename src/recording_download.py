@@ -19,8 +19,8 @@ import sys
 
 
 birds = ['Tangara+gyrola', 'Amazilia+decora', 'Hylophilus+decurtatus', 'Arremon+aurantiirostris',
-         'Dysithamnus+mentalis', 'Lophotriccus+pileatus', 'Euphonia+imitans', 'Tangara+icterocephala',
-         'Catharus+ustulatus', 'Parula+pitiayumi', 'Henicorhina+leucosticta', 'Corapipo+altera',
+         'Dysithamnus+mentalis', 'Lophotriccus+pileatus', 'Euphonia+imitans', 'Tangara+icterocephala', 
+         'Catharus+ustulatus', 'Parula+pitiayumi', 'Henicorhina+leucosticta', 'Corapipo+altera', 
          'Empidonax+flaviventris']
 
 
@@ -39,10 +39,10 @@ def download_bird(bird, out_dir):
     birdsong = requests.get(url)
 
     #write to file
-    birdname = bird['gen'] + bird['sp'] + bird['id']
-    filepath = os.path.join(out_dir, birdname) + '.wav'
+    birdname = bird['gen'] + bird['sp'] + bird['id'] 
+    filepath = os.path.join(out_dir, birdname) + '.wav' 
     with open(filepath, 'wb') as f:
-        f.write(birdsong.content)
+        f.write(birdsong.content)           
     return birdname
 
 
@@ -59,8 +59,8 @@ def get_data(birdname, in_dir, out_dir):
     """
     # read back from file
     filepath = os.path.join(in_dir, birdname)
-
-    audiotest, sr = librosa.load(filepath, sr=None)
+    
+    audiotest, sr = librosa.load(filepath, sr=None)   
     dur = librosa.get_duration(audiotest, sr)
 
     # split the audio and filter
@@ -71,8 +71,8 @@ def get_data(birdname, in_dir, out_dir):
         # output the filtered audio
         outfile = os.path.join(out_dir, birdname[:len(birdname) - 4]) + str(i) + ".wav"
         librosa.output.write_wav(outfile, audio, sr)
-
-
+        
+    
 def filter_bird(birdname, audio, sr):
     """
     Opens a specifc recording of a bird, filters the audio and converts it to a spectrogram which is saved.
@@ -94,7 +94,7 @@ def filter_bird(birdname, audio, sr):
     #noisy_part = output[0:1000]
     # perform noise reduction
     #output =  nr.reduce_noise(audio_clip=output, noise_clip=noisy_part, verbose=True, n_grad_freq=0, n_std_thresh=2)
-
+    
     # normalize the volume
     return output / np.max(output)
 
@@ -176,4 +176,5 @@ if __name__ == '__main__':
         if download:
             download_bird(sys.arv[2], sys.argv[3])
     else:
-        print(f"ERROR: invlaid number of arguments: Given {len(sys.argv)} arguments")
+        print("ERROR: invlaid number of arguments")
+        
