@@ -19,8 +19,8 @@ import sys
 
 
 birds = ['Tangara+gyrola', 'Amazilia+decora', 'Hylophilus+decurtatus', 'Arremon+aurantiirostris',
-         'Dysithamnus+mentalis', 'Lophotriccus+pileatus', 'Euphonia+imitans', 'Tangara+icterocephala', 
-         'Catharus+ustulatus', 'Parula+pitiayumi', 'Henicorhina+leucosticta', 'Corapipo+altera', 
+         'Dysithamnus+mentalis', 'Lophotriccus+pileatus', 'Euphonia+imitans', 'Tangara+icterocephala',
+         'Catharus+ustulatus', 'Parula+pitiayumi', 'Henicorhina+leucosticta', 'Corapipo+altera',
          'Empidonax+flaviventris']
 
 
@@ -32,18 +32,27 @@ def download_bird(bird, out_dir):
     :type bird: str
     :param out_dir: the relative or absolute file path to a directory to put the output files
     :type out_dir: str
-    :returns birdname: returns the bird's scientific name + recording id
+    :returns num: returns the number of records downloaded for the bird
     """
-    #download file
-    url = 'http:' + bird['url'] + '/download'
-    birdsong = requests.get(url)
+    response = requests.get("https://www.xeno-canto.org/api/2/recordings?query=" + birdname + "+len:5-60+q_gt:C")
+    data = response.json()
 
-    #write to file
-    birdname = bird['gen'] + bird['sp'] + bird['id'] 
-    filepath = os.path.join(out_dir, birdname) + '.wav' 
-    with open(filepath, 'wb') as f:
-        f.write(birdsong.content)           
-    return birdname
+    num_downloaded = 0
+    for record in data['recordings']: # each bird may have multiple records
+        #download file
+        url = 'http:' + record['url'] + '/download'
+        try:
+            birdsong = requests.get(url)
+            num_downloaded += 1
+        except:
+            print(f"Could not download url: {url}")
+            continue
+        #write to file
+        record_name = record['gen'] + record['sp'] + record['id']
+        filepath = os.path.join(out_dir, record_name) + '.wav'
+        with open(filepath, 'wb') as f:
+            f.write(birdsong.content)
+    return num_downloaded
 
 
 def get_data(birdname, in_dir, out_dir):
@@ -59,8 +68,8 @@ def get_data(birdname, in_dir, out_dir):
     """
     # read back from file
     filepath = os.path.join(in_dir, birdname)
-    
-    audiotest, sr = librosa.load(filepath, sr=None)   
+
+    audiotest, sr = librosa.load(filepath, sr=None)
     dur = librosa.get_duration(audiotest, sr)
 
     # split the audio and filter
@@ -71,8 +80,8 @@ def get_data(birdname, in_dir, out_dir):
         # output the filtered audio
         outfile = os.path.join(out_dir, birdname[:len(birdname) - 4]) + str(i) + ".wav"
         librosa.output.write_wav(outfile, audio, sr)
-        
-    
+
+
 def filter_bird(birdname, audio, sr):
     """
     Opens a specifc recording of a bird, filters the audio and converts it to a spectrogram which is saved.
@@ -94,7 +103,7 @@ def filter_bird(birdname, audio, sr):
     #noisy_part = output[0:1000]
     # perform noise reduction
     #output =  nr.reduce_noise(audio_clip=output, noise_clip=noisy_part, verbose=True, n_grad_freq=0, n_std_thresh=2)
-    
+
     # normalize the volume
     return output / np.max(output)
 
@@ -158,23 +167,30 @@ if __name__ == '__main__':
     Parses the command line parameters and calls the appropriate functions..
     """
     if len(sys.argv) == 4:
-        filepath_in = str(sys.argv[2])
         filepath_out = str(sys.argv[3])
-        download = False
-        for sample in os.listdir(filepath_in):
-            audio, sr = librosa.load(os.path.join(filepath_in, sample))
-            instance = ""
-            if sys.argv[1] == "-f": # filter and split the data
-                get_data(sample, filepath_in, filepath_out)
-            elif sys.argv[1] == "-s": # convert to a spectrogram
-                create_spectrogram(sample, instance, audio, sr, filepath_out, filepath_in)
-            elif sys.argv[1] == "-d": # download samples from zeno-canto
-                download = True
-                break
-            else:
-                print("ERROR: invalid flag argument")
-        if download:
-            download_bird(sys.arv[2], sys.argv[3])
+        if sys.argv[1] in ["-d", "-da"]:  # user wants to download, second argument is the bird name, third is directory to save download
+
+            if not os.path.isdir(filepath_out):
+                os.mkdir(filepath_out)
+
+            # if -d download only for input bird, otherwise download all birds in birds list
+            birds = [sys.argv[2]] if sys.argv[1] == "-d" else birds
+
+            for birdname in birds:
+                # download samples from zeno-canto
+                num_records = download_bird(birdname, filepath_out)
+                print(f"Downloaded {num_records} records for {birdname}.")
+        elif sys.argv[1] in ["-f", "-s"]:  # these flags can only be used after sample(s) are downloaded
+            filepath_in = str(sys.argv[2])
+
+            for sample in os.listdir(filepath_in):
+                audio, sr = librosa.load(os.path.join(filepath_in, sample))
+                instance = ""
+                if sys.argv[1] == "-f": # filter and split the data
+                    get_data(sample, filepath_in, filepath_out)
+                elif sys.argv[1] == "-s": # convert to a spectrogram
+                    create_spectrogram(sample, instance, audio, sr, filepath_out, filepath_in)
+        else:
+            print("ERROR: invalid flag argument. \n Accepted flags: -d, -f, -s")
     else:
-        print("ERROR: invlaid number of arguments")
-        
+        print(f"ERROR: invlaid number of arguments: Given {len(sys.argv)} arguments")
