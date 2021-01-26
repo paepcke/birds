@@ -1514,11 +1514,17 @@ class BirdTrainer(object):
     
         output_stack = None
         label_stack  = None
+        # Track num of samples we
+        # validate, so we can divide cumulating
+        # loss by that number:
+        
+        num_val_samples = 0
     
         # Model to eval mode:
         self.model.eval()
         with no_grad():
             for (val_sample, val_target) in self.dataloader.validation_samples():
+                num_val_samples += 1
                 # Push sample and target tensors
                 # to where the model is; but during
                 # validation we get only a single sample
@@ -1546,6 +1552,7 @@ class BirdTrainer(object):
 #                 
 #                 val_target = val_target.float()
                 loss =  self.loss_fn(pred_prob_tns, val_target)
+                loss = loss.to('cpu')
                 self.log.debug(f"***** Validation loss epoch {self.epoch}: {loss}")
 
                 self.tally_collection.add_loss(self.epoch, 
@@ -1563,11 +1570,14 @@ class BirdTrainer(object):
                                                   output_stack, 
                                                   label_stack,
                                                   learning_phase=LearningPhase.VALIDATING)
-                
+            total_val_loss = self.tally_collection.cumulative_loss(epoch=self.epoch,
+                                                                   learning_phase=LearningPhase.VALIDATING
+                                                                   )
+            avg_loss = total_val_loss / num_val_samples
             self.tally_result(split_num,
-                              label_stack,
+                              label_stack,   #****** Take loss off cuda
                               output_stack,
-                              loss, 
+                              avg_loss, 
                               LearningPhase.VALIDATING
                               )
 
