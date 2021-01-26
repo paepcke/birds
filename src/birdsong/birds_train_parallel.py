@@ -69,22 +69,22 @@ sys.path.insert(0,packet_root)
 # or different machine:
 #*****************
 # 
-# if socket.gethostname() in ('quintus', 'quatro'):
-#     # Point to where the pydev server 
-#     # software is installed on the remote
-#     # machine:
-#     sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
-# 
-#     import pydevd
-#     global pydevd
-#     # Uncomment the following if you
-#     # want to break right on entry of
-#     # this module. But you can instead just
-#     # set normal Eclipse breakpoints:
-#     #*************
-#     print("About to call settrace()")
-#     #*************
-#     pydevd.settrace('localhost', port=4040)
+if socket.gethostname() in ('quintus', 'quatro'):
+    # Point to where the pydev server 
+    # software is installed on the remote
+    # machine:
+    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
+ 
+    import pydevd
+    global pydevd
+    # Uncomment the following if you
+    # want to break right on entry of
+    # this module. But you can instead just
+    # set normal Eclipse breakpoints:
+    #*************
+    print("About to call settrace()")
+    #*************
+    pydevd.settrace('localhost', port=4040)
 # **************** 
 
 #***********
@@ -1183,6 +1183,14 @@ class BirdTrainer(object):
         
         time_start = datetime.datetime.now()
         num_folds  = self.config.Training.getint('num_folds')
+        
+        # Place to collect outputs and
+        # labels for each batch. Filled
+        # by train_one_split:
+        
+        self.output_stack = None
+        self.label_stack  = None
+
 
         # We will keep track of the average accuracy
         # over the splits of each epoch. The accuracies
@@ -1214,6 +1222,8 @@ class BirdTrainer(object):
                        self.epoch <= self.config.Training.getint('max_epochs'):
                     
                     self.epoch += 1
+                    self.num_train_samples_this_epoch = 0
+                    
                     # Tell dataloader that epoch changed.
                     # The dataloader will tell the sampler,
                     # which will use the information to 
@@ -1263,6 +1273,17 @@ class BirdTrainer(object):
                     # Done with one epoch:
                     self.log.info(f"Finished epoch {self.epoch}")
                     
+                    total_train_loss = self.tally_collection.cumulative_loss(epoch=self.epoch,
+                                                                           learning_phase=LearningPhase.TRAINING
+                                                                           )
+                    avg_loss = total_train_loss / self.num_train_samples_this_epoch
+                    
+                    self.tally_result(split_num,
+                                      self.label_stack, 
+                                      self.output_stack,
+                                      avg_loss, 
+                                      LearningPhase.TRAINING)
+                        
                     # Update the json based result record
                     # in the file system:
                     
@@ -1395,14 +1416,12 @@ class BirdTrainer(object):
         
         # Set model to train mode:
         self.model.train(True)
-        output_stack = None
-        label_stack  = None
         
         loss = 0.0
         
         # Await the first real call,
         # which will be via a send(split_num): 
-        split_num = yield
+        _split_num = yield
         
         # While loop will be exited when
         # dataloader has exhausted all batches
@@ -1416,11 +1435,13 @@ class BirdTrainer(object):
                 # the next split's worth of training
                 # is requested by the caller:
                 
-                self.tally_result(split_num,
-                                  label_stack, 
-                                  output_stack,
-                                  loss, 
-                                  LearningPhase.TRAINING)
+                #******* Remove and change comment above
+#                 self.tally_result(split_num,
+#                                   label_stack, 
+#                                   output_stack,
+#                                   loss, 
+#                                   LearningPhase.TRAINING)
+                #********
                 
                 # Sit until next() is called on this 
                 # generator again. At that point we continue feeding
@@ -1430,13 +1451,13 @@ class BirdTrainer(object):
                 # function when train() calls next() on this
                 # function:
                  
-                split_num = yield
+                _split_num = yield
                 
                 # Back for a new split. Prepare:
-                # Set model to train mode:
+                # Set model to train mode (just in
+                # case someone set it to eval mode...):
                 self.model.train(True)
-                output_stack = None
-                label_stack  = None
+                
                 # ... and continue in the while loop,
                 # using the continuing batch_feeder
                 continue
@@ -1446,6 +1467,7 @@ class BirdTrainer(object):
             # to where the model is:
             batch   = self.push_tensor(batch)
             targets = self.push_tensor(targets)
+            self.num_train_samples_this_epoch += len(batch)
             #********
             #self.log.info(f"***** New batch: {batch.shape}, targets: {targets.shape}")
             #********
@@ -1494,11 +1516,11 @@ class BirdTrainer(object):
             outputs = outputs.to('cpu')
             
                 
-            output_stack, label_stack = \
+            self.output_stack, self.label_stack = \
                 self.remember_output_and_label(outputs, 
                                                targets, 
-                                               output_stack, 
-                                               label_stack,
+                                               self.output_stack, 
+                                               self.label_stack,
                                                learning_phase=LearningPhase.TRAINING
                                                )
             # Pending STOP request?
