@@ -19,12 +19,38 @@ import logging
 import os, sys
 from pathlib import Path
 import random  # Just so we can fix seed for testing
+import re
 import signal
 import socket
 from threading import Timer
+import warnings
 
 import GPUtil
 from logging_service import LoggingService
+from torch import Size
+from torch import Tensor
+from torch import cuda
+from torch import device
+from torch import hub
+from torch import no_grad
+from torch import optim
+import torch
+from torch.distributed import  reduce_op
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.tensorboard import SummaryWriter
+from torchvision.models.resnet import ResNet, BasicBlock
+
+from birdsong.class_weight_discovery import ClassWeightDiscovery
+from birdsong.cross_validation_dataloader import MultiprocessingDataLoader, CrossValidatingDataLoader
+from birdsong.result_tallying import TrainResult, TrainResultCollection, EpochSummary
+from birdsong.rooted_image_dataset import MultiRootImageDataset
+from birdsong.utils import learning_phase
+from birdsong.utils.dottable_config import DottableConfigParser
+from birdsong.utils.learning_phase import LearningPhase
+import numpy as np
+import torch.distributed as dist
+import torch.nn as nn
+
 
 # Needed to make Eclipse's type engine happy.
 # I would prefer using torch.cuda, etc in the 
@@ -33,33 +59,6 @@ from logging_service import LoggingService
 # Some cases are solved in the torch.pypredef
 # file, but I don't know how to type-hint the
 # following few:
-
-from torch import cuda
-from torch import hub
-from torch import optim
-from torch import device
-from torch import no_grad
-from torch import Size
-from torch import Tensor
-from torch.distributed import  reduce_op
-
-import torch
-from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.utils.tensorboard import SummaryWriter
-from torchvision.models.resnet import ResNet, BasicBlock
-
-from birdsong.cross_validation_dataloader import MultiprocessingDataLoader, CrossValidatingDataLoader
-from birdsong.result_tallying import TrainResult, TrainResultCollection, EpochSummary
-from birdsong.rooted_image_dataset import MultiRootImageDataset
-from birdsong.utils.dottable_config import DottableConfigParser
-from birdsong.utils.learning_phase import LearningPhase
-import numpy as np
-import torch.distributed as dist
-import torch.nn as nn
-from birdsong.utils import learning_phase
-from birdsong.class_weight_discovery import ClassWeightDiscovery
-
-
 packet_root = os.path.abspath(__file__.split('/')[0])
 sys.path.insert(0,packet_root)
 
@@ -101,7 +100,6 @@ sys.path.insert(0,packet_root)
 # in module torch/distributed/distributed_c10d.py
 # Suppress that one warning:
 #
-import warnings
 
 # The message kwarg takes a regex:
 warnings.filterwarnings('ignore', 
@@ -435,11 +433,17 @@ class BirdTrainer(object):
                                 json_log_dir=performance_log_dir
                                 )
         if self.rank == 0:
-            timestamp = datetime.datetime.now()
-            time_str  = timestamp.isoformat()
-            exp_info = (f"Exp{time_str}_lr_{self.config.Training.lr}_" +
+            timestamp = datetime.datetime.now().isoformat()
+            # Remove the msecs part:
+            timestamp = re.sub(r'[.][0-9]{6}', '', timestamp)
+            # Replace colons with underscores:
+            timestamp = timestamp.replace(':', '_')
+            
+            exp_info = (f"Exp{timestamp}_lr_{self.config.Training.lr}_" +
                         f"bs_{self.config.Training.batch_size}_" +
+                        f"kernel_{self.config.Training.kernel_size}_" +
                         f"folds_{self.config.Training.num_folds}_" +
+                        f"classes_{self.num_classes}_" +
                         f"gpus_here_{self.comm_info['GPUS_USED_THIS_MACHINE']}"
                         )
 
