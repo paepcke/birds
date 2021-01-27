@@ -1184,14 +1184,6 @@ class BirdTrainer(object):
         time_start = datetime.datetime.now()
         num_folds  = self.config.Training.getint('num_folds')
         
-        # Place to collect outputs and
-        # labels for each batch. Filled
-        # by train_one_split:
-        
-        self.output_stack = None
-        self.label_stack  = None
-
-
         # We will keep track of the average accuracy
         # over the splits of each epoch. The accuracies
         # dict will key off an epoch number, and hold as
