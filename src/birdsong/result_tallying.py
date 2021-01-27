@@ -326,7 +326,9 @@ class TrainResultCollection(dict):
         loss_dict = self.fetch_loss_dict(learning_phase)
 
         try:
-            loss_dict[epoch] += loss
+            # Keep loss as a tensor for
+            # consistency throughout the tally collection
+            loss_dict[epoch] += loss.detach().clone().to('cpu')
         except KeyError:
             # First addition of a loss. If we
             # don't store a copy, then future
