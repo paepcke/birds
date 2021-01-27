@@ -1223,6 +1223,17 @@ class BirdTrainer(object):
                     
                     self.epoch += 1
                     self.num_train_samples_this_epoch = 0
+                    self.num_val_samples = 0
+                    
+                    # Places to accumulate output predictions
+                    # and truth labels for training and 
+                    # validation throughout one epoch:
+                    
+                    self.train_label_stack  = None 
+                    self.train_output_stack = None
+                    
+                    self.val_output_stack = None
+                    self.val_label_stack  = None
                     
                     # Tell dataloader that epoch changed.
                     # The dataloader will tell the sampler,
@@ -1276,19 +1287,31 @@ class BirdTrainer(object):
                     total_train_loss = self.tally_collection.cumulative_loss(epoch=self.epoch,
                                                                            learning_phase=LearningPhase.TRAINING
                                                                            )
-                    avg_loss = total_train_loss / self.num_train_samples_this_epoch
+                    avg_train_loss = total_train_loss / self.num_train_samples_this_epoch
                     
                     self.tally_result(split_num,
-                                      self.label_stack, 
-                                      self.output_stack,
-                                      avg_loss, 
+                                      self.train_label_stack, 
+                                      self.train_output_stack,
+                                      avg_train_loss, 
                                       LearningPhase.TRAINING)
+                    
+                    total_val_loss = self.tally_collection.cumulative_loss(epoch=self.epoch,
+                                                                           learning_phase=LearningPhase.VALIDATING
+                                                                           )
+                    avg_val_loss = total_val_loss / self.num_val_samples
+                    self.tally_result(split_num,
+                                      self.val_label_stack,   #****** Take loss off cuda
+                                      self.val_output_stack,
+                                      avg_val_loss, 
+                                      LearningPhase.VALIDATING
+                                      )
+
                         
                     # Update the json based result record
                     # in the file system:
                     
-                    self.record_json_display_results(self.epoch)
                     if self.rank == 0:
+                        self.record_json_display_results(self.epoch)
                         self.record_tensorboard_results(self.epoch)
                     
                     # Compute mean accuracy over all splits
@@ -1516,11 +1539,11 @@ class BirdTrainer(object):
             outputs = outputs.to('cpu')
             
                 
-            self.output_stack, self.label_stack = \
+            self.train_output_stack, self.train_label_stack = \
                 self.remember_output_and_label(outputs, 
                                                targets, 
-                                               self.output_stack, 
-                                               self.label_stack,
+                                               self.train_output_stack, 
+                                               self.train_label_stack,
                                                learning_phase=LearningPhase.TRAINING
                                                )
             # Pending STOP request?
@@ -1534,19 +1557,15 @@ class BirdTrainer(object):
 
     def validate_one_split(self, split_num):\
     
-        output_stack = None
-        label_stack  = None
         # Track num of samples we
         # validate, so we can divide cumulating
         # loss by that number:
         
-        num_val_samples = 0
-    
         # Model to eval mode:
         self.model.eval()
         with no_grad():
             for (val_sample, val_target) in self.dataloader.validation_samples():
-                num_val_samples += 1
+                self.num_val_samples += 1
                 # Push sample and target tensors
                 # to where the model is; but during
                 # validation we get only a single sample
@@ -1586,22 +1605,12 @@ class BirdTrainer(object):
                 val_sample = val_sample.to('cpu')
                 val_target = val_target.to('cpu')
                 pred_prob_tns = pred_prob_tns.to('cpu')
-                output_stack, label_stack = \
+                self.val_output_stack, self.val_label_stack = \
                    self.remember_output_and_label(pred_prob_tns, 
                                                   val_target, 
-                                                  output_stack, 
-                                                  label_stack,
+                                                  self.val_output_stack, 
+                                                  self.val_label_stack,
                                                   learning_phase=LearningPhase.VALIDATING)
-            total_val_loss = self.tally_collection.cumulative_loss(epoch=self.epoch,
-                                                                   learning_phase=LearningPhase.VALIDATING
-                                                                   )
-            avg_loss = total_val_loss / num_val_samples
-            self.tally_result(split_num,
-                              label_stack,   #****** Take loss off cuda
-                              output_stack,
-                              avg_loss, 
-                              LearningPhase.VALIDATING
-                              )
 
     #------------------------------------
     # remember_output_and_label 

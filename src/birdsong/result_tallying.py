@@ -332,7 +332,7 @@ class TrainResultCollection(dict):
             # don't store a copy, then future
             # additions will modify the passed-in
             # loss variable:
-            loss_dict[epoch] = loss.detach().clone()
+            loss_dict[epoch] = loss.detach().clone().to('cpu')
 
     #------------------------------------
     # epochs 
