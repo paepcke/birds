@@ -17,9 +17,9 @@ setup(
     setup_requires   = ['pytest-runner'],
     install_requires = ['scikit-learn>=0.23.1',
                         'pandas>=1.1.3',
-                        'numpy>=1.19.1',           
-                        'torch>=1.5.1',       
-                        'torchvision>=0.6.1', 
+                        'numpy>=1.19.1',
+                        'torch>=1.5.1',
+                        'torchvision>=0.6.1',
                         'seaborn>=0.11.0',
                         'requests>=2.24.0',
                         'torchaudio>=0.5.1',
@@ -28,7 +28,8 @@ setup(
                         'numba==0.48.0',
                         'librosa>=0.7.2',
                         'scipy>=1.5.2',
-                        'SoundFile>=0.10.3.post1'
+                        'SoundFile>=0.10.3.post1',
+                        'noisereduce>=1.1.0'
                         ],
 
     tests_require    =['pytest',
