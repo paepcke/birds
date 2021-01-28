@@ -31,7 +31,7 @@ class TrainResultCollection(dict):
     def __init__(self, initial_train_result=None):
         
         if initial_train_result is not None:
-            self.results[initial_train_result.split_num] = initial_train_result
+            self.results[initial_train_result] = initial_train_result
         self.epoch_losses_training    = {}
         self.epoch_losses_validation  = {}
         self.epoch_losses_testing     = {}
@@ -304,15 +304,12 @@ class TrainResultCollection(dict):
         @param tally_result: the result to add
         @type tally_result: TrainResult
         '''
-        # Need as retrieval key the epoch, the split_num, 
-        # and the learning phase, because split nums restart
-        # with each epoch. The key must be hashable, so
-        # cannot use the raw learning_phase enum instance.
-        # Convert it to 'Training', 'Validating', or 'Testing':
+        # Need as retrieval key the epoch, and the learning phase, 
+        # The key must be hashable, so cannot use the raw learning_phase 
+        # enum instance. Convert it to 'Training', 'Validating', or 'Testing':
         
         learning_phase_textual = tally_result.learning_phase.name.capitalize()
         tally_key = (tally_result.epoch, 
-                     tally_result.split_num,
                      learning_phase_textual,
                      ) 
         self[tally_key] = tally_result
@@ -512,7 +509,6 @@ class TrainResult:
     #-------------------
 
     def __init__(self, 
-                 split_num, 
                  epoch, 
                  learning_phase, 
                  loss, 
@@ -524,8 +520,6 @@ class TrainResult:
         Organize results from one train, validate,
         or test split.
 
-        @param split_num: split number within current epoch
-        @type split_num: int
         @param epoch: current epoch
         @type epoch: int
         @param learning_phase: whether result is from training,
@@ -547,7 +541,6 @@ class TrainResult:
         # arguments to inst vars. 
         
         self.created_at     = datetime.datetime.now()
-        self.split_num      = split_num
         self.epoch          = epoch
         self.learning_phase = learning_phase
         self.loss           = loss
@@ -759,7 +752,6 @@ class TrainResult:
             raise TypeError(f"Wrong type for {self.learning_phase}")
             
         human_readable = (f"<TrainResult epoch {self.epoch} " +
-                          f"split {self.split_num} " +
                           f"phase {learning_phase} " +
                           f"conf_matrix {cm_dim}>")
         return human_readable 

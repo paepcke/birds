@@ -921,7 +921,6 @@ class BirdTrainer(object):
     #-------------------
 
     def tally_result(self,
-                     split_num, 
                      labels_tns, 
                      pred_prob_tns,
                      loss,
@@ -1042,7 +1041,7 @@ class BirdTrainer(object):
         # Find labels that were incorrectly predicted:
         badly_predicted_labels = truth_labels[truth_labels != predicted_class_ids]
 
-        tally = TrainResult(split_num, 
+        tally = TrainResult(
                             self.epoch, 
                             learning_phase, 
                             loss, 
@@ -1266,7 +1265,7 @@ class BirdTrainer(object):
                             # Exhausted all the splits
                             self.log.warn(f"Unexpectedly ran out of splits.")
                             break
-                        self.validate_one_split(split_num)
+                        self.validate_one_split()
     
                         # Time for sign of life?
                         time_now = datetime.datetime.now()
@@ -1281,8 +1280,7 @@ class BirdTrainer(object):
                                                                            )
                     avg_train_loss = total_train_loss / self.num_train_samples_this_epoch
                     
-                    self.tally_result(split_num,
-                                      self.train_label_stack, 
+                    self.tally_result(self.train_label_stack, 
                                       self.train_output_stack,
                                       avg_train_loss, 
                                       LearningPhase.TRAINING)
@@ -1291,8 +1289,7 @@ class BirdTrainer(object):
                                                                            learning_phase=LearningPhase.VALIDATING
                                                                            )
                     avg_val_loss = total_val_loss / self.num_val_samples
-                    self.tally_result(split_num,
-                                      self.val_label_stack,   #****** Take loss off cuda
+                    self.tally_result(self.val_label_stack,
                                       self.val_output_stack,
                                       avg_val_loss, 
                                       LearningPhase.VALIDATING
@@ -1435,7 +1432,8 @@ class BirdTrainer(object):
         loss = 0.0
         
         # Await the first real call,
-        # which will be via a send(split_num): 
+        # which will be via a send(split_num):
+        # Not used, but nice for debugging: 
         _split_num = yield
         
         # While loop will be exited when
@@ -1448,15 +1446,7 @@ class BirdTrainer(object):
                 # Exhausted this split. Record this split's
                 # training results, and yield till
                 # the next split's worth of training
-                # is requested by the caller:
-                
-                #******* Remove and change comment above
-#                 self.tally_result(split_num,
-#                                   label_stack, 
-#                                   output_stack,
-#                                   loss, 
-#                                   LearningPhase.TRAINING)
-                #********
+                # is requested by the caller.
                 
                 # Sit until next() is called on this 
                 # generator again. At that point we continue feeding
@@ -1547,7 +1537,7 @@ class BirdTrainer(object):
     # validate_one_split 
     #-------------------
 
-    def validate_one_split(self, split_num):\
+    def validate_one_split(self):
     
         # Track num of samples we
         # validate, so we can divide cumulating
@@ -1903,9 +1893,9 @@ class BirdTrainer(object):
         # epoch from tally_collection:
         
         clean_tally_collection = TrainResultCollection.create_from(self.tally_collection)
-        for epoch, split_num, learning_phase in self.tally_collection.keys():
+        for epoch, learning_phase in self.tally_collection.keys():
             if epoch == self.epoch:
-                clean_tally_collection.pop((epoch,split_num,learning_phase))
+                clean_tally_collection.pop((epoch, learning_phase))
 
         to_save = {'epoch' : self.epoch,
                    'model_state_dict' : model.state_dict(),
