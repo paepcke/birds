@@ -463,10 +463,9 @@ class EpochSummary(UserDict):
            tally_collection.mean_accuracy(epoch, 
                                           learning_phase=LearningPhase.VALIDATING)
 
-        self['epoch_loss_train'] = tally_collection.cumulative_loss(epoch=epoch, 
-                                                              learning_phase=LearningPhase.TRAINING)
-        self['epoch_loss_val']   = tally_collection.cumulative_loss(epoch=epoch, 
-                                                              learning_phase=LearningPhase.VALIDATING)
+        self['epoch_loss_train'] = tally_collection[(epoch, 'Training')].loss
+        self['epoch_loss_val']   = tally_collection[(epoch, 'Validating')].loss
+
         self['epoch_mean_weighted_precision'] = \
            tally_collection.mean_weighted_precision(epoch,
                                                     learning_phase=LearningPhase.VALIDATING
