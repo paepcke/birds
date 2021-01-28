@@ -60,9 +60,7 @@ in the subclass MultiRootImageDataset.
 '''
 
 from _collections import OrderedDict
-import glob
 import os
-from pathlib import Path
 
 import natsort
 import torch
