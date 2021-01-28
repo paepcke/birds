@@ -998,34 +998,31 @@ class BirdTrainer(object):
         # batch_size 2 and 4 target classes:
         #  
         #    torch.tensor([[0.1, -0.2,  .3,  .42], |
-        #                                          | <--- one batch's probs
+        #                                          | <--- one batch's network raw outputs
         #                  [.43,  .3, -.23, -.18]  |   for batch_size == 2 
         #
         #                  ])
-        
-        if learning_phase == LearningPhase.TRAINING:
-            pred_classes_each_batch = torch.argmax(pred_prob_tns, dim=2)
-        else:
-            # Turn something like:
-            # tensor(
-            #  [[[ -9.6347,  30.7077,  12.9497, -13.9641,  -9.8286,  -8.1160]],
-            #   [[ -8.9195,  29.1933,  11.8827, -13.0813,  -9.9640,  -8.1645]],
-            #            ...
-            # first use softmax to turn the above into 
-            # probabilities that rowise add to 1
-            # 
-            # tensor(
-            #  [[[3.0166e-18, 1.0000e+00, 1.9400e-08, 3.9745e-20, 2.4849e-18, 1.3775e-17]],
-            #    [2.8043e-17, 1.0000e+00, 3.0346e-08, 4.3689e-19, 9.8674e-18, 5.9664e-17]],
-            #            ...
-            #
-            # Then argmax turns each row into a class prediction:
-            #   [[1],
-            #    [1],
-            #    ...
-            #    ]
-            #                   ...
-            pred_classes_each_batch = pred_prob_tns.softmax(dim=2).argmax(dim=2)
+
+        # Turn something like this 6-class value:
+        # tensor(
+        #  [[[ -9.6347,  30.7077,  12.9497, -13.9641,  -9.8286,  -8.1160]],
+        #   [[ -8.9195,  29.1933,  11.8827, -13.0813,  -9.9640,  -8.1645]],
+        #            ...
+        # first use softmax to turn the above into 
+        # probabilities that rowise add to 1
+        # 
+        # tensor(
+        #  [[[3.0166e-18, 1.0000e+00, 1.9400e-08, 3.9745e-20, 2.4849e-18, 1.3775e-17]],
+        #    [2.8043e-17, 1.0000e+00, 3.0346e-08, 4.3689e-19, 9.8674e-18, 5.9664e-17]],
+        #            ...
+        #
+        # Then argmax turns each row into a class prediction:
+        #   [[1],
+        #    [1],
+        #    ...
+        #    ]
+        #                   ...
+        pred_classes_each_batch = pred_prob_tns.softmax(dim=2).argmax(dim=2)
 
         #  For a batch size of 2 we would now have:
         #                 tensor([[3, 0],  <-- result batch 1 above
