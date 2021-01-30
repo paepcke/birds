@@ -115,7 +115,7 @@ class Test(unittest.TestCase):
         plotter = TensorBoardPlotter(self.tb_summary_dir)
         grid = plotter.write_img_grid(self.writer,
                                       data_root, 
-                                      num_imgs=4, 
+                                      num_imgs=4,
                                       unittesting=True)
         # self.assertEqual(grid.shape, Size([3, 175, 92]))
         self.assertEqual(grid.shape, torch.Size([3, 47, 694]))
@@ -123,7 +123,9 @@ class Test(unittest.TestCase):
         # Do it again, this time for real:
         grid = plotter.write_img_grid(self.writer,
                                       data_root,
-                                      num_imgs=4, 
+                                      num_imgs=4,
+                                      img_height=128,
+                                      img_width=512,
                                       unittesting=False)
         print(grid)
         
