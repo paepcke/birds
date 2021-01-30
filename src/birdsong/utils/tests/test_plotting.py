@@ -5,17 +5,19 @@ Created on Jan 25, 2021
 '''
 
 import os
+import shutil
 import unittest
 
 from sklearn.metrics import confusion_matrix 
+from torch import Size
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
 from birdsong.utils.tensorboard_plotter import TensorBoardPlotter
 
 
-TEST_ALL = True
-#TEST_ALL = False
+#******TEST_ALL = True
+TEST_ALL = False
 
 class Test(unittest.TestCase):
 
@@ -36,6 +38,10 @@ class Test(unittest.TestCase):
     def tearDown(self):
         pass
 
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tb_summary_dir)
+    
     #------------------------------------
     # test_ 
     #-------------------
@@ -77,6 +83,51 @@ class Test(unittest.TestCase):
                               )
         print('foo') 
         
+    #------------------------------------
+    # test_write_img_grid 
+    #-------------------
+    
+    #****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_write_img_grid(self):
+        '''
+        Test creating a grid of train images
+        for tensorboard. Method signature is:
+        	writer, 
+        	num_imgs=4, 
+        	img_dirs=None, 
+        	img_paths=None,
+        	img_height=43,    # px
+        	img_width=171,    # px
+        	unittesting=False):
+
+        '''
+        # This unittest is under the utils dir.
+        # The test img tree is under the main
+        # test dir:
+        data_root = os.path.join(self.curr_dir, '../../tests/data/cars')
+        img_dirs = [os.path.join(data_root, 'audi'),
+                    os.path.join(data_root, 'bmw'),
+                    ]
+        # Test enough imgs in each dir
+        # for the desired number of imgs
+        # to display. Write summaries to a tmp
+        # file underneath this script's dir, which 
+        # will be removed later.
+        plotter = TensorBoardPlotter(self.tb_summary_dir)
+        grid = plotter.write_img_grid(self.writer,
+                                      num_imgs=4, 
+                                      img_dirs=img_dirs, 
+                                      unittesting=True)
+        self.assertEqual(grid.shape, Size([3, 175, 92]))
+        
+        # Do it again, this time for real:
+        grid = plotter.write_img_grid(self.writer,
+                                      num_imgs=4, 
+                                      img_dirs=img_dirs, 
+                                      unittesting=False)
+        print(grid)
+        
+
 
 # ------------------ Utils ---------------
 
