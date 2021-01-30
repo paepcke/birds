@@ -18,17 +18,14 @@ Created on Jan 25, 2021
 # from .util import merge_kwargs, decode_bytes_if_necessary
 
 import os
-from pathlib import Path
 
 from matplotlib.figure import Figure
 import torch
 from torchvision import transforms
-from torchvision.datasets import folder
+from torchvision.datasets.folder import ImageFolder, default_loader
 from torchvision.utils import make_grid
 
-from birdsong.utils.file_utils import FileUtils
 import seaborn as sns
-
 
 class TensorBoardPlotter:
     
@@ -179,9 +176,9 @@ class TensorBoardPlotter:
     
     def write_img_grid(self, 
                        writer, 
+                       img_root_dir, 
                        num_imgs=4, 
-                       img_dirs=None, 
-                       img_paths=None,
+                       class_sample_file_pairs=None,
                        img_height=43,    # px
                        img_width=171,    # px
                        to_grayscale=True,
@@ -190,80 +187,165 @@ class TensorBoardPlotter:
         Create and log a Tensorboard 'grid' of
         example train images. 
 
-        @param writer:
-        @type writer:
-        @param tensorboard_log_dir:
-        @type tensorboard_log_dir:
-        @param num_imgs:
-        @type num_imgs:
-        @param img_dir:
-        @type img_dir:
-        @param img_paths:
-        @type img_paths:
-        @param paths:
-        @type paths:
-        @param img_height:
-        @type img_height:
-        @param img_width:
-        @type img_width:
-        @param to_grayscale:
-        @type to_grayscale:
+        @param writer: a Tensorboard Pytorch SummaryWriter
+        @type writer: SummaryWriter
+        @param img_root_dir: directory 
+            that contains sub-directories with samples. The 
+            sub-directory names are taken to be class names.  
+        @type img_root_dir: str
+        @param num_imgs: total number of images to
+            include in the grid. If None: all images
+        @type num_imgs: {None | int}
+        @param class_sample_file_pairs: <class>/<img_file_name> for
+            individual images
+        @type class_sample_file_pairs: {None | str | [str]}
+        @param img_height: height of all images
+        @type img_height: int (pixels)
+        @param img_width: width of all images
+        @type img_width: int (pixels)
+        @param to_grayscale: whether or not to convert 
+            images to grayscale upon import
+        @type to_grayscale: bool
         @param unittesting: controls whether grid is
             actually created, or the img tensor that
             would be contained in the grid is returned
             for testing dimensions.
-        @type unittesting: False 
+        @type unittesting: bool 
         '''
-        
-        if img_dirs is None and img_paths is None:
-            raise ValueError("Must provide either paths to imges or to image dirs")
-        if img_dirs is not None and img_paths is not None:
-            raise ValueError("Must only provide *either* paths to imges or to image dirs")
 
-        the_transforms = [transforms.Resize(img_height, img_width)]
+        if img_root_dir is None:
+            raise ValueError("Must provide path to image root dir")
+
+        # Prepare to resize all images to a given dimension,
+        # convert to grayscale if requested, and turn into
+        # a tensor:
+        the_transforms = [transforms.Resize((img_height, img_width))]
         if to_grayscale:
             the_transforms.append(transforms.Grayscale())
         the_transforms.append(transforms.ToTensor())
 
         img_transform = transforms.Compose(the_transforms)
         
-        if img_paths is not None:
-            if num_imgs is None:
-                num_imgs = len(img_paths)
-            else:
-                num_imgs = min(num_imgs, len(img_paths))
-        else:
-            # Got pointer(s) to img directory, and
-            # will randomly pick num_imgs imgs:
-            if num_imgs is None:
-                raise ValueError("Must provide number of imgs to pick if providing directories.")
-            if not type(img_dirs) == list:
-                img_dirs = list(img_dirs)
-                
-            # If fewer imgs are wanted than directories were 
-            # specified, only grab one img from each dir:
-            num_img_dirs = len(img_dirs)
-            num_imgs = min(num_imgs, num_img_dirs)
-            num_imgs_per_dir = round(num_imgs / num_img_dirs)
-            _remaining_imgs   = num_imgs % num_img_dirs
-            
-            img_paths = []
-            for img_dir in img_dirs:
-                img_files = [os.path.join(img_dir, file_name)
-                                          for file_name in os.listdir(img_dir)
-                                          if Path(file_name).suffix in FileUtils.IMG_EXTENSIONS] 
-                # Randomly select num_imgs_per_dir files
-                # from this image dir:
-                idxs = torch.randperm(num_imgs_per_dir)
-                img_paths.extend([img_files[idx] for idx in idxs])
+        # Get an ImageFolder instance, from which 
+        # we will easily find classes and samples
+        
+        img_folder  = ImageFolder(img_root_dir,
+                                  transform=img_transform,
+                                  loader=default_loader
+                                  )
 
-            img_tns_list = [img_transform(folder.default_loader(img)) 
-                            for img 
-                            in img_paths]
-            grid = make_grid(img_tns_list)
-            
-            if unittesting:
-                return grid
-            writer.add_image('Train Examples', grid)
+        # Get list of full paths to samples:
+        sample_idxs = self.get_sample_indices(img_folder,
+                                              num_imgs=num_imgs,
+                                              class_sample_file_pairs=class_sample_file_pairs
+                                              )
+
+        img_tns_list = [img_folder[idx]
+                        for idx
+                        in sample_idxs]
+
+        # We have in img_tns_list:
+        #   [ (tns1, class_idx1),
+        #     (tns2, class_idx2),
+        #     ...
+        #   ]
+        # Get just a list of the tensors:
+        
+        tns_list = [tns_class_idx[0] for tns_class_idx in img_tns_list]
+
+        grid = make_grid(tns_list)
+        
+        if unittesting:
             return grid
+        writer.add_image('Train Examples', grid)
+        return grid
             
+    #------------------------------------
+    # get_sample_indices 
+    #-------------------
+    
+    def get_sample_indices(self,
+                         img_folder,
+                         class_sample_file_pairs,
+                         num_imgs=None
+                         ):
+        '''
+        If class_sample_file_pairs is provided,
+        then num_imgs is ignored.
+        
+        @param img_folder:
+        @type img_folder:
+        @param class_sample_file_pairs:
+        @type class_sample_file_pairs:
+        @param num_imgs:
+        @type num_imgs:
+        '''
+
+        # Caller requests particular images?
+        if class_sample_file_pairs is not None:
+            
+            # Convert the (<class-name>,<sample-file_name>)
+            # pairs to (<class_idx>,<sample-file-name>)
+            requested_class_idx_sample_pairs = [
+                (img_folder.class_to_idx[class_name], sample_file_nm)
+                for class_name, sample_file_nm
+                in class_sample_file_pairs
+                ]
+
+            # Make a more convenient dict
+            #   {class-idx : [<sample-file-name>]
+            requests = {}
+            for class_idx, sample_path in requested_class_idx_sample_pairs:
+                try:
+                    requests[class_idx].append(sample_path)
+                except KeyError:
+                    # First sample file for this class:
+                    requests[class_idx] = [sample_path]
+
+            found_idxs = []
+            for i, (sample_path, class_idx) in enumerate(img_folder.samples):
+                try:
+                    if os.path.basename(sample_path) in requests[class_idx]:
+                        found_idxs.append(i)
+                except KeyError:
+                    # Not one of the requested samples:
+                    continue 
+            return found_idxs
+
+        # We are asked to randomly pick images
+        # from each class:
+        num_samples = len(img_folder)
+        num_classes = len(img_folder.classes)
+        num_samples_to_get = num_samples \
+                            if num_imgs is None \
+                            else min(num_samples, num_imgs)
+            
+        # Create a dict {class-idx : <list of indices into img_folder>}
+        # I.e. for each class, list the int indices i 
+        # such that img_folder[i] is an img in the class.
+        #  
+
+        class_dict = {}
+        for i, (sample_path, class_idx) in enumerate(img_folder.samples):
+            try:
+                class_dict[class_idx].append(i)
+            except KeyError:
+                # First sample of this class:
+                class_dict[class_idx] = [i]
+            
+        num_imgs_per_class = round(num_samples_to_get / num_classes)
+        _remaining_imgs    = num_samples_to_get % num_classes
+
+        to_get_idxs = []
+        for class_idx, sample_idx_list in class_dict.items():
+            # Get a random sequence into the 
+            # sample_idx_list:
+            rand_sample_idxs = torch.randperm(num_imgs_per_class)
+            if len(sample_idx_list) < len(rand_sample_idxs):
+                # Grab them all:
+                to_get_idxs.extend(sample_idx_list)
+            else:
+                to_get_idxs.extend([sample_idx_list[rand_pick]
+                                    for rand_pick
+                                    in rand_sample_idxs])
+        return to_get_idxs

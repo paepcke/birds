@@ -104,10 +104,9 @@ class Test(unittest.TestCase):
         # This unittest is under the utils dir.
         # The test img tree is under the main
         # test dir:
+        
         data_root = os.path.join(self.curr_dir, '../../tests/data/cars')
-        img_dirs = [os.path.join(data_root, 'audi'),
-                    os.path.join(data_root, 'bmw'),
-                    ]
+        
         # Test enough imgs in each dir
         # for the desired number of imgs
         # to display. Write summaries to a tmp
@@ -115,15 +114,16 @@ class Test(unittest.TestCase):
         # will be removed later.
         plotter = TensorBoardPlotter(self.tb_summary_dir)
         grid = plotter.write_img_grid(self.writer,
+                                      data_root, 
                                       num_imgs=4, 
-                                      img_dirs=img_dirs, 
                                       unittesting=True)
-        self.assertEqual(grid.shape, Size([3, 175, 92]))
+        # self.assertEqual(grid.shape, Size([3, 175, 92]))
+        self.assertEqual(grid.shape, torch.Size([3, 47, 694]))
         
         # Do it again, this time for real:
         grid = plotter.write_img_grid(self.writer,
+                                      data_root,
                                       num_imgs=4, 
-                                      img_dirs=img_dirs, 
                                       unittesting=False)
         print(grid)
         
