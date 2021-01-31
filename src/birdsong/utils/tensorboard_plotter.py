@@ -24,8 +24,9 @@ import torch
 from torchvision import transforms
 from torchvision.datasets.folder import ImageFolder, default_loader
 from torchvision.utils import make_grid
-
 import seaborn as sns
+
+from PIL import Image, ImageDraw, ImageFont
 
 #*****************
 #
@@ -67,7 +68,7 @@ class TensorBoardPlotter:
         
         self.curr_dir = os.path.dirname(__file__)
         if logdir is None:
-            self.logdir = os.path.join(self.curr_dir/'runs')
+            self.logdir = os.path.join(self.curr_dir, 'runs')
         self.logdir = logdir
 
     #------------------------------------
@@ -267,27 +268,81 @@ class TensorBoardPlotter:
                                               num_imgs=num_imgs,
                                               class_sample_file_pairs=class_sample_file_pairs
                                               )
-
+        # Get list of img tensor/class_idx pairs:
         img_tns_list = [img_folder[idx]
                         for idx
                         in sample_idxs]
-
-        # We have in img_tns_list:
-        #   [ (tns1, class_idx1),
-        #     (tns2, class_idx2),
-        #     ...
-        #   ]
-        # Get just a list of the tensors:
         
-        tns_list = [tns_class_idx[0] for tns_class_idx in img_tns_list]
+        # Print <class>/file_name onto
+        # each spectrogram:
+        
+        marked_img_tns = []
+        for i, (img_tns, class_idx) in enumerate(img_tns_list):
+            class_name = img_folder.classes[class_idx]
+            # img_folder.samples is [ (full_path, class_idx), (..., ...) ]:
+            img_file_basename = os.path.basename(img_folder.samples[i][0])
+            marked_img_tns.append(
+                self.print_onto_image(img_tns,
+                                      f"{class_name}/{img_file_basename}" 
+                                      ))
+
+        marked_img_tns = [tns_class_idx[0] for tns_class_idx in img_tns_list]
 
         # A 10px frame around each img:
-        grid = make_grid(tns_list, padding=10)
+        grid = make_grid(marked_img_tns, padding=10)
         
         if unittesting:
             return grid
         writer.add_image('Train Examples', grid)
         return grid
+
+
+    #------------------------------------
+    # print_onto_image 
+    #-------------------
+    
+    def print_onto_image(self, img_src, txt, point=(10,10)):
+        
+        if type(img_src) == str:
+            # Image is a path:
+            try:
+                pil_img = Image.open(img_src)
+            except Exception as e:
+                raise ValueError(f"Could not load img from {img_src}: {repr(e)}")
+            
+        elif type(img_src) == torch.Tensor:
+            try:
+                pil_img = transforms.ToPILImage()(pil_to_tensor.squeeze_(0))
+            except Exception as e:
+                raise ValueError(f"Could not convert tensor to PIL img ({img_src.size()})")
+        
+        elif not Image.isImageType(img_src):
+            raise ValueError(f"Image src must be path to img, tensor, or PIL image; not {type(img_src)}") 
+
+        else:
+            pil_img = img_src
+            
+        # Make a blank image for the text, initialized 
+        # to transparent text color:
+        txt_img = Image.new("RGBA", pil_img.size, (255,255,255,0))
+        
+        # get a font
+        fnt = ImageFont.load_default()
+        # get a drawing context
+        drawing = ImageDraw.Draw(txt_img)
+        
+        # Draw text, half opacity
+        drawing.text(point, txt, font=fnt, fill=(0,0,0,128))
+        # Draw text, full opacity
+        #drawing.text(point, txt, font=fnt, fill=(255,255,255,255))
+        
+        out_img = Image.alpha_composite(pil_img, txt_img)
+
+        out_tns = transforms.ToTensor()(out_img).unsqueeze_(0)         
+        #out_img.show()
+        out_img.close()
+
+        return out_tns
             
     #------------------------------------
     # get_sample_indices 

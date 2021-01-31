@@ -30,7 +30,11 @@ class Test(unittest.TestCase):
         
         if not os.path.exists(cls.tb_summary_dir):
             os.makedirs(cls.tb_summary_dir)
-        
+            
+        cls.sample_spectrogram_path = os.path.join(
+            cls.curr_dir,
+            '../../tests/data/birds/DYSMEN_S/SONG_Dysithamnusmentalis5114773.png'
+            )
 
     def setUp(self):
         self.writer = SummaryWriter(self.tb_summary_dir)
@@ -87,7 +91,7 @@ class Test(unittest.TestCase):
     # test_write_img_grid 
     #-------------------
     
-    #****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_write_img_grid(self):
         '''
         Test creating a grid of train images
@@ -117,19 +121,77 @@ class Test(unittest.TestCase):
                                       data_root, 
                                       num_imgs=4,
                                       unittesting=True)
-        # self.assertEqual(grid.shape, Size([3, 175, 92]))
-        self.assertEqual(grid.shape, torch.Size([3, 47, 694]))
-        
-        # Do it again, this time for real:
-        grid = plotter.write_img_grid(self.writer,
-                                      data_root,
-                                      num_imgs=4,
-                                      img_height=128,
-                                      img_width=512,
-                                      unittesting=False)
-        print(grid)
-        
 
+        self.assertEqual(grid.shape, torch.Size([3, 220, 1650]))
+
+        
+        # Do it again, this time for real.
+        # To test:
+        #    o Comment out the tearDownClass() method
+        #      above to avoid removing the tensorboard
+        #      log file at the end of all tests.
+        #    o Start a tensorflow service locally, on laptop:
+        #       tensorboard tensorboard --logdir <dir-of-this-test-script/tensorboard_summaries>
+        #    o In browser:
+        #        localhost:6006
+        #
+        # If testing on a remote server:
+        #    o On server in an unused window,
+        #      start tensorboard service at remote
+        #      server:
+        #
+        #       tensorboard --logdir <dir-of-this-test-script/tensorboard_summaries>
+        #
+        #    o On laptop in an unused window
+        #
+        #       ssh -N -L localhost:60006:localhost:6006 your_uid@server.your.domain
+        #
+        #      This will hang, and allow a browser 
+        #      on the local laptop to reach the tensorflow
+        #      server at the remote site.
+        #
+        #    o On laptop: localhost:60006
+        # 
+#         grid = plotter.write_img_grid(self.writer,
+#                                       data_root,
+#                                       num_imgs=4,
+#                                       img_height=128,
+#                                       img_width=512,
+#                                       unittesting=False)
+
+    #------------------------------------
+    # test_more_img_requests_than_available 
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_more_img_requests_than_available(self):
+        
+        data_root = os.path.join(self.curr_dir, '../../tests/data/cars')
+        
+        # Test enough imgs in each dir
+        # for the desired number of imgs
+        # to display. Write summaries to a tmp
+        # file underneath this script's dir, which 
+        # will be removed later.
+        plotter = TensorBoardPlotter(self.tb_summary_dir)
+        grid = plotter.write_img_grid(self.writer,
+                                      data_root, 
+                                      num_imgs=40,
+                                      unittesting=False)
+        self.assertEqual(grid.shape, Size([3,43,3290]))
+
+    #------------------------------------
+    # test_print_onto_image 
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_print_onto_image(self):
+        
+        plotter = TensorBoardPlotter()
+        img_tns = plotter.print_onto_image(self.sample_spectrogram_path,
+                                           "Hello World"
+                                           )
+        self.assertEqual(img_tns.shape, torch.Size([1, 4, 128, 512]))
 
 # ------------------ Utils ---------------
 
