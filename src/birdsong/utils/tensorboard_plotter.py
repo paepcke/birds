@@ -27,6 +27,34 @@ from torchvision.utils import make_grid
 
 import seaborn as sns
 
+#*****************
+#
+# For remote debugging via pydev and Eclipse:
+# If uncommented, will hang if started from
+# on Quatro or Quintus, and will send a trigger
+# to the Eclipse debugging service on the same
+# or different machine:
+ 
+import socket,sys
+if socket.gethostname() in ('quintus', 'quatro'):
+    # Point to where the pydev server 
+    # software is installed on the remote
+    # machine:
+    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
+ 
+    import pydevd
+    global pydevd
+    # Uncomment the following if you
+    # want to break right on entry of
+    # this module. But you can instead just
+    # set normal Eclipse breakpoints:
+    #*************
+    print("About to call settrace()")
+    #*************
+    pydevd.settrace('localhost', port=4040)
+# **************** 
+
+
 class TensorBoardPlotter:
     
     conf_matrices = []
@@ -179,8 +207,8 @@ class TensorBoardPlotter:
                        img_root_dir, 
                        num_imgs=4, 
                        class_sample_file_pairs=None,
-                       img_height=43,    # px
-                       img_width=171,    # px
+                       img_height=200,    # px
+                       img_width=400,     # px
                        to_grayscale=True,
                        unittesting=False):
         '''
@@ -253,7 +281,8 @@ class TensorBoardPlotter:
         
         tns_list = [tns_class_idx[0] for tns_class_idx in img_tns_list]
 
-        grid = make_grid(tns_list)
+        # A 10px frame around each img:
+        grid = make_grid(tns_list, padding=10)
         
         if unittesting:
             return grid
