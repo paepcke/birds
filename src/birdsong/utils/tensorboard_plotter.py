@@ -312,7 +312,7 @@ class TensorBoardPlotter:
             
         elif type(img_src) == torch.Tensor:
             try:
-                pil_img = transforms.ToPILImage()(pil_to_tensor.squeeze_(0))
+                pil_img = transforms.ToPILImage()(img_src.squeeze_(0))
             except Exception as e:
                 raise ValueError(f"Could not convert tensor to PIL img ({img_src.size()})")
         
@@ -324,7 +324,8 @@ class TensorBoardPlotter:
             
         # Make a blank image for the text, initialized 
         # to transparent text color:
-        txt_img = Image.new("RGBA", pil_img.size, (255,255,255,0))
+        #*****txt_img = Image.new("RGBA", pil_img.size, (255,255,255,0))
+        txt_img = Image.new("L", pil_img.size, 255)
         
         # get a font
         fnt = ImageFont.load_default()
@@ -336,7 +337,8 @@ class TensorBoardPlotter:
         # Draw text, full opacity
         #drawing.text(point, txt, font=fnt, fill=(255,255,255,255))
         
-        out_img = Image.alpha_composite(pil_img, txt_img)
+        #*****out_img = Image.alpha_composite(pil_img, txt_img)
+        out_img = Image.blend(pil_img, txt_img, 0.5)
 
         out_tns = transforms.ToTensor()(out_img).unsqueeze_(0)         
         #out_img.show()
