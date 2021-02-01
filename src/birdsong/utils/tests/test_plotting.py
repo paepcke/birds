@@ -120,10 +120,10 @@ class Test(unittest.TestCase):
         grid = plotter.write_img_grid(self.writer,
                                       data_root, 
                                       num_imgs=4,
-                                      unittesting=True)
+                                      unittesting=False)
 
-        #*****self.assertEqual(grid.shape, torch.Size([3, 220, 1650]))
-        #**********self.assertEqual(grid.shape, torch.Size([3, 220, 1650]))
+        self.assertEqual(grid.shape, torch.Size([3, 220, 1650]))
+
         print(f"Shape of grid is {grid.shape}")
         print(("Wrote a record to Tensorflow; hit \n",
                "ENTER when manually checked. Record \n",

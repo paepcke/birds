@@ -276,17 +276,19 @@ class TensorBoardPlotter:
         # Print <class>/file_name onto
         # each spectrogram:
         
-        marked_img_tns = []
+        marked_img_tns_list = []
         for i, (img_tns, class_idx) in enumerate(img_tns_list):
             class_name = img_folder.classes[class_idx]
             # img_folder.samples is [ (full_path, class_idx), (..., ...) ]:
             img_file_basename = os.path.basename(img_folder.samples[i][0])
-            marked_img_tns.append(
+            marked_img_tns_list.append(
                 self.print_onto_image(img_tns,
                                       f"{class_name}/{img_file_basename}" 
                                       ))
-
-        marked_img_tns = [tns_class_idx[0] for tns_class_idx in img_tns_list]
+        # Turn list of img tensors into
+        # a single tensor with first dim 
+        # being len of list:
+        marked_img_tns = torch.cat(marked_img_tns_list)
 
         # A 10px frame around each img:
         grid = make_grid(marked_img_tns, padding=10)
@@ -333,14 +335,14 @@ class TensorBoardPlotter:
         drawing = ImageDraw.Draw(txt_img)
         
         # Draw text, half opacity
-        drawing.text(point, txt, font=fnt, fill=(0,0,0,128))
+        drawing.text(point, txt, font=fnt)  #******, fill=(0,0,0,128))
         # Draw text, full opacity
         #drawing.text(point, txt, font=fnt, fill=(255,255,255,255))
         
         #*****out_img = Image.alpha_composite(pil_img, txt_img)
         out_img = Image.blend(pil_img, txt_img, 0.5)
 
-        out_tns = transforms.ToTensor()(out_img).unsqueeze_(0)         
+        out_tns = transforms.ToTensor()(out_img).unsqueeze_(0)
         #out_img.show()
         out_img.close()
 
