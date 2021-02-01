@@ -5,6 +5,7 @@ Created on Jan 25, 2021
 '''
 
 import os
+import random
 import shutil
 import unittest
 
@@ -219,18 +220,24 @@ class Test(unittest.TestCase):
         @return: a dict: {'truth': [int], 'pred' : [int]}
         '''
         
-        truth       = (torch.rand(1+num_classes)*10).int()
-        pred        = (torch.rand(1+num_classes)*10).int()
+        truth       = torch.randperm(num_classes)
+        pred        = torch.randperm(num_classes)
+        
+        # Number of predictions we need to 
+        # modify so they predict correctly:
         
         num_correct = round(num_classes * perc_correct + 0.5)
-        self.true_pos_idxs = torch.randperm(num_correct)
         
-        for true_pos_idx in self.true_pos_idxs:
-            pred[true_pos_idx] = truth[true_pos_idx]
+        # Pick num_correct random indices
+        # into the truth, and make the corresponding
+        # pred match:
+        
+        for _i in range(num_correct):
+            truth_pos = random.randint(0,num_classes-1)
+            pred[truth_pos] = truth[truth_pos]
+            
         return {'truth' : truth, 'pred' : pred}
-        
-        
-    
+
 # ------------------ Main ---------------
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

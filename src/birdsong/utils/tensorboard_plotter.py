@@ -100,26 +100,24 @@ class TensorBoardPlotter:
 
         cm_normed = self.calc_norm(conf_matrix)
         
-        # Use white text if squares are dark; otherwise black.
-        threshold = cm_normed.max() / 2.
-        num_rows, num_cols = cm_normed.shape
-        for i, j in itertools.product(range(num_rows), range(num_cols)):
-            color = "white" if cm_normed[i, j] > threshold else "black"
-            ax.text(j, i, 
-                    cm_normed[i, j], 
-                    horizontalalignment="center", 
-                    color=color)
-
-        # Add the legend of color gradations:
-        fig.colorbar(col_map.ScalarMappable(cmap=cmap), ax=ax)
-        cm_img = ax.imshow(cm_normed, 
-                           cmap=cmap,
-                           interpolation='nearest', 
-                           )
-        
-        
-
-        return ax
+        heatmap_ax = sns.heatmap(
+            cm_normed,
+            #*****vmin=0.0, vmax=1.0,
+            cmap=cmap,
+            annot=True,  # Do write percentages into cells
+            fmt='g',     # Avoid scientific notation
+            cbar=True,   # Do draw color bar legend
+            ax=ax,
+            xticklabels=class_names,
+            yticklabels=class_names,
+            linewidths=1,# Pixel,
+            linecolor='black'
+            )
+        heatmap_ax.set_xticklabels(heatmap_ax.get_xticklabels(), 
+                                   rotation = 45 
+                                   )
+        return heatmap_ax
+    
     #------------------------------------
     # calc_norm
     #-------------------
@@ -166,11 +164,10 @@ class TensorBoardPlotter:
         with np.errstate(divide='ignore', invalid='ignore'):
             #*****norm_cm = conf_matrix / sample_sizes_col_vec
             num_samples_col_vec = conf_matrix.sum(axis=1)[:, np.newaxis]
-            norm_cm = np.around(conf_matrix.astype('float') / num_samples_col_vec, 
-                                decimals=2)
+            norm_cm = ((conf_matrix.astype('float') / num_samples_col_vec)*100).astype(int)
             
         # Replace any nan's with -1:
-        norm_cm[np.isnan(norm_cm)] = -1
+        norm_cm[np.isnan(norm_cm)] = 0
         return norm_cm 
 
 #     #------------------------------------
