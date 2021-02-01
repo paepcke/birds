@@ -17,16 +17,21 @@ Created on Jan 25, 2021
 # from . import util
 # from .util import merge_kwargs, decode_bytes_if_necessary
 
+import itertools
 import os
+import socket, sys
 
-from matplotlib.figure import Figure
+from PIL import Image, ImageDraw, ImageFont
+from matplotlib import pyplot as plt
+from matplotlib import cm as col_map
 import torch
 from torchvision import transforms
 from torchvision.datasets.folder import ImageFolder, default_loader
 from torchvision.utils import make_grid
+
+import numpy as np
 import seaborn as sns
 
-from PIL import Image, ImageDraw, ImageFont
 
 #*****************
 #
@@ -35,8 +40,6 @@ from PIL import Image, ImageDraw, ImageFont
 # on Quatro or Quintus, and will send a trigger
 # to the Eclipse debugging service on the same
 # or different machine:
- 
-import socket,sys
 if socket.gethostname() in ('quintus', 'quatro'):
     # Point to where the pydev server 
     # software is installed on the remote
@@ -81,31 +84,69 @@ class TensorBoardPlotter:
                              title='Confusion Matrix'):
         
 
-        self.figure = Figure(figsize=(10, 5))
-        self.resize(400, 400)
+        # Subplot 111: array of subplots has
+        # 1 row, 1 col, and the requested axes
+        # is in position 1 (1-based):
+        # Need figsize=(10, 5) somewhere
+        fig, ax = plt.subplots()
+        cmap = col_map.Blues
+
+        fig.set_tight_layout(True)
+        fig.suptitle(title)
+        ax.set_xlabel('Actual species')
+        ax.set_ylabel('Predicted species')
+        ax.set_xticklabels(class_names, rotation=45)
+        ax.set_yticklabels(class_names)
+
+        cm_normed = self.calc_norm(conf_matrix)
         
-        # create confusion matrix and its peripherals
-        ax = self.figure.add_subplot(111)
-        ax.set_title(title)
-        ax = sns.heatmap(self.calc_norm(conf_matrix), 
-                         xticklabels=class_names, 
-                         yticklabels=class_names, 
-                         center=0.45)
-        ax.set_xlabel('actual species')
-        ax.set_ylabel('predicted species')
-        ax.tick_params(axis='x', labelrotation=90)
+        # Use white text if squares are dark; otherwise black.
+        threshold = cm_normed.max() / 2.
+        num_rows, num_cols = cm_normed.shape
+        for i, j in itertools.product(range(num_rows), range(num_cols)):
+            color = "white" if cm_normed[i, j] > threshold else "black"
+            ax.text(j, i, 
+                    cm_normed[i, j], 
+                    horizontalalignment="center", 
+                    color=color)
+
+        # Add the legend of color gradations:
+        fig.colorbar(col_map.ScalarMappable(cmap=cmap), ax=ax)
+        cm_img = ax.imshow(cm_normed, 
+                           cmap=cmap,
+                           interpolation='nearest', 
+                           )
+        
+        
 
         return ax
     #------------------------------------
     # calc_norm
     #-------------------
 
-    def calcNorm(self, conf_matrix, num_classes):
-        """
-        Calculates a normalized confusion matrix. Normalizes the 
-        confusion matrix for the last epoch by the number of samples each species has.
-        """
+    def calc_norm(self, conf_matrix):
+        '''
+        Calculates a normalized confusion matrix.
+        Normalizes by the number of samples that each 
+        species contributed to the confusion matrix.
+        Each cell in the returned matrix will be a
+        percentage. If no samples were present for a
+        particular class, the respective cells will
+        contain -1.
         
+        It is assumed that rows correspond to the classes 
+        truth labels, and cols to the classes of the
+        predictions.
+        
+        @param conf_matrix: confusion matrix to normalize
+        @type conf_matrix: numpy.ndarray[int]
+        @returned a new confusion matrix with cells replaced
+            by the percentage of time that cell's prediction
+            was made. Cells of classes without any samples in
+            the dataset will contain -1 
+        @rtype numpy.ndarray[float]
+        '''
+
         # Get the sum of each row, which is the number
         # of samples in that row's class. Then divide
         # each element in the row by that num of samples
@@ -114,9 +155,22 @@ class TensorBoardPlotter:
           
         # Sum the rows, and turn the resulting 
         # row vector into a column vector:
-        sample_sizes = conf_matrix.sum(axis=1).resize(num_classes, 1)
+        #****sample_sizes_row_vec = conf_matrix.sum(axis=1)
+        #****sample_sizes_col_vec = sample_sizes_row_vec[:, np.newaxis]
         
-        norm_cm = conf_matrix.float() / sample_sizes
+        # When a class had no samples at all,
+        # there will be divide-by-zero occurrences.
+        # Suppress related warnings. The respective
+        # cells will contain nan:
+        
+        with np.errstate(divide='ignore', invalid='ignore'):
+            #*****norm_cm = conf_matrix / sample_sizes_col_vec
+            num_samples_col_vec = conf_matrix.sum(axis=1)[:, np.newaxis]
+            norm_cm = np.around(conf_matrix.astype('float') / num_samples_col_vec, 
+                                decimals=2)
+            
+        # Replace any nan's with -1:
+        norm_cm[np.isnan(norm_cm)] = -1
         return norm_cm 
 
 #     #------------------------------------

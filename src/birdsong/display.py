@@ -154,7 +154,7 @@ class LogReader():
 # *************
 
         self.genTru()
-        self.calcNorm()
+        self.calc_norm()
         self.calcMAP()
 
     #------------------------------------
@@ -173,10 +173,10 @@ class LogReader():
                     self.tru[pred, truth] = 0
 
     #------------------------------------
-    # calcNorm 
+    # calc_norm 
     #-------------------
 
-    def calcNorm(self):
+    def calc_norm(self):
         self.normal = self.confusion.copy()
         self.normal[0:len(self.normal)-1][0:len(self.normal[0])-1] = 0
         for pred in range(len(self.confusion)):

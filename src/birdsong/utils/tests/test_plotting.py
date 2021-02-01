@@ -50,23 +50,24 @@ class Test(unittest.TestCase):
     # test_ 
     #-------------------
 
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_cm_creation(self):
         
         # Get dict {'truth' : <tensor>, 'pred' : <tensor>}
         # with ten classes, and 25% correct answers
         
         num_classes = 10
-        pred_outcome = self.classes10_corr0_25 = self.gen_pred_truth(num_classes,
-                                                                     0.25)
+        pred_outcome = self.gen_pred_truth(num_classes,
+                                           0.25)
+        # Rows will be Truths, cols will be Preds:
         conf_matrix = confusion_matrix(pred_outcome['truth'],
                                        pred_outcome['pred'],
                                        )
+        # Generate fantasy class names:
         class_names = [f'class_num-{idx}' for idx in range(num_classes)]
         
         plotter = TensorBoardPlotter()
-        cm_ax = plotter.fig_from_conf_matrix(self, 
-                                             conf_matrix,
+        cm_ax = plotter.fig_from_conf_matrix(conf_matrix,
                                              class_names,
                                              title='Confusion Matrix')
         
@@ -91,7 +92,7 @@ class Test(unittest.TestCase):
     # test_write_img_grid 
     #-------------------
     
-    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_write_img_grid(self):
         '''
         Test creating a grid of train images
@@ -201,9 +202,25 @@ class Test(unittest.TestCase):
 # ------------------ Utils ---------------
 
     def gen_pred_truth(self, num_classes, perc_correct):
+        '''
+        Given a number of classes, and a percentage 
+        of hypothetically correct predictions, generate
+        two sequences[int] of length num_classes: First,
+        a sequence that represents true target class labels. 
+        Second, a sequence that matches the truth labels
+        perc_correct number of times.
+
+        @param num_classes: number of hypothetical 
+            classes
+        @type num_classes: int
+        @param perc_correct: percentage of hypothetial
+            class predictions that are to match the truth
+        @type perc_correct: float
+        @return: a dict: {'truth': [int], 'pred' : [int]}
+        '''
         
-        truth       = (torch.rand(num_classes)*10).int()
-        pred        = (torch.rand(num_classes)*10).int()
+        truth       = (torch.rand(1+num_classes)*10).int()
+        pred        = (torch.rand(1+num_classes)*10).int()
         
         num_correct = round(num_classes * perc_correct + 0.5)
         self.true_pos_idxs = torch.randperm(num_correct)
