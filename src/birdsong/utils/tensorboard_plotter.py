@@ -6,6 +6,8 @@ Created on Jan 25, 2021
 import os
 import socket, sys
 
+from collections import Counter
+
 from PIL import Image, ImageDraw, ImageFont
 from matplotlib import pyplot as plt
 from matplotlib import cm as col_map
@@ -18,6 +20,7 @@ from torchvision.utils import make_grid
 import numpy as np
 import seaborn as sns
 
+from birdsong.rooted_image_dataset import SingleRootImageDataset
 
 #*****************
 #
@@ -61,168 +64,107 @@ class TensorBoardPlotter:
         self.logdir = logdir
 
     #------------------------------------
-    # fig_from_conf_matrix 
+    # conf_matrix_to_tensorboard 
     #-------------------
     
-    def fig_from_conf_matrix(self, 
-                             conf_matrix,
-                             class_names,
-                             title='Confusion Matrix'):
+    def conf_matrix_to_tensorboard(self,
+                                   writer,
+                                   conf_matrix,
+                                   class_names,
+                                   epoch=0,
+                                   title='Confusion Matrix'
+                                   ):
+        conf_matrix_fig = self.fig_from_conf_matrix(conf_matrix, 
+                                                    class_names, 
+                                                    title)
+        writer.add_figure(title, conf_matrix_fig, global_step=epoch)
+
+    #------------------------------------
+    # class_support_to_tensorboard
+    #-------------------
+
+    def class_support_to_tensorboard(self,
+                                     data_src, 
+                                     writer,
+                                     title='Class Support'):
         '''
-        Given a confusion matrix and class names,
-        return a matplotlib.pyplot axes with a
-        heatmap of the matrix.
+        Create a barchart showing number of samples
+        in each class. The chart is converted to
+        a tensor, and submitted to tensorboard.
+        The data_src may be a dataset in the 
+        pytorch sense. Or data_src may be a full path
+        the the root of a training data directory.
         
-        @param conf_matrix: nxn confusion matrix representing
-            rows:truth, cols:predicted for n classes
-        @type conf_matrix: numpy.ndarray
-        @param class_names: n class names to use for x/y labels
-        @type class_names: [str]
-        @param title: title at top of figure
+        @param img_folder: either a path to samples,
+            or a dataset
+        @type img_folder: {str | torch.utils.data.Dataset}
+        @param writer: a tensorboard summary writer
+        @type writer: tensorboard.SummaryWriter
+        @param title: optional title above the figure
         @type title: str
+        @return: dict {<class_name> : <num_samples_for_class_name>}
+            i.e. number of samples in each class. 
+        @rtype: {str : int}
         '''
 
-        # Subplot 111: array of subplots has
-        # 1 row, 1 col, and the requested axes
-        # is in position 1 (1-based):
-        # Need figsize=(10, 5) somewhere
+        if type(data_src) == str:
+            # Data source is file path to 
+            # root of training data. Create
+            # a dataset from that tree:
+            dataset = SingleRootImageDataset(data_src)
+        elif type(data_src) != SingleRootImageDataset:
+            raise ValueError(f"Data source must be path to data root, or a dataset, not {data_src}")
+        else:
+            dataset = data_src
+        
+        # Get sample classes ordered by sample_id
+        # from 0-num_samples:
+        #   array([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1])
+
+        sample_classes   = dataset.sample_classes()
+        
+        # Get dict: {<class_id> : <class_name>}
+        class_id_to_name = {class_id : class_name
+                            for class_name, class_id
+                            in dataset.class_to_id.items() 
+                            }
+        
+        # Get {<class_id> : <num_samples>}:
+        # Something like: Counter({0: 6, 1: 6})
+        
+        support = Counter(sample_classes)
+        barchart_class_names = np.array([])
+        for class_id in support.keys():
+            barchart_class_names = np.append(barchart_class_names, 
+                                             [class_id_to_name[class_id]])
+
+        barchart_counts = np.array(list(support.values()))
+        
+        # Make a horizontal chart, so class names are
+        # Y-axis labels:
+        y_pos = np.arange(len(barchart_class_names))
+        
         fig, ax = plt.subplots()
-        cmap = col_map.Blues
-
-        fig.set_tight_layout(True)
-        fig.suptitle(title)
-        ax.set_xlabel('Actual species')
-        ax.set_ylabel('Predicted species')
-
-        # Later matplotlib versions want us
-        # to use the mticker axis tick locator
-        # machinery:
-        ax.xaxis.set_major_locator(mticker.MaxNLocator('auto'))
-        ticks_loc = ax.get_xticks().tolist()
-        ax.xaxis.set_major_locator(mticker.FixedLocator(ticks_loc))
-        ax.set_xticklabels([class_name for class_name in ticks_loc],
-                           rotation=45)
+        fig.suptitle('Number of Samples in Each Class')
+        _bar_container = ax.barh(y_pos,
+                                 barchart_counts,  # Bar length (i.e. width) 
+                                 tick_label=barchart_class_names,
+                                 align='center')
+        ax.set_xlabel('Number of Samples')
         
-        ax.yaxis.set_major_locator(mticker.MaxNLocator('auto'))
-        ticks_loc = ax.get_yticks().tolist()
-        ax.yaxis.set_major_locator(mticker.FixedLocator(ticks_loc))
-        ax.set_yticklabels([class_name for class_name in ticks_loc])
-
-        cm_normed = self.calc_norm(conf_matrix)
+        # Convert matplotlib figure into 
+        # an image tensor for tensorboard:
         
-        heatmap_ax = sns.heatmap(
-            cm_normed,
-            #*****vmin=0.0, vmax=1.0,
-            cmap=cmap,
-            annot=True,  # Do write percentages into cells
-            fmt='g',     # Avoid scientific notation
-            cbar=True,   # Do draw color bar legend
-            ax=ax,
-            xticklabels=class_names,
-            yticklabels=class_names,
-            linewidths=1,# Pixel,
-            linecolor='black'
-            )
-        heatmap_ax.set_xticklabels(heatmap_ax.get_xticklabels(), 
-                                   rotation = 45 
-                                   )
-        return heatmap_ax
-    
-    #------------------------------------
-    # calc_norm
-    #-------------------
-
-    def calc_norm(self, conf_matrix):
-        '''
-        Calculates a normalized confusion matrix.
-        Normalizes by the number of samples that each 
-        species contributed to the confusion matrix.
-        Each cell in the returned matrix will be a
-        percentage. If no samples were present for a
-        particular class, the respective cells will
-        contain -1.
+        # The zero for global-step arg means
+        # associate fig with epoch 0:
+        writer.add_figure(title, fig, 0)
         
-        It is assumed that rows correspond to the classes 
-        truth labels, and cols to the classes of the
-        predictions.
-        
-        @param conf_matrix: confusion matrix to normalize
-        @type conf_matrix: numpy.ndarray[int]
-        @returned a new confusion matrix with cells replaced
-            by the percentage of time that cell's prediction
-            was made. Cells of classes without any samples in
-            the dataset will contain -1 
-        @rtype numpy.ndarray[float]
-        '''
-
-        # Get the sum of each row, which is the number
-        # of samples in that row's class. Then divide
-        # each element in the row by that num of samples
-        # to get the percentage of predictions that ended
-        # up in each cell:
-          
-        # Sum the rows, and turn the resulting 
-        # row vector into a column vector:
-        #****sample_sizes_row_vec = conf_matrix.sum(axis=1)
-        #****sample_sizes_col_vec = sample_sizes_row_vec[:, np.newaxis]
-        
-        # When a class had no samples at all,
-        # there will be divide-by-zero occurrences.
-        # Suppress related warnings. The respective
-        # cells will contain nan:
-        
-        with np.errstate(divide='ignore', invalid='ignore'):
-            #*****norm_cm = conf_matrix / sample_sizes_col_vec
-            num_samples_col_vec = conf_matrix.sum(axis=1)[:, np.newaxis]
-            norm_cm = ((conf_matrix.astype('float') / num_samples_col_vec)*100).astype(int)
-            
-        # Replace any nan's with -1:
-        norm_cm[np.isnan(norm_cm)] = 0
-        return norm_cm 
-
-    #------------------------------------
-    # clear 
-    #-------------------
-    
-    def clear(self):
-        '''
-        Clear confusion matrices from the 
-        plotter
-        '''
-        
-        self.conf_matrices = []
-
-    #------------------------------------
-    # plot_fig_to_tensorboard 
-    #-------------------
-    
-    def plot_fig_to_tensorboard(self, writer, fig, step):
-        '''
-        Takes a matplotlib figure handle and converts it using
-        canvas and string-casts to a numpy array that can be
-        visualized in TensorBoard using the add_image function
-        
-        @param writer: tensorboard summary writer
-        @type writer: TensorBoard.SummaryWriter
-        @param fig: matplotlib figure
-        @type fig: pyplot.Figure
-        @param step: epoch
-        @type step: int
-        '''
-    
-        # Draw figure on canvas
-        fig.canvas.draw()
-    
-        # Convert the figure to one long 1D numpy array, 
-        # and reshape the array:
-        img_1D = np.frombuffer(fig.canvas.tostring_rgb(), 
-                               dtype=np.uint8)
-        
-        # Want shape (3, width, height), where 3 is RGB:
-        img = img_1D.reshape((3,) + fig.canvas.get_width_height()[::-1])
-    
-        # Add figure in numpy "image" to TensorBoard writer
-        writer.add_image('Confusion_matrix', img, step)
+        support_dict = {class_name : num_samples
+                        for class_name, num_samples
+                        in zip(barchart_class_names, 
+                               barchart_counts)
+                        }
+        return support_dict
 
     #------------------------------------
     # write_img_grid 
@@ -323,6 +265,141 @@ class TensorBoardPlotter:
         writer.add_image('Train Examples', grid)
         return grid
 
+    #------------------------------------
+    # fig_from_conf_matrix 
+    #-------------------
+    
+    def fig_from_conf_matrix(self, 
+                             conf_matrix,
+                             class_names,
+                             title='Confusion Matrix'):
+        '''
+        Given a confusion matrix and class names,
+        return a matplotlib.pyplot axes with a
+        heatmap of the matrix.
+        
+        @param conf_matrix: nxn confusion matrix representing
+            rows:truth, cols:predicted for n classes
+        @type conf_matrix: numpy.ndarray
+        @param class_names: n class names to use for x/y labels
+        @type class_names: [str]
+        @param title: title at top of figure
+        @type title: str
+        @return: matplotlib figure with confusion
+            matrix heatmap.
+        @rtype: pyplot.Figure
+        '''
+
+        # Subplot 111: array of subplots has
+        # 1 row, 1 col, and the requested axes
+        # is in position 1 (1-based):
+        # Need figsize=(10, 5) somewhere
+        fig, ax = plt.subplots()
+        cmap = col_map.Blues
+
+        fig.set_tight_layout(True)
+        fig.suptitle(title)
+        ax.set_xlabel('Actual species')
+        ax.set_ylabel('Predicted species')
+
+        # Later matplotlib versions want us
+        # to use the mticker axis tick locator
+        # machinery:
+        ax.xaxis.set_major_locator(mticker.MaxNLocator('auto'))
+        ticks_loc = ax.get_xticks().tolist()
+        ax.xaxis.set_major_locator(mticker.FixedLocator(ticks_loc))
+        ax.set_xticklabels([class_name for class_name in ticks_loc],
+                           rotation=45)
+        
+        ax.yaxis.set_major_locator(mticker.MaxNLocator('auto'))
+        ticks_loc = ax.get_yticks().tolist()
+        ax.yaxis.set_major_locator(mticker.FixedLocator(ticks_loc))
+        ax.set_yticklabels([class_name for class_name in ticks_loc])
+
+        cm_normed = self.calc_conf_matrix_norm(conf_matrix)
+        
+        heatmap_ax = sns.heatmap(
+            cm_normed,
+            #*****vmin=0.0, vmax=1.0,
+            cmap=cmap,
+            annot=True,  # Do write percentages into cells
+            fmt='g',     # Avoid scientific notation
+            cbar=True,   # Do draw color bar legend
+            ax=ax,
+            xticklabels=class_names,
+            yticklabels=class_names,
+            linewidths=1,# Pixel,
+            linecolor='black'
+            )
+        heatmap_ax.set_xticklabels(heatmap_ax.get_xticklabels(), 
+                                   rotation = 45 
+                                   )
+        return fig
+
+
+    #------------------------------------
+    # calc_conf_matrix_norm
+    #-------------------
+
+    def calc_conf_matrix_norm(self, conf_matrix):
+        '''
+        Calculates a normalized confusion matrix.
+        Normalizes by the number of samples that each 
+        species contributed to the confusion matrix.
+        Each cell in the returned matrix will be a
+        percentage. If no samples were present for a
+        particular class, the respective cells will
+        contain -1.
+        
+        It is assumed that rows correspond to the classes 
+        truth labels, and cols to the classes of the
+        predictions.
+        
+        @param conf_matrix: confusion matrix to normalize
+        @type conf_matrix: numpy.ndarray[int]
+        @returned a new confusion matrix with cells replaced
+            by the percentage of time that cell's prediction
+            was made. Cells of classes without any samples in
+            the dataset will contain -1 
+        @rtype numpy.ndarray[float]
+        '''
+
+        # Get the sum of each row, which is the number
+        # of samples in that row's class. Then divide
+        # each element in the row by that num of samples
+        # to get the percentage of predictions that ended
+        # up in each cell:
+          
+        # Sum the rows, and turn the resulting 
+        # row vector into a column vector:
+        #****sample_sizes_row_vec = conf_matrix.sum(axis=1)
+        #****sample_sizes_col_vec = sample_sizes_row_vec[:, np.newaxis]
+        
+        # When a class had no samples at all,
+        # there will be divide-by-zero occurrences.
+        # Suppress related warnings. The respective
+        # cells will contain nan:
+        
+        with np.errstate(divide='ignore', invalid='ignore'):
+            #*****norm_cm = conf_matrix / sample_sizes_col_vec
+            num_samples_col_vec = conf_matrix.sum(axis=1)[:, np.newaxis]
+            norm_cm = ((conf_matrix.astype('float') / num_samples_col_vec)*100).astype(int)
+            
+        # Replace any nan's with -1:
+        norm_cm[np.isnan(norm_cm)] = 0
+        return norm_cm 
+
+    #------------------------------------
+    # clear 
+    #-------------------
+    
+    def clear(self):
+        '''
+        Clear confusion matrices from the 
+        plotter
+        '''
+        
+        self.conf_matrices = []
 
     #------------------------------------
     # print_onto_image 

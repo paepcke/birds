@@ -15,10 +15,10 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 
 from birdsong.utils.tensorboard_plotter import TensorBoardPlotter
-
+from birdsong.rooted_image_dataset import SingleRootImageDataset
 
 TEST_ALL = True
-#***** TEST_ALL = False
+#TEST_ALL = False
 
 class TestTensorBoardPlotter(unittest.TestCase):
 
@@ -28,14 +28,26 @@ class TestTensorBoardPlotter(unittest.TestCase):
         cls.tb_summary_dir = os.path.join(cls.curr_dir, 
                                           'tensorboard_summaries')
                                           
+        try:
+            shutil.rmtree(cls.tb_summary_dir)
+        except FileNotFoundError:
+            # Dir not existing is fine:
+            pass
         
-        if not os.path.exists(cls.tb_summary_dir):
-            os.makedirs(cls.tb_summary_dir)
-            
+        # Create dir for tensorboard summaries
+        os.makedirs(cls.tb_summary_dir)
+        
+        print(f"For most thorough testing, start tensorboard,")
+        print(f"if not already running. This can be done when ")
+        print(f"being prompted to check tensorboard:")
+        print(f"   tensorboard --logdir {cls.tb_summary_dir}")
+        
         cls.sample_spectrogram_path = os.path.join(
             cls.curr_dir,
             '../../tests/data/birds/DYSMEN_S/SONG_Dysithamnusmentalis5114773.png'
             )
+
+        cls.data_root = os.path.join(cls.curr_dir, '../../tests/data/cars')
 
     def setUp(self):
         self.writer = SummaryWriter(self.tb_summary_dir)
@@ -69,16 +81,15 @@ class TestTensorBoardPlotter(unittest.TestCase):
             print(f"Conf matrix to tensorboard: epoch {epoch}")
             # Get a 10x10 confusion matrix and ten
             # fake class names 
+
             class_names, conf_matrix = self.create_conf_matrix()
             
             plotter = TensorBoardPlotter()
-            cm_ax = plotter.fig_from_conf_matrix(conf_matrix,
-                                                 class_names,
-                                                 title='Confusion Matrix')
-    
-            plotter.plot_fig_to_tensorboard(self.writer, 
-                                            cm_ax.figure,
-                                            epoch)
+            plotter.conf_matrix_to_tensorboard(self.writer,
+                                               conf_matrix,
+                                               class_names,
+                                               epoch=epoch
+                                               )
         self.await_user_ack(f"Wrote conf matrix for tensorboard to\n" +\
                             f"{self.tb_summary_dir}.\n" +\
                             "Hit key when inspected:")
@@ -101,11 +112,6 @@ class TestTensorBoardPlotter(unittest.TestCase):
         	unittesting=False):
 
         '''
-        # This unittest is under the utils dir.
-        # The test img tree is under the main
-        # test dir:
-        
-        data_root = os.path.join(self.curr_dir, '../../tests/data/cars')
         
         # Test enough imgs in each dir
         # for the desired number of imgs
@@ -114,7 +120,7 @@ class TestTensorBoardPlotter(unittest.TestCase):
         # will be removed later.
         plotter = TensorBoardPlotter(self.tb_summary_dir)
         grid = plotter.write_img_grid(self.writer,
-                                      data_root, 
+                                      self.data_root, 
                                       num_imgs=4,
                                       unittesting=False)
 
@@ -153,7 +159,7 @@ class TestTensorBoardPlotter(unittest.TestCase):
         #    o On laptop: localhost:60006
         # 
 #         grid = plotter.write_img_grid(self.writer,
-#                                       data_root,
+#                                       self.data_root,
 #                                       num_imgs=4,
 #                                       img_height=128,
 #                                       img_width=512,
@@ -166,8 +172,6 @@ class TestTensorBoardPlotter(unittest.TestCase):
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_more_img_requests_than_available(self):
         
-        data_root = os.path.join(self.curr_dir, '../../tests/data/cars')
-        
         # Test enough imgs in each dir
         # for the desired number of imgs
         # to display. Write summaries to a tmp
@@ -175,10 +179,32 @@ class TestTensorBoardPlotter(unittest.TestCase):
         # will be removed later.
         plotter = TensorBoardPlotter(self.tb_summary_dir)
         grid = plotter.write_img_grid(self.writer,
-                                      data_root, 
+                                      self.data_root, 
                                       num_imgs=40,
                                       unittesting=False)
         self.assertEqual(grid.shape, Size([3,430,3290]))
+
+    #------------------------------------
+    # test_class_support_to_tensorboard 
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_class_support_to_tensorboard(self):
+        
+        plotter = TensorBoardPlotter(self.tb_summary_dir)
+        dataset = SingleRootImageDataset(self.data_root)
+        
+        support_dict = plotter.class_support_to_tensorboard(dataset,
+                                                            self.writer)
+        self.assertDictEqual(support_dict,
+                             {'audi' : 6,
+                              'bmw'  : 6
+                              })
+                             
+        self.await_user_ack("Wrote class support histogram to \n"+\
+                            f"{self.tb_summary_dir}.\n" +\
+                            "Hit key when inspected:")
+
 
     #------------------------------------
     # test_print_onto_image 

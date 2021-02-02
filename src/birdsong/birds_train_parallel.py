@@ -451,6 +451,14 @@ class BirdTrainer(object):
 
             self.setup_tensorboard(logdir=exp_info)
 
+            # Log a barchart of how many samples for
+            # each class:
+
+            self.tensorboard_plotter.class_support_to_tensorboard(
+                dataset,
+                self.writer_val
+                )
+
         # A stack to allow clear_gpu() to
         # remove all tensors from the GPU.
         # Requires that code below always
@@ -1163,12 +1171,14 @@ class BirdTrainer(object):
                     
         # Submit the confusion matrix image
         # to the tensorboard:
-        
-        self.tensorboard_plotter.fig_from_conf_matrix(epoch_results['epoch_conf_matrix'], 
-                                                      self.class_names,
-                                                      title=f"Confusion Matrix (Validation): Epoch{epoch}")
-        
-        
+        self.tensorboard_plotter.conf_matrix_to_tensorboard(
+            self.writer_val,
+            epoch_results['epoch_conf_matrix'], 
+            self.class_names,
+            self.epoch,
+            title=f"Confusion Matrix (Validation): Epoch{epoch}"
+            )
+
     #------------------------------------
     # train 
     #-------------------
@@ -2179,12 +2189,13 @@ class BirdTrainer(object):
         
         # Tensorboard image writing:
         self.tensorboard_plotter = TensorBoardPlotter(log_dir=logdir_val)
+        
         # Log a few example spectrograms to tensorboard:
         self.tensorboard_plotter.write_img_grid(self.writer_val,
                                                 self.root_train_test_data,
                                                 len(self.class_names), # Num of train examples
                                                 )
-                                          
+
         self.log.info(f"Tensorboard train log will be in {logdir_train}")
         self.log.info(f"Tensorboard validation log will be in {logdir_val}")
 
