@@ -1398,6 +1398,7 @@ class BirdTrainer(object):
                 sys.exit(0)
 
         finally:
+            # If two times cnt-c, exit no matter what
             if hard_stop:
                 sys.exit(0)
             if self.device == self.cuda:
@@ -1421,9 +1422,9 @@ class BirdTrainer(object):
                 
                 self.cleanup()
                 self.log.info(f"Process with node{self.rank} exiting.")
-                sys.exit(0)
 
         self.log.info("Training finished")
+        sys.exit(0)
 
 
     #------------------------------------
@@ -2188,7 +2189,7 @@ class BirdTrainer(object):
         self.writer_val   = SummaryWriter(log_dir=logdir_val) 
         
         # Tensorboard image writing:
-        self.tensorboard_plotter = TensorBoardPlotter(log_dir=logdir_val)
+        self.tensorboard_plotter = TensorBoardPlotter(logdir=logdir_val)
         
         # Log a few example spectrograms to tensorboard:
         self.tensorboard_plotter.write_img_grid(self.writer_val,
