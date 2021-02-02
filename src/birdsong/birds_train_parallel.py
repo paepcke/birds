@@ -47,6 +47,7 @@ from birdsong.rooted_image_dataset import MultiRootImageDataset
 from birdsong.utils import learning_phase
 from birdsong.utils.dottable_config import DottableConfigParser
 from birdsong.utils.learning_phase import LearningPhase
+from birdsong.utils.tensorboard_plotter import TensorBoardPlotter
 import numpy as np
 import torch.distributed as dist
 import torch.nn as nn
@@ -354,6 +355,7 @@ class BirdTrainer(object):
                                                         batch_size=batch_size 
                                                         )
         self.num_classes = len(dataset.class_id_list())
+        self.class_names = dataset.class_names()
         
         self.log.debug(f"***** Number of samples in loader: {len(self.dataloader)}")
 
@@ -1158,7 +1160,15 @@ class BirdTrainer(object):
                                                global_step=epoch)
                 except AttributeError:
                     self.log.err(f"No validation result tensorboard writer in process {self.rank}")
-
+                    
+        # Submit the confusion matrix image
+        # to the tensorboard:
+        
+        self.tensorboard_plotter.fig_from_conf_matrix(epoch_results['epoch_conf_matrix'], 
+                                                      self.class_names,
+                                                      title=f"Confusion Matrix (Validation): Epoch{epoch}")
+        
+        
     #------------------------------------
     # train 
     #-------------------
@@ -2166,6 +2176,14 @@ class BirdTrainer(object):
         # Default dest dir: ./runs
         self.writer_train = SummaryWriter(log_dir=logdir_train) 
         self.writer_val   = SummaryWriter(log_dir=logdir_val) 
+        
+        # Tensorboard image writing:
+        self.tensorboard_plotter = TensorBoardPlotter(log_dir=logdir_val)
+        # Log a few example spectrograms to tensorboard:
+        self.tensorboard_plotter.write_img_grid(self.writer_val,
+                                                self.root_train_test_data,
+                                                len(self.class_names), # Num of train examples
+                                                )
                                           
         self.log.info(f"Tensorboard train log will be in {logdir_train}")
         self.log.info(f"Tensorboard validation log will be in {logdir_val}")

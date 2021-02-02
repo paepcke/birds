@@ -3,27 +3,13 @@ Created on Jan 25, 2021
 
 @author: paepcke
 '''
-# from textwrap import wrap
-# 
-# import itertools
-# import matplotlib
-# from sklearn.metrics import confusion_matrix
-# 
-# import numpy as np
-# #****import tensorflow as tf
-# import torch
-# 
-# from . import figure
-# from . import util
-# from .util import merge_kwargs, decode_bytes_if_necessary
-
-import itertools
 import os
 import socket, sys
 
 from PIL import Image, ImageDraw, ImageFont
 from matplotlib import pyplot as plt
 from matplotlib import cm as col_map
+import matplotlib.ticker as mticker
 import torch
 from torchvision import transforms
 from torchvision.datasets.folder import ImageFolder, default_loader
@@ -82,7 +68,19 @@ class TensorBoardPlotter:
                              conf_matrix,
                              class_names,
                              title='Confusion Matrix'):
+        '''
+        Given a confusion matrix and class names,
+        return a matplotlib.pyplot axes with a
+        heatmap of the matrix.
         
+        @param conf_matrix: nxn confusion matrix representing
+            rows:truth, cols:predicted for n classes
+        @type conf_matrix: numpy.ndarray
+        @param class_names: n class names to use for x/y labels
+        @type class_names: [str]
+        @param title: title at top of figure
+        @type title: str
+        '''
 
         # Subplot 111: array of subplots has
         # 1 row, 1 col, and the requested axes
@@ -95,8 +93,20 @@ class TensorBoardPlotter:
         fig.suptitle(title)
         ax.set_xlabel('Actual species')
         ax.set_ylabel('Predicted species')
-        ax.set_xticklabels(class_names, rotation=45)
-        ax.set_yticklabels(class_names)
+
+        # Later matplotlib versions want us
+        # to use the mticker axis tick locator
+        # machinery:
+        ax.xaxis.set_major_locator(mticker.MaxNLocator('auto'))
+        ticks_loc = ax.get_xticks().tolist()
+        ax.xaxis.set_major_locator(mticker.FixedLocator(ticks_loc))
+        ax.set_xticklabels([class_name for class_name in ticks_loc],
+                           rotation=45)
+        
+        ax.yaxis.set_major_locator(mticker.MaxNLocator('auto'))
+        ticks_loc = ax.get_yticks().tolist()
+        ax.yaxis.set_major_locator(mticker.FixedLocator(ticks_loc))
+        ax.set_yticklabels([class_name for class_name in ticks_loc])
 
         cm_normed = self.calc_norm(conf_matrix)
         
@@ -170,74 +180,6 @@ class TensorBoardPlotter:
         norm_cm[np.isnan(norm_cm)] = 0
         return norm_cm 
 
-#     #------------------------------------
-#     # plot_confusion_matrix 
-#     #-------------------
-# 
-#     def plot_confusion_matrix(self, 
-#                               correct_labels, 
-#                               predict_labels, 
-#                               labels, 
-#                               title='Confusion matrix', 
-#                               tensor_name = 'MyFigure/image', 
-#                               normalize=False):
-#         ''' 
-#         Parameters:
-#             correct_labels                  : These are your true classification categories.
-#             predict_labels                  : These are you predicted classification categories
-#             labels                          : This is a list of labels which will be used to display the axix labels
-#             title='Confusion matrix'        : Title for your matrix
-#             tensor_name = 'MyFigure/image'  : Name for the output summay tensor
-#         
-#         Returns:
-#             summary: TensorFlow summary, ready for addition to 
-#                      Tensorboard as an image.
-#         
-#         Other itema to note:
-#             - Depending on the number of category and the data , you may have to 
-#               modify the figzize, font sizes etc. 
-#             - Currently, some of the ticks dont line up due to rotations.
-#             
-#         All conf matrices are stored at the class
-#         level. So each epoch can generate a CM. All
-#         can be submitted to Tensorboard, and animated. 
-#         '''
-#         cm = confusion_matrix(correct_labels, predict_labels, labels=labels)
-#         if normalize:
-#             cm = cm.astype('float')*10 / cm.sum(axis=1)[:, np.newaxis]
-#             cm = np.nan_to_num(cm, copy=True)
-#             cm = cm.astype('int')
-#         
-#         np.set_printoptions(precision=2)
-#         ###fig, ax = matplotlib.figure.Figure()
-#         
-#         fig = matplotlib.figure.Figure(figsize=(7, 7), dpi=320, facecolor='w', edgecolor='k')
-#         ax = fig.add_subplot(1, 1, 1)
-#         im = ax.imshow(cm, cmap='Oranges')
-#         
-#         classes = [re.sub(r'([a-z](?=[A-Z])|[A-Z](?=[A-Z][a-z]))', r'\1 ', x) for x in labels]
-#         classes = ['\n'.join(wrap(l, 40)) for l in classes]
-#         
-#         tick_marks = np.arange(len(classes))
-#         
-#         ax.set_xlabel('Predicted', fontsize=7)
-#         ax.set_xticks(tick_marks)
-#         c = ax.set_xticklabels(classes, fontsize=4, rotation=-90,  ha='center')
-#         ax.xaxis.set_label_position('bottom')
-#         ax.xaxis.tick_bottom()
-#         
-#         ax.set_ylabel('True Label', fontsize=7)
-#         ax.set_yticks(tick_marks)
-#         ax.set_yticklabels(classes, fontsize=4, va ='center')
-#         ax.yaxis.set_label_position('left')
-#         ax.yaxis.tick_left()
-#         
-#         for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
-#             ax.text(j, i, format(cm[i, j], 'd') if cm[i,j]!=0 else '.', horizontalalignment="center", fontsize=6, verticalalignment='center', color= "black")
-#         fig.set_tight_layout(True)
-#         summary = tfplot.figure.to_summary(fig, tag=tensor_name)
-#         return summary
-
     #------------------------------------
     # clear 
     #-------------------
@@ -249,6 +191,38 @@ class TensorBoardPlotter:
         '''
         
         self.conf_matrices = []
+
+    #------------------------------------
+    # plot_fig_to_tensorboard 
+    #-------------------
+    
+    def plot_fig_to_tensorboard(self, writer, fig, step):
+        '''
+        Takes a matplotlib figure handle and converts it using
+        canvas and string-casts to a numpy array that can be
+        visualized in TensorBoard using the add_image function
+        
+        @param writer: tensorboard summary writer
+        @type writer: TensorBoard.SummaryWriter
+        @param fig: matplotlib figure
+        @type fig: pyplot.Figure
+        @param step: epoch
+        @type step: int
+        '''
+    
+        # Draw figure on canvas
+        fig.canvas.draw()
+    
+        # Convert the figure to one long 1D numpy array, 
+        # and reshape the array:
+        img_1D = np.frombuffer(fig.canvas.tostring_rgb(), 
+                               dtype=np.uint8)
+        
+        # Want shape (3, width, height), where 3 is RGB:
+        img = img_1D.reshape((3,) + fig.canvas.get_width_height()[::-1])
+    
+        # Add figure in numpy "image" to TensorBoard writer
+        writer.add_image('Confusion_matrix', img, step)
 
     #------------------------------------
     # write_img_grid 
@@ -277,7 +251,7 @@ class TensorBoardPlotter:
             include in the grid. If None: all images
         @type num_imgs: {None | int}
         @param class_sample_file_pairs: <class>/<img_file_name> for
-            individual images
+            individual images if random choice is not wanted.
         @type class_sample_file_pairs: {None | str | [str]}
         @param img_height: height of all images
         @type img_height: int (pixels)
@@ -355,6 +329,25 @@ class TensorBoardPlotter:
     #-------------------
     
     def print_onto_image(self, img_src, txt, point=(10,10)):
+        '''
+        Given an image, writes given text onto the image.
+        Returns a tensor of the new image. Acceptable as image
+        sources are:
+        
+            o File path to jpg, png, etc.
+            o A tensor
+            o A PIL image
+            
+        @param img_src: image, or a way to get the image
+        @type img_src: {str | Tensor | PIL}
+        @param txt: text to be printed onto the image
+        @type txt: str
+        @param point: where to place the text. In pixels,
+            origin upper left
+        @type point: [int,int]
+        @return: new image with text 'burned' onto it
+        @rtype: Tensor
+        '''
         
         if type(img_src) == str:
             # Image is a path:
@@ -375,10 +368,10 @@ class TensorBoardPlotter:
         else:
             pil_img = img_src
             
-        # Make a blank image for the text, initialized 
-        # to transparent text color:
-        #*****txt_img = Image.new("RGBA", pil_img.size, (255,255,255,0))
-        txt_img = Image.new("L", pil_img.size, 255)
+        # Make a blank image for the text.
+        # Match the mode (RGB/RGBA/L/...):
+        
+        txt_img = Image.new(pil_img.mode, pil_img.size, 255)
         
         # get a font
         fnt = ImageFont.load_default()

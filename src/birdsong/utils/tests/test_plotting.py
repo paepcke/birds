@@ -17,10 +17,10 @@ from torch.utils.tensorboard import SummaryWriter
 from birdsong.utils.tensorboard_plotter import TensorBoardPlotter
 
 
-#******TEST_ALL = True
-TEST_ALL = False
+TEST_ALL = True
+#***** TEST_ALL = False
 
-class Test(unittest.TestCase):
+class TestTensorBoardPlotter(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -43,51 +43,45 @@ class Test(unittest.TestCase):
     def tearDown(self):
         pass
 
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tb_summary_dir)
+#*****************
+#     @classmethod
+#     # Remove the tensorboard summaries
+#     # that were created during the tests:
+#     def tearDownClass(cls):
+#         shutil.rmtree(cls.tb_summary_dir)
+#*****************
     
     #------------------------------------
-    # test_ 
+    # test_conf_mat_to_tensorboard 
     #-------------------
 
-    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    def test_cm_creation(self):
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_conf_mat_to_tensorboard (self):
         
-        # Get dict {'truth' : <tensor>, 'pred' : <tensor>}
-        # with ten classes, and 25% correct answers
+        # Add 3 random confusion matrices
+        # to tensorboard. Then pause for user
+        # input. User can check whether a slider
+        # appeared in tensorboard to run through
+        # the matrices:
         
-        num_classes = 10
-        pred_outcome = self.gen_pred_truth(num_classes,
-                                           0.25)
-        # Rows will be Truths, cols will be Preds:
-        conf_matrix = confusion_matrix(pred_outcome['truth'],
-                                       pred_outcome['pred'],
-                                       )
-        # Generate fantasy class names:
-        class_names = [f'class_num-{idx}' for idx in range(num_classes)]
-        
-        plotter = TensorBoardPlotter()
-        cm_ax = plotter.fig_from_conf_matrix(conf_matrix,
-                                             class_names,
-                                             title='Confusion Matrix')
-        
-        
-        cm_img = plotter.plot_confusion_matrix(
-                pred_outcome['truth'],
-                pred_outcome['pred'],
-                class_names,
-                title="Test Figure",
-                tensor_name="TestFig/image",
-                normalize=False
-                )
-
-        #img_d_summary_writer.add_summary(img_d_summary, current_step)
-        self.writer.add_image('conf_matrix', 
-                              cm_img,
-                              global_step=1
-                              )
-        print('foo') 
+        for epoch in range(4):
+            
+            print(f"Conf matrix to tensorboard: epoch {epoch}")
+            # Get a 10x10 confusion matrix and ten
+            # fake class names 
+            class_names, conf_matrix = self.create_conf_matrix()
+            
+            plotter = TensorBoardPlotter()
+            cm_ax = plotter.fig_from_conf_matrix(conf_matrix,
+                                                 class_names,
+                                                 title='Confusion Matrix')
+    
+            plotter.plot_fig_to_tensorboard(self.writer, 
+                                            cm_ax.figure,
+                                            epoch)
+        self.await_user_ack(f"Wrote conf matrix for tensorboard to\n" +\
+                            f"{self.tb_summary_dir}.\n" +\
+                            "Hit key when inspected:")
         
     #------------------------------------
     # test_write_img_grid 
@@ -126,11 +120,10 @@ class Test(unittest.TestCase):
 
         self.assertEqual(grid.shape, torch.Size([3, 220, 1650]))
 
-        print(f"Shape of grid is {grid.shape}")
-        print(("Wrote a record to Tensorflow; hit \n",
-               "ENTER when manually checked. Record \n",
-               "will then be deleted."))
-        input("Waiting...")
+        self.await_user_ack(f"Wrote tensorboard sample imgs to\n" +\
+                            f"{self.tb_summary_dir}.\n" +\
+                            "Hit key when inspected:"
+                            )
 
         # Do it again, this time for real.
         # To test:
@@ -185,7 +178,7 @@ class Test(unittest.TestCase):
                                       data_root, 
                                       num_imgs=40,
                                       unittesting=False)
-        self.assertEqual(grid.shape, Size([3,43,3290]))
+        self.assertEqual(grid.shape, Size([3,430,3290]))
 
     #------------------------------------
     # test_print_onto_image 
@@ -199,6 +192,7 @@ class Test(unittest.TestCase):
                                            "Hello World"
                                            )
         self.assertEqual(img_tns.shape, torch.Size([1, 4, 128, 512]))
+
 
 # ------------------ Utils ---------------
 
@@ -237,6 +231,63 @@ class Test(unittest.TestCase):
             pred[truth_pos] = truth[truth_pos]
             
         return {'truth' : truth, 'pred' : pred}
+
+    #------------------------------------
+    # create_conf_matrix
+    #-------------------
+    
+    def create_conf_matrix(self, 
+                               num_classes=10,
+                               perc_correct=0.25):
+        '''
+        Creates and returns random confusion
+        matrix, and corresponding fake class
+        names.
+        
+        @returns tuple of class name list, and the
+           confusion matrix
+        @rtype ([str], np.ndarray)
+        '''
+        
+        # Get dict {'truth' : <tensor>, 'pred' : <tensor>}
+        # with ten classes, and 25% correct answers
+        
+        pred_outcome = self.gen_pred_truth(num_classes,
+                                           perc_correct)
+        # Rows will be Truths, cols will be Preds:
+        conf_matrix = confusion_matrix(pred_outcome['truth'],
+                                       pred_outcome['pred'],
+                                       )
+        # Generate fantasy class names:
+        class_names = [f'class_num-{idx}' 
+                       for idx 
+                       in range(num_classes)]
+        
+        return class_names, conf_matrix
+        
+    #------------------------------------
+    # await_user_ack 
+    #-------------------
+    
+    def await_user_ack(self, msg=None):
+        '''
+        Print given msg or the default msg,
+        then block till user hits any key.
+        
+        Used when images are sent to tensorboard,
+        and user needs to check them. The end
+        of the test suite will remove the tensorflow
+        event files; so then it would be too late. 
+        
+        @param msg: prompt to print
+        @type msg: {str | None}
+        '''
+        if msg is None:
+            msg = "Wrote a record to Tensorboard; hit \n" +\
+                  "ENTER when manually checked. Record \n" +\
+                  "will then be deleted."
+        print(msg)
+        input("Waiting...")
 
 # ------------------ Main ---------------
 if __name__ == "__main__":
