@@ -22,6 +22,7 @@ batch_size    = 32
 # The 'k' in k=fold cross validation:
 num_folds     = 10
 seed          = 42
+optimizer     = SGD
 kernel_size   = 7
 lr            = 0.001
 momentum      = 0.9
