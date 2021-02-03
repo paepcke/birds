@@ -856,7 +856,7 @@ class BirdTrainer(object):
         if optimizer_name not in [opt_name.lower() 
                                       for opt_name 
                                       in self.available_optimizers]:
-            msg = f"Optimizer '{optimizer_name}' in config file not implemented; use {self.available_optimizers}")
+            msg = f"Optimizer '{optimizer_name}' in config file not implemented; use {self.available_optimizers}"
             self.log.err(msg)
             raise ValueError(msg)
             
@@ -1172,13 +1172,18 @@ class BirdTrainer(object):
                     self.log.err(f"No validation result tensorboard writer in process {self.rank}")
                     
         # Submit the confusion matrix image
-        # to the tensorboard:
+        # to the tensorboard. In the following:
+        # do not provide a separate title, such as
+        #  title=f"Confusion Matrix (Validation): Epoch{epoch}"
+        # That will put each matrix into its own slot
+        # on tensorboard, rather than having a time slider
+        
         self.tensorboard_plotter.conf_matrix_to_tensorboard(
             self.writer_misc,
             epoch_results['epoch_conf_matrix'], 
             self.class_names,
-            self.epoch,
-            title=f"Confusion Matrix (Validation): Epoch{epoch}"
+            epoch=self.epoch
+            
             )
 
     #------------------------------------
