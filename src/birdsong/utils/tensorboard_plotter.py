@@ -383,7 +383,7 @@ class TensorBoardPlotter:
         with np.errstate(divide='ignore', invalid='ignore'):
             #*****norm_cm = conf_matrix / sample_sizes_col_vec
             num_samples_col_vec = conf_matrix.sum(axis=1)[:, np.newaxis]
-            norm_cm = ((conf_matrix.float() / num_samples_col_vec)*100).int()
+            norm_cm = ((conf_matrix.astype('float') / num_samples_col_vec)*100).astype('int')
             
         # Replace any nan's with -1:
         norm_cm[np.isnan(norm_cm)] = 0
