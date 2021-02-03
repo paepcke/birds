@@ -11,7 +11,8 @@ import utils
 import logging as log
 
 # BACKGROUND_NOISE_PATH = "/Users/lglik/Code/birds/data_augmentation/lib/default_background"
-BACKGROUND_NOISE_PATH = "data_augmentation/lib/default_background/"
+# BACKGROUND_NOISE_PATH = "data_augmentation/lib/default_background/"
+BACKGROUND_NOISE_PATH = "data_augmentation/lib/Noise_Recordings/"
 DESTINATION_PATH = "/home/data/birds/NEW_BIRDSONG/EXTRA_FILTERED/CALL_FILTERED_FULL_AUG"
 SOURCE_FOLDER_PATH = "/home/data/birds/NEW_BIRDSONG/EXTRA_FILTERED/CALL_FILTERED_TIMESHIFT"
 SPECIES = ""
@@ -85,6 +86,13 @@ def add_background(in_dir, out_dir, species=None, len_noise_to_add=5.0, verbose 
     for file_name in os.listdir(in_dir):
         if species is None or species in file_name:
             for background_name in os.listdir(BACKGROUND_NOISE_PATH):
+                # Check if augmented file exists
+                output_path = os.path.join(out_dir, file_name[:-len(".wav")]) + "_" + background_name
+                if os.path.exists(output_path):
+                    ans = input(f"Do you want to rewrite {output_path}? [y/N]  ")
+                    if ans not in ["y", "yes"]:
+                        continue
+
                 log.info(f"Adding {background_name} to {file_name}.")
                 # We will be working with 1 second as the smallest unit of time
                 # load all of both wav files and determine the length of each
@@ -102,6 +110,7 @@ def add_background(in_dir, out_dir, species=None, len_noise_to_add=5.0, verbose 
                 noise_duration = librosa.get_duration(noise, noise_sr)
                 if noise_duration < len_noise_to_add:
                     log.info(f"Duration:{noise_duration} < len_noise_to_add:{len_noise_to_add}. Will only add {noise_duration}s of noise")
+                    samples_per_segment = len(noise)
                 elif noise_duration > len_noise_to_add:  # randomly choose noise segment
                     samples_per_segment = int(new_sr * len_noise_to_add)  # this is the number of samples per 5 seconds
                     subsegment_start = random.randint(0, len(noise) - samples_per_segment)
@@ -131,8 +140,7 @@ def add_background(in_dir, out_dir, species=None, len_noise_to_add=5.0, verbose 
 
                 assert(new_duration == orig_duration)
                 # output the new wav data to a file
-                librosa.output.write_wav(os.path.join(out_dir, file_name[:-len(".wav")])
-                                         + "_" + background_name[:len(file_name) - 4], new_record, new_sr)
+                librosa.output.write_wav(output_path, new_record, new_sr)
 
 
 if __name__ == '__main__':
