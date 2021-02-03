@@ -442,6 +442,7 @@ class BirdTrainer(object):
             timestamp = timestamp.replace(':', '_')
             
             exp_info = (f"Exp{timestamp}_lr_{self.config.Training.lr}_" +
+                        f"opt_{self.config.Training.optimizer}_"
                         f"bs_{self.config.Training.batch_size}_" +
                         f"kernel_{self.config.Training.kernel_size}_" +
                         f"folds_{self.config.Training.num_folds}_" +
@@ -456,7 +457,7 @@ class BirdTrainer(object):
 
             self.tensorboard_plotter.class_support_to_tensorboard(
                 dataset,
-                self.writer_val
+                self.writer_misc
                 )
 
         # A stack to allow clear_gpu() to
@@ -841,7 +842,7 @@ class BirdTrainer(object):
         momentum = config.Training.getfloat('momentum', 0.9)
         
         try:
-            optimizer_name = config['optimizer']
+            optimizer_name = config['optimizer'].lower()
         except KeyError:
             # Not specified in config file; use default:
             optimizer = optim.SGD(model.parameters(), 
@@ -850,25 +851,26 @@ class BirdTrainer(object):
             return optimizer
         
         # Make case insensitive:
-        optimizer_name_low = optimizer_name.lower()
+        optimizer_name = optimizer_name.lower()
         
-        if optimizer_name_low not in [opt_name.lower() 
+        if optimizer_name not in [opt_name.lower() 
                                       for opt_name 
                                       in self.available_optimizers]:
-            self.log.err(f"Optimizer '{optimizer_name}' in config file not implemented; use {self.available_optimizers}")
-            sys.exit(1)
+            msg = f"Optimizer '{optimizer_name}' in config file not implemented; use {self.available_optimizers}")
+            self.log.err(msg)
+            raise ValueError(msg)
             
-        if optimizer_name_low == 'adam':
+        if optimizer_name == 'adam':
             optimizer = optim.Adam(model.parameters(),lr=lr)
             return optimizer
         
-        if optimizer_name_low == 'SGD':
+        if optimizer_name == 'SGD':
             self.optimizer = optim.SGD(model.parameters(), 
                                        lr=lr,
                                        momentum=momentum)
             return optimizer
 
-        if optimizer_name_low == 'rmsprop':
+        if optimizer_name == 'rmsprop':
             self.optimizer = optim.RMSprop(model.parameters(), 
                                            lr=lr,
                                            momentum=momentum)
@@ -1172,7 +1174,7 @@ class BirdTrainer(object):
         # Submit the confusion matrix image
         # to the tensorboard:
         self.tensorboard_plotter.conf_matrix_to_tensorboard(
-            self.writer_val,
+            self.writer_misc,
             epoch_results['epoch_conf_matrix'], 
             self.class_names,
             self.epoch,
@@ -2178,15 +2180,19 @@ class BirdTrainer(object):
 
         logdir_train     = os.path.join(logdir, 'train')
         logdir_val       = os.path.join(logdir, 'validate')
+        logdir_misc      = os.path.join(logdir, 'misc')
         
         if not os.path.isdir(logdir_train):
             os.makedirs(logdir_train)
         if not os.path.isdir(logdir_val):
             os.makedirs(logdir_val)
+        if not os.path.isdir(logdir_misc):
+            os.makedirs(logdir_misc)
         
         # Default dest dir: ./runs
         self.writer_train = SummaryWriter(log_dir=logdir_train) 
         self.writer_val   = SummaryWriter(log_dir=logdir_val) 
+        self.writer_misc  = SummaryWriter(log_dir=logdir_misc)
         
         # Tensorboard image writing:
         self.tensorboard_plotter = TensorBoardPlotter(logdir=logdir_val)
