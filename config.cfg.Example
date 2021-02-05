@@ -1,3 +1,9 @@
+# Controlling how the classifier training
+# runs.
+
+# Boolean quantities may be indicated by
+# Yes/No, True/False, 1/0
+
 [Paths]
 
 # Root of the data/test files:
@@ -40,6 +46,15 @@ show_alive    = 30
 # machines:
 
 seed          = 42
+
+# When running distributed, only the master process
+# (rank 0) log measurement results. But when
+# multiple GPUs are used for independent runs,
+# such as for hyperparameter exploration, then
+# you want all processes logging their result to
+# tensorboard
+
+all_procs_log = False
 
 # Communication used for inter process/machine
 # communication during parallel training.

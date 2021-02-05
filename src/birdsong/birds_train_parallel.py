@@ -434,7 +434,10 @@ class BirdTrainer(object):
                                 self.config.Training.getint('batch_size'),
                                 json_log_dir=performance_log_dir
                                 )
-        if self.rank == 0:
+        # If this process is to report results,
+        # set up tensorboard reporting:
+        
+        if self.rank == 0 or self.config.getboolean('Parallelism', 'all_procs_log'):
             timestamp = datetime.datetime.now().isoformat()
             # Remove the msecs part:
             timestamp = re.sub(r'[.][0-9]{6}', '', timestamp)
@@ -1329,7 +1332,7 @@ class BirdTrainer(object):
                     # Update the json based result record
                     # in the file system:
                     
-                    if self.rank == 0:
+                    if self.rank == 0 or self.config.getboolean('Parallelism', 'all_procs_log'):
                         self.record_json_display_results(self.epoch)
                         self.record_tensorboard_results(self.epoch)
                     

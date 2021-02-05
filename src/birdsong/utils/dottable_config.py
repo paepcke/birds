@@ -3,12 +3,14 @@ Created on Dec 19, 2020
 
 @author: paepcke
 '''
+from configparser import ConfigParser
 import os, sys
+
+from birdsong.utils.dottable_map import DottableMap
+
 packet_root = os.path.abspath(__file__.split('/')[0])
 sys.path.insert(0,packet_root)
 
-from configparser import ConfigParser
-from birdsong.utils.dottable_map import DottableMap
 
 class DottableConfigParser(DottableMap):
     '''
@@ -51,8 +53,8 @@ class DottableConfigParser(DottableMap):
                  os.path.abspath(os.path.join('/Users/doe/code', '/Users/doe/code'))                  
                   --> '/Users/doe/code'
                   
-        o Methods getint(), getboolean(), getfloat(), which 
-          convert the strings in config options to the desired
+        o Methods getint(), getboolean(), getfloat() and others, 
+          which convert the strings in config options to the desired
           types.
             
     '''
@@ -65,17 +67,27 @@ class DottableConfigParser(DottableMap):
     # __init__ 
     #-------------------
 
-    def __init__(self, conf_path):
+    def __init__(self, conf_src):
         '''
-        Constructor
+        Allow subclasses to pass either
+        a path to a config file, or an
+        already made config structure
+
+        @param conf_src: file path to config file,
+            or instance of ConfigParser
+        @type conf_src: {src | ConfigParser}
         '''
-        self.config = ConfigParser()
-        self.config.read(conf_path)
+        
+        if type(conf_src) == str:
+            build_in_config = ConfigParser()
+            build_in_config.read(conf_src)
+        else:
+            build_in_config = conf_src
             
-        for sec_name in self.config.sections():
-            self[sec_name] = DottableMap(self.config[sec_name])
+        for sec_name in build_in_config.sections():
+            self[sec_name] = DottableMap(build_in_config[sec_name])
             
-        self.sections = self.config.sections
+        self.sections = build_in_config.sections
             
     #------------------------------------
     # sections 

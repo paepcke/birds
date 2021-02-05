@@ -9,8 +9,11 @@ used.
 '''
 class DottableMap(dict):
     """
+    Flattens dicts; adds entries to resulting single dict with
+    the kwargs.
+    
     Example:
-    m = Map({'first_name': 'Eduardo'}, last_name='Pool', age=24, sports=['Soccer'])
+    m = DottableMap({'first_name': 'Eduardo'}, last_name='Pool', age=24, sports=['Soccer'])
     """
     def __init__(self, *args, **kwargs):
         super(DottableMap, self).__init__(*args, **kwargs)
