@@ -11,6 +11,7 @@ from json.decoder import JSONDecodeError as JSONError
 import os
 import socket
 import sys
+import copy
 
 from birdsong.birds_train_parallel import BirdTrainer
 from birdsong.utils.neural_net_config import NeuralNetConfig
@@ -30,7 +31,10 @@ class TrainScripRunner(object):
     # Constructor 
     #-------------------
 
-    def __init__(self, hparms_spec, starting_config_src):
+    def __init__(self, 
+                 hparms_spec, 
+                 starting_config_src,
+                 unittesting=False):
         '''
         Specifications expected like this
         *Ordered* dict (i.e. sequence of 
@@ -54,10 +58,16 @@ class TrainScripRunner(object):
         self.WORLD_SIZE = 0
         
         starting_config = NeuralNetConfig(starting_config_src)
+        if unittesting:
+            # Leave calling of the methods below
+            # to the unittests
+            return
+        
         self.gpu_landscape = self.obtain_world_map(starting_config)
         
         the_run_dicts   = self.get_runs_hparm_specs(hparms_spec)
-        the_run_configs = self.gen_configurations(starting_config, the_run_dicts)
+        the_run_configs = self.gen_configurations(starting_config, 
+                                                  the_run_dicts)
         self.run_configurations(the_run_configs) 
         
     #------------------------------------
@@ -156,9 +166,14 @@ class TrainScripRunner(object):
             script to run
         @rtype: [DottableConfigParser]
         '''
-
+        
+        configs = []
         for conf_dict in config_dicts:
-            
+            conf_copy = copy.copy(config)
+            for param_name, val in conf_dict.items():
+                conf_copy[param_name] = val
+            configs.append(conf_copy)
+        return configs
 
     #------------------------------------
     # obtain_world_map 
@@ -370,11 +385,6 @@ class TrainScripRunner(object):
     
     def run_configurations(self, run_configs):
         pass
-
-
-        
-        
-
 
 # ------------------------ Main ------------
 if __name__ == '__main__':

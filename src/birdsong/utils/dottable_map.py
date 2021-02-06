@@ -7,6 +7,8 @@ https://stackoverflow.com/questions/2352181/how-to-use-a-dot-to-access-members-o
 Extends dictionaries so that dot notation can be
 used.
 '''
+import copy
+
 class DottableMap(dict):
     """
     Flattens dicts; adds entries to resulting single dict with
@@ -42,6 +44,11 @@ class DottableMap(dict):
     def __delitem__(self, key):
         super(DottableMap, self).__delitem__(key)
         del self.__dict__[key]
+        
+    def __copy__(self):
+        new_dottable_map = DottableMap()
+        for key, val in self.items():
+            new_dottable_map[key] = copy.copy(val)
 
     def getint(self, key, default=None):
         try:

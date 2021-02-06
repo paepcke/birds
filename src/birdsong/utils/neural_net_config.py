@@ -33,20 +33,20 @@ class NeuralNetConfig(DottableConfigParser):
 			 momentum      = 0.9
     '''
     
-    NEURAL_NET_ATTRS = [
-            'min_epochs',
-            'max_epochs',
-            'batch_size',
-            'num_folds',
-            'optimizer',
-            'loss_fn',
-            'weighted',
-            'kernel_size',
-            'lr',
-            'momentum',
-            'seed',
-            'all_procs_log'
-            ]
+    NEURAL_NET_ATTRS = {
+            'min_epochs' : 'Training',
+            'max_epochs' : 'Training',
+            'batch_size' : 'Training',
+            'num_folds'  : 'Training',
+            'optimizer'  : 'Training',
+            'loss_fn'    : 'Training',
+            'weighted'   : 'Training',
+            'kernel_size': 'Training',
+            'lr'         : 'Training',
+            'momentum'   : 'Training',
+            'seed'       : 'Parallelism',
+            'all_procs_log' : 'Parallelism'
+            }
 
     #------------------------------------
     # Constructor 
@@ -70,23 +70,44 @@ class NeuralNetConfig(DottableConfigParser):
         '''
 
         if type(conf_src) == str:
-            build_in_config = ConfigParser()
-            build_in_config.read(conf_src)
+            # Use the Python ConfigParser class
+            # to parse the config file:
+            built_in_content = ConfigParser()
+            built_in_content.read(conf_src)
         else:
-            build_in_config = conf_src
-            
-        for sec_name in build_in_config.sections():
-            self[sec_name] = DottableMap(build_in_config[sec_name])
-            
-        self.sections = build_in_config.sections
-        self.build_in_config = build_in_config
+            built_in_content = conf_src
+        
+        # Copy the parameter/value pairs from the
+        # config structure into this instance's
+        # dict data struct. The dicts are DottableMap
+        # instances to allow dot notation:
+        
+        for sec_name in built_in_content.sections():
+            self[sec_name] = DottableMap({parm_name : parm_val 
+                              for parm_name,parm_val 
+                              in built_in_content[sec_name].items()}
+                              )
 
+        # Guarantee presence of some sections
+        # that are minimally needed for neural nets:
+        
         if 'Training' not in self.sections():
             self.add_section('Training')
         if 'Parallelism' not in self.sections():
             self.add_section('Parallelism')
 
+        # Create coinvenience properties
+        # (getters and setters) for known
+        # nn parameters (listed in NEURAL_NET_ATTRS:
+        
         self.define_nn_properties()
+
+    #------------------------------------
+    # sections 
+    #-------------------
+    
+    def sections(self):
+        return list(self.keys())
         
     #------------------------------------
     # define_nn_properties 
@@ -94,10 +115,12 @@ class NeuralNetConfig(DottableConfigParser):
     
     def define_nn_properties(self):
         
-        for prop_name in self.NEURAL_NET_ATTRS:
+        for prop_name in self.NEURAL_NET_ATTRS.keys():
             fset = NeuralNetConfig.__dict__[f"set_{prop_name}"]
-            fget = lambda self, prop_name: self[prop_name]
-            self.__dict__[prop_name] = property(fget, fset, f"A neural net property: {prop_name}")
+            fget = self.__getattr__
+            self.__dict__[prop_name] = property(fget, 
+                                                fset, 
+                                                f"A neural net property: {prop_name}")
         
     #------------------------------------
     # add_section 
@@ -111,9 +134,7 @@ class NeuralNetConfig(DottableConfigParser):
         @param sec_name: name of new config section
         @type sec_name: str
         '''
-
         self[sec_name] = DottableMap({})
-        self.build_in_config.add_section(sec_name)
 
     #------------------------------------
     # __setattr__
@@ -137,15 +158,127 @@ class NeuralNetConfig(DottableConfigParser):
         @param new_value: new value to set
         @type new_value: Any
         '''
-        if param_name in NeuralNetConfig.NEURAL_NET_ATTRS:
+        if param_name in NeuralNetConfig.NEURAL_NET_ATTRS.keys():
             prop = self.__dict__[param_name]
             prop.fset(self, new_value)
-            #******** Need a reader; just the default;
-            #         Then continue building configs in
-            #         launch
-            prop.fget(self)
         else:
             super().__setattr__(param_name, new_value)
+
+    #------------------------------------
+    # __getattr__
+    #-------------------
+
+    def __getattr__(self, param_name):
+        '''
+        
+        Called whenever 
+        
+          <NeuralNetConfig-obj>.prop_name
+          
+        is executed. Method checks whether 
+        the property is one of the special neural net
+        related parameter names. If so, the fget
+        method of the property with the same name
+        is invoked. Else, defer to parent.
+        
+        @param param_name: name of property
+        @type param_name: str
+        @return: value of property
+        @rtype: Any
+        '''
+        if param_name in NeuralNetConfig.NEURAL_NET_ATTRS.keys():
+            section_nm = NeuralNetConfig.NEURAL_NET_ATTRS[param_name]
+            return self[section_nm][param_name]
+        else:
+            return super().__getattr__(param_name)
+
+    #------------------------------------
+    # __delattr__
+    #-------------------
+    
+    def __delattr__(self, attr_name):
+        pass
+
+    #------------------------------------
+    # __copy__ 
+    #-------------------
+    
+    def __copy__(self):
+        # Create a new instance through
+        # the regular init, providing this
+        # NeuralNetConfig config as source
+        # from which to copy everything:
+        
+        new_copy = NeuralNetConfig(self)
+        return new_copy
+
+    #------------------------------------
+    # _eq_ 
+    #-------------------
+
+    def __eq__(self, other):
+        '''
+        Called when '==' or '!='
+        are invoked. Python automatically
+        takes the inverse of this method's
+        result for '!='
+        
+        For equality, all dicts that make
+        up the config sections must be equal,
+        and both instances must have the same
+        number of sections
+        
+        @param other: instance to compare against
+        @type other: NeuralNetConfig
+        @return: True for equality, False for not
+        @rtype: bool
+        '''
+        
+        sec_dicts_this = [self[sec_name]
+                          for sec_name
+                          in self.sections()
+                          ]
+        sec_dicts_other = [other[sec_name]
+                           for sec_name
+                           in other.sections()
+                           ]
+        
+        if len(sec_dicts_this) != len(sec_dicts_other):
+            return False
+        
+        # All the sections dicts need to 
+        # be equal for the two NeuralNetConfig
+        # instances to be equal:
+        
+        is_eq = (sum([dict_self == (dict_other)
+                      for dict_self, dict_other
+                      in zip(sec_dicts_this, sec_dicts_other)
+                      ])) == len(sec_dicts_this)
+        
+        return is_eq
+
+
+    #------------------------------------
+    # __str__ 
+    #-------------------
+    
+    def __str__(self):
+        section_names = self.sections()
+        if len(section_names) > 3:
+            show_names = ','.join(section_names[:3])
+        else:
+            show_names = ','.join(section_names)
+        the_str = f"<NeuralNetConfig ({show_names})>"
+        return the_str
+
+    #------------------------------------
+    # __repr__ 
+    #-------------------
+    
+    def __repr__(self):
+        
+        id_str = hex(id(self))
+        return f"<NeuralNetConfig {id_str}>"
 
     # ---------------- Setters ----------
 
