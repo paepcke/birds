@@ -4,7 +4,9 @@ Created on Feb 4, 2021
 @author: paepcke
 '''
 import copy
+import io
 import os
+import tempfile
 import unittest
 
 from birdsong.utils.neural_net_config import NeuralNetConfig
@@ -15,6 +17,11 @@ TEST_ALL = True
 
 class NeuralNetConfigTest(unittest.TestCase):
 
+
+    @classmethod
+    def setUpClass(cls):
+        cls.curr_dir = os.path.dirname(__file__)
+        
 
     def setUp(self):
         cfg_file = os.path.join(os.path.dirname(__file__), 
@@ -107,7 +114,7 @@ class NeuralNetConfigTest(unittest.TestCase):
         # shouldn't be (content-wise) equal to
         # the original:
         
-        conf_copy = copy.copy(self.config)
+        conf_copy = self.config.copy()
         self.assertTrue(conf_copy == self.config)
         
         # But if we add a section to the copy
@@ -127,6 +134,66 @@ class NeuralNetConfigTest(unittest.TestCase):
         self.assertEqual(sorted(self.config.sections()), 
                          sorted(['Paths', 'Training', 'Parallelism'])
                                 )
+
+    #------------------------------------
+    # test_to_json 
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_to_json(self):
+
+        json_str = self.config.to_json()
+        expected = '{"Paths": {"my_path": "/foo/bar.txt", "roots": "[/foo/bar.txt, blue.jpg, 10, 3.14]", "toots": "/foo/bar.txt, blue.jpg, 10, 3.14"}, "Training": {"train_str": "resnet18", "train_int": "5", "train_float": "3.14159", "train_yes": "yes", "train_yescap": "Yes", "train_1": "1", "train_on": "On", "train_no": "no", "train_0": "0", "train_off": "off"}, "Parallelism": {}}'
+        self.assertEqual(json_str, expected)
+        
+        str_stream  = io.StringIO()
+        full_stream = self.config.to_json(str_stream)
+        expected = full_stream.getvalue()
+        self.assertEqual(json_str, expected)
+        
+        # For writing to file, use a temp file
+        # that is destroyed when closed:
+        try:
+            tmp_file = tempfile.NamedTemporaryFile(dir=self.curr_dir,
+                                                   suffix='.json',
+                                                   delete=False
+                                                   )
+            tmp_file.close()
+            with open(tmp_file.name, 'w') as fd:
+                fd.write('foobar')
+            
+            with self.assertRaises(FileExistsError):
+                self.config.to_json(tmp_file.name)
+                
+        finally:
+            tmp_file.close()
+            os.remove(tmp_file.name)
+    
+        try:
+            tmp_file = tempfile.NamedTemporaryFile(dir=self.curr_dir,
+                                                   suffix='.json',
+                                                   delete=False
+                                                   )
+            tmp_file.close()
+            self.config.to_json(tmp_file.name,
+                                check_file_exists=False
+                                )
+
+        finally:
+            tmp_file.close()
+            os.remove(tmp_file.name)
+
+    #------------------------------------
+    # test_from_json 
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_from_json(self):
+        
+        json_str = self.config.to_json()
+        
+        new_inst = self.config.from_json(json_str)
+        self.assertTrue(new_inst == self.config)
 
 # -------------- Main -----------------
 if __name__ == "__main__":

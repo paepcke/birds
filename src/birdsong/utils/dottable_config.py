@@ -79,15 +79,15 @@ class DottableConfigParser(DottableMap):
         '''
         
         if type(conf_src) == str:
-            build_in_config = ConfigParser()
-            build_in_config.read(conf_src)
+            built_in_config = ConfigParser()
+            built_in_config.read(conf_src)
         else:
-            build_in_config = conf_src
+            built_in_config = conf_src
             
-        for sec_name in build_in_config.sections():
-            self[sec_name] = DottableMap(build_in_config[sec_name])
+        for sec_name in built_in_config.sections():
+            self[sec_name] = DottableMap(built_in_config[sec_name])
             
-        self.sections = build_in_config.sections
+        self.sections = built_in_config.sections
             
     #------------------------------------
     # sections 

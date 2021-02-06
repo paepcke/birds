@@ -5,6 +5,9 @@ Created on Feb 4, 2021
 '''
 
 from configparser import ConfigParser
+import io
+import json
+import os
 
 from birdsong.utils.dottable_config import DottableConfigParser
 from birdsong.utils.dottable_map import DottableMap
@@ -69,20 +72,14 @@ class NeuralNetConfig(DottableConfigParser):
         @type conf_src: {str | DottableConfigParser}
         '''
 
-        if type(conf_src) == str:
-            # Use the Python ConfigParser class
-            # to parse the config file:
-            built_in_content = ConfigParser()
-            built_in_content.read(conf_src)
-        else:
-            built_in_content = conf_src
+        built_in_content, section_names = self.process_init_info(conf_src)
         
         # Copy the parameter/value pairs from the
         # config structure into this instance's
         # dict data struct. The dicts are DottableMap
         # instances to allow dot notation:
         
-        for sec_name in built_in_content.sections():
+        for sec_name in section_names:
             self[sec_name] = DottableMap({parm_name : parm_val 
                               for parm_name,parm_val 
                               in built_in_content[sec_name].items()}
@@ -137,80 +134,87 @@ class NeuralNetConfig(DottableConfigParser):
         self[sec_name] = DottableMap({})
 
     #------------------------------------
-    # __setattr__
-    #-------------------
-
-    def __setattr__(self, param_name, new_value):
-        '''
-        
-        Called whenever 
-        
-          <NeuralNetConfig-obj>.prop_name = value
-          
-        is executed. Method checks whether 
-        the property is one of the special neural net
-        related parameter names. If so, the fset
-        method of the property with the same name
-        is invoked. Else, defer to parent.
-        
-        @param param_name: name of property
-        @type param_name: str
-        @param new_value: new value to set
-        @type new_value: Any
-        '''
-        if param_name in NeuralNetConfig.NEURAL_NET_ATTRS.keys():
-            prop = self.__dict__[param_name]
-            prop.fset(self, new_value)
-        else:
-            super().__setattr__(param_name, new_value)
-
-    #------------------------------------
-    # __getattr__
-    #-------------------
-
-    def __getattr__(self, param_name):
-        '''
-        
-        Called whenever 
-        
-          <NeuralNetConfig-obj>.prop_name
-          
-        is executed. Method checks whether 
-        the property is one of the special neural net
-        related parameter names. If so, the fget
-        method of the property with the same name
-        is invoked. Else, defer to parent.
-        
-        @param param_name: name of property
-        @type param_name: str
-        @return: value of property
-        @rtype: Any
-        '''
-        if param_name in NeuralNetConfig.NEURAL_NET_ATTRS.keys():
-            section_nm = NeuralNetConfig.NEURAL_NET_ATTRS[param_name]
-            return self[section_nm][param_name]
-        else:
-            return super().__getattr__(param_name)
-
-    #------------------------------------
-    # __delattr__
+    # to_json 
     #-------------------
     
-    def __delattr__(self, attr_name):
-        pass
+    def to_json(self, file_info=None, check_file_exists=True):
+        '''
+        Convert this NeuralNetConfig structure
+        to JSON, write:
+        
+            o to a string and return or
+            o write to a provided IOStream handle
+            o write to a provided file path
+            
+        When writing to a file, intermediate directories
+        are created if necessary. 
+        
+        If a file path is provided, check_file_exists
+        is True, and the file already exists, FileExistsError
+        is raised. If the file exists, and check_file_exists
+        is False, the existing file is overwritten.
+        
+        @param file_info: If None, return a json string.
+            If a StringIO handle, fill the stream and 
+            return it. Else, must be a file path where to
+            write the JSON
+        @type file_info: {None | str | StringIO}
+        @param check_file_exists: whether or not to raise
+            exception upon destination file existence
+        @type check_file_exists: bool
+        @return: JSON string, a StringIO filled with the
+            JSON, or None if writing to a file
+        @rtype: {str | StringIO | None}
+        @raise FileExistsError: if file exists and check_file_exists
+            is True
+        '''
+        
+        if file_info is None:
+            return json.dumps(self)
+        
+        if type(file_info) == io.StringIO:
+            json.dump(self, file_info)
+            return file_info
+        else:
+            # File name: check existence
+            if check_file_exists and os.path.exists(file_info):
+                raise FileExistsError()
+            try:
+                os.makedirs(os.path.dirname(file_info))
+            except FileExistsError:
+                pass
+            with open(file_info, 'w') as fd:
+                json.dump(self, fd)
+
+        return None
 
     #------------------------------------
-    # __copy__ 
+    # from_json 
     #-------------------
     
-    def __copy__(self):
-        # Create a new instance through
-        # the regular init, providing this
-        # NeuralNetConfig config as source
-        # from which to copy everything:
+    def from_json(self, json_str):
+        '''
+        Given a json string that represents
+        a NeuralNetConfig instance, reconstitute
+        that instance and return it.
         
-        new_copy = NeuralNetConfig(self)
-        return new_copy
+        @param json_str: json string
+        @type json_str: str
+        @return: a reconsituted NeuralNetConfig instance
+        @rtype: NeuralNetConfig
+        '''
+        
+        content_info = json.loads(json_str)
+        new_inst = NeuralNetConfig(content_info)
+        return new_inst
+
+    #------------------------------------
+    # copy 
+    #-------------------
+    
+    def copy(self):
+        new_inst = NeuralNetConfig(self)
+        return new_inst
 
     #------------------------------------
     # _eq_ 
@@ -279,6 +283,19 @@ class NeuralNetConfig(DottableConfigParser):
         
         id_str = hex(id(self))
         return f"<NeuralNetConfig {id_str}>"
+
+    #------------------------------------
+    # __setattr__ 
+    #-------------------
+    
+    def __setattr__(self, prop_name, new_val):
+        if prop_name in self.NEURAL_NET_ATTRS.keys():
+            section_dict = self[self.NEURAL_NET_ATTRS[prop_name]]
+            section_dict[prop_name] = new_val
+            
+        else:
+            super().__setattr__(prop_name, new_val)
+
 
     # ---------------- Setters ----------
 
@@ -404,4 +421,59 @@ class NeuralNetConfig(DottableConfigParser):
         conf_dict = self.Parallelism
         conf_dict['all_procs_log'] = new_val
 
+# ------------------------- Utilities ----------
 
+    def process_init_info(self, conf_src):
+        '''
+        Given config information in one of several
+        formats, create an intermediate representation
+        that the __init__() method can then turn into
+        a true NeuralNetConfig instance. Input options:
+           
+           1 Filename, which is expected to point to
+                 a valid config file
+           2 A dict structure that mimics the internal
+                 struct of a NeuralNetConfig instance:
+                    {<section_name1> : {param_name : param_val,...}
+                     <section_name2> : {param_name : param_val,...}
+                     }
+           3 An existing NeuralNetConfig instance
+           
+        Returns a structure that behaves as in 2 above,
+        and a list of section names. Often those will
+        be the same as the keys of the returned outer dict.
+        But not always. 
+        
+        @param conf_src: configuration content
+        @type conf_src: {str | dict | NeuralNetConfig}
+        @return dict of dict with outer dict being
+            section names
+        @rtype: dict
+        '''
+        
+        if type(conf_src) == str:
+            # A file name.
+            # Use the Python ConfigParser class
+            # to parse the config file:
+            built_in_content = ConfigParser()
+            built_in_content.read(conf_src)
+            section_names = built_in_content.sections()
+            
+        elif type(conf_src) == dict:
+            # Dict of sections, each section being
+            # another dict with atomic values:
+            for val in conf_src.values():
+                if type(val) != dict:
+                    raise TypeError("Only dict of dicts allowed for dict structure source")
+                
+            built_in_content = conf_src
+            section_names = list(built_in_content.keys())
+            
+        elif type(conf_src) != NeuralNetConfig:
+            raise TypeError("Only file paths, dict-of-dict, or a NeuralNetConfig instance are allowed")
+        else:
+            # Creating a copy from an existing NeuralNetConfig.
+            built_in_content = conf_src
+            section_names = built_in_content.sections()
+    
+        return built_in_content, section_names
