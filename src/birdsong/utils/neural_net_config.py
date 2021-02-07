@@ -192,7 +192,8 @@ class NeuralNetConfig(DottableConfigParser):
     # from_json 
     #-------------------
     
-    def from_json(self, json_str):
+    @classmethod
+    def from_json(cls, json_str):
         '''
         Given a json string that represents
         a NeuralNetConfig instance, reconstitute

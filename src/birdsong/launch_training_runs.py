@@ -11,10 +11,10 @@ from json.decoder import JSONDecodeError as JSONError
 import os
 import socket
 import sys
-import copy
 
 from birdsong.birds_train_parallel import BirdTrainer
 from birdsong.utils.neural_net_config import NeuralNetConfig
+import subprocess
 
 
 # ------------------------ Specialty Exceptions --------
@@ -135,7 +135,7 @@ class TrainScripRunner(object):
     def gen_configurations(self, config, config_dicts):
         '''
         Takes a list of dicts, and returns a list
-        of DottableConfigParser instances. Each dict
+        of NeuralNetConfig instances. Each dict
         contains one hyperparameter settings combination
         that is to be tested. Such as:
              [{'lr': 0.001,
@@ -158,18 +158,18 @@ class TrainScripRunner(object):
         @param config: a configuration with
             all settings; only the hyperparameter 
             settings will be modified
-        @type config: DottableConfigParser
+        @type config: NeuralNetConfig
         @param config_dicts: one dict of hyperparm-name : value
             for each process to run independently
         @type config_dicts: [{str : Any}]
         @return: list of configurations for the classifier
             script to run
-        @rtype: [DottableConfigParser]
+        @rtype: [NeuralNetConfig]
         '''
         
         configs = []
         for conf_dict in config_dicts:
-            conf_copy = copy.copy(config)
+            conf_copy = config.copy()
             for param_name, val in conf_dict.items():
                 conf_copy[param_name] = val
             configs.append(conf_copy)
@@ -384,7 +384,175 @@ class TrainScripRunner(object):
     #-------------------
     
     def run_configurations(self, run_configs):
-        pass
+        '''
+        The set of launches from this method differs
+        from what the launch_scripts() method does
+        launch_birds_training.py. Here each training
+        process (i.e. invocation of the training script)
+        is indendent, and trains on all data, rather
+        than splitting the train set across multiple
+        GPUS/Machines. 
+        
+        Use world_map.json to know how many, and which 
+        GPUs this machine is to use.
+        
+        Each copy of the training script is told:
+        
+        #*****    o MASTER_ADDR  # Where to reach the coordinating process
+        #*****    o MASTER_PORT  # Corresponding port
+            o RANK         # The copy's sequence number, which is
+                           # Unique across all participating machines
+            o LOCAL_RANK   # Which of this machine's GPU to use (0-origin)
+            o WORLD_SIZE   # How many GPUs are used on all machines together
+            o GPUS_USED_THIS_MACHINE # Number of GPUs *used* on this
+                                     # machine, according to the world_map.
+
+        '''
+        
+        # Compute a unique number for each GPU within
+        # the group of nodes (machines). Starting with
+        # the master node's first GPU as 0 (if master node
+        # has a GPU.
+        # The resulting GPU layout is assigned to
+        # variable gpu_landscape: 
+        #
+        #     {<machine_name> : 
+
+        # This machine's range of ranks:
+        rank_range              = self.gpu_landscape[self.hostname]['rank_range']
+        this_machine_gpu_ids    = self.gpu_landscape[self.hostname]['gpu_device_ids']
+        min_rank_this_machine   = self.gpu_landscape[self.hostname]['start_rank']
+
+        local_rank = 0
+        # Map from process object to rank (for debug msgs):
+        self.who_is_who = OrderedDict()
+        for rank in rank_range: 
+
+            cmd = self.training_script_start_cmd(rank, 
+                                                 len(this_machine_gpu_ids),
+                                                 local_rank,
+                                                 min_rank_this_machine,
+                                                 self.launch_args,
+                                                 self.script_args
+                                                 )
+                
+            # Copy stdin, and give the copy to the subprocess.
+            # This enables the subprocess to ask user whether
+            # to save training state in case of a cnt-C:
+            newstdin = os.fdopen(os.dup(sys.stdin.fileno()))
+            
+            # Spawn one training script.
+
+            process = subprocess.Popen(cmd,
+                                       stdin=newstdin,
+                                       stdout=None,  # Script inherits this launch
+                                       stderr=None   # ... script's stdout/stderr  
+                                       )
+            self.who_is_who[process] = rank
+            local_rank += 1
+        
+        if not self.launch_args['quiet']:
+            print(f"Node {self.hostname} {os.path.basename(sys.argv[0])}: Num processes launched: {len(self.who_is_who)}")
+            if self.am_master_node:
+                print(f"Awaiting {self.WORLD_SIZE} process(es) to finish...")
+            else:
+                print(f"Awaiting {self.my_gpus} process(es) to finish...")
+        
+        failed_processes = []
+        try:
+            for process in self.who_is_who.keys():
+                process.wait()
+                if process.returncode != 0:
+                    failed_processes.append(process)
+                continue
+        except KeyboardInterrupt:
+            # Gently kill the training scripts:
+            self.handle_cnt_c()
+            pass # See which processes get the interrupt
+            
+        num_failed = len(failed_processes)
+        if num_failed > 0:
+            print(f"Number of failed training scripts: {num_failed}")
+            for failed_process in failed_processes:
+                train_script   = self.launch_args['training_script']
+                script_rank    = self.who_is_who[failed_process]
+                msg = (f"Training script {train_script} (rank {script_rank}) encountered error(s); see logfile")
+                print(msg)
+
+    #------------------------------------
+    # training_script_start_cmd 
+    #-------------------
+
+    def training_script_start_cmd(self, 
+                                  rank,
+                                  gpus_used_this_machine,
+                                  local_rank,
+                                  min_rank_this_machine,
+                                  launch_args,
+                                  script_args):
+        '''
+        From provided information, creates a legal 
+        command string for starting the training script.
+        
+        @param rank: rank of the script; i.e. it's process' place
+            in the sequence of all train script processes
+            across all machines
+        @type rank: int
+        @param gpus_used_this_machine: number of GPU devices to 
+            be used, according to the world_map; may be less than
+            number of available GPUs
+        @type gpus_used_this_machine: int
+        @param local_rank: index into the local sequence of GPUs
+            for for the GPU that the script is to use
+        @type local_rank: int
+        @param min_rank_this_machine: the lowest of the ranks among
+            the training scripts on this machine
+        @type min_rank_this_machine: int
+        @param launch_args: command line arguments intended for the
+            launch script, as opposed to being destined for the 
+            train script
+        @type launch_args: {str : Any}
+        @param script_args: additional args for the train script
+        @type script_args: {str : Any}
+        '''
+
+        # Build the shell command line,
+        # starting with 'python -u':
+        cmd = [sys.executable, "-u"]
+
+        cmd.append(launch_args['training_script'])
+
+        # Add the args for the script that were
+        # in the command line:
+        for arg_name in script_args.keys():
+            script_arg_val = script_args[arg_name]
+            if script_arg_val is None or arg_name == 'config':
+                # Skip over non-specified CLI args:
+                continue
+            cmd.append(f"--{arg_name}={script_args[arg_name]}")
+
+        # Add the 'secret' args that tell the training
+        # script all the communication parameters:
+        
+        cmd.extend([f"--MASTER_ADDR={self.MASTER_ADDR}",
+                    f"--MASTER_PORT={self.MASTER_PORT}",
+                    f"--RANK={rank}",
+                    f"--LOCAL_RANK={local_rank}",
+                    f"--MIN_RANK_THIS_MACHINE={min_rank_this_machine}",
+                    f"--WORLD_SIZE={self.WORLD_SIZE}",
+                    f"--GPUS_USED_THIS_MACHINE={gpus_used_this_machine}"
+                    ])
+        
+        # Finally, the obligatory non-option arg
+        # to the training script: the configuration
+        # file:
+        
+        config_json_or_file_name = script_args['config']
+        cmd.append(config_json_or_file_name)
+        
+        self.log.debug(f"****** Launch: the cmd is {cmd}")
+        return cmd
+
 
 # ------------------------ Main ------------
 if __name__ == '__main__':

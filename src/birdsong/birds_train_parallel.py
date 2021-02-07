@@ -47,6 +47,7 @@ from birdsong.rooted_image_dataset import MultiRootImageDataset
 from birdsong.utils import learning_phase
 from birdsong.utils.dottable_config import DottableConfigParser
 from birdsong.utils.learning_phase import LearningPhase
+from birdsong.utils.neural_net_config import NeuralNetConfig
 from birdsong.utils.tensorboard_plotter import TensorBoardPlotter
 import numpy as np
 import torch.distributed as dist
@@ -211,13 +212,20 @@ class BirdTrainer(object):
         # The config read method will handle config_info
         # being None. 
         #
-        # If config_info is a string, it is assumed to
-        # be a file with the configuration. Else it is
-        # assumed to be a DottableConfigParser
+        # If config_info is a string, it is assumed either 
+        # to be a file containing the configuration, or
+        # a JSON string that defines the config. 
+        # Else config_info is assumed to be a NeuralNetConfig.
+        # The latter is relevant only if using this file
+        # as a library, rather than a command line tool:
 
         if isinstance(config_info, str):
-            self.config = self.read_configuration(config_info)
-        elif isinstance(config_info, DottableConfigParser):
+            if config_info.startswith('{'):
+                # JSON String:
+                self.config = NeuralNetConfig.from_json(config_info)
+            else: 
+                self.config = self.read_configuration(config_info)
+        elif isinstance(config_info, NeuralNetConfig):
             self.config = config_info
         else:
             print("Error: must have a config file. See config.cfg.Example in project root")
@@ -2633,7 +2641,7 @@ if __name__ == '__main__':
                         default=None)
     
     parser.add_argument('config',
-                        help='fully qualified file name of configuration file',
+                        help='fully qualified file name of configuration file, or JSON string',
                         default=None)
 
     args = parser.parse_args();

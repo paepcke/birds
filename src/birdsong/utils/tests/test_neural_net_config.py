@@ -192,7 +192,7 @@ class NeuralNetConfigTest(unittest.TestCase):
         
         json_str = self.config.to_json()
         
-        new_inst = self.config.from_json(json_str)
+        new_inst = NeuralNetConfig.from_json(json_str)
         self.assertTrue(new_inst == self.config)
 
 # -------------- Main -----------------
