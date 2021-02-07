@@ -40,6 +40,10 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.tensorboard import SummaryWriter
 from torchvision.models.resnet import ResNet, BasicBlock
 
+sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+
 from birdsong.class_weight_discovery import ClassWeightDiscovery
 from birdsong.cross_validation_dataloader import MultiprocessingDataLoader, CrossValidatingDataLoader
 from birdsong.result_tallying import TrainResult, TrainResultCollection, EpochSummary
@@ -71,22 +75,22 @@ sys.path.insert(0,packet_root)
 # or different machine:
 #*****************
 # 
-# if socket.gethostname() in ('quintus', 'quatro'):
-#     # Point to where the pydev server 
-#     # software is installed on the remote
-#     # machine:
-#     sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
-#  
-#     import pydevd
-#     global pydevd
-#     # Uncomment the following if you
-#     # want to break right on entry of
-#     # this module. But you can instead just
-#     # set normal Eclipse breakpoints:
-#     #*************
-#     print("About to call settrace()")
-#     #*************
-#     pydevd.settrace('localhost', port=4040)
+if socket.gethostname() in ('quintus', 'quatro', 'sparky'):
+    # Point to where the pydev server 
+    # software is installed on the remote
+    # machine:
+    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
+  
+    import pydevd
+    global pydevd
+    # Uncomment the following if you
+    # want to break right on entry of
+    # this module. But you can instead just
+    # set normal Eclipse breakpoints:
+    #*************
+    print("About to call settrace()")
+    #*************
+    pydevd.settrace('localhost', port=4040)
 # **************** 
 
 #***********
@@ -2587,7 +2591,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--MASTER_ADDR',
                         help=argparse.SUPPRESS,
-                        default=None
+                        default='127.0.0.1'
                         )
     # Used only by launch.py script! Pass
     # communication parameters:
@@ -2595,7 +2599,7 @@ if __name__ == '__main__':
     parser.add_argument('--MASTER_PORT',
                         help=argparse.SUPPRESS,
                         type=int,
-                        default=None
+                        default=5678  # The Distributed Data Parallel port
                         )
     # Used only by launch.py script! Pass
     # communication parameters:

@@ -440,6 +440,8 @@ class NeuralNetConfig(DottableConfigParser):
                      }
            3 An existing NeuralNetConfig instance
            
+           4 A JSON string containing the config info
+           
         Returns a structure that behaves as in 2 above,
         and a list of section names. Often those will
         be the same as the keys of the returned outer dict.
@@ -453,7 +455,7 @@ class NeuralNetConfig(DottableConfigParser):
         '''
         
         if type(conf_src) == str:
-            # A file name.
+            # A file name
             # Use the Python ConfigParser class
             # to parse the config file:
             built_in_content = ConfigParser()

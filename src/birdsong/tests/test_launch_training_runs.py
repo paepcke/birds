@@ -9,7 +9,7 @@ import unittest
 
 import numpy as np
 
-from birdsong.launch_training_runs import TrainScripRunner
+from birdsong.launch_training_runs import TrainScriptRunner
 from birdsong.utils.neural_net_config import NeuralNetConfig
 
 
@@ -38,7 +38,7 @@ class Test(unittest.TestCase):
 
     def setUp(self):
 
-        self.launcher = TrainScripRunner(self.hparms_spec, 
+        self.launcher = TrainScriptRunner(self.hparms_spec, 
                                          self.initial_config,
                                          unittesting=True)
 

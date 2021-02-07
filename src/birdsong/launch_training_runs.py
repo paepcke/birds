@@ -6,23 +6,28 @@ Created on Feb 2, 2021
 from _collections import OrderedDict
 import argparse
 from itertools import product
-import json5
 from json.decoder import JSONDecodeError as JSONError
 import os
 import socket
+import subprocess
 import sys
+import time
+
+import json5
+from logging_service.logging_service import LoggingService
 
 from birdsong.birds_train_parallel import BirdTrainer
 from birdsong.utils.neural_net_config import NeuralNetConfig
-import subprocess
 
 
+# TODO: 
+#   o In run configs: take care of 
+#     more configs than CPUs/GPUs
 # ------------------------ Specialty Exceptions --------
 class ConfigError(Exception):
     pass
 
-
-class TrainScripRunner(object):
+class TrainScriptRunner(object):
     '''
     classdocs
     '''
@@ -34,6 +39,8 @@ class TrainScripRunner(object):
     def __init__(self, 
                  hparms_spec, 
                  starting_config_src,
+                 training_script,
+                 logfile=None,
                  unittesting=False):
         '''
         Specifications expected like this
@@ -51,6 +58,13 @@ class TrainScripRunner(object):
             or a NeuralNetConfig instance
         @type starting_config_src: {str | NeuralNetConfig}
         '''
+
+        if logfile is None:
+            self.log = LoggingService(logfile=logfile)
+        else:
+            self.log = LoggingService()
+
+        self.training_script = training_script
 
         self.curr_dir = os.path.dirname(__file__)
         self.hostname = socket.getfqdn()
@@ -119,7 +133,7 @@ class TrainScripRunner(object):
         
         hparms_permutations = []
         
-        for perm_num, ordered_vals_tuple in enumerate(product(*hparms_spec.values())):
+        for _perm_num, ordered_vals_tuple in enumerate(product(*hparms_spec.values())):
             # Have something like:
             #   (0.001, 'Adam', 32, 3)
             # Separate dict for each combo:
@@ -279,7 +293,10 @@ class TrainScripRunner(object):
 
         gpu_landscape[machine_name]['gpu_device_ids'] = machine_gpus_to_use
         
-        self.WORLD_SIZE += machine_gpus
+        # Add 1 process for the on this machine,
+        # which will run on its CPU, b/c no GPUs
+        # are available:
+        self.WORLD_SIZE += machine_gpus if machine_gpus > 0 else 1
                     
         self.my_gpus = gpu_landscape[self.hostname]['num_gpus']
         self.gpu_landscape = gpu_landscape
@@ -385,56 +402,65 @@ class TrainScripRunner(object):
     
     def run_configurations(self, run_configs):
         '''
-        The set of launches from this method differs
-        from what the launch_scripts() method does
-        launch_birds_training.py. Here each training
-        process (i.e. invocation of the training script)
-        is indendent, and trains on all data, rather
-        than splitting the train set across multiple
-        GPUS/Machines. 
+        Takes a list of run configuration that 
+        specify the details of a training run 
+        (lr, optimizer to use, etc.) Spawns
+        independent training script processes, one 
+        with each of the configurations.
         
+        If fewer CPUs/GPUs are available than the
+        number of configs in run_configs, waits for
+        processes to finish, then launches more.
+        
+        Configs may take one of three forms:
+            o File path to a config file
+            o JSON string with all the config info
+            o A NeuralNetConfig instance
+
         Use world_map.json to know how many, and which 
         GPUs this machine is to use.
         
         Each copy of the training script is told:
         
-        #*****    o MASTER_ADDR  # Where to reach the coordinating process
-        #*****    o MASTER_PORT  # Corresponding port
             o RANK         # The copy's sequence number, which is
-                           # Unique across all participating machines
+                           # Unique within this machine (but not 
+                           # currently across machines, as in in 
+                           # distributed data parallel (DDP)
             o LOCAL_RANK   # Which of this machine's GPU to use (0-origin)
             o WORLD_SIZE   # How many GPUs are used on all machines together
             o GPUS_USED_THIS_MACHINE # Number of GPUs *used* on this
                                      # machine, according to the world_map.
+                                     # (As opposed to number of GPUs that
+                                     # exist on this machine.)
 
+        @param run_configs: list of configurations. Each config
+            may either be a JSON string, the file name of
+            a config file, or a NeuralNetConfig instance
+        @type run_configs: [str | NeuralNetConfig]
+        @return 0 for success of all processes, else 1
+        @rtype int
         '''
-        
-        # Compute a unique number for each GPU within
-        # the group of nodes (machines). Starting with
-        # the master node's first GPU as 0 (if master node
-        # has a GPU.
-        # The resulting GPU layout is assigned to
-        # variable gpu_landscape: 
-        #
-        #     {<machine_name> : 
 
-        # This machine's range of ranks:
-        rank_range              = self.gpu_landscape[self.hostname]['rank_range']
-        this_machine_gpu_ids    = self.gpu_landscape[self.hostname]['gpu_device_ids']
-        min_rank_this_machine   = self.gpu_landscape[self.hostname]['start_rank']
-
-        local_rank = 0
-        # Map from process object to rank (for debug msgs):
+        this_machine_gpu_ids = self.gpu_landscape[self.hostname]['gpu_device_ids']
+        num_local_processors = 1 if len(this_machine_gpu_ids) == 0 \
+            else len(this_machine_gpu_ids)
+        # Map from process object to GPU ID (for debug msgs):
         self.who_is_who = OrderedDict()
-        for rank in rank_range: 
+        
+        for config_num, config in enumerate(run_configs):
 
-            cmd = self.training_script_start_cmd(rank, 
-                                                 len(this_machine_gpu_ids),
-                                                 local_rank,
-                                                 min_rank_this_machine,
-                                                 self.launch_args,
-                                                 self.script_args
-                                                 )
+            # Used up all CPUs/GPUs?
+            if len(self.who_is_who.keys()) >= num_local_processors:
+                self.hold_for_free_processor()
+
+            # Create a command that is fit for passing to
+            # Popen; it will start one training script
+            # process. The max expression accounts for 
+            # machine with no GPU (which will run on CPU):
+            
+            local_rank = 0 if len(this_machine_gpu_ids) == 0 \
+                          else this_machine_gpu_ids[config_num]
+            cmd = self.training_script_start_cmd(local_rank, config)
                 
             # Copy stdin, and give the copy to the subprocess.
             # This enables the subprocess to ask user whether
@@ -448,8 +474,10 @@ class TrainScripRunner(object):
                                        stdout=None,  # Script inherits this launch
                                        stderr=None   # ... script's stdout/stderr  
                                        )
-            self.who_is_who[process] = rank
-            local_rank += 1
+            # Associate process instance with
+            # the GPU ID for error reporting later:
+            
+            self.who_is_who[process] = local_rank
         
         if not self.launch_args['quiet']:
             print(f"Node {self.hostname} {os.path.basename(sys.argv[0])}: Num processes launched: {len(self.who_is_who)}")
@@ -475,29 +503,33 @@ class TrainScripRunner(object):
             print(f"Number of failed training scripts: {num_failed}")
             for failed_process in failed_processes:
                 train_script   = self.launch_args['training_script']
-                script_rank    = self.who_is_who[failed_process]
-                msg = (f"Training script {train_script} (rank {script_rank}) encountered error(s); see logfile")
+                failed_local_rank = self.who_is_who[failed_process]
+                msg = (f"Training script {train_script} (GPU ID {failed_local_rank}) encountered error(s); see logfile")
                 print(msg)
+
+    #------------------------------------
+    # hold_for_free_processor 
+    #-------------------
+    
+    def hold_for_free_processor(self):
+        
+        while True:
+            for proc in self.who_is_who.keys():
+                if proc.poll() is not None:
+                    return
+            time.sleep(3) # Seconds
+            
+
 
     #------------------------------------
     # training_script_start_cmd 
     #-------------------
 
-    def training_script_start_cmd(self, 
-                                  rank,
-                                  gpus_used_this_machine,
-                                  local_rank,
-                                  min_rank_this_machine,
-                                  launch_args,
-                                  script_args):
+    def training_script_start_cmd(self, local_rank, config):
         '''
         From provided information, creates a legal 
         command string for starting the training script.
         
-        @param rank: rank of the script; i.e. it's process' place
-            in the sequence of all train script processes
-            across all machines
-        @type rank: int
         @param gpus_used_this_machine: number of GPU devices to 
             be used, according to the world_map; may be less than
             number of available GPUs
@@ -505,54 +537,59 @@ class TrainScripRunner(object):
         @param local_rank: index into the local sequence of GPUs
             for for the GPU that the script is to use
         @type local_rank: int
-        @param min_rank_this_machine: the lowest of the ranks among
-            the training scripts on this machine
-        @type min_rank_this_machine: int
-        @param launch_args: command line arguments intended for the
-            launch script, as opposed to being destined for the 
-            train script
-        @type launch_args: {str : Any}
         @param script_args: additional args for the train script
         @type script_args: {str : Any}
         '''
 
         # Build the shell command line,
         # starting with 'python -u':
-        cmd = [sys.executable, "-u"]
-
-        cmd.append(launch_args['training_script'])
-
-        # Add the args for the script that were
-        # in the command line:
-        for arg_name in script_args.keys():
-            script_arg_val = script_args[arg_name]
-            if script_arg_val is None or arg_name == 'config':
-                # Skip over non-specified CLI args:
-                continue
-            cmd.append(f"--{arg_name}={script_args[arg_name]}")
+        cmd = [sys.executable, "-u", f"{self.training_script}"]
 
         # Add the 'secret' args that tell the training
         # script all the communication parameters:
         
-        cmd.extend([f"--MASTER_ADDR={self.MASTER_ADDR}",
-                    f"--MASTER_PORT={self.MASTER_PORT}",
-                    f"--RANK={rank}",
-                    f"--LOCAL_RANK={local_rank}",
-                    f"--MIN_RANK_THIS_MACHINE={min_rank_this_machine}",
+        cmd.extend([f"--LOCAL_RANK={local_rank}",
                     f"--WORLD_SIZE={self.WORLD_SIZE}",
-                    f"--GPUS_USED_THIS_MACHINE={gpus_used_this_machine}"
                     ])
         
         # Finally, the obligatory non-option arg
-        # to the training script: the configuration
-        # file:
+        # to the training script: the configuration.
+        # Could be a file, a json string, or a 
+        # NeuralNetConfig instance:
         
-        config_json_or_file_name = script_args['config']
-        cmd.append(config_json_or_file_name)
+        if isinstance(config, NeuralNetConfig):
+            # Turn into a JSON str for communicating
+            # to the script:
+            config_arg = config.to_json()
+        else:
+            config_arg = config
+            
+        cmd.append(config_arg)
         
         self.log.debug(f"****** Launch: the cmd is {cmd}")
         return cmd
 
+# ------------------- Utils --------------
+
+    #------------------------------------
+    # is_json_str
+    #-------------------
+    
+    def is_json_str(self, str_to_check):
+        '''
+        Very primitive test whether a passed-in
+        string is (legal) JSON or not.
+        
+        @param str_to_check: string to examine
+        @type str_to_check: str
+        @return True/False
+        @rtype bool
+        '''
+        try:
+            json5.loads(str_to_check)
+        except JSONError:
+            return False
+        return True
 
 # ------------------------ Main ------------
 if __name__ == '__main__':
@@ -565,6 +602,9 @@ if __name__ == '__main__':
     parser.add_argument('-c', '--config_file',
                         help='fully qualified path to config file',
                         default=None)
+    parser.add_argument('training_script',
+                        help='fully qualified path to the training script',
+                        default=None)
 
     args = parser.parse_args();
     
@@ -574,6 +614,13 @@ if __name__ == '__main__':
         config_file = os.path.join(curr_dir, '../../config.cfg')
         if not os.path.exists(config_file):
             raise FileNotFoundError(f"Could not find config file at {config_file}")
+    else:
+        if not os.path.exists(config_file):
+            raise FileNotFoundError(f"Could not find config file at {config_file}")
+    
+    training_script = args.training_script
+    if not os.path.exists(training_script):
+        raise FileNotFoundError(f"Could not find training script at {training_script}")
     
     hparms_spec = {'lr' : [0.001],
                    'optimizer'  : ['Adam', 'RMSprop', 'SGD'],
@@ -581,4 +628,4 @@ if __name__ == '__main__':
                    'kernel'     : [3,7]
                    }
 
-    TrainScripRunner(hparms_spec, config_file)
+    TrainScriptRunner(hparms_spec, config_file, args.training_script)
