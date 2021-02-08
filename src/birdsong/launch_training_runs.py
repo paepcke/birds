@@ -516,7 +516,7 @@ class TrainScriptRunner(object):
 
             # Create a command that is fit for passing to
             # Popen; it will start one training script
-            # process. The max expression accounts for 
+            # process. The conditional expression accounts for 
             # machine with no GPU (which will run on CPU):
             
             local_rank = 0 if len(this_machine_gpu_ids) == 0 \

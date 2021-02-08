@@ -235,6 +235,13 @@ class BirdTrainer(object):
             print(f"Error: must have a config file, not {config_info}. See config.cfg.Example in project root")
             sys.exit(1)
 
+        # Is this training process collaborating with 
+        # others, training on its own slice of data, 
+        # or does every training process run with its
+        # own settings, creating its own model?
+        
+        self.independent_runs = self.config.getboolean('Parallelism', 'independent_runs') 
+
         # Replace None args with config file values:
 
         # Create temporary logging till setup_tallying()
@@ -321,13 +328,24 @@ class BirdTrainer(object):
                                          )
         self.num_folds = self.config.Training.getint('num_folds')
         
+        # GPUSs used on *this* machine:
+        
+        num_gpus_used_here = self.comm_info['GPUS_USED_THIS_MACHINE']
+        if num_gpus_used_here is None:
+            num_gpus_used_here = cuda.device_count()
+        
+        batch_size = batch_size if batch_size is not None else train_parms.getint('batch_size')
+
+        master_addr_in_environ = self.comm_info["MASTER_ADDR"]
+        master_port_in_environ = self.comm_info["MASTER_PORT"]
+
         # In the dataloader creation, make drop_last=True 
         # to skip the last batch if it is not full. Just 
         # not worth the trouble dealing with unusually 
         # dimensioned tensors:
 
         # Make an appropriate (single/multiprocessing) dataloader:
-        if self.device == device('cpu'):
+        if self.device == device('cpu') or self.independent_runs:
 
             # CPU bound, single machine:
             
@@ -343,19 +361,8 @@ class BirdTrainer(object):
                 num_folds=self.num_folds
                 )
         else:
-            # GPUSs used on *this* machine:
-            
-            num_gpus_used_here = self.comm_info['GPUS_USED_THIS_MACHINE']
-            if num_gpus_used_here is None:
-                num_gpus_used_here = cuda.device_count()
-            
-            batch_size = batch_size if batch_size is not None else train_parms.getint('batch_size')
-
-            master_addr_in_environ = self.comm_info["MASTER_ADDR"]
-            master_port_in_environ = self.comm_info["MASTER_PORT"]
 
             self.log.debug(f"***** Calling init_multiprocessing (master: {master_addr_in_environ}:{master_port_in_environ}...")            
-
             self.init_multiprocessing()
             self.log.debug("***** Returned from init_multiprocessing...")
             
@@ -449,7 +456,7 @@ class BirdTrainer(object):
         # If this process is to report results,
         # set up tensorboard reporting:
         
-        if self.rank == 0 or self.config.getboolean('Parallelism', 'all_procs_log'):
+        if self.rank == 0 or self.independent_runs:
             timestamp = datetime.datetime.now().isoformat()
             # Remove the msecs part:
             timestamp = re.sub(r'[.][0-9]{6}', '', timestamp)
@@ -1345,7 +1352,7 @@ class BirdTrainer(object):
                     # Update the json based result record
                     # in the file system:
                     
-                    if self.rank == 0 or self.config.getboolean('Parallelism', 'all_procs_log'):
+                    if self.rank == 0 or self.independent_runs:
                         self.record_json_display_results(self.epoch)
                         self.record_tensorboard_results(self.epoch)
                     

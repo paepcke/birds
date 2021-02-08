@@ -33,11 +33,14 @@ max_epochs    = 100
 batch_size    = 32
 # The 'k' in k=fold cross validation:
 num_folds     = 10
-seed          = 42
 optimizer     = SGD
 kernel_size   = 7
 lr            = 0.001
 momentum      = 0.9
+# Pseudo randomization must be the
+# same on all collaborating machines:
+seed          = 42
+
 # Training images should be scaled to (in pixels):
 sample_width  = 400
 sample_height = 400 
@@ -48,19 +51,13 @@ show_alive    = 30
 
 [Parallelism]
 
-# Must be the same on all collaborating
-# machines:
+# If True, every training script runs with
+# its own settings, and possibly its own dataset.
+# When False, use Distributed Data Parallel (DDP)
+# where all processes cooperated in training,
+# each with their own slice of the data:
 
-seed          = 42
-
-# When running distributed, only the master process
-# (rank 0) log measurement results. But when
-# multiple GPUs are used for independent runs,
-# such as for hyperparameter exploration, then
-# you want all processes logging their result to
-# tensorboard
-
-all_procs_log = False
+independent_runs = True
 
 # Communication used for inter process/machine
 # communication during parallel training.
