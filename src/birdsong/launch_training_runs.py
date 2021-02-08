@@ -8,6 +8,7 @@ import argparse
 from itertools import product
 from json.decoder import JSONDecodeError as JSONError
 import os
+import signal
 import socket
 import subprocess
 import sys
@@ -23,7 +24,6 @@ from birdsong.utils.neural_net_config import NeuralNetConfig
 # TODO: 
 #   o In run configs: take care of 
 #     more configs than CPUs/GPUs
-
 # For remote debugging via pydev and Eclipse:
 # If uncommented, will hang if started from
 # on Quatro or Quintus, and will send a trigger
@@ -613,8 +613,10 @@ class TrainScriptRunner(object):
             # Turn into a JSON str for communicating
             # to the script:
             config_arg = config.to_json()
+            self.log.info(f"Launching training: {config_arg}")
         else:
             config_arg = config
+            self.log.info(f"Launching training from file: {config_arg}")
             
         cmd.append(config_arg)
         
@@ -622,6 +624,36 @@ class TrainScriptRunner(object):
         return cmd
 
 # ------------------- Utils --------------
+
+    #------------------------------------
+    # handle_cnt_c 
+    #-------------------
+
+    def handle_cnt_c(self):
+        '''
+        Given a list of process instances,
+        Send SIGINT (cnt-C) to them:
+        @param procs:
+        @type procs:
+        '''
+        # Line processes up, highest rank first,
+        # master process last:
+        
+        procs_terminate = sorted([proc
+                                   for proc
+                                    in self.who_is_who.keys()
+                                  ],
+                                 key=lambda obj: self.who_is_who[obj],
+                                 reverse=True)
+
+        for process in procs_terminate:
+            # If process is no longer running,
+            # forget about it:
+            if process.poll is not None:
+                # Process dead:
+                continue
+            process.send_signal(signal.SIGTERM)
+            process.wait()
 
     #------------------------------------
     # am_master_node 

@@ -3,7 +3,6 @@ Created on Feb 4, 2021
 
 @author: paepcke
 '''
-import copy
 import io
 import os
 import tempfile
@@ -27,6 +26,11 @@ class NeuralNetConfigTest(unittest.TestCase):
         cfg_file = os.path.join(os.path.dirname(__file__), 
                                 'dottable_config_tst.cfg')
         self.config = NeuralNetConfig(cfg_file)
+        
+        complete_cfg_file = os.path.join(os.path.dirname(__file__), 
+                                         '../../tests',
+                                         'bird_trainer_tst.cfg')
+        self.complete_config = NeuralNetConfig(complete_cfg_file)
 
     def tearDown(self):
         pass
@@ -194,6 +198,18 @@ class NeuralNetConfigTest(unittest.TestCase):
         
         new_inst = NeuralNetConfig.from_json(json_str)
         self.assertTrue(new_inst == self.config)
+
+    #------------------------------------
+    # test_json_human_readable 
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_json_human_readable(self):
+        
+        json_str = self.complete_config.to_json()
+        human_str = NeuralNetConfig.json_human_readable(json_str)
+        print(human_str)
+
 
 # -------------- Main -----------------
 if __name__ == "__main__":

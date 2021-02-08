@@ -222,6 +222,37 @@ class NeuralNetConfig(DottableConfigParser):
         return new_inst
 
     #------------------------------------
+    # json_human_readable 
+    #-------------------
+    
+    @classmethod
+    def json_human_readable(cls, json_str):
+        '''
+        Given a config in json format, return
+        a human readable string, listing neural-net
+        relevant parameters in their respective sections
+        
+        @param json_str: string to humanize
+        @type json_str: str
+        @return: printable string with vals for nn parameters
+        @rtype: str
+        '''
+        config = json.loads(json_str)
+        human_str = ''
+        for sec_name in config.keys():
+            first_of_sec = True
+            for parm_name in config[sec_name]:
+                if parm_name in cls.NEURAL_NET_ATTRS:
+                    if first_of_sec:
+                        human_str += f"Section {sec_name}: "
+                        first_of_sec = False
+                    else:
+                        human_str += '/'
+                    human_str += f"{parm_name}({config[sec_name][parm_name]})"
+        return human_str
+
+
+    #------------------------------------
     # copy 
     #-------------------
     
