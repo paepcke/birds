@@ -63,8 +63,8 @@ class TrainScriptRunner(object):
     #-------------------
 
     def __init__(self, 
-                 hparms_spec, 
                  starting_config_src,
+                 hparms_spec, 
                  training_script,
                  logfile=None,
                  quiet=False,
@@ -676,8 +676,8 @@ if __name__ == '__main__':
             raise FileNotFoundError(f"Could not find config file at {config_file}")
     
     training_script = args.training_script
-    if not os.path.exists(training_script):
-        raise FileNotFoundError(f"Could not find training script at {training_script}")
+    if not (os.path.exists(training_script) and training_script.endswith('.py'):
+        raise FileNotFoundError(f"Could not find Python training script at {training_script}")
     
     hparms_spec = {'lr' : [0.001],
                    'optimizer'  : ['Adam', 'RMSprop', 'SGD'],
@@ -685,7 +685,7 @@ if __name__ == '__main__':
                    'kernel'     : [3,7]
                    }
 
-    TrainScriptRunner(hparms_spec, 
-                      config_file, 
+    TrainScriptRunner(config_file, 
+                      hparms_spec, 
                       args.training_script,
                       quiet=args.quiet)
