@@ -23,6 +23,32 @@ from birdsong.utils.neural_net_config import NeuralNetConfig
 # TODO: 
 #   o In run configs: take care of 
 #     more configs than CPUs/GPUs
+
+# For remote debugging via pydev and Eclipse:
+# If uncommented, will hang if started from
+# on Quatro or Quintus, and will send a trigger
+# to the Eclipse debugging service on the same
+# or different machine:
+#*****************
+#
+if socket.gethostname() in ('quintus', 'quatro', 'sparky'):
+    # Point to where the pydev server
+    # software is installed on the remote
+    # machine:
+    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
+
+    import pydevd
+    global pydevd
+    # Uncomment the following if you
+    # want to break right on entry of
+    # this module. But you can instead just
+    # set normal Eclipse breakpoints:
+    #*************
+    print("About to call settrace()")
+    #*************
+    pydevd.settrace('localhost', port=4040)
+#****************
+
 # ------------------------ Specialty Exceptions --------
 class ConfigError(Exception):
     pass
@@ -444,14 +470,23 @@ class TrainScriptRunner(object):
         this_machine_gpu_ids = self.gpu_landscape[self.hostname]['gpu_device_ids']
         num_local_processors = 1 if len(this_machine_gpu_ids) == 0 \
             else len(this_machine_gpu_ids)
+
         # Map from process object to GPU ID (for debug msgs):
         self.who_is_who = OrderedDict()
+
+        procs_started = 0
         
         for config_num, config in enumerate(run_configs):
 
             # Used up all CPUs/GPUs?
             if len(self.who_is_who.keys()) >= num_local_processors:
-                self.hold_for_free_processor()
+                # Wait for a GPU to free up:
+                ret_code = self.hold_for_free_processor(procs_started)
+                if ret_code != 0:
+                    # If the process that terminated
+                    # had an error, stop spawning new ones.
+                    # (Fail early):
+                    break
 
             # Create a command that is fit for passing to
             # Popen; it will start one training script
@@ -478,9 +513,11 @@ class TrainScriptRunner(object):
             # the GPU ID for error reporting later:
             
             self.who_is_who[process] = local_rank
+            procs_started += 1
         
         if not self.launch_args['quiet']:
-            print(f"Node {self.hostname} {os.path.basename(sys.argv[0])}: Num processes launched: {len(self.who_is_who)}")
+            print(f"Node {self.hostname} {os.path.basename(sys.argv[0])}: " \
+                  f"Num processes launched: {len(self.who_is_who)}")
             if self.am_master_node:
                 print(f"Awaiting {self.WORLD_SIZE} process(es) to finish...")
             else:
@@ -511,12 +548,13 @@ class TrainScriptRunner(object):
     # hold_for_free_processor 
     #-------------------
     
-    def hold_for_free_processor(self):
+    def hold_for_free_processor(self, procs_started):
         
         while True:
             for proc in self.who_is_who.keys():
                 if proc.poll() is not None:
-                    return
+                    procs_started -= 1
+                    return proc.returncode
             time.sleep(3) # Seconds
             
 

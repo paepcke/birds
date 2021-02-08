@@ -232,7 +232,7 @@ class BirdTrainer(object):
         elif isinstance(config_info, NeuralNetConfig):
             self.config = config_info
         else:
-            print("Error: must have a config file. See config.cfg.Example in project root")
+            print(f"Error: must have a config file, not {config_info}. See config.cfg.Example in project root")
             sys.exit(1)
 
         # Replace None args with config file values:
