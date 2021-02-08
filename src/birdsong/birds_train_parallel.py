@@ -1252,11 +1252,12 @@ class BirdTrainer(object):
                 # improved beyond 0.05 during the past
                 # self.EPOCHS_FOR_PLATEAU_DETECTION epochs:
                 
-                while (self._diff_avg >= 0.05 or \
-                       self.epoch <= self.config.Training.getint('min_epochs')
-                       ) and \
-                       self.epoch <= self.config.Training.getint('max_epochs'):
-                    
+                while (self.epoch <= self.config.Training.getint('max_epochs') \
+                       and (self._diff_avg >= 0.05 or \
+                            self.epoch <= self.config.Training.getint('min_epochs')
+                            )
+                       ):
+
                     self.epoch += 1
                     self.num_train_samples_this_epoch = 0
                     self.num_val_samples = 0

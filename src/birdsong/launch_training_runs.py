@@ -613,7 +613,7 @@ class TrainScriptRunner(object):
             # Turn into a JSON str for communicating
             # to the script:
             config_arg = config.to_json()
-            self.log.info(f"Launching training: {config_arg}")
+            self.log.info(f"Launching training: {NeuralNetConfig.human_readable(config_arg)}")
         else:
             config_arg = config
             self.log.info(f"Launching training from file: {config_arg}")
