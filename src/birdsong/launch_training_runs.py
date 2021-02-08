@@ -470,21 +470,21 @@ class TrainScriptRunner(object):
         '''
 
         this_machine_gpu_ids = self.gpu_landscape[self.hostname]['gpu_device_ids']
-        num_local_processors = 1 if len(this_machine_gpu_ids) == 0 \
-            else len(this_machine_gpu_ids)
 
         # Map from process object to GPU ID (for debug msgs):
         self.who_is_who = OrderedDict()
 
-        procs_started = 0
+        available_gpus = this_machine_gpu_ids.copy()
         
-        for config_num, config in enumerate(run_configs):
+        for config in run_configs:
 
             # Used up all CPUs/GPUs?
-            if procs_started >= num_local_processors:
+            if len(available_gpus) == 0:
                 # Wait for a GPU to free up:
-                ret_code = self.hold_for_free_processor(procs_started)
-                if ret_code != 0:
+                freed_gpu = self.hold_for_free_processor()
+                if freed_gpu >= 0:
+                    available_gpus.append(freed_gpu)
+                else:
                     # If the process that terminated
                     # had an error, stop spawning new ones.
                     # (Fail early):
@@ -496,7 +496,7 @@ class TrainScriptRunner(object):
             # machine with no GPU (which will run on CPU):
             
             local_rank = 0 if len(this_machine_gpu_ids) == 0 \
-                          else this_machine_gpu_ids[config_num]
+                          else available_gpus.pop()
             cmd = self.training_script_start_cmd(local_rank, config)
                 
             # Copy stdin, and give the copy to the subprocess.
@@ -515,7 +515,6 @@ class TrainScriptRunner(object):
             # the GPU ID for error reporting later:
             
             self.who_is_who[process] = local_rank
-            procs_started += 1
         
         if not self.quiet:
             print(f"Node {self.hostname} {os.path.basename(sys.argv[0])}: " \
@@ -550,13 +549,26 @@ class TrainScriptRunner(object):
     # hold_for_free_processor 
     #-------------------
     
-    def hold_for_free_processor(self, procs_started):
+    def hold_for_free_processor(self):
+        '''
+        Waits for any of the launched training
+        script processes to finish. Returns 
+        either a positive number, which corresponds
+        to the GPU ID (a.k.a. local_rank) that the
+        now finished process was using. If the process
+        finished with an error, returns -1.
         
+        @returns GPU ID (i.e. local_rank), or -1
+        @rtype: int
+        '''
+
         while True:
             for proc in self.who_is_who.keys():
                 if proc.poll() is not None:
-                    procs_started -= 1
-                    return proc.returncode
+                    if proc.returncode != 0:
+                        return -1
+                    else:
+                        return self.who_is_who[proc]
             time.sleep(3) # Seconds
             
 
