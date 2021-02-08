@@ -517,7 +517,7 @@ class TrainScriptRunner(object):
             self.who_is_who[process] = local_rank
             procs_started += 1
         
-        if not self.'quiet':
+        if not self.quiet:
             print(f"Node {self.hostname} {os.path.basename(sys.argv[0])}: " \
                   f"Num processes launched: {len(self.who_is_who)}")
             if self.am_master_node:
@@ -610,6 +610,20 @@ class TrainScriptRunner(object):
         return cmd
 
 # ------------------- Utils --------------
+
+    #------------------------------------
+    # am_master_node 
+    #-------------------
+    
+    def am_master_node(self):
+        '''
+        This method allows this script to stay somewhat
+        close to the Distributed Data Parallel sibling
+        launch_birds_parallel(). For this script,
+        though, every process is its own master.
+        '''
+        return True
+
 
     #------------------------------------
     # is_json_str
