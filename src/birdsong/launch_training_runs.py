@@ -133,7 +133,7 @@ class TrainScriptRunner(object):
         #     {'lr'         : [0.001],
         #      'optimizer'  : ['Adam','RMSprop','SGD'],
         #      'batch_size' : [32, 64, 128],
-        #      'kernel'     : [3, 7]
+        #      'kernel_size': [3, 7]
         #     })
 
         # Parameters to vary:
@@ -148,13 +148,13 @@ class TrainScriptRunner(object):
         # unique combination of parameter settings:
         #
         #     [{'lr': 0.001,
-        #       'optimizer': 'Adam',
-        #       'batch_size': 32,
-        #       'kernel': 3},
+        #       'optimizer'  : 'Adam',
+        #       'batch_size' : 32,
+        #       'kernel_size': 3},
         #       {'lr': 0.001,
-        #        'optimizer': 'Adam',
-        #        'batch_size': 32,
-        #        'kernel': 7},
+        #        'optimizer'  : 'Adam',
+        #        'batch_size' : 32,
+        #        'kernel_size': 7},
         #       {...}
         #       ...
         #     ]
@@ -183,11 +183,11 @@ class TrainScriptRunner(object):
              [{'lr': 0.001,
                'optimizer': 'Adam',
                'batch_size': 32,
-               'kernel': 3},
+               'kernel_size': 3},
                {'lr': 0.001,
                 'optimizer': 'Adam',
                 'batch_size': 32,
-                'kernel': 7},
+                'kernel_size': 7},
                {...}
                ...
              ]
@@ -686,7 +686,7 @@ if __name__ == '__main__':
     hparms_spec = {'lr' : [0.001],
                    'optimizer'  : ['Adam', 'RMSprop', 'SGD'],
                    'batch_size' : [32,64,128],
-                   'kernel'     : [3,7]
+                   'kernel_size': [3,7]
                    }
 
     TrainScriptRunner(config_file, 
