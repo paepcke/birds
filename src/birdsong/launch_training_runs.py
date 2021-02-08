@@ -67,6 +67,7 @@ class TrainScriptRunner(object):
                  starting_config_src,
                  training_script,
                  logfile=None,
+                 quiet=False,
                  unittesting=False):
         '''
         Specifications expected like this
@@ -91,6 +92,7 @@ class TrainScriptRunner(object):
             self.log = LoggingService()
 
         self.training_script = training_script
+        self.quiet = quiet
 
         self.curr_dir = os.path.dirname(__file__)
         self.hostname = socket.getfqdn()
@@ -479,7 +481,7 @@ class TrainScriptRunner(object):
         for config_num, config in enumerate(run_configs):
 
             # Used up all CPUs/GPUs?
-            if len(self.who_is_who.keys()) >= num_local_processors:
+            if procs_started >= num_local_processors:
                 # Wait for a GPU to free up:
                 ret_code = self.hold_for_free_processor(procs_started)
                 if ret_code != 0:
@@ -515,7 +517,7 @@ class TrainScriptRunner(object):
             self.who_is_who[process] = local_rank
             procs_started += 1
         
-        if not self.launch_args['quiet']:
+        if not self.'quiet':
             print(f"Node {self.hostname} {os.path.basename(sys.argv[0])}: " \
                   f"Num processes launched: {len(self.who_is_who)}")
             if self.am_master_node:
@@ -539,7 +541,7 @@ class TrainScriptRunner(object):
         if num_failed > 0:
             print(f"Number of failed training scripts: {num_failed}")
             for failed_process in failed_processes:
-                train_script   = self.launch_args['training_script']
+                train_script   = self.training_script
                 failed_local_rank = self.who_is_who[failed_process]
                 msg = (f"Training script {train_script} (GPU ID {failed_local_rank}) encountered error(s); see logfile")
                 print(msg)
@@ -637,6 +639,9 @@ if __name__ == '__main__':
                                      description="Run multiple trainers independently"
                                      )
 
+    parser.add_argument('-q', '--quiet',
+                        help='suppress info msgs to the display',
+                        default=False)
     parser.add_argument('-c', '--config_file',
                         help='fully qualified path to config file',
                         default=None)
@@ -666,4 +671,7 @@ if __name__ == '__main__':
                    'kernel'     : [3,7]
                    }
 
-    TrainScriptRunner(hparms_spec, config_file, args.training_script)
+    TrainScriptRunner(hparms_spec, 
+                      config_file, 
+                      args.training_script,
+                      quiet=args.quiet)
