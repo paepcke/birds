@@ -122,7 +122,10 @@ class TrainScriptRunner(object):
         if training_script is None:
             # Try to find it in config:
             try:
-                self.training_script = starting_config.Path.train_script
+                self.training_script = starting_config.getpath('Paths',
+                                                               'train_script', 
+                                                               relative_to=self.curr_dir
+                                                               )
             except KeyError:
                 raise ValueError("Did not provide training script path on cmd line or in config")
 
