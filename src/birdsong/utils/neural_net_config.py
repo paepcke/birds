@@ -244,7 +244,9 @@ class NeuralNetConfig(DottableConfigParser):
             for parm_name in config[sec_name]:
                 if parm_name in cls.NEURAL_NET_ATTRS:
                     if first_of_sec:
-                        human_str += f"Section {sec_name}: "
+                        human_str += f". Section {sec_name}: " \
+                                if len(human_str) > 0 \
+                                else f"Section {sec_name}: " 
                         first_of_sec = False
                     else:
                         human_str += '/'

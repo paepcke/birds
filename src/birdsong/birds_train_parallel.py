@@ -1252,7 +1252,7 @@ class BirdTrainer(object):
                 # improved beyond 0.05 during the past
                 # self.EPOCHS_FOR_PLATEAU_DETECTION epochs:
                 
-                while (self.epoch <= self.config.Training.getint('max_epochs') \
+                while (self.epoch < self.config.Training.getint('max_epochs') \
                        and (self._diff_avg >= 0.05 or \
                             self.epoch <= self.config.Training.getint('min_epochs')
                             )
@@ -2462,6 +2462,18 @@ class BirdTrainer(object):
     #-------------------
     
     def human_readable(self, num, suffix='B'):
+        '''
+        Create human readable string from a
+        (usually large) number of bytes.
+         
+        @param num: the number to convert
+        @type num: int
+        @param suffix: desired suffix in the 
+            output (default B for Bytes)
+        @type suffix: str
+        @return: human readable str. such as
+            13MB, or 140TB
+        '''
         for unit in ['','K','M','G','T','P','E','Z']:
             if abs(num) < 1024.0:
                 return "%3.1f%s%s" % (num, unit, suffix)
