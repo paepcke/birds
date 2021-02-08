@@ -213,7 +213,7 @@ class TrainScriptRunner(object):
         for conf_dict in config_dicts:
             conf_copy = config.copy()
             for param_name, val in conf_dict.items():
-                conf_copy[param_name] = val
+                conf_copy.add_neural_net_parm(param_name, val)
             configs.append(conf_copy)
         return configs
 

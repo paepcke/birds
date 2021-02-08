@@ -134,6 +134,18 @@ class NeuralNetConfig(DottableConfigParser):
         self[sec_name] = DottableMap({})
 
     #------------------------------------
+    # add_neural_net_parm 
+    #-------------------
+    
+    def add_neural_net_parm(self, parm_name, parm_val):
+        
+        try:
+            sec_name = self.NEURAL_NET_ATTRS[parm_name]
+        except KeyError:
+            raise ValueError(f"Name {parm_name} is not a recognized neural net parameter")
+        self[sec_name][parm_name] = parm_val
+
+    #------------------------------------
     # to_json 
     #-------------------
     
