@@ -670,13 +670,17 @@ if __name__ == '__main__':
         curr_dir = os.path.dirname(__file__)
         config_file = os.path.join(curr_dir, '../../config.cfg')
         if not os.path.exists(config_file):
+            parser.print_usage()
             raise FileNotFoundError(f"Could not find config file at {config_file}")
     else:
         if not os.path.exists(config_file):
+            parser.print_usage()
             raise FileNotFoundError(f"Could not find config file at {config_file}")
     
     training_script = args.training_script
-    if not (os.path.exists(training_script) and training_script.endswith('.py'):
+    if not (os.path.exists(training_script) and \
+            training_script.endswith('.py')):
+        parser.print_usage()
         raise FileNotFoundError(f"Could not find Python training script at {training_script}")
     
     hparms_spec = {'lr' : [0.001],
