@@ -31,22 +31,22 @@ from birdsong.utils.neural_net_config import NeuralNetConfig
 # or different machine:
 #*****************
 #
-if socket.gethostname() in ('quintus', 'quatro', 'sparky'):
-    # Point to where the pydev server
-    # software is installed on the remote
-    # machine:
-    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
-
-    import pydevd
-    global pydevd
-    # Uncomment the following if you
-    # want to break right on entry of
-    # this module. But you can instead just
-    # set normal Eclipse breakpoints:
-    #*************
-    print("About to call settrace()")
-    #*************
-    pydevd.settrace('localhost', port=4040)
+# if socket.gethostname() in ('quintus', 'quatro', 'sparky'):
+#     # Point to where the pydev server
+#     # software is installed on the remote
+#     # machine:
+#     sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
+# 
+#     import pydevd
+#     global pydevd
+#     # Uncomment the following if you
+#     # want to break right on entry of
+#     # this module. But you can instead just
+#     # set normal Eclipse breakpoints:
+#     #*************
+#     print("About to call settrace()")
+#     #*************
+#     pydevd.settrace('localhost', port=4040)
 #****************
 
 # ------------------------ Specialty Exceptions --------
