@@ -440,6 +440,26 @@ class TrainScriptLauncher:
             raise RuntimeError("Error: launch args must include a config file. See config.cfg.Example in project root")
         
         self.config = DottableConfigParser(config_file)
+
+        # Ensure that the launch_args contains 
+        # the path to the training script. It
+        # will be there if provided on the cmd line.
+        # But it may instead be under Path:train_script
+        # in the configuration:
+        
+        try:
+            self.launch_args['training_script']
+        except KeyError:
+            # The training script was not specified
+            # on the command line. Is it in the config
+            # file:
+            try:
+                self.launch_args['training_script'] = self.config.getpath('Paths',
+                                                                          'train_script',
+                                                                          relative_to=self.curr_dict
+                                                                          )
+            except KeyError:
+                raise ValueError("No training script specified on command line or in config file")
         
         try:
             self.world_map_path = self.config.getpath('Paths', 

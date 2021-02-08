@@ -65,7 +65,7 @@ class TrainScriptRunner(object):
     def __init__(self, 
                  starting_config_src,
                  hparms_spec, 
-                 training_script,
+                 training_script=None,
                  logfile=None,
                  quiet=False,
                  unittesting=False):
@@ -79,11 +79,25 @@ class TrainScriptRunner(object):
              <hparm2> : [val2_1, val2_2, ...]
              }
         
+        @param starting_config_src: a configuration 
+            whose neural net related parameters will 
+            be modified below for each run.
+        @type starting_config_src: {str | NeuralNetConfig}            
         @param hparms_spec:
         @type hparms_spec:
-        @param starting_config_src: file path to config file,
-            or a NeuralNetConfig instance
-        @type starting_config_src: {str | NeuralNetConfig}
+        @param training_script: path to the training script
+            of which to run multiple copies. If None, will
+            look in config for Path:train_script.
+        @type training_script: {None | str}
+        @param logfile: where to log information. If None,
+            log to console
+        @type logfile: {None | str}
+        @param quiet: whether or not to report progress
+        @type quiet: bool
+        @param unittesting: set to True if unittesting so that
+            __init__() will only do a minimum, and allows unittests
+            to call other methods individually
+        @type bool
         '''
 
         if logfile is None:
@@ -91,7 +105,6 @@ class TrainScriptRunner(object):
         else:
             self.log = LoggingService()
 
-        self.training_script = training_script
         self.quiet = quiet
 
         self.curr_dir = os.path.dirname(__file__)
@@ -104,7 +117,15 @@ class TrainScriptRunner(object):
             # Leave calling of the methods below
             # to the unittests
             return
-        
+
+        self.training_script = training_script
+        if training_script is None:
+            # Try to find it in config:
+            try:
+                self.training_script = starting_config.Path.train_script
+            except KeyError:
+                raise ValueError("Did not provide training script path on cmd line or in config")
+
         self.gpu_landscape = self.obtain_world_map(starting_config)
         
         the_run_dicts   = self.get_runs_hparm_specs(hparms_spec)
@@ -704,8 +725,9 @@ if __name__ == '__main__':
     parser.add_argument('-c', '--config_file',
                         help='fully qualified path to config file',
                         default=None)
-    parser.add_argument('training_script',
-                        help='fully qualified path to the training script',
+    parser.add_argument('-t', '--training_script',
+                        help='fully qualified path to the training script \n'+ \
+                             'provide here, or in config file',
                         default=None)
 
     args = parser.parse_args();
@@ -721,12 +743,6 @@ if __name__ == '__main__':
         if not os.path.exists(config_file):
             parser.print_usage()
             raise FileNotFoundError(f"Could not find config file at {config_file}")
-    
-    training_script = args.training_script
-    if not (os.path.exists(training_script) and \
-            training_script.endswith('.py')):
-        parser.print_usage()
-        raise FileNotFoundError(f"Could not find Python training script at {training_script}")
     
     hparms_spec = {'lr' : [0.001],
                    'optimizer'  : ['Adam', 'RMSprop', 'SGD'],
