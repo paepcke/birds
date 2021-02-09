@@ -376,7 +376,7 @@ class BirdTrainer(object):
         self.num_classes = len(dataset.class_id_list())
         self.class_names = dataset.class_names()
         
-        self.log.debug(f"***** Number of samples in loader: {len(self.dataloader)}")
+        self.log.info(f"Samples in loader: {len(self.dataloader)}")
 
         # Resnet18 retain 6 layers of pretraining.
         # Train the remaining 4 layers with your own
