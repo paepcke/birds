@@ -398,7 +398,6 @@ class BirdTrainer(object):
         #**********
         if unit_testing:
             return
-
         self.optimizer = self.select_optimizer(self.config, self.model)
         
         if checkpoint:
@@ -683,7 +682,7 @@ class BirdTrainer(object):
             model.to(self.device)
 
         if self.independent_runs:
-            return
+            return model
         
         if self.device == device('cuda'):
         
@@ -1568,8 +1567,6 @@ class BirdTrainer(object):
                         param.grad.data /= self.comm_info['WORLD_SIZE']
             self.optimizer.step()
             
-            self.scheduler.step()
-            
             # Free GPU memory:
             targets = self.pop_tensor()
             batch   = self.pop_tensor()
@@ -1637,6 +1634,11 @@ class BirdTrainer(object):
                                                loss,
                                                LearningPhase.VALIDATING
                                                )
+                # Have scheduler decrease the learning
+                # rate if validation loss stops changing
+                # much:
+                
+                self.scheduler.step(loss)
 
                 # Free GPU memory:
                 val_sample = val_sample.to('cpu')
