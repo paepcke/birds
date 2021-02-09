@@ -14,13 +14,14 @@ import librosa.display
 import noisereduce as nr
 import os
 import sys
+import logging as log
 
 # A list of the scientific names for the bird species in this study
 
 
 birds = ['Tangara+gyrola', 'Amazilia+decora', 'Hylophilus+decurtatus', 'Arremon+aurantiirostris',
-         'Dysithamnus+mentalis', 'Lophotriccus+pileatus', 'Euphonia+imitans', 'Tangara+icterocephala', 
-         'Catharus+ustulatus', 'Parula+pitiayumi', 'Henicorhina+leucosticta', 'Corapipo+altera', 
+         'Dysithamnus+mentalis', 'Lophotriccus+pileatus', 'Euphonia+imitans', 'Tangara+icterocephala',
+         'Catharus+ustulatus', 'Parula+pitiayumi', 'Henicorhina+leucosticta', 'Corapipo+altera',
          'Empidonax+flaviventris']
 
 
@@ -139,7 +140,9 @@ def create_spectrogram(birdname, in_dir, out_dir, n_mels=128):
     """
     # create a mel spectrogram
     spectrogramfile = os.path.join(out_dir, birdname[:-len(".wav")]) + '.png'
+    log.info(f"Creating spectrogram: {spectrogramfile}")
     audio, sr = librosa.load(os.path.join(in_dir, birdname))
+    log.info(f"Audio len: {len(audio)/sr}")
     mel = librosa.feature.melspectrogram(audio, sr=sr, n_mels=n_mels)
     # create a logarithmic mel spectrogram
     log_mel = librosa.power_to_db(mel, ref=np.max)
@@ -157,9 +160,13 @@ if __name__ == '__main__':
     """
     Parses the command line parameters and calls the appropriate functions..
     """
-    if len(sys.argv) == 4:
+    if len(sys.argv) == 4 or sys.argv[4] == "-v":
         filepath_in = str(sys.argv[2])
         filepath_out = str(sys.argv[3])
+        if len(sys.argv) == 5: # if verbose flag used
+            log.basicConfig(format="%(levelname)s: %(message)s", level=log.INFO)
+        else:
+            log.basicConfig(format="%(levelname)s: %(message)s")
         download = False
         for sample in os.listdir(filepath_in):
             # instance = ""
