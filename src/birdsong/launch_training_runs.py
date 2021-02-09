@@ -10,21 +10,18 @@ from json.decoder import JSONDecodeError as JSONError
 import os
 import signal
 import socket
-import subprocess
 import sys
-import time
 
 import json5
 from logging_service.logging_service import LoggingService
 import psutil
 
-from birdsong.birds_train_parallel import BirdTrainer
 from birdsong.utils.neural_net_config import NeuralNetConfig
 
-
 # TODO: 
-#   o In run configs: take care of 
-#     more configs than CPUs/GPUs
+#   nothing right now
+
+
 # For remote debugging via pydev and Eclipse:
 # If uncommented, will hang if started from
 # on Quatro or Quintus, and will send a trigger
