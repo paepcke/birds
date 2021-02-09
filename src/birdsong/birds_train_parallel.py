@@ -869,16 +869,13 @@ class BirdTrainer(object):
         momentum = config.Training.getfloat('momentum', 0.9)
         
         try:
-            optimizer_name = config['optimizer'].lower()
+            optimizer_name = config.Training['optimizer'].lower()
         except KeyError:
             # Not specified in config file; use default:
             optimizer = optim.SGD(model.parameters(), 
                                   lr=lr,
                                   momentum=momentum)
             return optimizer
-        
-        # Make case insensitive:
-        optimizer_name = optimizer_name.lower()
         
         if optimizer_name not in [opt_name.lower() 
                                       for opt_name 
