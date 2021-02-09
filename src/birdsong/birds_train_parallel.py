@@ -682,6 +682,11 @@ class BirdTrainer(object):
         if self.device == device('cuda'):
             model.to(self.device)
 
+        if self.independent_runs:
+            return
+        
+        if self.device == device('cuda'):
+        
             # Leave out the devices and output
             # keyword args, b/c we always work
             # with one process per device, and
