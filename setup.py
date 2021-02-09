@@ -36,7 +36,8 @@ setup(
                         'Pillow>=8.0.1',
                         'json5>=0.9.5',
                         'nose2>=0.9.2',     # For testing
-                        'tensorflow-plot>=0.3.2'
+                        'tensorflow-plot>=0.3.2',
+                        'psutil>=5.8.0',
                         ],
 
     tests_require    =[

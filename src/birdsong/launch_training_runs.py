@@ -16,6 +16,7 @@ import time
 
 import json5
 from logging_service.logging_service import LoggingService
+import psutil
 
 from birdsong.birds_train_parallel import BirdTrainer
 from birdsong.utils.neural_net_config import NeuralNetConfig
@@ -48,7 +49,6 @@ from birdsong.utils.neural_net_config import NeuralNetConfig
 #     #*************
 #     pydevd.settrace('localhost', port=4040)
 #****************
-
 # ------------------------ Specialty Exceptions --------
 class ConfigError(Exception):
     pass
@@ -528,13 +528,16 @@ class TrainScriptRunner(object):
             # to save training state in case of a cnt-C:
             newstdin = os.fdopen(os.dup(sys.stdin.fileno()))
             
-            # Spawn one training script.
+            # Spawn one training script. Use psutil's 
+            # Popen instead of subprocess.Popen to get
+            # the wait_procs() method on the resulting
+            # process instances:
 
-            process = subprocess.Popen(cmd,
-                                       stdin=newstdin,
-                                       stdout=None,  # Script inherits this launch
-                                       stderr=None   # ... script's stdout/stderr  
-                                       )
+            process = psutil.Popen(cmd,
+                                   stdin=newstdin,
+                                   stdout=None,  # Script inherits this launch
+                                   stderr=None   # ... script's stdout/stderr  
+                                   )
             # Associate process instance with
             # the GPU ID for error reporting later:
             
@@ -587,15 +590,39 @@ class TrainScriptRunner(object):
         '''
 
         while True:
-            for proc in self.who_is_who.keys():
-                if proc.poll() is not None:
-                    if proc.returncode != 0:
+            
+            freed_proc = None
+            
+            def proc_term_callback(proc):
+                # Declare nonlocal for permission
+                # to modify the outer var freed_proc:
+                nonlocal freed_proc
+                freed_proc = proc
+
+            while True:
+                
+                # Wait for a process to finish,
+                # and free up a GPU (or the CPU).
+                # Note: the 3 seconds is not to fix 
+                # race condition!!! It's just so we
+                # get out of the function at some point
+                # after proc_term_callback() was called:
+                
+                _gone, _alive = psutil.wait_procs(list(self.who_is_who.keys()), 
+                                                  3,   # sec timeout
+                                                  proc_term_callback)
+                if freed_proc is not None:
+                    
+                    # Callback occured, announcing one
+                    # process having terminated. Return
+                    # either the proc's error code, or
+                    # the GPU ID (local_rank) that was
+                    # used by the terminated proc:
+                    
+                    if freed_proc.returncode != 0:
                         return -1
                     else:
-                        return self.who_is_who[proc]
-            time.sleep(3) # Seconds
-            
-
+                        return self.who_is_who[freed_proc]
 
     #------------------------------------
     # training_script_start_cmd 
