@@ -1546,7 +1546,9 @@ class BirdTrainer(object):
                                            LearningPhase.TRAINING
                                            )
             loss.backward()
-            if self.comm_info['WORLD_SIZE'] > 1 and self.device != device('cpu'):
+            if not self.independent_runs and \
+                self.comm_info['WORLD_SIZE'] > 1 \
+                and self.device != device('cpu'):
                 #**********
                 # Force synchronicity across all GPUs
                 # before averaging the gradients:
@@ -1564,17 +1566,14 @@ class BirdTrainer(object):
                         param.grad.data /= self.comm_info['WORLD_SIZE']
             self.optimizer.step()
             
-            #********
-            #*****self.scheduler.step()
-            #********
+            self.scheduler.step()
             
             # Free GPU memory:
             targets = self.pop_tensor()
             batch   = self.pop_tensor()
             
             outputs = outputs.to('cpu')
-            
-                
+
             self.train_output_stack, self.train_label_stack = \
                 self.remember_output_and_label(outputs, 
                                                targets, 
@@ -1874,8 +1873,55 @@ class BirdTrainer(object):
     #-------------------
 
     def get_resnet18_partially_trained(self, num_classes, num_layers_to_retain=6):
+        '''
+        Obtains the pretrained resnet18 model from the Web
+        if not cached. Then freezes num_layers_to_retain
+        layers to preserve the pre-training.
         
+        If running under Distributed Data Processing (DDP) 
+        protocol, only the master node will download, and
+        then share with the others.
         
+        @param num_classes: number of target classes
+        @type num_classes: int
+        @param num_layers_to_retain: how many layers to
+            freeze, protecting them from training.
+        @type num_layers_to_retain: int
+        '''
+        
+        # Which protocol is in use?
+        if self.independent_runs:
+            model = hub.load('pytorch/vision:v0.6.0', 'resnet18', pretrained=True)
+        else:
+            self.get_model_ddp()
+        
+        # Freeze the bottom num_layers_to_retain layers:
+        for (i, child) in enumerate(model.children()):
+            for param in child.parameters():
+                param.requires_grad = False
+            if i >= num_layers_to_retain:
+                break
+        num_in_features = model.fc.in_features
+        
+        model.fc = nn.Linear(num_in_features, num_classes)
+        
+        # Create a property on the model that 
+        # returns the number of output classes:
+        model.num_classes = model.fc.out_features
+        return model
+
+    #------------------------------------
+    # get_model_ddp 
+    #-------------------
+    
+    def get_model_ddp(self):  # @DontTrace
+        '''
+        Determine whether this process is the
+        master node. If so, obtain the pretrained
+        resnet18 model. Then distributed the model
+        to the other nodes. 
+        '''
+
         # Let the local leader download
         # the model from the Internet,
         # in case it is not already cached
@@ -1901,25 +1947,12 @@ class BirdTrainer(object):
         else:
             # Wait for leader to download the
             # model for everyone on this machine:
-            self.log.info(f"Procss with rank {self.rank} on {self.hostname} waiting for leader to laod model")
+            self.log.info(f"Process with rank {self.rank} on {self.hostname} waiting for leader to laod model")
             dist.barrier()
             # Get the cached version:
             self.log.info(f"Procss with rank {self.rank} on {self.hostname} laoding model")
             model = hub.load('pytorch/vision:v0.6.0', 'resnet18', pretrained=True)
-        
-        # Freeze the bottom num_layers_to_retain layers:
-        for (i, child) in enumerate(model.children()):
-            for param in child.parameters():
-                param.requires_grad = False
-            if i >= num_layers_to_retain:
-                break
-        num_in_features = model.fc.in_features
-        
-        model.fc = nn.Linear(num_in_features, num_classes)
-        
-        # Create a property on the model that 
-        # returns the number of output classes:
-        model.num_classes = model.fc.out_features
+
         return model
 
     #------------------------------------
