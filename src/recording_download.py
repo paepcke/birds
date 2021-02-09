@@ -120,7 +120,7 @@ def define_bandpass(lowcut, highcut, sr, order = 2):
     return b, a
 
 
-def create_spectrogram(birdname, instance, audio, sr, out_dir, in_dir, n_mels=128):
+def create_spectrogram(birdname, in_dir, out_dir, n_mels=128):
     """
     Filters audio and converts it to a spectrogram which is saved.
 
@@ -138,7 +138,7 @@ def create_spectrogram(birdname, instance, audio, sr, out_dir, in_dir, n_mels=12
     :type n_mels: int
     """
     # create a mel spectrogram
-    spectrogramfile = os.path.join(out_dir, birdname[:len(birdname) - 4]) + '.png'
+    spectrogramfile = os.path.join(out_dir, birdname[:-len(".wav")]) + '.png'
     audio, sr = librosa.load(os.path.join(in_dir, birdname))
     mel = librosa.feature.melspectrogram(audio, sr=sr, n_mels=n_mels)
     # create a logarithmic mel spectrogram
@@ -162,12 +162,11 @@ if __name__ == '__main__':
         filepath_out = str(sys.argv[3])
         download = False
         for sample in os.listdir(filepath_in):
-            audio, sr = librosa.load(os.path.join(filepath_in, sample))
-            instance = ""
+            # instance = ""
             if sys.argv[1] == "-f": # filter and split the data
                 get_data(sample, filepath_in, filepath_out)
             elif sys.argv[1] == "-s": # convert to a spectrogram
-                create_spectrogram(sample, instance, audio, sr, filepath_out, filepath_in)
+                create_spectrogram(sample, filepath_in, filepath_out)
             elif sys.argv[1] == "-d": # download samples from zeno-canto
                 download = True
                 break
