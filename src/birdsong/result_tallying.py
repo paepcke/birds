@@ -104,6 +104,58 @@ class TrainResultCollection(dict):
         return float(res)
 
     #------------------------------------
+    # mean_balanced_accuracy
+    #-------------------
+    
+    def mean_balanced_accuracy(self, epoch=None, learning_phase=LearningPhase.TRAINING):
+        '''
+        Computes the mean of all balanced accuracies in the given 
+        epoch and learning phase. Individual balanced accuracies
+        among all truth/prediction pairs are weighted to account
+        for class imbalance, and adjusted for chance.
+        
+        @param epoch: epoch during which tallies must have
+            been created to be included in the mean:
+        @type epoch: int
+        @param learning_phase: learning phase during which 
+            included tallies must have been produced.
+        @type learning_phase: LearningPhase
+        @return mean accuracy over the specified tallies
+        @rtype float
+        '''
+
+        if epoch is None:
+            m = np.mean([tally.balanced_accuracy
+                         for tally 
+                         in self.values()
+                         if tally.learning_phase == learning_phase
+                         ])
+        else:
+            m = np.mean([tally.balanced_accuracy
+                         for tally 
+                         in self.values() 
+                         if tally.epoch == epoch and \
+                            tally.learning_phase == learning_phase
+                         ])
+        # m is an np.float.
+        # We want to return a Python float. The conversion
+        # starts being inaccurate around the 6th digit.
+        # Example:
+        #      torch.tensor(0.9).item() --> 0.8999999761581421  
+        # This inaccuracy is 'inherited' into the np.float32. 
+        # The following gymnastics are a work-around:
+        # Round in numpy country:
+        
+        mean_acc_tensor = (m * 10**6).round() / (10**6)
+        
+        # Convert to Python float, and round that
+        # float to 6 digits:
+        
+        mean_acc = round(mean_acc_tensor.item(), 6) 
+        
+        return mean_acc
+
+    #------------------------------------
     # mean_accuracy
     #-------------------
 
@@ -447,6 +499,7 @@ class EpochSummary(UserDict):
         resulting instance acts like a dict with 
         the following keys:
         
+           o balanced_accuracy
            o mean_accuracy_training
            o mean_accuracy_validating
            o epoch_loss_train
@@ -465,6 +518,14 @@ class EpochSummary(UserDict):
 
         super().__init__()
         
+        self['balanced_accuracy_training'] = \
+           tally_collection.mean_balanced_accuracy(epoch, 
+                                                   learning_phase=LearningPhase.TRAINING)
+
+        self['balanced_accuracy_validating'] = \
+           tally_collection.mean_balanced_accuracy(epoch, 
+                                                   learning_phase=LearningPhase.VALIDATING)
+
         # Mean of accuracies among the 
         # training splits of this epoch
         self['mean_accuracy_training'] = \
@@ -574,6 +635,15 @@ class TrainResult:
                 
         self.conf_matrix = self.compute_confusion_matrix(predicted_class_ids,
                                                          truth_labels)
+
+        # Accuracy:
+        
+        # The accuracy weighted by class support,
+        # and adjusted for correctness by chance:
+        self.balanced_accuracy = metrics.balanced_accuracy_score(truth_labels,
+                                                                 predicted_class_ids,
+                                                                 adjusted=True
+                                                                 )
 
         # Find classes that are present in the
         # truth labels; all others will be excluded

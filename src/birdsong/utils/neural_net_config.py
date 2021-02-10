@@ -253,6 +253,24 @@ class NeuralNetConfig(DottableConfigParser):
                     human_str += f"{parm_name}({config[sec_name][parm_name]})"
         return human_str
 
+    #------------------------------------
+    # run_name 
+    #-------------------
+    
+    def run_name(self):
+        '''
+        Create name for use in tensorboard to identify
+        a run that uses the nn settings of this configuration.
+        
+          Exp_lr<num>bs<num>kern<num>opt<optimizer> 
+        '''
+        
+        nm = (f"Exp_lr{self.Training.lr}"
+              f"_bs{self.Training.batch_size}"
+              f"_kern{self.Training.kernel_size}"
+              f"_opt{self.Training.optimizer}"
+              )
+        return nm
 
     #------------------------------------
     # copy 

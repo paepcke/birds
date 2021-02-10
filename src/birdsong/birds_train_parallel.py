@@ -78,22 +78,22 @@ sys.path.insert(0,packet_root)
 # or different machine:
 #*****************
 # 
-if socket.gethostname() in ('quintus', 'quatro', 'sparky'):
-    # Point to where the pydev server 
-    # software is installed on the remote
-    # machine:
-    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
-    
-    import pydevd
-    global pydevd
-    # Uncomment the following if you
-    # want to break right on entry of
-    # this module. But you can instead just
-    # set normal Eclipse breakpoints:
-    #*************
-    print("About to call settrace()")
-    #*************
-    pydevd.settrace('localhost', port=4040)
+# if socket.gethostname() in ('quintus', 'quatro', 'sparky'):
+#     # Point to where the pydev server 
+#     # software is installed on the remote
+#     # machine:
+#     sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
+#     
+#     import pydevd
+#     global pydevd
+#     # Uncomment the following if you
+#     # want to break right on entry of
+#     # this module. But you can instead just
+#     # set normal Eclipse breakpoints:
+#     #*************
+#     print("About to call settrace()")
+#     #*************
+#     pydevd.settrace('localhost', port=4040)
 # **************** 
 
 #***********
@@ -1398,6 +1398,11 @@ class BirdTrainer(object):
                                                 )]
                     self._diff_avg = self.mean_diff(torch.tensor(past_accuracies))
     
+                # All seems to have gone well. Report the 
+                # overall result of the final epoch for the 
+                # hparms config used in this process:
+                
+                self.report_hparams_summary(self.tally_collection, self.epoch)
     
             except (KeyboardInterrupt, InterruptTraining) as _e:
                 # Stop brutal-shutdown time; we will be gentle here:
@@ -2229,15 +2234,15 @@ class BirdTrainer(object):
             o logdir None and relative_to NOT None:
                  relative_to
             o logdir NOT None and relative_to None:
-	            o logdir absolute: 
-	                 relative_to ignored
-	            o logdir relative, relative_to None:
-	                 script_dir + /runs + logdir
-	        o logdir NOT None and relative_to NOT None:
-	            o logdir absolute: 
-	                 relative_to ignored
-	            o logdir relative
-	                 logdir + relative_to
+                o logdir absolute: 
+                     relative_to ignored
+                o logdir relative, relative_to None:
+                     script_dir + /runs + logdir
+            o logdir NOT None and relative_to NOT None:
+                o logdir absolute: 
+                     relative_to ignored
+                o logdir relative
+                     logdir + relative_to
 
         
         @param logdir: if not provided, uses 
@@ -2341,6 +2346,60 @@ class BirdTrainer(object):
                      tally.accuracy.item(),
                      incorrect_paths,
                      tally.conf_matrix.tolist()]) + "\n")
+
+    #------------------------------------
+    # report_hparams_summary 
+    #-------------------
+    
+    def report_hparams_summary(self, tally_coll, epoch):
+        '''
+        Called at the end of training. Constructs
+        a summary to report for the hyperparameters
+        used in this process. Reports to the tensorboard.
+        
+        Hyperparameters reported:
+        
+           o lr
+           o optimizer
+           o batch_size
+           o kernel_size
+        
+        Included in the measures are:
+        
+           o mean_balanced_accuracy_training   
+           o mean_balanced_accuracy_validating
+           o mean_accuracy_training
+           o mean_accuracy_validating
+           o epoch_mean_weighted_precision
+           o epoch_mean_weighted_recall
+           o epoch_loss_train
+           o epoch_loss_val
+        
+        @param tally_coll: the collection of results for
+            each epoch
+        @type tally_coll: TrainResultCollection
+        '''
+        
+        summary = EpochSummary(tally_coll, epoch, logger=self.log)
+        hparms_vals = {
+            'lr' : self.config.Training.lr,
+            'optimizer' : self.config.Training.optimizer,
+            'batch_size': self.config.Training.batch_size,
+            'kernel_size' : self.config.Training.kernel_size
+            }
+        
+        metric_results = {
+                'mean_balanced_accuracy_training' : summary.mean_balanced_accuracy_training,
+                'mean_balanced_accuracy_validating':summary.mean_balanced_accuracy_validating,
+                'mean_accuracy_training' : summary.mean_accuracy_training,
+                'mean_accuracy_validating': summary.mean_accuracy_validating,
+                'epoch_mean_weighted_precision': summary.epoch_mean_weighted_precision,
+                'epoch_mean_weighted_recall' : summary.epoch_mean_weighted_recall,
+                'epoch_loss_train' : summary.epoch_loss_train,
+                'epoch_loss_val' : summary.epoch_loss_val
+                }
+        
+        self.writer(hparms_vals, metric_results, run_name=self.config.run_name())
 
     #------------------------------------
     # device_residence

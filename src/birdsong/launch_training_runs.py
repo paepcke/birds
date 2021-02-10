@@ -128,9 +128,17 @@ class TrainScriptRunner(object):
 
         self.gpu_landscape = self.obtain_world_map(starting_config)
         
+        # Get list of dicts of hparm-name/hparm_value pairs;
+        # one for each of the runs
+        
         the_run_dicts   = self.get_runs_hparm_specs(hparms_spec)
+        
+        # Turn the run dicts into configurations
+        # that that modify the starting config:
         the_run_configs = self.gen_configurations(starting_config, 
                                                   the_run_dicts)
+        
+        # Start one training script for each configuration:
         self.run_configurations(the_run_configs) 
         
     #------------------------------------

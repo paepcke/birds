@@ -266,6 +266,14 @@ class TensorBoardPlotter:
         return grid
 
     #------------------------------------
+    # report_hparams_results 
+    #-------------------
+    
+    def report_hparams_results(self, hparms_dict, hparms_measures):
+        pass
+
+
+    #------------------------------------
     # fig_from_conf_matrix 
     #-------------------
     
