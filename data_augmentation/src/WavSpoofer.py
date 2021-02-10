@@ -77,7 +77,7 @@ def change_volume(in_dir, out_dir, species=None):
                                      + "_volume" + str(factor) + ".wav", y1, sample_rate0)
 
 
-def add_background(in_dir, out_dir, species=None, len_noise_to_add=5.0, verbose = True):
+def add_background(in_dir, out_dir, species=None, len_noise_to_add=5.0):
     """
     Combines the wav recording in the species subdirectory with a random 5s clip of audio from a random recording in
     data_augmentation/lib.
@@ -86,7 +86,6 @@ def add_background(in_dir, out_dir, species=None, len_noise_to_add=5.0, verbose 
     :type species: str
     """
     len_noise_to_add = float(len_noise_to_add)  # need length to be float
-    log.basicConfig(format="%(levelname)s: %(message)s", level=log.INFO) if verbose else log.basicConfig(format="%(levelname)s: %(message)s")
     for file_name in os.listdir(in_dir):
         if species is None or species in file_name:
             for background_name in os.listdir(BACKGROUND_NOISE_PATH):
@@ -159,16 +158,23 @@ def warp_spectrogram(in_dir, out_dir, species=None):
     """
     for file_name in os.listdir(in_dir):
         if species is None or species in file_name:
+            log.info(f"Adding masks to {file_name}")
             orig_spectrogram = np.asarray(Image.open(os.path.join(SPECTROGRAM_PATH, file_name)))
-            masked_spectrogram = sa.time_mask(sa.freq_mask(orig_spectrogram, num_masks=2), num_masks=2)
+            masked_spectrogram = sa.time_mask(sa.freq_mask(orig_spectrogram, log, num_masks=2), log, num_masks=2)
             plt.imshow(masked_spectrogram);
             plt.axis('off')
             plt.savefig(os.path.join(out_dir, file_name[:-len(".png")] + "_masked.png"), dpi=100, bbox_inches='tight', pad_inches=0, format='png', facecolor='none')
+
+
 if __name__ == '__main__':
     """The main method. Parses command-line input and calls appropriate functions:"""
     if len(sys.argv) >= 4:
         in_dir = sys.argv[2]
         out_dir = sys.argv[3]
+        if len(sys.argv) > 4 and sys.argv[4] == '-v':
+            log.basicConfig(format="%(levelname)s: %(message)s", level=log.INFO)
+        else:
+             log.basicConfig(format="%(levelname)s: %(message)s")
         if sys.argv[1] == "-ts":
             time_shift(in_dir, out_dir)
         elif sys.argv[1] == "-cv":
