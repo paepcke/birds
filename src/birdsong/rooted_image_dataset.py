@@ -401,7 +401,7 @@ class MultiRootImageDataset(SingleRootImageDataset):
 
         for root_dir in roots:
             if not os.path.isdir(root_dir):
-                raise TypeError(f"Only directories may be roots for target classes; got {root_dir}")
+                raise TypeError(f"Roots must be directories of target class subdirs; got {root_dir}")
 
         # Make a dataset from classes/samples 
         # under the first root dir: 

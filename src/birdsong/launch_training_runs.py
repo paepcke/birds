@@ -490,19 +490,24 @@ class TrainScriptRunner(object):
         @rtype int
         '''
 
-        this_machine_gpu_ids = self.gpu_landscape[self.hostname]['gpu_device_ids']
+        running_processes = []
+        gpu_ids_to_use = self.gpu_landscape[self.hostname]['gpu_device_ids']
+        if self.gpu_landscape[self.hostname]['num_gpus'] == 0:
+            # Only have a CPU; in this context, pretend that 
+            # there is one GPU at ID 0:
+            gpu_ids_to_use = [0]
 
         # Map from process object to GPU ID (for debug msgs):
         self.who_is_who = OrderedDict()
 
-        available_gpus = this_machine_gpu_ids.copy()
+        available_gpus = gpu_ids_to_use.copy()
         
         for config in run_configs:
 
             # Used up all CPUs/GPUs?
             if len(available_gpus) == 0:
                 # Wait for a GPU to free up:
-                freed_gpu = self.hold_for_free_processor()
+                freed_gpu = self.hold_for_free_processor(running_processes)
                 if freed_gpu >= 0:
                     available_gpus.append(freed_gpu)
                 else:
@@ -516,9 +521,11 @@ class TrainScriptRunner(object):
             # process. The conditional expression accounts for 
             # machine with no GPU (which will run on CPU):
             
-            local_rank = 0 if len(this_machine_gpu_ids) == 0 \
+            local_rank = 0 if len(gpu_ids_to_use) == 0 \
                           else available_gpus.pop()
-            cmd = self.training_script_start_cmd(local_rank, config)
+            cmd = self.training_script_start_cmd(local_rank,
+                                                 gpu_ids_to_use,
+                                                 config)
                 
             # Copy stdin, and give the copy to the subprocess.
             # This enables the subprocess to ask user whether
@@ -536,9 +543,18 @@ class TrainScriptRunner(object):
                                    stderr=None   # ... script's stdout/stderr  
                                    )
             # Associate process instance with
-            # the GPU ID for error reporting later:
+            # the GPU ID for error reporting later,
+            # but also so that we know to wait for
+            # that process if it is still running after
+            # we launched all the ones we want:
             
             self.who_is_who[process] = local_rank
+            
+            # Separately record the process
+            # so that we can keep track of freed
+            # GPUs in hold_for_free_processor():
+            
+            running_processes.append(process)
         
         if not self.quiet:
             print(f"Node {self.hostname} {os.path.basename(sys.argv[0])}: " \
@@ -573,7 +589,7 @@ class TrainScriptRunner(object):
     # hold_for_free_processor 
     #-------------------
     
-    def hold_for_free_processor(self):
+    def hold_for_free_processor(self, running_processes):
         '''
         Waits for any of the launched training
         script processes to finish. Returns 
@@ -582,6 +598,9 @@ class TrainScriptRunner(object):
         now finished process was using. If the process
         finished with an error, returns -1.
         
+        @param running_processes: list of PIDs for processes
+            that are still running, as far as we know
+        @type running_processes: [int]
         @returns GPU ID (i.e. local_rank), or -1
         @rtype: int
         '''
@@ -605,10 +624,13 @@ class TrainScriptRunner(object):
                 # get out of the function at some point
                 # after proc_term_callback() was called:
                 
-                _gone, _alive = psutil.wait_procs(list(self.who_is_who.keys()), 
+                _gone, _alive = psutil.wait_procs(running_processes, 
                                                   3,   # sec timeout
                                                   proc_term_callback)
                 if freed_proc is not None:
+
+                    for proc in [goner for goner in _gone]:
+                        running_processes.remove(proc)
                     
                     # Callback occured, announcing one
                     # process having terminated. Return
@@ -625,20 +647,24 @@ class TrainScriptRunner(object):
     # training_script_start_cmd 
     #-------------------
 
-    def training_script_start_cmd(self, local_rank, config):
+    def training_script_start_cmd(self, 
+                                  local_rank, 
+                                  gpus_used_this_machine, 
+                                  config):
         '''
         From provided information, creates a legal 
         command string for starting the training script.
         
+        @param local_rank: GPU identifier (between 0 and 
+            num of GPUs in this machine)
+        @type local_rank: int
         @param gpus_used_this_machine: number of GPU devices to 
             be used, according to the world_map; may be less than
             number of available GPUs
         @type gpus_used_this_machine: int
-        @param local_rank: index into the local sequence of GPUs
-            for for the GPU that the script is to use
-        @type local_rank: int
-        @param script_args: additional args for the train script
-        @type script_args: {str : Any}
+        @param config: additional information in a config instance,
+            or a path to a configuration file
+        @type config: {NeuralNetConfig | str}
         '''
 
         # Build the shell command line,
@@ -770,12 +796,20 @@ if __name__ == '__main__':
         if not os.path.exists(config_file):
             parser.print_usage()
             raise FileNotFoundError(f"Could not find config file at {config_file}")
-    
+
+    #**************
     hparms_spec = {'lr' : [0.001],
                    'optimizer'  : ['Adam', 'RMSprop', 'SGD'],
                    'batch_size' : [32,64,128],
                    'kernel_size': [3,7]
                    }
+#     hparms_spec = {'lr' : [0.001],
+#                    'optimizer'  : ['Adam', 'RMSprop', 'SGD'],
+#                    'batch_size' : [4, 32,64,128],
+#                    'kernel_size': [3,7]
+#                    }
+
+    #**************
 
     TrainScriptRunner(config_file, 
                       hparms_spec, 

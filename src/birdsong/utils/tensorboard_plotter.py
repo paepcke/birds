@@ -385,12 +385,13 @@ class TensorBoardPlotter:
             num_samples_col_vec = conf_matrix.sum(axis=1)[:, np.newaxis]
             if type(conf_matrix) == np.ndarray:
                 norm_cm = ((conf_matrix.astype('float') / num_samples_col_vec)*100).astype('int')
+                # Replace any nan's with 0:
+                norm_cm[np.isnan(norm_cm)] = 0
             else:
                 # Assume conf_matrix is a tensor:
                 norm_cm = ((conf_matrix.float() / num_samples_col_vec)*100).int()
-            
-        # Replace any nan's with -1:
-        norm_cm[np.isnan(norm_cm)] = 0
+                # Replace any nan's with 0:
+                norm_cm[torch.isnan(norm_cm)] = 0
         return norm_cm 
 
     #------------------------------------

@@ -4,14 +4,15 @@ Created on Dec 13, 2020
 @author: paepcke
 '''
 
-import torch
+from logging_service.logging_service import LoggingService
 from torch import unsqueeze, cat
+import torch
 from torch.utils.data import DataLoader
 
 from birdsong.samplers import SKFSampler, DistributedSKFSampler
 
-# ------------------------- Class CrossValidatingDataLoader ----------------
 
+# ------------------------- Class CrossValidatingDataLoader ----------------
 class CrossValidatingDataLoader(DataLoader):
     '''
     
@@ -97,7 +98,8 @@ class CrossValidatingDataLoader(DataLoader):
                  prefetch_factor=2,
                  drop_last=True,
                  num_folds=10,
-                 sampler=None
+                 sampler=None,
+                 logger=None
                  ):
         '''
         This instance will use cross validation
@@ -157,6 +159,13 @@ class CrossValidatingDataLoader(DataLoader):
         @param batch_size: number of samples to combine into 
             a batch to feed model during training
         @type batch_size: int
+        @param shuffle: whether or not to shuffle the
+            dataset once, initially.
+        @type shuffle: bool
+        @param seed: random seed to use if shuffle is True
+        @type shuffle: int
+        @param num_workers: number of threads used to preload
+        @type num_workers: int
         @param pin_memory: set to True if using a GPU. Speeds
             transfer of tensors from CPU to GPU
         @type pin_memory: bool
@@ -173,16 +182,22 @@ class CrossValidatingDataLoader(DataLoader):
             is being instantiated, and that class's __init__()
             calls super(). Leave out for singleprocess/single-GPU
             use
-        @param drop_last: whether to skip the last split if
-            the folds would not have equal numbers of samples
-        @type drop_last: bool
         @type sampler: {None | DistributedSKFSampler}
+        @param logger: the LoggingService instance to use
+            for logging info/warnings/errors. If None, fetches
+            the LoggingService singleton.
+        @type logger: LoggingService
         '''
         
         if len(dataset) == 0:
             raise ValueError("Dataset is empty, nothing to load")
 
         self.drop_last = drop_last
+        
+        if logger is None:
+            self.log = LoggingService()
+        else:
+            self.log = logger
         
         # Sampler will only be set if a subclass instance
         # of MultiprocessingDataLoader is being initialized.
@@ -278,6 +293,8 @@ class CrossValidatingDataLoader(DataLoader):
             # 66 // 2 = 33
             
             self.total_num_batches = total_train_samples // self.batch_size
+            if self.total_num_batches is 0:
+                self.log.warn(f"Not enough data ({total_train_samples}) for even one batch (of size {self.batch_size})")
                         
             remainder_samples = total_train_samples % self.batch_size
             if not self.drop_last and remainder_samples > 0:

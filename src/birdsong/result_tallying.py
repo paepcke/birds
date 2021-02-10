@@ -90,7 +90,17 @@ class TrainResultCollection(dict):
             res = torch.sum(torch.tensor(list(loss_dict.values()), 
                                          dtype=float))
         else:
-            res = loss_dict[epoch]
+            try:
+                res = loss_dict[epoch]
+            except KeyError:
+                # Happens if add_loss() was never
+                # called. Which happens when 
+                # less data are available that not even
+                # one batch of batch_size can be filled,
+                # and drop_last is True:
+                # 
+                loss_dict[epoch] = 0.0
+                return 0.0
         return float(res)
 
     #------------------------------------
@@ -430,7 +440,7 @@ class EpochSummary(UserDict):
     # Constructor
     #-------------------
     
-    def __init__(self, tally_collection, epoch):
+    def __init__(self, tally_collection, epoch, logger=None):
         '''
         Given a filled-in tally_collection, filter
         the measurements by the given epoch. The
@@ -445,10 +455,12 @@ class EpochSummary(UserDict):
            o epoch_mean_weighted_recall
            o epoch_conf_matrix
         
-        @param tally_collection:
-        @type tally_collection:
-        @param epoch:
-        @type epoch:
+        @param tally_collection: existing collection of tallies
+        @type tally_collection: TrainResultCollection
+        @param epoch: epoch for which result is being reported
+        @type epoch: int
+        @param logger: optional logger; if None prints to console.
+        @type logger: {None | LoggingService}
         '''
 
         super().__init__()
@@ -462,9 +474,23 @@ class EpochSummary(UserDict):
         self['mean_accuracy_validating'] = \
            tally_collection.mean_accuracy(epoch, 
                                           learning_phase=LearningPhase.VALIDATING)
-
-        self['epoch_loss_train'] = tally_collection[(epoch, 'Training')].loss
-        self['epoch_loss_val']   = tally_collection[(epoch, 'Validating')].loss
+        try:
+            self['epoch_loss_train'] = tally_collection[(epoch, 'Training')].loss
+        except KeyError:
+            msg = f"Training loss for epoch {epoch} not avaible: add_loss() was never called."
+            if logger is None:
+                print(msg)
+            else:
+                logger.warn(msg)
+                
+        try:
+            self['epoch_loss_val']   = tally_collection[(epoch, 'Validating')].loss
+        except KeyError:
+            msg = f"Validation loss for epoch {epoch} not avaible: add_loss() was never called."
+            if logger is None:
+                print(msg)
+            else:
+                logger.warn(msg)
 
         self['epoch_mean_weighted_precision'] = \
            tally_collection.mean_weighted_precision(epoch,

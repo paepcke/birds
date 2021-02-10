@@ -10,6 +10,9 @@ code by
 @author: paepcke
 '''
 
+# TODO:
+#   o Test model save on cnt-c, and start from savepoint
+
 from _collections import OrderedDict
 import argparse
 import contextlib
@@ -75,22 +78,22 @@ sys.path.insert(0,packet_root)
 # or different machine:
 #*****************
 # 
-# if socket.gethostname() in ('quintus', 'quatro', 'sparky'):
-#     # Point to where the pydev server 
-#     # software is installed on the remote
-#     # machine:
-#     sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
-#    
-#     import pydevd
-#     global pydevd
-#     # Uncomment the following if you
-#     # want to break right on entry of
-#     # this module. But you can instead just
-#     # set normal Eclipse breakpoints:
-#     #*************
-#     print("About to call settrace()")
-#     #*************
-#     pydevd.settrace('localhost', port=4040)
+if socket.gethostname() in ('quintus', 'quatro', 'sparky'):
+    # Point to where the pydev server 
+    # software is installed on the remote
+    # machine:
+    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
+    
+    import pydevd
+    global pydevd
+    # Uncomment the following if you
+    # want to break right on entry of
+    # this module. But you can instead just
+    # set normal Eclipse breakpoints:
+    #*************
+    print("About to call settrace()")
+    #*************
+    pydevd.settrace('localhost', port=4040)
 # **************** 
 
 #***********
@@ -462,6 +465,7 @@ class BirdTrainer(object):
             # Replace colons with underscores:
             timestamp = timestamp.replace(':', '_')
             
+            # Experiment info:
             exp_info = (f"Exp{timestamp}_lr_{self.config.Training.lr}_" +
                         f"opt_{self.config.Training.optimizer}_"
                         f"bs_{self.config.Training.batch_size}_" +
@@ -887,16 +891,16 @@ class BirdTrainer(object):
             optimizer = optim.Adam(model.parameters(),lr=lr)
             return optimizer
         
-        if optimizer_name == 'SGD':
-            self.optimizer = optim.SGD(model.parameters(), 
-                                       lr=lr,
-                                       momentum=momentum)
+        if optimizer_name == 'sgd':
+            optimizer = optim.SGD(model.parameters(), 
+                                  lr=lr,
+                                  momentum=momentum)
             return optimizer
 
         if optimizer_name == 'rmsprop':
-            self.optimizer = optim.RMSprop(model.parameters(), 
-                                           lr=lr,
-                                           momentum=momentum)
+            optimizer = optim.RMSprop(model.parameters(), 
+                                      lr=lr,
+                                      momentum=momentum)
             return optimizer
 
     #------------------------------------
@@ -1139,7 +1143,9 @@ class BirdTrainer(object):
             absolute_file_path = self.dataloader.file_from_sample_id(sample_id)
             incorrect_paths.append(os.path.basename(absolute_file_path))
 
-        epoch_summary = EpochSummary(self.tally_collection, epoch)
+        epoch_summary = EpochSummary(self.tally_collection, 
+                                     epoch,
+                                     self.log)
         with open(self.json_filepath, 'a') as f:
             f.write(json.dumps(
                     [epoch, 
@@ -1157,7 +1163,10 @@ class BirdTrainer(object):
     
     def record_tensorboard_results(self, epoch):
         
-        epoch_results = EpochSummary(self.tally_collection, epoch)
+        epoch_results = EpochSummary(self.tally_collection, 
+                                     epoch,
+                                     self.log
+                                     )
         
         training_quantities_to_report = ['mean_accuracy_training',
                                          'epoch_loss_train',
@@ -1168,12 +1177,12 @@ class BirdTrainer(object):
                                            'epoch_mean_weighted_precision',
                                            'epoch_mean_weighted_recall'
                                            ]
-        train_results = {measure_name : epoch_results[measure_name]
+        train_results = {measure_name : epoch_results.get(measure_name, None)
                          for measure_name
                          in training_quantities_to_report
                          }
 
-        validation_results = {measure_name : epoch_results[measure_name]
+        validation_results = {measure_name : epoch_results.get(measure_name,None)
                               for measure_name
                               in validation_quantities_to_report
                               }
@@ -1332,12 +1341,20 @@ class BirdTrainer(object):
                     total_train_loss = self.tally_collection.cumulative_loss(epoch=self.epoch,
                                                                            learning_phase=LearningPhase.TRAINING
                                                                            )
-                    avg_train_loss = total_train_loss / self.num_train_samples_this_epoch
                     
-                    self.tally_result(self.train_label_stack, 
-                                      self.train_output_stack,
-                                      avg_train_loss, 
-                                      LearningPhase.TRAINING)
+                    if self.num_train_samples_this_epoch == 0:
+                        self.log.warn(f"No samples available in epoch {self.epoch}")
+                        avg_train_loss = total_train_loss
+                    else:
+                        avg_train_loss = total_train_loss / self.num_train_samples_this_epoch
+
+                    if self.train_output_stack is None:
+                        self.log.warn(f"No samples were processed for epoch {self.epoch}; no result reported")
+                    else:
+                        self.tally_result(self.train_label_stack, 
+                                          self.train_output_stack,
+                                          avg_train_loss, 
+                                          LearningPhase.TRAINING)
                     
                     total_val_loss = self.tally_collection.cumulative_loss(epoch=self.epoch,
                                                                            learning_phase=LearningPhase.VALIDATING
@@ -2491,6 +2508,21 @@ class BirdTrainer(object):
         processes. OK to call multiple times.
         '''
         self.clear_gpu()
+        try:
+            self.writer_train.close()
+        except Exception as e:
+            self.log.err(f"Could not close tensorboard train writer: {repr(e)}")
+
+        try:
+            self.writer_val.close()
+        except Exception as e:
+            self.log.err(f"Could not close tensorboard val writer: {repr(e)}")
+            
+        try:
+            self.writer_misc.close()
+        except Exception as e:
+            self.log.err(f"Could not close tensorboard misc writer: {repr(e)}")
+
         if self.init_process_group_called or dist.is_initialized():
             try:
                 dist.destroy_process_group()
