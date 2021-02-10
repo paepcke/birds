@@ -9,10 +9,14 @@ import math
 import sys
 import utils
 import logging as log
+import specaugment as sa
+from PIL import Image
+import matplotlib.pyplot as plt
 
 # BACKGROUND_NOISE_PATH = "/Users/lglik/Code/birds/data_augmentation/lib/default_background"
 # BACKGROUND_NOISE_PATH = "data_augmentation/lib/default_background/"
 BACKGROUND_NOISE_PATH = "data_augmentation/lib/Noise_Recordings/"
+SPECTROGRAM_PATH = "spectrograms/"
 DESTINATION_PATH = "/home/data/birds/NEW_BIRDSONG/EXTRA_FILTERED/CALL_FILTERED_FULL_AUG"
 SOURCE_FOLDER_PATH = "/home/data/birds/NEW_BIRDSONG/EXTRA_FILTERED/CALL_FILTERED_TIMESHIFT"
 SPECIES = ""
@@ -142,7 +146,24 @@ def add_background(in_dir, out_dir, species=None, len_noise_to_add=5.0, verbose 
                 # output the new wav data to a file
                 librosa.output.write_wav(output_path, new_record, new_sr)
 
+def warp_spectrogram(in_dir, out_dir, species=None):
+    """
+    Performs Frequency and Time Masking for Spectrograms
 
+    :param in_dir: the path to the directory containing spectrograms
+    :type in_dir: str
+    :param out_dir: the path to the directory to save the augmented spectrograms
+    :type out_dir: str
+    :param species: the directory names of the species to modify the wav files of. If species=None, all subdirectories will be used.
+    :type species: str
+    """
+    for file_name in os.listdir(in_dir):
+        if species is None or species in file_name:
+            orig_spectrogram = np.asarray(Image.open(os.path.join(SPECTROGRAM_PATH, file_name)))
+            masked_spectrogram = sa.time_mask(sa.freq_mask(orig_spectrogram, num_masks=2), num_masks=2)
+            plt.imshow(masked_spectrogram);
+            plt.axis('off')
+            plt.savefig(os.path.join(out_dir, file_name[:-len(".png")] + "_masked.png"), dpi=100, bbox_inches='tight', pad_inches=0, format='png', facecolor='none')
 if __name__ == '__main__':
     """The main method. Parses command-line input and calls appropriate functions:"""
     if len(sys.argv) >= 4:
@@ -155,6 +176,8 @@ if __name__ == '__main__':
         elif sys.argv[1] == "-ab":
             add_background(in_dir, out_dir,
                            species= sys.argv[4] if len(sys.argv) == 5 else None)
+        elif sys.argv[1] == "-ws":
+            warp_spectrogram(in_dir, out_dir)
         else:
             print("ERROR: invlaid parameter flag")
     else:
