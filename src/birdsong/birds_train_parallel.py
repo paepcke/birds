@@ -482,7 +482,8 @@ class BirdTrainer(object):
 
             self.tensorboard_plotter.class_support_to_tensorboard(
                 dataset,
-                self.writer_misc
+                self.writer,
+                title='figs/Class Support'
                 )
 
         # A stack to allow clear_gpu() to
@@ -1190,7 +1191,7 @@ class BirdTrainer(object):
         for measure_name, val in train_results.items():
             if type(val) in (float, int, str):
                 try:
-                    self.writer_train.add_scalar(measure_name, val, 
+                    self.writer.add_scalar(f"{measure_name}/train", val, 
                                                  global_step=epoch)
                 except AttributeError:
                     self.log.err(f"No train result tensorboard writer in process {self.rank}")
@@ -1198,7 +1199,7 @@ class BirdTrainer(object):
         for measure_name, val in validation_results.items():
             if type(val) in (float, int, str):
                 try:
-                    self.writer_val.add_scalar(measure_name, val, 
+                    self.writer.add_scalar(f"{measure_name}/validate", val, 
                                                global_step=epoch)
                 except AttributeError:
                     self.log.err(f"No validation result tensorboard writer in process {self.rank}")
@@ -1211,11 +1212,11 @@ class BirdTrainer(object):
         # on tensorboard, rather than having a time slider
         
         self.tensorboard_plotter.conf_matrix_to_tensorboard(
-            self.writer_misc,
+            self.writer,
             epoch_results['epoch_conf_matrix'], 
             self.class_names,
-            epoch=self.epoch
-            
+            epoch=self.epoch,
+            title="figs/Confusion Matrix"
             )
 
     #------------------------------------
@@ -2265,33 +2266,24 @@ class BirdTrainer(object):
         elif logdir is not None and relative_to is not None:
             os.path.join(relative_to, logdir)
 
-        logdir_train     = os.path.join(logdir, 'train')
-        logdir_val       = os.path.join(logdir, 'validate')
-        logdir_misc      = os.path.join(logdir, 'misc')
+        logdir = os.path.join(logdir, self.config.run_name())
         
-        if not os.path.isdir(logdir_train):
-            os.makedirs(logdir_train)
-        if not os.path.isdir(logdir_val):
-            os.makedirs(logdir_val)
-        if not os.path.isdir(logdir_misc):
-            os.makedirs(logdir_misc)
+        if not os.path.isdir(logdir):
+            os.makedirs(logdir)
         
         # Default dest dir: ./runs
-        self.writer_train = SummaryWriter(log_dir=logdir_train) 
-        self.writer_val   = SummaryWriter(log_dir=logdir_val) 
-        self.writer_misc  = SummaryWriter(log_dir=logdir_misc)
+        self.writer = SummaryWriter(log_dir=logdir)
         
         # Tensorboard image writing:
-        self.tensorboard_plotter = TensorBoardPlotter(logdir=logdir_val)
+        self.tensorboard_plotter = TensorBoardPlotter(logdir=logdir)
         
         # Log a few example spectrograms to tensorboard:
-        self.tensorboard_plotter.write_img_grid(self.writer_val,
+        self.tensorboard_plotter.write_img_grid(self.writer,
                                                 self.root_train_test_data,
                                                 len(self.class_names), # Num of train examples
                                                 )
 
-        self.log.info(f"Tensorboard train log will be in {logdir_train}")
-        self.log.info(f"Tensorboard validation log will be in {logdir_val}")
+        self.log.info(f"Tensorboard log will be in {logdir}")
 
     #------------------------------------
     # setup_json_logging 
@@ -2388,6 +2380,22 @@ class BirdTrainer(object):
             'kernel_size' : self.config.Training.kernel_size
             }
         
+        # Epoch loss summaries may be 
+        # unavailable, because not even enough
+        # data for a single batch was available.
+        # Put in -1 as a warning; it's unlikely
+        # we could send nan to tensorboard:
+        try:
+            loss_train = summary.epoch_loss_train
+        except AttributeError:
+            loss_train = -1.0
+            
+        try:
+            loss_val = summary.epoch_loss_val
+        except AttributeError:
+            loss_val = -1.0
+        
+        
         metric_results = {
                 'mean_balanced_accuracy_training' : summary.mean_balanced_accuracy_training,
                 'mean_balanced_accuracy_validating':summary.mean_balanced_accuracy_validating,
@@ -2395,11 +2403,12 @@ class BirdTrainer(object):
                 'mean_accuracy_validating': summary.mean_accuracy_validating,
                 'epoch_mean_weighted_precision': summary.epoch_mean_weighted_precision,
                 'epoch_mean_weighted_recall' : summary.epoch_mean_weighted_recall,
-                'epoch_loss_train' : summary.epoch_loss_train,
-                'epoch_loss_val' : summary.epoch_loss_val
+                'epoch_loss_train' : loss_train,
+                'epoch_loss_val' : loss_val
                 }
         
-        self.writer(hparms_vals, metric_results, run_name=self.config.run_name())
+        self.writer.add_hparams(hparms_vals, metric_results, 
+                                run_name=f"hparams/{self.config.run_name()}")
 
     #------------------------------------
     # device_residence
@@ -2568,19 +2577,9 @@ class BirdTrainer(object):
         '''
         self.clear_gpu()
         try:
-            self.writer_train.close()
+            self.writer.close()
         except Exception as e:
-            self.log.err(f"Could not close tensorboard train writer: {repr(e)}")
-
-        try:
-            self.writer_val.close()
-        except Exception as e:
-            self.log.err(f"Could not close tensorboard val writer: {repr(e)}")
-            
-        try:
-            self.writer_misc.close()
-        except Exception as e:
-            self.log.err(f"Could not close tensorboard misc writer: {repr(e)}")
+            self.log.err(f"Could not close tensorboard writer: {repr(e)}")
 
         if self.init_process_group_called or dist.is_initialized():
             try:
@@ -2693,13 +2692,6 @@ class Resnet18Grayscale(ResNet):
             self.kernel_size) + '_B' + str(self.batch_size) + '.jsonl'
         with open(self.log_filepath, 'w') as f:
             f.write(json.dumps(['epoch', 'loss', 'training_accuracy', 'testing_accuracy', 'precision', 'recall', 'incorrect_paths', 'confusion_matrix']) + "\n")
-
-
-        # Default dest dir: ./runs
-        self.writer = SummaryWriter(log_dir=None)
-        tb_dir = os.path.join(os.path.dirname(__file__), 'runs')
-
-        self.log.info(f"Tensorboard info will be at {tb_dir}")
 
 # ------------------------ Main ------------
 if __name__ == '__main__':

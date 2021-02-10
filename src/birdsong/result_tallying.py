@@ -499,7 +499,8 @@ class EpochSummary(UserDict):
         resulting instance acts like a dict with 
         the following keys:
         
-           o balanced_accuracy
+           o mean_balanced_accuracy_training
+           o mean_balanced_accuracy_validating
            o mean_accuracy_training
            o mean_accuracy_validating
            o epoch_loss_train
@@ -518,11 +519,11 @@ class EpochSummary(UserDict):
 
         super().__init__()
         
-        self['balanced_accuracy_training'] = \
+        self['mean_balanced_accuracy_training'] = \
            tally_collection.mean_balanced_accuracy(epoch, 
                                                    learning_phase=LearningPhase.TRAINING)
 
-        self['balanced_accuracy_validating'] = \
+        self['mean_balanced_accuracy_validating'] = \
            tally_collection.mean_balanced_accuracy(epoch, 
                                                    learning_phase=LearningPhase.VALIDATING)
 
