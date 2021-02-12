@@ -4,21 +4,25 @@ Created on Dec 23, 2020
 @author: paepcke
 '''
 
-import os, sys
-packet_root = os.path.abspath(__file__.split('/')[0])
-sys.path.insert(0,packet_root)
-
+from collections import UserDict
 import copy
 import datetime
-from collections import UserDict
+import os, sys
 
 from sklearn import metrics
 from sklearn.metrics import confusion_matrix
 import torch
 
+from birdsong.utils.learning_phase import LearningPhase
 import numpy as np
 
-from birdsong.utils.learning_phase import LearningPhase
+
+packet_root = os.path.abspath(__file__.split('/')[0])
+sys.path.insert(0,packet_root)
+
+
+
+
 
 
 # ---------------------- Class Train Result Collection --------
@@ -862,32 +866,47 @@ class TrainResult:
         '''
         return f"<TrainResult object at {self.id()}>"
 
-            
-#===============================================================================
-# 
-#===============================================================================
-#     #------------------------------------
-#     # __eq__ 
-#     #-------------------
-#     
-#     def __eq__(self, other):
-#         '''
-#         # *********Needs update
-#         
-#         Return True if given TrainResult instance
-#         is equal to self in all but loss and weights
-#         @param other: instance to compare to
-#         @type other: TrainResult
-#         @return: True for equality
-#         @rtype: bool
-#         '''
-#         if not isinstance(other, TrainResult):
-#             return False
-#         
-#         if  round(self.best_valid_acc,4)       ==  round(other.best_valid_acc,4)         and \
-#             round(self.best_valid_fscore,4)    ==  round(other.best_valid_fscore,4)      and \
-#             round(self.best_valid_precision,4) ==  round(other.best_valid_precision,4)   and \
-#             round(self.best_valid_recall,4)    ==  round(other.best_valid_recall,4):
-#             return True
-#         else:
-#             return False
+    #------------------------------------
+    # __eq__ 
+    #-------------------
+     
+    def __eq__(self, other):
+        '''
+        Return True if given TrainResult instance
+        is equal to self in all property values
+        @param other: instance to compare to
+        @type other: TrainResult
+        @return: True for equality
+        @rtype: bool
+        '''
+        if not isinstance(other, TrainResult):
+            return False
+
+        # Compare corresponding property values
+        # between self and other. For Tensor quantities,
+        # ensure that all corresponding elements of the 
+        # tensors are equal:
+
+        prop_dict_self   = self.__dict__
+        prop_dict_other  = other.__dict__
+        prop_names = prop_dict_self.keys()
+        
+        for prop_name in prop_names:
+            val_self  = prop_dict_self[prop_name]
+            val_other = prop_dict_other[prop_name]
+            if type(val_self) != type(val_other):
+                return False
+            if type(val_self) == torch.Tensor:
+                if (val_self != val_other).any():
+                    return False
+                continue
+            else:
+                #********
+                try:
+                    if val_self != val_other:
+                        return False
+                except Exception as e:
+                    print(e)
+                #********
+        return True
+

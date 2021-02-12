@@ -118,7 +118,7 @@ class TestTensorBoardPlotter(unittest.TestCase):
         # to display. Write summaries to a tmp
         # file underneath this script's dir, which 
         # will be removed later.
-        plotter = TensorBoardPlotter(self.tb_summary_dir)
+        plotter = TensorBoardPlotter()
         grid = plotter.write_img_grid(self.writer,
                                       self.data_root, 
                                       num_imgs=4,
@@ -177,7 +177,7 @@ class TestTensorBoardPlotter(unittest.TestCase):
         # to display. Write summaries to a tmp
         # file underneath this script's dir, which 
         # will be removed later.
-        plotter = TensorBoardPlotter(self.tb_summary_dir)
+        plotter = TensorBoardPlotter()
         grid = plotter.write_img_grid(self.writer,
                                       self.data_root, 
                                       num_imgs=40,
@@ -191,7 +191,7 @@ class TestTensorBoardPlotter(unittest.TestCase):
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_class_support_to_tensorboard(self):
         
-        plotter = TensorBoardPlotter(self.tb_summary_dir)
+        plotter = TensorBoardPlotter()
         dataset = SingleRootImageDataset(self.data_root)
         
         support_dict = plotter.class_support_to_tensorboard(dataset,

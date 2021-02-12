@@ -13,8 +13,8 @@ from birdsong.launch_training_runs import TrainScriptRunner
 from birdsong.utils.neural_net_config import NeuralNetConfig
 
 
-#*****TEST_ALL = True
-TEST_ALL = False
+TEST_ALL = True
+#TEST_ALL = False
 
 class Test(unittest.TestCase):
 
@@ -32,15 +32,15 @@ class Test(unittest.TestCase):
         cls.hparms_spec = {'lr' : [0.001],
                            'optimizer'  : ['Adam', 'RMSprop', 'SGD'],
                            'batch_size' : [32,64,128],
-                           'kernel'     : [3,7]
+                           'kernel_size': [3,7]
                            }
         cls.this_hostname = socket.getfqdn()
 
     def setUp(self):
 
-        self.launcher = TrainScriptRunner(self.hparms_spec, 
-                                         self.initial_config,
-                                         unittesting=True)
+        self.launcher = TrainScriptRunner(self.initial_config,
+                                          self.hparms_spec, 
+                                          unittesting=True)
 
     def tearDown(self):
         pass
@@ -91,7 +91,7 @@ class Test(unittest.TestCase):
     # test_gen_configurations
     #-------------------
     
-    #****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_gen_configurations(self):
         
         config_dicts = self.launcher.get_runs_hparm_specs(self.hparms_spec)

@@ -12,6 +12,12 @@ import os
 from birdsong.utils.dottable_config import DottableConfigParser
 from birdsong.utils.dottable_map import DottableMap
 
+# ------------ Specialty Exceptions --------
+
+class ConfigError(Exception):
+    pass
+
+# ----------- Class NeuralNetConfig ----------
 
 class NeuralNetConfig(DottableConfigParser):
     '''

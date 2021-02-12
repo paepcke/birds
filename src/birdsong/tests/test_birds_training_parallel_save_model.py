@@ -13,7 +13,7 @@ import socket
 import torch
 
 from birdsong.birds_train_parallel import BirdTrainer 
-from birdsong.utils.dottable_config import DottableConfigParser
+from birdsong.utils.neural_net_config import NeuralNetConfig
 from birdsong.utils.learning_phase import LearningPhase
 
 TEST_ALL = True
@@ -111,7 +111,7 @@ class TestBirdsTrainingParallel(unittest.TestCase):
         self.config_file = os.path.join(os.path.dirname(__file__), 'bird_trainer_tst.cfg')
 
         # Our own copy of the configuration:
-        self.config = DottableConfigParser(self.config_file)
+        self.config = NeuralNetConfig(self.config_file)
 
         # The stand-alone, single process distribution
         # parameter defaults:
@@ -164,19 +164,24 @@ class TestBirdsTrainingParallel(unittest.TestCase):
             
         try:
             tally1 = trainer.tally_result(
-                        0, # Split number
                         four_truths,
                         four_results_training,  # using the 3D result
                         10.1,
                         LearningPhase.TRAINING
                         )
             tally2 = trainer.tally_result(
-                        1, # Split number
                         four_truths,
-                        four_results,  # using the 2D result
+                        four_results_training,
                         20.2,
                         LearningPhase.VALIDATING
                         )
+            
+#             tally2 = trainer.tally_result(
+#                         four_truths,
+#                         four_results,  # using the 2D result
+#                         20.2,
+#                         LearningPhase.VALIDATING
+#                         )
     
             
             # Pretend the trainer is in the 10th epoch...
@@ -187,19 +192,19 @@ class TestBirdsTrainingParallel(unittest.TestCase):
             tally2.epoch = 9
             # Have to correct the tallies' keys
             # in the tally_collection. For tally1:
-            trainer.tally_collection[(10, 0, 'Training')] = \
-                trainer.tally_collection[(None, 0, 'Training')]
-            trainer.tally_collection.pop((None, 0, 'Training'))
+            trainer.tally_collection[(10, 'Training')] = \
+                trainer.tally_collection[(None, 'Training')]
+            trainer.tally_collection.pop((None, 'Training'))
             
             # For tally2:
-            trainer.tally_collection[(9, 1, 'Validating')] = \
-                trainer.tally_collection[(None, 1, 'Validating')]
-            trainer.tally_collection.pop((None, 1, 'Validating'))
+            trainer.tally_collection[(9, 'Validating')] = \
+                trainer.tally_collection[(None, 'Validating')]
+            trainer.tally_collection.pop((None, 'Validating'))
             
             
             # Make sure the surgery worked:
-            self.assertEqual(trainer.tally_collection[(10,0,'Training')].epoch,10)
-            self.assertEqual(trainer.tally_collection[(9,1,'Validating')].epoch,9)
+            self.assertEqual(trainer.tally_collection[(10,'Training')].epoch,10)
+            self.assertEqual(trainer.tally_collection[(9,'Validating')].epoch,9)
             
             save_file = os.path.join(self.curr_dir, 'saved_model.pth')
             trainer.save_model_checkpoint(save_file, 
@@ -227,13 +232,13 @@ class TestBirdsTrainingParallel(unittest.TestCase):
             
             # Tally2 should be in the new trainer's
             # tallies collection:
-            self.assertEqual(trainer1.tally_collection[(9,1,'Validating')].epoch,9)
+            self.assertEqual(trainer1.tally_collection[(9,'Validating')].epoch,9)
             # Tally1 should have been removed during the
             # saving process because its epoch was same as
             # trainer's current epoch:
             self.assertEqual(len(trainer1.tally_collection), 1)
             
-            tally2Prime = trainer1.tally_collection[(9,1,'Validating')]
+            tally2Prime = trainer1.tally_collection[(9,'Validating')]
             
             # Check two of the constants:
             self.assertEqual(tally2.learning_phase, tally2Prime.learning_phase)
@@ -243,7 +248,7 @@ class TestBirdsTrainingParallel(unittest.TestCase):
             self.assertEqual(tally2Prime.recall, tally2.recall)
             
             # But tally2Prime must be a *copy* of tally2:
-            self.assertNotEqual(tally2Prime, tally2)
+            self.assertTrue(tally2Prime == tally2)
         finally:
             try:
                 trainer1.cleanup()

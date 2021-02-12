@@ -4,7 +4,6 @@ Created on Jan 25, 2021
 @author: paepcke
 '''
 import os
-import socket, sys
 
 from collections import Counter
 
@@ -29,6 +28,7 @@ from birdsong.rooted_image_dataset import SingleRootImageDataset
 # on Quatro or Quintus, and will send a trigger
 # to the Eclipse debugging service on the same
 # or different machine:
+# import socket, sys
 # if socket.gethostname() in ('quintus', 'quatro'):
 #     # Point to where the pydev server 
 #     # software is installed on the remote
@@ -49,6 +49,19 @@ from birdsong.rooted_image_dataset import SingleRootImageDataset
 
 
 class TensorBoardPlotter:
+    '''
+    Support functionality for creating custom 
+    graphs and images for submission to Tensorboard.
+    Services include:
+    
+        o Create confusion matrix images
+        o Bar charts for number of samples in each class
+        o Placing a grid of images on Tensorboard
+        o Writing (i.e. overlaying) text onto images
+        
+    No SummaryWriter is created. A writer is always
+    passed in
+    '''
     
     conf_matrices = []
 
@@ -56,12 +69,8 @@ class TensorBoardPlotter:
     # Constructor
     #-------------------
     
-    def __init__(self, logdir=None):
-        
-        self.curr_dir = os.path.dirname(__file__)
-        if logdir is None:
-            self.logdir = os.path.join(self.curr_dir, 'runs')
-        self.logdir = logdir
+    def __init__(self):
+        pass
 
     #------------------------------------
     # conf_matrix_to_tensorboard 

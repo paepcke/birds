@@ -7,11 +7,12 @@ Created on Dec 19, 2020
 
 import os
 from pathlib import Path
-import unittest
 import socket
+import unittest
 
 from birdsong.birds_train_parallel import BirdTrainer 
-from birdsong.utils.dottable_config import DottableConfigParser
+from birdsong.utils.neural_net_config import NeuralNetConfig
+
 
 TEST_ALL = True
 #TEST_ALL = False
@@ -108,7 +109,7 @@ class TestBirdsTrainingParallel(unittest.TestCase):
         self.config_file = os.path.join(os.path.dirname(__file__), 'bird_trainer_tst.cfg')
 
         # Our own copy of the configuration:
-        self.config = DottableConfigParser(self.config_file)
+        self.config = NeuralNetConfig(self.config_file)
 
         # The stand-alone, single process distribution
         # parameter defaults:

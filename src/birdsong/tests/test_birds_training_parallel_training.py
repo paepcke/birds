@@ -15,7 +15,7 @@ import socket
 import torch
 
 from birdsong.birds_train_parallel import BirdTrainer 
-from birdsong.utils.dottable_config import DottableConfigParser
+from birdsong.utils.neural_net_config import NeuralNetConfig
 
 TEST_ALL = True
 #TEST_ALL = False
@@ -112,7 +112,7 @@ class TestBirdsTrainingParallel(unittest.TestCase):
         self.config_file = os.path.join(os.path.dirname(__file__), 'bird_trainer_tst.cfg')
 
         # Our own copy of the configuration:
-        self.config = DottableConfigParser(self.config_file)
+        self.config = NeuralNetConfig(self.config_file)
 
         # The stand-alone, single process distribution
         # parameter defaults:
@@ -177,11 +177,12 @@ class TestBirdsTrainingParallel(unittest.TestCase):
             self.assertEqual(trainer.device_residence(trainer.model), 
                              torch.device('cpu'))
              
-            # Expected number of results is 28:
-            #   4 results (3 train + 1 validation) for the splits
-            #   in each of the 7 epochs: 4*7=28
+            # Expected number of results is 10:
+            #   1 train + 1 validation result for
+            #   each epoch. Epochs turns out to be
+            #   5, but we adjust below if needed:
              
-            expected_intermediate_results = trainer.epoch * 2 * trainer.dataloader.num_folds
+            expected_intermediate_results = trainer.epoch * 2
             self.assertEqual(len(trainer.tally_collection),
                              expected_intermediate_results
                              )

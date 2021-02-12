@@ -87,25 +87,21 @@ class Test(unittest.TestCase):
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_basics_single_split(self):
         tally = self.tally_result(
-                            0, # Split number
                             self.single_label_matching,
                             self.single_pred,
                             LearningPhase.TRAINING
                             )
         self.assertEqual(tally.epoch, 1)
-        self.assertEqual(tally.split_num, 0)
         self.assertEqual(tally.num_samples, 1)
         self.assertEqual(tally.num_correct, 1)
         self.assertEqual(tally.num_wrong, 0)
 
         tally = self.tally_result(
-                            0, # Split number
                             self.single_label_non_match,
                             self.single_pred,
                             LearningPhase.TRAINING
                             )
         self.assertEqual(tally.epoch, 1)
-        self.assertEqual(tally.split_num, 0)
         self.assertEqual(tally.num_samples, 1)
         self.assertEqual(tally.num_correct, 0)
         self.assertEqual(tally.num_wrong, 1)
@@ -117,25 +113,21 @@ class Test(unittest.TestCase):
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_basics_two_splits(self):
         tally = self.tally_result(
-                            0, # Split number
                             self.batch_label_matching,
                             self.batch_pred,
                             LearningPhase.TRAINING
                             )
         self.assertEqual(tally.epoch, 1)
-        self.assertEqual(tally.split_num, 0)
         self.assertEqual(tally.num_samples, 2)
         self.assertEqual(tally.num_correct, 2)
         self.assertEqual(tally.num_wrong, 0)
 
         tally = self.tally_result(
-                            0, # Split number
                             self.batch_label_non_match,
                             self.batch_pred,
                             LearningPhase.TRAINING
                             )
         self.assertEqual(tally.epoch, 1)
-        self.assertEqual(tally.split_num, 0)
         self.assertEqual(tally.num_samples, 2)
         self.assertEqual(tally.num_correct, 1)
         self.assertEqual(tally.num_wrong, 1)
@@ -148,7 +140,6 @@ class Test(unittest.TestCase):
     def test_accuracy(self):
         # Single split, correct prediction
         tally = self.tally_result(
-                            0, # Split number
                             self.single_label_matching,
                             self.single_pred,
                             LearningPhase.TRAINING
@@ -157,7 +148,6 @@ class Test(unittest.TestCase):
 
         # Single split, incorrect prediction
         tally = self.tally_result(
-                            0, # Split number
                             self.single_label_non_match,
                             self.single_pred,
                             LearningPhase.TRAINING
@@ -166,7 +156,6 @@ class Test(unittest.TestCase):
 
         # Two splits, correct predictions
         tally = self.tally_result(
-                            0, # Split number
                             self.batch_label_matching,
                             self.batch_pred,
                             LearningPhase.TRAINING
@@ -175,7 +164,6 @@ class Test(unittest.TestCase):
 
         # Two splits, incorrect predictions
         tally = self.tally_result(
-                            0, # Split number
                             self.batch_label_non_match,
                             self.batch_pred,
                             LearningPhase.TRAINING
@@ -191,7 +179,6 @@ class Test(unittest.TestCase):
         # Single split, correct predictions
         # for all 10 samples:
         tally = self.tally_result(
-                            0, # Split number
                             self.ten_labels_perfect,
                             self.ten_results,
                             LearningPhase.TRAINING
@@ -202,7 +189,6 @@ class Test(unittest.TestCase):
         self.assertTrue((recalls == truth).all())
         
         tally = self.tally_result(
-                            0, # Split number
                             self.ten_labels_first_wrong,
                             self.ten_results,
                             LearningPhase.TRAINING
@@ -220,7 +206,6 @@ class Test(unittest.TestCase):
         # Single split, correct predictions
         # for all 10 samples:
         tally = self.tally_result(
-                            0, # Split number
                             self.ten_labels_perfect,
                             self.ten_results,
                             LearningPhase.TRAINING
@@ -231,7 +216,6 @@ class Test(unittest.TestCase):
         self.assertTrue(torch.eq(precisions, truth).all())
 
         tally = self.tally_result(
-                            0, # Split number
                             self.ten_labels_first_wrong,
                             self.ten_results,
                             LearningPhase.TRAINING
@@ -257,7 +241,6 @@ class Test(unittest.TestCase):
         # Single split, correct predictions
         # for all 10 samples:
         _tally1 = self.tally_result(
-                            0, # Split number
                             self.ten_labels_perfect,
                             self.ten_results,
                             LearningPhase.TRAINING
@@ -268,7 +251,6 @@ class Test(unittest.TestCase):
         #self.assertTrue(torch.eq(precisions, truth).all())
 
         tally2 = self.tally_result(
-                            0, # Split number
                             self.ten_labels_first_wrong,
                             self.ten_results,
                             LearningPhase.TRAINING
@@ -292,7 +274,6 @@ class Test(unittest.TestCase):
         # Single split, correct predictions
         # for all 10 samples:
         _tally = self.tally_result(
-                            0, # Split number
                             self.ten_labels_perfect,
                             self.ten_results,
                             LearningPhase.TRAINING
@@ -303,7 +284,6 @@ class Test(unittest.TestCase):
         #self.assertTrue(torch.eq(precisions, truth).all())
 
         tally = self.tally_result(
-                            0, # Split number
                             self.ten_labels_first_wrong,
                             self.ten_results,
                             LearningPhase.TRAINING
@@ -328,16 +308,16 @@ class Test(unittest.TestCase):
     def test_accuracy_aggregation(self):
         
         tally1 = self.tally_result(
-                              0, # Split number
                               self.single_label_matching,
                               self.single_pred,
-                              LearningPhase.TRAINING
+                              LearningPhase.TRAINING,
+                              epoch=1
                               )
         tally2 = self.tally_result(
-                              1, # Split number
                               self.single_label_non_match,
                               self.single_pred,
-                              LearningPhase.TRAINING
+                              LearningPhase.TRAINING,
+                              epoch=2
                               )
         acc1 = tally1.accuracy
         acc2 = tally2.accuracy
@@ -348,7 +328,6 @@ class Test(unittest.TestCase):
         self.assertEqual(mean_accuracy, mean_acc.item()) # 0.5
 
         tally1 = self.tally_result(
-                              0, # Split number
                               self.ten_labels_perfect,
                               self.ten_results,
                               LearningPhase.TRAINING
@@ -363,7 +342,6 @@ class Test(unittest.TestCase):
         
         # Epoch 1 result
         _tally1 = self.tally_result(
-                              0, # Split number
                               self.ten_labels_perfect,
                               self.ten_results,
                               LearningPhase.TRAINING,
@@ -371,7 +349,6 @@ class Test(unittest.TestCase):
                               )
         # Epoch 2 result:
         _tally2 = self.tally_result(
-                              0, # Split number
                               self.ten_labels_first_wrong,
                               self.ten_results,
                               LearningPhase.TESTING,
@@ -379,7 +356,6 @@ class Test(unittest.TestCase):
                               )
         # Second Epoch 2 result:
         _tally3 = self.tally_result(
-                              0, # Split number
                               self.ten_labels_first_wrong,
                               self.ten_results,
                               LearningPhase.TESTING,
@@ -462,7 +438,6 @@ class Test(unittest.TestCase):
 
         # Epoch 1 result
         _tally1 = self.tally_result(
-                              0, # Split number
                               self.ten_labels_perfect,
                               self.ten_results,
                               LearningPhase.TRAINING,
@@ -470,7 +445,6 @@ class Test(unittest.TestCase):
                               )
         # Epoch 2 result:
         _tally2 = self.tally_result(
-                              0, # Split number
                               self.ten_labels_first_wrong,
                               self.ten_results,
                               LearningPhase.TESTING,
@@ -478,7 +452,6 @@ class Test(unittest.TestCase):
                               )
         # Second Epoch 2 result:
         _tally3 = self.tally_result(
-                              0, # Split number
                               self.ten_labels_first_wrong,
                               self.ten_results,
                               LearningPhase.TESTING,
@@ -512,7 +485,6 @@ class Test(unittest.TestCase):
 
         # Epoch 1 result
         _tally1 = self.tally_result(
-                              0, # Split number
                               self.ten_labels_perfect,
                               self.ten_results,
                               LearningPhase.TRAINING,
@@ -520,7 +492,6 @@ class Test(unittest.TestCase):
                               )
         # Epoch 2 result:
         _tally2 = self.tally_result(
-                              0, # Split number
                               self.ten_labels_first_wrong,
                               self.ten_results,
                               LearningPhase.TESTING,
@@ -528,7 +499,6 @@ class Test(unittest.TestCase):
                               )
         # Second Epoch 2 result:
         _tally3 = self.tally_result(
-                              0, # Split number
                               self.ten_labels_first_wrong,
                               self.ten_results,
                               LearningPhase.TESTING,
@@ -564,59 +534,57 @@ class Test(unittest.TestCase):
         '''
         # Epoch 1, learning phase TRAINING
         _tally_ep1_lp_train1 = self.tally_result(
-                                   0, # Split number
                                    self.ten_labels_perfect,
                                    self.ten_results,
                                    LearningPhase.TRAINING,
                                    epoch=1
                                    )
-        # Epoch 1, learning phase TRAINING
-        _tally_ep1_lp_train2 = self.tally_result(
-                                  1, # Split number
+        # Epoch 2, learning phase TRAINING
+        _tally_ep2_lp_train2 = self.tally_result(
                                   self.ten_labels_perfect,
                                   self.ten_results,
                                   LearningPhase.TRAINING,
-                                  epoch=1
+                                  epoch=2
                                   )
-        # Epoch 2, learning phase TRAINING
-        _tally_ep2_lp_train1 = self.tally_result(
-                              0, # Split number
+        # Epoch 3, learning phase TRAINING
+        _tally_ep3_lp_train3 = self.tally_result(
                               self.ten_labels_first_wrong,
                               self.ten_results,
                               LearningPhase.TRAINING,
-                              epoch=2
+                              epoch=3
                               )
-        # Second Epoch 2 result:
-        _tally_ep2_lp_test1 = self.tally_result(
-                              0, # Split number
+        # Second Epoch 1 result:
+        _tally_ep1_lp_test1 = self.tally_result(
                               self.ten_labels_first_wrong,
                               self.ten_results,
                               LearningPhase.TESTING,
-                              epoch=2
+                              epoch=1
                               )
         
         tallies_sorted = [_tally_ep1_lp_train1,
-                          _tally_ep1_lp_train2,
-                          _tally_ep2_lp_train1,
-                          _tally_ep2_lp_test1
+                          _tally_ep2_lp_train2,
+                          _tally_ep3_lp_train3,
+                          _tally_ep1_lp_test1
                           ]
         
         # All tallies, sorted by time:
         tallies = list(self.tally_collection.tallies())
         self.assertEqual(tallies, tallies_sorted)
 
-        # All tallies, sorted by time, but only epoch 1:
-        tallies = list(self.tally_collection.tallies(epoch=1))
-        self.assertEqual(tallies, tallies_sorted[:2])
-        
-        # All tallies, sorted by time, but only training:
-        tallies = list(self.tally_collection.tallies(learning_phase=LearningPhase.TRAINING))
+        # All TRAINING tallies, sorted by time:
+        tallies = list(self.tally_collection.tallies(
+            learning_phase=LearningPhase.TRAINING))
         self.assertEqual(tallies, tallies_sorted[:3])
+        
+        # All TESTING tallies, sorted by time:
+        tallies = list(self.tally_collection.tallies(
+            learning_phase=LearningPhase.TESTING))
+        self.assertTrue(tallies[0] == tallies_sorted[3])
 
         # All tallies, sorted by time, but only testing in epoch 2:
-        tallies = list(self.tally_collection.tallies(epoch=2,
-                                                     learning_phase=LearningPhase.TESTING))
-        self.assertEqual(tallies, [_tally_ep2_lp_test1])
+        tallies = list(self.tally_collection.tallies(
+            epoch=2,
+            learning_phase=LearningPhase.TESTING))
 
     #------------------------------------
     # test_collection_num_classes 
@@ -636,7 +604,6 @@ class Test(unittest.TestCase):
                          
         
         _tally1 = self.tally_result(
-                       0, # Split number
                        self.ten_labels_perfect,
                        self.ten_results,
                        LearningPhase.TRAINING,
@@ -644,7 +611,6 @@ class Test(unittest.TestCase):
                        )
         # Epoch 1, learning phase TRAINING
         _tally2 = self.tally_result(
-                       1, # Split number
                        self.ten_labels_perfect,
                        self.ten_results,
                        LearningPhase.TRAINING,
@@ -662,7 +628,6 @@ class Test(unittest.TestCase):
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_copy(self):
         tally1 = self.tally_result(
-                       0, # Split number
                        self.ten_labels_perfect,
                        self.ten_results,
                        LearningPhase.TRAINING,
@@ -673,13 +638,11 @@ class Test(unittest.TestCase):
         # Contents of new collection should be same:
         self.assertEqual(len(new_col), 1)
         new_tally = list(new_col.tallies())[0]
+        self.assertTrue(new_tally == tally1)
         
-        self.assertEqual(new_tally.split_num, tally1.split_num)
-        self.assertEqual(new_tally.epoch, tally1.epoch)
-        
-        # But the contained tallies must not be equal: 
-        self.assertNotEqual(new_tally, tally1)
-
+        for tally_old, tally_new in zip(self.tally_collection.tallies(),
+                                        new_col.tallies()):
+            self.assertTrue(tally_old == tally_new)
 
     # ****** Needs thinking and debugging in result_tallying
 #     #------------------------------------
@@ -741,7 +704,6 @@ class Test(unittest.TestCase):
     #-------------------
 
     def tally_result(self,
-                     split_num, 
                      labels_tns, 
                      pred_prob_tns,
                      learning_phase,
@@ -769,8 +731,7 @@ class Test(unittest.TestCase):
 
         # Use a random loss value:
         loss = 0.14
-        tally = TrainResult(split_num, 
-                            epoch, 
+        tally = TrainResult(epoch, 
                             learning_phase, 
                             loss, 
                             pred_class_ids,
@@ -780,9 +741,6 @@ class Test(unittest.TestCase):
                             
         self.tally_collection.add(tally)
         return tally
-
-        
-
 
 # ----------------- Main --------------
 

@@ -16,7 +16,7 @@ import json5
 from logging_service.logging_service import LoggingService
 import psutil
 
-from birdsong.utils.neural_net_config import NeuralNetConfig
+from birdsong.utils.neural_net_config import NeuralNetConfig, ConfigError
 
 # TODO: 
 #   nothing right now
@@ -47,8 +47,6 @@ from birdsong.utils.neural_net_config import NeuralNetConfig
 #     pydevd.settrace('localhost', port=4040)
 #****************
 # ------------------------ Specialty Exceptions --------
-class ConfigError(Exception):
-    pass
 
 class TrainScriptRunner(object):
     '''
@@ -65,6 +63,7 @@ class TrainScriptRunner(object):
                  training_script=None,
                  logfile=None,
                  quiet=False,
+                 dryrun=False,
                  unittesting=False):
         '''
         Specifications expected like this
@@ -137,6 +136,14 @@ class TrainScriptRunner(object):
         # that that modify the starting config:
         the_run_configs = self.gen_configurations(starting_config, 
                                                   the_run_dicts)
+
+        if dryrun:
+            print("Dryrun:")
+            print(f"Would run {len(the_run_dicts)} processes with these configs:")
+            for configs in the_run_dicts:
+                
+                print(configs)
+            return
         
         # Start one training script for each configuration:
         self.run_configurations(the_run_configs) 
@@ -782,10 +789,18 @@ if __name__ == '__main__':
 
     parser.add_argument('-q', '--quiet',
                         help='suppress info msgs to the display',
+                        action='store_true',
                         default=False)
+    
+    parser.add_argument('-d', '--dryrun',
+                        help='print configs of processes that would be started, but do not start them.',
+                        action='store_true',
+                        default=False)
+    
     parser.add_argument('-c', '--config_file',
                         help='fully qualified path to config file',
                         default=None)
+    
     parser.add_argument('-t', '--training_script',
                         help='fully qualified path to the training script \n'+ \
                              'provide here, or in config file',
@@ -795,6 +810,7 @@ if __name__ == '__main__':
     
     config_file = args.config_file
     if config_file is None:
+        # Check the default location: <proj_root>/config.cfg:
         curr_dir = os.path.dirname(__file__)
         config_file = os.path.join(curr_dir, '../../config.cfg')
         if not os.path.exists(config_file):
@@ -822,4 +838,5 @@ if __name__ == '__main__':
     TrainScriptRunner(config_file, 
                       hparms_spec, 
                       args.training_script,
-                      quiet=args.quiet)
+                      quiet=args.quiet,
+                      dryrun=args.dryrun)

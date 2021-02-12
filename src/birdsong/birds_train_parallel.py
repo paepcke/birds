@@ -42,6 +42,7 @@ from torch.distributed import  reduce_op
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.tensorboard import SummaryWriter
 from torchvision.models.resnet import ResNet, BasicBlock
+from seaborn.matrix import heatmap
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -54,7 +55,7 @@ from birdsong.rooted_image_dataset import MultiRootImageDataset
 from birdsong.utils import learning_phase
 from birdsong.utils.dottable_config import DottableConfigParser
 from birdsong.utils.learning_phase import LearningPhase
-from birdsong.utils.neural_net_config import NeuralNetConfig
+from birdsong.utils.neural_net_config import NeuralNetConfig, ConfigError
 from birdsong.utils.tensorboard_plotter import TensorBoardPlotter
 import numpy as np
 import torch.distributed as dist
@@ -208,35 +209,11 @@ class BirdTrainer(object):
         # by one process in a machine: 
         self.local_leader_rank = self.comm_info['MIN_RANK_THIS_MACHINE']
 
-        # Initialize a config dict of dict with
-        # the application's configurations. Sections
-        # will be:
-        #
-        #   config['Paths']       -> dict[attr : val]
-        #   config['Training']    -> dict[attr : val]
-        #   config['Parallelism'] -> dict[attr : val]
-        #
-        # The config read method will handle config_info
-        # being None. 
-        #
-        # If config_info is a string, it is assumed either 
-        # to be a file containing the configuration, or
-        # a JSON string that defines the config. 
-        # Else config_info is assumed to be a NeuralNetConfig.
-        # The latter is relevant only if using this file
-        # as a library, rather than a command line tool:
-
-        if isinstance(config_info, str):
-            if config_info.startswith('{'):
-                # JSON String:
-                self.config = NeuralNetConfig.from_json(config_info)
-            else: 
-                self.config = self.read_configuration(config_info)
-        elif isinstance(config_info, NeuralNetConfig):
-            self.config = config_info
-        else:
-            print(f"Error: must have a config file, not {config_info}. See config.cfg.Example in project root")
-            sys.exit(1)
+        try:
+            self.config = self.initialize_config_struct(config_info)
+        except Exception as e:
+            # Error already reported at source:
+            return
 
         # Is this training process collaborating with 
         # others, training on its own slice of data, 
@@ -245,37 +222,13 @@ class BirdTrainer(object):
         
         self.independent_runs = self.config.getboolean('Parallelism', 'independent_runs') 
 
-        # Replace None args with config file values:
 
-        # Create temporary logging till setup_tallying()
-        # is called further down:
-
-        if logfile is None:
-            try:
-                logfile = self.config.getpath('Paths','logfile', 
-                                              relative_to=self.curr_dir)
-            except ValueError:
-                # No logfile specified in config.cfg
-                # Use stdout:
-                self.log = LoggingService(msg_identifier=f"Rank {self.rank}")
-                
-        # Add rank so each training process gets
-        # its own log output file. The "logfile is None"
-        # body may have initialized logfile, so need to
-        # check for None again:
-
-        if logfile is not None:
-            lp = Path(logfile)
-            new_logname = lp.stem + str(self.comm_info['RANK']) + lp.suffix
-            # Put the path back together, and turn 
-            # from Path instnce to string
-            logfile = str(Path.joinpath(lp.parent, new_logname))
-    
-            if os.path.isdir(logfile):
-                raise ValueError(f"Logfile argument must be a file name, not a directory ({logfile})")
-            self.log = LoggingService(logfile=logfile, msg_identifier=f"Rank {self.rank}")
-
+        # The logger for runtime info/err messages:
+        self.log = self.find_log_path(logfile)
         self.log.logging_level = logging_level
+        
+        # Replace None args with config file values:
+        # Find the test data root from the configuration:
         
         if root_train_test_data is None:
             try:
@@ -295,7 +248,6 @@ class BirdTrainer(object):
 
         self.init_process_group_called = False
         self.setup_gpus()
-
 
         train_parms  = self.config['Training']
         
@@ -325,10 +277,6 @@ class BirdTrainer(object):
         self.cuda   = device('cuda')
         self.cpu    = device('cpu')
         
-        dataset  = MultiRootImageDataset(self.root_train_test_data,
-                                         sample_width=train_parms.getint('sample_width'),
-                                         sample_height=train_parms.getint('sample_width')
-                                         )
         self.num_folds = self.config.Training.getint('num_folds')
         
         # GPUSs used on *this* machine:
@@ -339,112 +287,23 @@ class BirdTrainer(object):
         
         batch_size = batch_size if batch_size is not None else train_parms.getint('batch_size')
 
-        master_addr_in_environ = self.comm_info["MASTER_ADDR"]
-        master_port_in_environ = self.comm_info["MASTER_PORT"]
+        #master_addr_in_environ = self.comm_info["MASTER_ADDR"]
+        #master_port_in_environ = self.comm_info["MASTER_PORT"]
 
-        # In the dataloader creation, make drop_last=True 
-        # to skip the last batch if it is not full. Just 
-        # not worth the trouble dealing with unusually 
-        # dimensioned tensors:
+        self.dataloader = self.initialize_data_access(batch_size)
 
-        # Make an appropriate (single/multiprocessing) dataloader:
-        if self.device == device('cpu') or self.independent_runs:
-
-            # CPU bound, single machine:
-            
-            self.dataloader = CrossValidatingDataLoader(
-                dataset,
-                batch_size=batch_size,
-                num_workers=0,
-                pin_memory=False,
-                prefetch_factor=2,
-                drop_last=self.drop_last,
-                shuffle=True,       # Shuffle underlying dataset at the outset (only)
-                seed=self.seed,
-                num_folds=self.num_folds
-                )
-        else:
-
-            self.log.debug(f"***** Calling init_multiprocessing (master: {master_addr_in_environ}:{master_port_in_environ}...")            
-            self.init_multiprocessing()
-            self.log.debug("***** Returned from init_multiprocessing...")
-            
-            self.dataloader = MultiprocessingDataLoader(dataset,
-                                                        shuffle=True,
-                                                        seed=self.seed,
-                                                        num_folds=self.num_folds,
-                                                        drop_last=True,
-                                                        batch_size=batch_size 
-                                                        )
+        dataset = self.dataloader.dataset
         self.num_classes = len(dataset.class_id_list())
         self.class_names = dataset.class_names()
         
         self.log.info(f"Samples in loader: {len(self.dataloader)}")
 
-        # Resnet18 retain 6 layers of pretraining.
-        # Train the remaining 4 layers with your own
-        # dataset. This is the model without capability
-        # for parallel training. Will be adjusted in
-        # to_app
-        #  
-        
-        raw_model = self.get_resnet18_partially_trained(self.num_classes)
-        
-        # Wrapper to handle distributed training, and
-        # move to GPU, if appropriate. 
-        
-        self.model = self.prep_model(raw_model,
-                                     self.comm_info['LOCAL_RANK']
-                                     )
-        #**********
-        self.log.info(f"type(model): {type(self.model)}")
-        #**********
-        if unit_testing:
+        try:
+            self.init_neural_net_parms(checkpoint, 
+                                       unit_testing=unit_testing)
+        except Exception as e:
+            # Errors were already logged at their source
             return
-        self.optimizer = self.select_optimizer(self.config, self.model)
-        
-        if checkpoint:
-            # Requested to continue training 
-            # from a checkpoint:
-            if not os.path.exists(checkpoint):
-                msg = f"Requested continuation from checkpoint {checkpoint}, which does not exist."
-                self.log.err(msg)
-                print(msg)
-                sys.exit(1)
-            self.log.info("Loading checkpoint...")
-            self.load_model_checkpoint(checkpoint, 
-                                       self.model, 
-                                       self.optimizer)
-            self.log.info("Loading checkpoint done")
-            self.log.info(f"Resume training at start of epoch {self.epoch}")
-        else:
-            self.epoch = None
-            self._diff_avg = None
-            self.tally_collection = None
-
-        # Loss function:
-        #self.loss_fn = self.select_loss_function(self.config)
-
-        if self.config.getboolean('Training', 'weighted', True):
-            # Get path to samples, relative to current
-            # dir, if the file path in the config file 
-            # is relative:
-            class_root = self.config.getpath('Paths',
-                                             'root_train_test_data',
-                                             relative_to = self.curr_dir)
-            weights = ClassWeightDiscovery.get_weights(class_root)
-            # Put weights to the device where the model
-            # was placed: CPU, or GPU_n:
-            device_resident_weights = weights.to(self.device_residence(self.model))
-        else:
-            weights = None
-        self.loss_fn = nn.CrossEntropyLoss(weight=device_resident_weights)
-        
-        
-        # Scheduler:
-        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer)
-
-        self.log.info(f"Model resides on device: {self.device_residence(self.model)}")
 
         # Note: call to setup_tallying must
         # be after checkpoint restoration above.
@@ -475,7 +334,9 @@ class BirdTrainer(object):
                         f"gpus_here_{self.comm_info['GPUS_USED_THIS_MACHINE']}"
                         )
 
-            self.setup_tensorboard(logdir=exp_info)
+            exp_logdir = os.path.join('runs', exp_info)
+            self.setup_tensorboard(logdir=exp_logdir, 
+                                   relative_to=self.curr_dir)
 
             # Log a barchart of how many samples for
             # each class:
@@ -845,8 +706,9 @@ class BirdTrainer(object):
         # Have name in optimizer. Is it one that we support?
         # Be case insensitive:
         if loss_fn_name.lower() not in [fn.lower() for fn in self.available_loss_fns]:
-            self.log.err(f"Loss function '{loss_fn_name}' in config file not implemented; use {self.available_loss_fns}")
-            sys.exit(1)
+            msg = f"Loss function '{loss_fn_name}' in config file not implemented; use {self.available_loss_fns}"
+            self.log.err(msg)
+            raise ConfigError(msg)
         
         if loss_fn_name.lower() == 'mseloss':
             
@@ -1417,7 +1279,7 @@ class BirdTrainer(object):
 
                 if self.rank != self.local_leader_rank:
                     self.log.info(f"Leaving model saving to process {self.local_leader_rank}")
-                    sys.exit(0)
+                    return
                     
                 do_save = self.offer_model_save()
                 if do_save in ('y','Y','yes','Yes', ''):
@@ -1449,7 +1311,7 @@ class BirdTrainer(object):
                 self.cleanup()
                 self.log.info("Exiting")
                 hard_stop = True
-                sys.exit(0)
+                return
 
         finally:
             # If two times cnt-c, exit no matter what
@@ -1478,8 +1340,6 @@ class BirdTrainer(object):
                 self.log.info(f"Process with node{self.rank} exiting.")
 
         self.log.info("Training finished")
-        sys.exit(0)
-
 
     #------------------------------------
     # train_one_split 
@@ -1762,6 +1622,204 @@ class BirdTrainer(object):
 
 
     # ------------- Utils -----------
+
+    #------------------------------------
+    # initialize_config_struct 
+    #-------------------
+    
+    def initialize_config_struct(self, config_info):
+        '''
+        Initialize a config dict of dict with
+        the application's configurations. Sections
+        will be:
+        
+          config['Paths']       -> dict[attr : val]
+          config['Training']    -> dict[attr : val]
+          config['Parallelism'] -> dict[attr : val]
+        
+        The config read method will handle config_info
+        being None. 
+        
+        If config_info is a string, it is assumed either 
+        to be a file containing the configuration, or
+        a JSON string that defines the config.
+         
+        Else config_info is assumed to be a NeuralNetConfig.
+        The latter is relevant only if using this file
+        as a library, rather than a command line tool.
+        
+        If given a NeuralNetConfig instance, it is returned
+        unchanged. 
+        
+        @param config_info: the information needed to construct
+            the structure
+        @type config_info: {NeuralNetConfig | str}
+        @return a NeuralNetConfig instance with all parms
+            initialized
+        @rtype NeuralNetConfig
+        '''
+
+        if isinstance(config_info, str):
+            # Is it a JSON str? Should have a better test!
+            if config_info.startswith('{'):
+                # JSON String:
+                config = NeuralNetConfig.from_json(config_info)
+            else: 
+                config = self.read_configuration(config_info)
+        elif isinstance(config_info, NeuralNetConfig):
+            config = config_info
+        else:
+            msg = f"Error: must have a config file, not {config_info}. See config.cfg.Example in project root"
+            # Since logdir may be in config, need to use print here:
+            print(msg)
+            raise ConfigError(msg)
+            
+        return config
+
+    #------------------------------------
+    # initialize_data_access 
+    #-------------------
+    
+    def initialize_data_access(self, batch_size):
+        '''
+        Creates dataset and dataloader instances.
+        If operating in Distributed Data Parallel,
+        calls init_process_group().
+        
+        @param batch_size: desired batch size
+        @type batch_size: int
+        @return: a dataloader in the pytorch sense
+        @rtype CrossValidatingDataLoader, or subclass
+        '''
+        
+        # In the dataloader creation, make drop_last=True 
+        # to skip the last batch if it is not full. Just 
+        # not worth the trouble dealing with unusually 
+        # dimensioned tensors:
+        
+        dataset  = MultiRootImageDataset(self.root_train_test_data,
+                                         sample_width=self.config.Training.getint('sample_width'),
+                                         sample_height=self.config.Training.getint('sample_width')
+                                         )
+
+
+        # Make an appropriate (single/multiprocessing) dataloader:
+        if self.device == device('cpu') or self.independent_runs:
+
+            # CPU bound, single machine:
+            
+            dataloader = CrossValidatingDataLoader(
+                dataset,
+                batch_size=batch_size,
+                num_workers=0,
+                pin_memory=False,
+                prefetch_factor=2,
+                drop_last=self.drop_last,
+                shuffle=True,       # Shuffle underlying dataset at the outset (only)
+                seed=self.seed,
+                num_folds=self.num_folds
+                )
+        else:
+
+            self.init_multiprocessing()
+            
+            dataloader = MultiprocessingDataLoader(dataset,
+                                                   shuffle=True,
+                                                   seed=self.seed,
+                                                   num_folds=self.num_folds,
+                                                   drop_last=True,
+                                                   batch_size=batch_size 
+                                                   )
+        
+        return dataloader
+
+    #------------------------------------
+    # init_neural_net_parms 
+    #-------------------
+    
+    def init_neural_net_parms(self, checkpoint=None, unit_testing=False):
+        '''
+        Finds all neural net related hyper parameter values
+        in the configuration, and assigns them to instance
+        vars. If checkpoint is provided it must be a file
+        path to a previously saved, partially trained model.
+        That checkpoint will be loaded. Else network initialization
+        occurs from scratch.
+        
+        Creates a network  
+        
+        @param checkpoint: optional path to previously saved
+            model
+        @type checkpoint: {None | str}
+        @param unit_testing: early return if unit testing
+        @type unit_testing: bool
+        '''
+        
+        # Resnet18 retain 6 layers of pretraining.
+        # Train the remaining 4 layers with your own
+        # dataset. This is the model without capability
+        # for parallel training. Will be adjusted in
+        # to_app
+        #  
+        
+        raw_model = self.get_resnet18_partially_trained(self.num_classes)
+        
+        # Wrapper to handle distributed training, and
+        # move to GPU, if appropriate. 
+        
+        self.model = self.prep_model(raw_model,
+                                     self.comm_info['LOCAL_RANK']
+                                     )
+        #**********
+        self.log.info(f"type(model): {type(self.model)}")
+        #**********
+        if unit_testing:
+            return
+        self.optimizer = self.select_optimizer(self.config, self.model)
+        
+        if checkpoint:
+            # Requested to continue training 
+            # from a checkpoint:
+            if not os.path.exists(checkpoint):
+                msg = f"Requested continuation from checkpoint {checkpoint}, which does not exist."
+                self.log.err(msg)
+                raise FileNotFoundError(msg)
+            
+            self.log.info("Loading checkpoint...")
+            self.load_model_checkpoint(checkpoint, 
+                                       self.model, 
+                                       self.optimizer)
+            self.log.info("Loading checkpoint done")
+            self.log.info(f"Resume training at start of epoch {self.epoch}")
+        else:
+            self.epoch = None
+            self._diff_avg = None
+            self.tally_collection = None
+
+        if self.config.getboolean('Training', 'weighted', True):
+            # Get path to samples, relative to current
+            # dir, if the file path in the config file 
+            # is relative:
+            class_root = self.config.getpath('Paths',
+                                             'root_train_test_data',
+                                             relative_to = self.curr_dir)
+            weights = ClassWeightDiscovery.get_weights(class_root)
+            # Put weights to the device where the model
+            # was placed: CPU, or GPU_n:
+            device_resident_weights = weights.to(self.device_residence(self.model))
+        else:
+            weights = None
+            
+        # Loss function:
+        #self.loss_fn = self.select_loss_function(self.config)
+        self.loss_fn = nn.CrossEntropyLoss(weight=device_resident_weights)
+        
+        # Scheduler:
+        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer)
+
+        self.log.info(f"Model resides on device: {self.device_residence(self.model)}")
+        
+
 
     #------------------------------------
     # request_interrupt_training
@@ -2254,28 +2312,48 @@ class BirdTrainer(object):
         '''
         
         if logdir is None and relative_to is None:
+            # <Use script dir>/runs
             logdir = os.path.join(self.curr_dir, 'runs')
+            
         elif logdir is None and relative_to is not None:
+            # Ex:   logdir: None
+            #  relative_to:/foo/bar
+            if not os.path.isabs(relative_to):
+                raise ValueError(("If logdir is None and relative_to is given, ",
+                                  "then relative_to must be an absolute path"))
             logdir = relative_to
+            
         # Most conventient case:
         elif logdir is not None and relative_to is None:
+            # logdir  /foo/bar/
             if os.path.isabs(logdir):
+                # Just use the given:
                 logdir = logdir
             else:
-                logdir = os.path.join(self.curr_dir, 'runs', logdir)
+            # logdir foo/bar/
+            # Use <script_dir>/foo/bar
+                logdir = os.path.join(self.curr_dir, logdir)
+                
         elif logdir is not None and relative_to is not None:
+            # logdir : runs/Experiments
+            # rel to : /foo/bar
+            # Use /foo/bar/runs/Experiments
             os.path.join(relative_to, logdir)
 
+        # Get a name 'Exp_lr_<val>_bs_<val>...' that
+        # reflects the configuration:
+        
         logdir = os.path.join(logdir, self.config.run_name())
         
         if not os.path.isdir(logdir):
             os.makedirs(logdir)
         
-        # Default dest dir: ./runs
+        # We now have the root directory for this
+        # summary writer:
         self.writer = SummaryWriter(log_dir=logdir)
         
         # Tensorboard image writing:
-        self.tensorboard_plotter = TensorBoardPlotter(logdir=logdir)
+        self.tensorboard_plotter = TensorBoardPlotter()
         
         # Log a few example spectrograms to tensorboard:
         self.tensorboard_plotter.write_img_grid(self.writer,
@@ -2283,7 +2361,7 @@ class BirdTrainer(object):
                                                 len(self.class_names), # Num of train examples
                                                 )
 
-        self.log.info(f"Tensorboard log will be in {logdir}")
+        self.log.info(f"Tensorboard files will be in {logdir}")
 
     #------------------------------------
     # setup_json_logging 
@@ -2614,7 +2692,73 @@ class BirdTrainer(object):
             num /= 1024.0
         return "%.1f%s%s" % (num, 'Yi', suffix)
 
+    #------------------------------------
+    # find_log_path 
+    #-------------------
+    
+    def find_log_path(self, logfile=None):
+        '''
+        Given a log file, which may be None, 
+        find a destinating for info/err messages.
+        In all cases, specify a msg_identifier for
+        LoggingService to prepend to messages. The
+        id specifies this node's rank to distinquish
+        msg from those of other nodes. 
+        
+           o logfile is None, check in config. 
+             If nothing found, log to stdout.
+           o if given logfile is a directory, a
+             filename is constructed inside that dir.
+             The name will contain this node's rank
+           o if file name is given, it is augmented 
+             with this node's rank. 
+        
+        Assumptions: self.rank contains this node's rank
+        
+        @param logfile: specification for the log file
+        @type logfile: {None | str}
+        @return: a ready-to-use LoggingService instance
+        @rtype: LoggingService
+        '''
+        if logfile is None:
+            try:
+                # Log file specified in configuration?
+                logfile = self.config.getpath('Paths','logfile', 
+                                              relative_to=self.curr_dir)
+                
+                log = LoggingService(logfile=logfile,
+                                     msg_identifier=f"Rank {self.rank}")
+                return log
+            except ValueError:
+                # No logfile specified in config.cfg
+                # Use stdout by omitting the logfile:
+                log = LoggingService(msg_identifier=f"Rank {self.rank}")
+                return log
 
+        # Add rank to logfile so each training process gets
+        # its own log output file.
+
+        if os.path.isdir(logfile):
+            # Create logfile below given dir:
+            final_file_name = os.path.join(logfile, f"node{self.rank}.log")
+            
+        else:
+            # Was given a file path. Splice in the rank
+            # of this node to have a unique log
+            # destination with distributed processing.
+              
+            # Use pathlib.Path for convenience:
+            log_path = Path(logfile)
+            
+            # Construct <given_name_without_extension><rank>.<original_extension>
+            new_logname = log_path.stem + str(self.rank) + log_path.suffix
+            # Put the path back together, and turn 
+            # from Path instance to string
+            final_file_name = str(Path.joinpath(log_path.parent, new_logname))
+
+        log = LoggingService(logfile=final_file_name, 
+                             msg_identifier=f"Rank {self.rank}")
+        return log
 
 # ---------------------- Resnet18Grayscale ---------------
 
@@ -2692,6 +2836,8 @@ class Resnet18Grayscale(ResNet):
             self.kernel_size) + '_B' + str(self.batch_size) + '.jsonl'
         with open(self.log_filepath, 'w') as f:
             f.write(json.dumps(['epoch', 'loss', 'training_accuracy', 'testing_accuracy', 'precision', 'recall', 'incorrect_paths', 'confusion_matrix']) + "\n")
+            
+
 
 # ------------------------ Main ------------
 if __name__ == '__main__':

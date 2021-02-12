@@ -32,9 +32,10 @@ class TestMultiProcessSampler(unittest.TestCase):
         cls.config = DottableConfigParser(os.path.join(cls.CURR_DIR,
                                                        'bird_trainer_tst.cfg'
                                                        ))
+        parent = os.path.join(cls.CURR_DIR, '..')
         cls.data_path = cls.config.getpath('Paths', 
-                                           'train_data_from_test_dir', 
-                                           relative_to=cls.CURR_DIR)
+                                           'root_train_test_data', 
+                                           relative_to=parent)
 
     #------------------------------------
     # setUP 

@@ -132,11 +132,15 @@ class TestLauncher(unittest.TestCase):
         expected = OrderedDict([('quatro.stanford.edu', 
                                  {'num_gpus': 2, 
                                   'gpu_device_ids': [1, 2], 
-                                  'rank_range': [2, 3]}), 
+                                  'rank_range': [2, 3],
+                                  'start_rank': 2
+                                  }), 
                                 ('quintus.stanford.edu', 
                                  {'num_gpus': 2, 
                                   'gpu_device_ids': [0, 1], 
-                                  'rank_range': [0, 1]})])
+                                  'rank_range': [0, 1],
+                                  'start_rank': 0
+                                  })])
 
         self.assertDictEqual(gpu_landscape, expected)
 

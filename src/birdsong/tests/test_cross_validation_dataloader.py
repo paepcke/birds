@@ -185,10 +185,7 @@ class TestBirdDataLoader(unittest.TestCase):
             if batch != (None,None):
                 got_batches += 1
 
-        # The '+2' is the number of batches
-        # for which there was only 1 label
-        # left: 
-        self.assertEqual(got_batches, num_batches_total + 2)
+        self.assertEqual(got_batches, num_batches_total)
         
         # Last fold's number of test sample ids
         # should be the full length as in previous
