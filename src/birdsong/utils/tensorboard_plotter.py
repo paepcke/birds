@@ -176,6 +176,60 @@ class TensorBoardPlotter:
         return support_dict
 
     #------------------------------------
+    # add_image 
+    #-------------------
+    
+    def add_image(self, 
+                  writer, 
+                  tag, 
+                  img_path,
+                  step=0,
+                  to_grayscale=True,
+                  img_height=200, # px
+                  img_width=400 # px
+                  ):
+        '''
+        Writes a single image to tensorboard.
+        Can resize image or turn to grayscale
+        if requested. If img_width or img_height
+        is None, no scaling is done.
+        
+        @param writer: the SummaryWriter to use
+        @type writer: SummaryWriter
+        @param tag: the name of the image in 
+            tensorboard display
+        @type tag: str
+        @param img_path: full path to image
+        @type img_path: str
+        @param step: epoch
+        @type step: int
+        @param to_grayscale: whether or not to conver
+            to grayscale
+        @type to_grayscale: bool
+        @param img_height: desired image height
+        @type img_height: int
+        @param img_width: desired image width
+        @type img_width: int
+        '''
+        
+        the_transforms = []
+        if img_height is not None and img_width is not None:
+            the_transforms.append(transforms.Resize((img_height, img_width)))
+        if to_grayscale:
+            the_transforms.append(transforms.Grayscale())
+        the_transforms.append(transforms.ToTensor())
+
+        img_transform = transforms.Compose(the_transforms)
+        img = Image.open(img_path)
+        img = img_transform(img).float()
+
+        # A 10px frame around each img:
+        #grid = make_grid(img, padding=10)
+        #writer.add_image(tag, grid, step)
+        
+        writer.add_image(tag, img, step)
+
+    #------------------------------------
     # write_img_grid 
     #-------------------
     
@@ -190,7 +244,9 @@ class TensorBoardPlotter:
                        unittesting=False):
         '''
         Create and log a Tensorboard 'grid' of
-        example train images. 
+        example train images. The img_root_dir must
+        be the 'data root': the dir holding one subdir
+        per class.
 
         @param writer: a Tensorboard Pytorch SummaryWriter
         @type writer: SummaryWriter

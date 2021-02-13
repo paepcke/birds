@@ -61,7 +61,7 @@ class TrainScriptRunner(object):
                  starting_config_src,
                  hparms_spec, 
                  training_script=None,
-                 logfile=None,
+                 logdir=None,
                  quiet=False,
                  dryrun=False,
                  unittesting=False):
@@ -85,9 +85,9 @@ class TrainScriptRunner(object):
             of which to run multiple copies. If None, will
             look in config for Path:train_script.
         @type training_script: {None | str}
-        @param logfile: where to log information. If None,
+        @param logdir: where to log information. If None,
             log to console
-        @type logfile: {None | str}
+        @type logdir: {None | str}
         @param quiet: whether or not to report progress
         @type quiet: bool
         @param unittesting: set to True if unittesting so that
@@ -96,8 +96,8 @@ class TrainScriptRunner(object):
         @type bool
         '''
 
-        if logfile is None:
-            self.log = LoggingService(logfile=logfile)
+        if logdir is None:
+            self.log = LoggingService(logdir=logdir)
         else:
             self.log = LoggingService()
 

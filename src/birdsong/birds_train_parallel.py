@@ -172,7 +172,7 @@ class BirdTrainer(object):
                  root_train_test_data=None,
                  batch_size=None,
                  checkpoint=None,   # Load if given path to saved
-                 logfile=None,      # ...partially trained model
+                 logdir=None,      # ...partially trained model
                  logging_level=logging.INFO,
                  performance_log_dir=None,
                  testing_cuda_on_cpu=False,
@@ -224,7 +224,7 @@ class BirdTrainer(object):
 
 
         # The logger for runtime info/err messages:
-        self.log = self.find_log_path(logfile)
+        self.log = self.find_log_path(logdir)
         self.log.logging_level = logging_level
         
         # Replace None args with config file values:
@@ -334,9 +334,20 @@ class BirdTrainer(object):
                         f"gpus_here_{self.comm_info['GPUS_USED_THIS_MACHINE']}"
                         )
 
-            exp_logdir = os.path.join('runs', exp_info)
-            self.setup_tensorboard(logdir=exp_logdir, 
-                                   relative_to=self.curr_dir)
+            # Tensorboard will create a subdir called 
+            # the above string under <curr_dir>/runs.
+            # The setup_tensorboard() method will create
+            # the directory if needed:
+            
+            exp_logdir = os.path.join(self.curr_dir, f"runs/{exp_info}")
+            self.setup_tensorboard(logdir=exp_logdir)
+
+            # Log a few example spectrograms to tensorboard;
+            # one per class:
+            self.tensorboard_plotter.write_img_grid(self.writer,
+                                                    self.root_train_test_data,
+                                                    len(self.class_names), # Num of train examples
+                                                    )
 
             # Log a barchart of how many samples for
             # each class:
@@ -2266,102 +2277,26 @@ class BirdTrainer(object):
     # setup_tensorboard 
     #-------------------
     
-    def setup_tensorboard(self, 
-                          logdir=None, 
-                          relative_to=None):
+    def setup_tensorboard(self, logdir):
         '''
         Initialize tensorboard. To easily compare experiments,
         use runs/exp1, runs/exp2, etc.
         
-        Support for interaction between logdir and relative_to
-        is a bit excessive. I went overboard. In summary, 
-        the easiest call might be something like:
-  
-            self.setup_tensorboard('Exp_lr0.001_bs_64')
-            
-        for which case tensorboard log activity goes to:
+        Method creates the dir if needed.
         
-                  script_dir + /runs + Exp_lr0.001_bs_64
-                  
-        with the directories created automatically. 
-        
-        
-        For more detailed control:
-
-            o logdir None and relative_to None:
-                 script_dir + /runs
-            o logdir None and relative_to NOT None:
-                 relative_to
-            o logdir NOT None and relative_to None:
-                o logdir absolute: 
-                     relative_to ignored
-                o logdir relative, relative_to None:
-                     script_dir + /runs + logdir
-            o logdir NOT None and relative_to NOT None:
-                o logdir absolute: 
-                     relative_to ignored
-                o logdir relative
-                     logdir + relative_to
-
-        
-        @param logdir: if not provided, uses 
-            runs/CURRENT_DATETIME_HOSTNAME
+        @param logdir: root for tensorboard events
         @type logdir: str
-        @param dir_suffix: suffix to directory name 
-        @type dir_suffix: str
         '''
-        
-        if logdir is None and relative_to is None:
-            # <Use script dir>/runs
-            logdir = os.path.join(self.curr_dir, 'runs')
-            
-        elif logdir is None and relative_to is not None:
-            # Ex:   logdir: None
-            #  relative_to:/foo/bar
-            if not os.path.isabs(relative_to):
-                raise ValueError(("If logdir is None and relative_to is given, ",
-                                  "then relative_to must be an absolute path"))
-            logdir = relative_to
-            
-        # Most conventient case:
-        elif logdir is not None and relative_to is None:
-            # logdir  /foo/bar/
-            if os.path.isabs(logdir):
-                # Just use the given:
-                logdir = logdir
-            else:
-            # logdir foo/bar/
-            # Use <script_dir>/foo/bar
-                logdir = os.path.join(self.curr_dir, logdir)
-                
-        elif logdir is not None and relative_to is not None:
-            # logdir : runs/Experiments
-            # rel to : /foo/bar
-            # Use /foo/bar/runs/Experiments
-            os.path.join(relative_to, logdir)
-
-        # Get a name 'Exp_lr_<val>_bs_<val>...' that
-        # reflects the configuration:
-        
-        logdir = os.path.join(logdir, self.config.run_name())
         
         if not os.path.isdir(logdir):
             os.makedirs(logdir)
         
-        # We now have the root directory for this
-        # summary writer:
         self.writer = SummaryWriter(log_dir=logdir)
         
         # Tensorboard image writing:
         self.tensorboard_plotter = TensorBoardPlotter()
         
-        # Log a few example spectrograms to tensorboard:
-        self.tensorboard_plotter.write_img_grid(self.writer,
-                                                self.root_train_test_data,
-                                                len(self.class_names), # Num of train examples
-                                                )
-
-        self.log.info(f"Tensorboard files will be in {logdir}")
+        self.log.info(f"To view tensorboard charts: in shell: tensorboard --logdir {logdir}; then browser: localhost:6006")
 
     #------------------------------------
     # setup_json_logging 
