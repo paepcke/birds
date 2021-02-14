@@ -20,8 +20,8 @@ from birdsong.utils.tensorboard_plotter import SummaryWriterPlus
 from birdsong.utils.tensorboard_plotter import TensorBoardPlotter
 
 
-TEST_ALL = True
-#TEST_ALL = False
+#********TEST_ALL = True
+TEST_ALL = False
 
 class TensorBoardOpsTester(unittest.TestCase):
 
@@ -29,87 +29,56 @@ class TensorBoardOpsTester(unittest.TestCase):
     def setUpClass(cls):
         cls.curr_dir = os.path.dirname(__file__)
         cls.tensorboard_dir = os.path.join(cls.curr_dir, 'tensorboard_test_runs')
-        
+        os.makedirs(cls.tensorboard_dir)
+
         cls.bmw_images_path = os.path.join(cls.curr_dir, 'data/cars/bmw')
-        
+
         # Start a tensorboard server, and pop it
         # up in a browser window:
-        
+
         cls.tb_man = TensorBoardManager(cls.tensorboard_dir)
 
+        # Start tensorboard, and fill with some scalars
+        cls.writer1, cls.writer2 = cls.build_basic_tensorboard_info()
+
+
     def setUp(self):
-        # Fresh tensorboard dir:
-        try:
-            shutil.rmtree(self.tensorboard_dir)
-        except Exception:
-            pass
-        os.makedirs(self.tensorboard_dir)
-
-        # No tensorboard service yet:
-        self.tb_man = None
-        
+        pass
+    
     def tearDown(self):
-
-        if self.tb_man is not None:
-            # In case user hit cnt-c
-            # during a tensorboard display: 
-            self.tb_man.close()
-            print("You need to close browser windows/tabs manually :-(")
-        try:
-            shutil.rmtree(self.tensorboard_dir)
-        except Exception:
-            pass
+        pass
 
     @classmethod
     def tearDownClass(cls):
+
         try:
-            if cls.db_man is not None:
+            if cls.tb_man is not None:
                 cls.tb_man.close()
-                cls.tb_man = None
         except AttributeError:
             # No db_man created during test(s)
             pass
 
+        try:
+            shutil.rmtree(cls.tensorboard_dir)
+        except Exception:
+            pass
+        
+        print("You need to close browser windows/tabs manually :-(")
 
 # -------------- Tests ------------------
 
-    #------------------------------------
-    # test_start_new_experiments 
-    #-------------------
-
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    def test_start_new_experiments(self):
-
-        _writer1, _writer2 = self.build_basic_tensorboard_info()
-        # Expect:
-
-        # tb_root
-        #    Exp1
-        #       1-file
-        #    Exp2
-        #       1-file
-
-        num_files = self.count_tensorboard_files()
-        self.assertEqual(num_files, 4)
-        
     #------------------------------------
     # test_same_image_each_experiment
     #-------------------
 
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_same_image_each_experiment(self):
-        
-        writer1, writer2 = self.build_basic_tensorboard_info()
-        
+
+        # Can't assert anything, but make sure
+        # these operations at least run
         bmw1_path = os.path.join(self.bmw_images_path, 'bmw1.jpg')
-        self.add_image(writer1, 'cars', bmw1_path, step=0)
-
-        num_files = self.count_tensorboard_files()
-        # Adding images does not change the file structure
-        self.assertEqual(num_files, 4)
-
-        self.add_image(writer2, 'cars', bmw1_path, step=0)
-        self.assertEqual(num_files, 4)
+        self.add_image(self.writer1, 'cars', bmw1_path, step=0)
+        self.add_image(self.writer2, 'cars', bmw1_path, step=0)
 
     #------------------------------------
     # test_animated_matrix 
@@ -118,12 +87,10 @@ class TensorBoardOpsTester(unittest.TestCase):
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_animated_matrix(self):
         
-        writer1, writer2 = self.build_basic_tensorboard_info()
-        
         tb_plotter = TensorBoardPlotter()
         for epoch in range(5):
             mat, class_names = self.make_confusion_matrix()
-            tb_plotter.conf_matrix_to_tensorboard(writer1, 
+            tb_plotter.conf_matrix_to_tensorboard(self.writer1, 
                                                   mat,
                                                   class_names, 
                                                   epoch=epoch)
@@ -138,7 +105,7 @@ class TensorBoardOpsTester(unittest.TestCase):
         
         for epoch in range(5):
             mat, class_names = self.make_confusion_matrix()
-            tb_plotter.conf_matrix_to_tensorboard(writer2, 
+            tb_plotter.conf_matrix_to_tensorboard(self.writer2, 
                                                   mat,
                                                   class_names, 
                                                   epoch=epoch)
@@ -155,8 +122,6 @@ class TensorBoardOpsTester(unittest.TestCase):
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_hparams(self):
         
-        writer1, writer2 = self.build_basic_tensorboard_info()
-        
         hparm_names     = {'lr' : 0.001, 
                            'optimizer' : 'Adam',
                            'batch_size' : 32}
@@ -166,7 +131,7 @@ class TensorBoardOpsTester(unittest.TestCase):
                            '_accuracy'   : .83
                            }
         
-        writer1.add_hparams(hparm_names, hparm_measures)
+        self.writer1.add_hparams(hparm_names, hparm_measures)
 
         num_files = self.count_tensorboard_files()
         # Adding hparams adds an event file just for 
@@ -188,7 +153,7 @@ class TensorBoardOpsTester(unittest.TestCase):
                            '_accuracy'   : .50
                            }
         
-        writer2.add_hparams(hparm_names, hparm_measures)
+        self.writer2.add_hparams(hparm_names, hparm_measures)
 
         num_files = self.count_tensorboard_files()
         # Adding hparams adds an event file just for 
@@ -198,14 +163,65 @@ class TensorBoardOpsTester(unittest.TestCase):
         user_prompt = "After refreshing, is there a second line for Exp2 in HPARAMS tab?"
         if not self.query_yes_no(user_prompt):
             self.fail('Second hparam line did not show')
+
+    #------------------------------------
+    # test_prec_recall_curve 
+    #-------------------
+    
+    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_prec_recall_curves_binary(self):
         
+        # Binary labels 0/1, len single-dim 100:
+        labels = torch.randint(0, 2, (100,))  
+        predictions = torch.rand(100)
+        epoch = 0
+        self.writer1.add_pr_curve('P/R Curve Binary Epoch 0',
+                                  labels,
+                                  predictions, 
+                                  global_step=epoch 
+                                  )
+        user_prompt = "After refresh: is there a PR curve for Exp1?: "
+        self.query_yes_no(user_prompt)
+
+        # Add more curves for addtional epochs:
+        num_epochs_total = 5
+        # Already have the curve for epoch 0: 
+        for epoch in range(1, num_epochs_total):
+            labels = torch.randint(0, 2, (100,))  
+            predictions = torch.rand(100)
+            self.writer1.add_pr_curve(f"P/R Curve Binary Epoch {epoch}",
+                                      labels,
+                                      predictions, 
+                                      global_step=epoch 
+                                      )
+
+        user_prompt = f"After refresh: are there more PR curves for Exp1, epochs 1-{num_epochs_total - 1}?: "
+        self.query_yes_no(user_prompt)
+            
+        # Add same number of curves for Exp 2:
+
+        # Already have the curve for epoch 0: 
+        for epoch in range(0, num_epochs_total):
+            labels = torch.randint(0, 2, (100,))  
+            predictions = torch.rand(100)
+            self.writer2.add_pr_curve(f"P/R Curve Binary Epoch {epoch}",
+                                      labels,
+                                      predictions, 
+                                      global_step=epoch 
+                                      )
+
+        user_prompt = f"After refresh: {num_epochs_total} more PR curves for Exp2? "
+        self.query_yes_no(user_prompt)
+         
+
 # ------------------- Utils -----------
 
     #------------------------------------
     # build_basic_tensorboard_info 
     #-------------------
 
-    def build_basic_tensorboard_info(self):
+    @classmethod
+    def build_basic_tensorboard_info(cls):
         '''
         Create two experiments. Within each, place
         values tagged loss/train, loss/val. Dir struct
@@ -219,8 +235,8 @@ class TensorBoardOpsTester(unittest.TestCase):
 
         '''
         
-        exp1_dir = os.path.join(self.tensorboard_dir, 'Exp1')
-        exp2_dir = os.path.join(self.tensorboard_dir, 'Exp2')
+        exp1_dir = os.path.join(cls.tensorboard_dir, 'Exp1')
+        exp2_dir = os.path.join(cls.tensorboard_dir, 'Exp2')
         
         writer1 = SummaryWriterPlus(exp1_dir)
         writer2 = SummaryWriterPlus(exp2_dir)
