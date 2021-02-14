@@ -3,23 +3,24 @@ Created on Jan 25, 2021
 
 @author: paepcke
 '''
+from collections import Counter
 import os
 
-from collections import Counter
-
 from PIL import Image, ImageDraw, ImageFont
-from matplotlib import pyplot as plt
 from matplotlib import cm as col_map
-import matplotlib.ticker as mticker
+from matplotlib import pyplot as plt
 import torch
+from torch.utils.tensorboard.summary import hparams
+from torch.utils.tensorboard.writer import SummaryWriter
 from torchvision import transforms
 from torchvision.datasets.folder import ImageFolder, default_loader
 from torchvision.utils import make_grid
 
+from birdsong.rooted_image_dataset import SingleRootImageDataset
+import matplotlib.ticker as mticker
 import numpy as np
 import seaborn as sns
 
-from birdsong.rooted_image_dataset import SingleRootImageDataset
 
 #*****************
 #
@@ -46,8 +47,6 @@ from birdsong.rooted_image_dataset import SingleRootImageDataset
 #     #*************
 #     pydevd.settrace('localhost', port=4040)
 # **************** 
-
-
 class TensorBoardPlotter:
     '''
     Support functionality for creating custom 
@@ -628,3 +627,27 @@ class TensorBoardPlotter:
                                     for rand_pick
                                     in rand_sample_idxs])
         return to_get_idxs
+
+# -------------------- Class SummaryWriterPlus ----------
+
+class SummaryWriterPlus(SummaryWriter):
+    '''
+    Identical to the standard Pytorch SummaryWriter,
+    except that it does not add an additional subdirectory
+    when add_hparams is called
+    '''
+    def add_hparams(self, hparam_dict, metric_dict):
+        torch._C._log_api_usage_once("tensorboard.logging.add_hparams")
+        if type(hparam_dict) is not dict or type(metric_dict) is not dict:
+            raise TypeError('hparam_dict and metric_dict should be dictionary.')
+        exp, ssi, sei = hparams(hparam_dict, metric_dict)
+
+        logdir = self._get_file_writer().get_logdir()
+        
+        with SummaryWriter(log_dir=logdir) as w_hp:
+            w_hp.file_writer.add_summary(exp)
+            w_hp.file_writer.add_summary(ssi)
+            w_hp.file_writer.add_summary(sei)
+            for k, v in metric_dict.items():
+                w_hp.add_scalar(k, v)
+

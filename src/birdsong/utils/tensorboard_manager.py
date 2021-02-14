@@ -8,8 +8,6 @@ import fnmatch
 import shutil
 import subprocess
 import sys, os
-import webbrowser
-
 
 class TensorBoardManager(object):
     '''
@@ -65,7 +63,9 @@ class TensorBoardManager(object):
             msg = f"Cannot find tensorboard; if running in IDE, set path by hand"
             raise FileNotFoundError(msg)
         
-        self.tensorboard_server = subprocess.Popen([tb_exec, '--logdir', logdir])
+        self.tensorboard_server = subprocess.Popen([tb_exec, 
+                                                    '--logdir', logdir, 
+                                                    '--port', str(port)])
         return
 
     #------------------------------------
@@ -86,24 +86,11 @@ class TensorBoardManager(object):
     def start_webbrowser(self, port):
         
         if self.web_browser is not None:
-            raise RuntimeError("The start_webbrowser() method must only be called once")
-        
-        (self.chrome_exec, 
-         self.firefox_exec, 
-         self.safari_exec) = self.register_browsers()
+            raise RuntimeError("The start_webbrowser() method must only be called once; close tensorboard_manager in between.")
 
-        if self.chrome_exec is None and \
-           self.firefox_exec is None and \
-           self.safari_exec is None:
-            raise FileNotFoundError("None of Chrome, Firefox, or Safari browser exeutables found")
-
-        # The webbrowser get() method calls one of
-        # the run_chrome() (preferred), run_firefox(),
-        # or run_safari() methodw, which run the 
-        # respective subprocess, and set self.web_browser
-        # to the process objects
+        browser_exec_file = self.find_browser()
         
-        webbrowser.get()
+        self.web_browser = subprocess.Popen([browser_exec_file, f"http://localhost:{port}"])
 
     #------------------------------------
     # stop_webbrowser 
@@ -124,57 +111,21 @@ class TensorBoardManager(object):
     # find_browsers 
     #-------------------
 
-    def register_browsers(self):
+    def find_browser(self):
         
         chrome_exec  = self.find_executable('chrome')
-        firefox_exec = self.find_executable('firefox')
-        safari_exec  = self.find_executable('safari')
-
-        # Tell webbrowser package about how to 
-        # start Chrome, and say that it's preferred:
         if chrome_exec is not None:
-            webbrowser.register('chrome', self.run_chrome, preferred=True)
-            
+            return chrome_exec
+        
+        firefox_exec = self.find_executable('firefox')
         if firefox_exec is not None:
-            webbrowser.register('firefox', self.run_firefox, preferred=False)
-
+            return firefox_exec
+        
+        safari_exec  = self.find_executable('safari')
         if safari_exec is not None:
-            webbrowser.register('safari', self.run_safari, preferred=False)
+            return safari_exec
 
-        return chrome_exec, firefox_exec, safari_exec
-
-    #------------------------------------
-    # run_chrome 
-    #-------------------
-    
-    def run_chrome(self):
-        '''
-        Called from webbrowser.get() without argument
-        to start the browser process
-        '''
-        self.web_browser = subprocess.Popen([self.chrome_exec, f"http://localhost:{self.port}"])
-
-    #------------------------------------
-    # run_firefox 
-    #-------------------
-    
-    def run_firefox(self):
-        '''
-        Called from webbrowser.get() without argument
-        to start the browser process
-        '''
-        self.web_browser = subprocess.Popen([self.firefox_exec, f"http://localhost:{self.port}"])
-
-    #------------------------------------
-    # run_safari
-    #-------------------
-    
-    def run_safari(self):
-        '''
-        Called from webbrowser.get() without argument
-        to start the browser process
-        '''
-        self.web_browser = subprocess.Popen([self.safari_exec, f"http://localhost:{self.port}"])
+        raise FileNotFoundError("Found none of chrome, firefox, or safari")
 
     #------------------------------------
     # close 
@@ -303,28 +254,6 @@ class TensorBoardManager(object):
         return file_list[0]
 
 # -------------------- Utils ------------------
-
-    #------------------------------------
-    # running_in_IDE
-    #-------------------
-
-    def running_in_IDE(self):
-        '''
-        Tries to assertain whether or not 
-        code is running in Eclipse or PyCharm.
-        Knowing is relevant when looking for 
-        application executables. If running in 
-        IDE, shutil.which() will fail, because 
-        paths are all different.
-        
-        Horrible kludge: in the IDE, use 
-        Project-->Properties-->PyDev Pythonpath,
-            tab String Substitution Variables, 
-        and create variable 'running_in_ide' with
-        value True
-        '''
-        
-        return os.getenv('running_in_ide')
 
 
 # ------------------------ Main ------------

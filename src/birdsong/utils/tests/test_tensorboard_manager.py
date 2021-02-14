@@ -41,7 +41,7 @@ class ShowInBrowserTester(unittest.TestCase):
         # the standard tensorboard port of
         # 6006; so testing shouldn't interfere
         # with another running tensorboard instance:
-
+        
         self.assertTrue(self.tb_man.tensorboard_server is not None)
         
         # None return from poll() indicates subprocess running:
@@ -51,6 +51,12 @@ class ShowInBrowserTester(unittest.TestCase):
         
         # None return from poll() indicates subprocess running:
         self.assertTrue(self.tb_man.web_browser.poll() is None)
+        
+        # Happens fast enough that browser window won't
+        # come up, unless we pause here. When input returns,
+        # tearDown() will close the browser:
+        
+        input("Browser window should have popped up with empty tensorboard; hit any key: ")
         
 # --------------- Main -----------
 
