@@ -554,8 +554,8 @@ class TrainScriptRunner(object):
             # Associate process instance with
             # the configuration it was to run.
             
-            self.gpu_manager.process_register(RunConfig(process,
-                                                        local_rank,
+            self.gpu_manager.process_register(RunConfig(local_rank,
+                                                        process,
                                                         config,
                                                         cmd
                                                         )
@@ -864,10 +864,10 @@ class GPUManager:
     # process_register 
     #-------------------
     
-    def process_register(self, proc, config):
+    def process_register(self, config):
         
         with self.lock:
-            self.who_is_who[proc] = config
+            self.who_is_who[config.proc] = config
 
     #------------------------------------
     # process_list 
