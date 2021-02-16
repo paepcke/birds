@@ -776,6 +776,7 @@ class GPUManager:
         else:
             self.cpu_only = False
             
+        self.gpus_available = len(gpu_ids)
         self.gpu_ids = gpu_ids
         self.who_is_who = {}
         self.lock = Lock()
@@ -850,18 +851,21 @@ class GPUManager:
             # after proc_term_callback() was called.
             # wait_procs() hangs till either *all*
             # processes are finished, or a timeout
-            # occurs.
+            # occurs. So want to check whether 
+            # self.proc_termination_callback() was 
+            # called and has reclaimed a gpu_id.
             
             # Note that these training process are
             # long-running. So a bit of delay here
-            # is not the world.
-            
-            gone, _alive = psutil.wait_procs(self.process_list(), 
-                                             3,   # sec timeout
-                                             self.proc_termination_callback
-                                             )
+            # is not the world. 
+
+            procs_past_and_present = self.process_list()
+            _gone, _alive = psutil.wait_procs(procs_past_and_present, 
+                                              3,   # sec timeout
+                                              self.proc_termination_callback
+                                              )
             # Timed out?
-            if len(gone) == 0:
+            if len(self.gpu_ids) == 0:
                 # Nobody terminated:
                 continue
 
