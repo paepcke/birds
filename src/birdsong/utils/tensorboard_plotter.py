@@ -326,7 +326,7 @@ class TensorBoardPlotter:
         
         if unittesting:
             return grid
-        writer.add_image('Train Examples', grid)
+        writer.add_image('Train Input Examples', grid)
         return grid
 
     #------------------------------------

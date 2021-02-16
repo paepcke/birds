@@ -5,12 +5,15 @@ Created on Feb 2, 2021
 '''
 from _collections import OrderedDict
 import argparse
+import copy
+from functools import partial
 from itertools import product
 from json.decoder import JSONDecodeError as JSONError
 import os
 import signal
 import socket
 import sys
+from threading import Lock
 
 import json5
 from logging_service.logging_service import LoggingService
@@ -18,10 +21,9 @@ import psutil
 
 from birdsong.utils.neural_net_config import NeuralNetConfig, ConfigError
 
+
 # TODO: 
 #   nothing right now
-
-
 # For remote debugging via pydev and Eclipse:
 # If uncommented, will hang if started from
 # on Quatro or Quintus, and will send a trigger
@@ -47,7 +49,6 @@ from birdsong.utils.neural_net_config import NeuralNetConfig, ConfigError
 #     pydevd.settrace('localhost', port=4040)
 #****************
 # ------------------------ Specialty Exceptions --------
-
 class TrainScriptRunner(object):
     '''
     classdocs
@@ -61,7 +62,7 @@ class TrainScriptRunner(object):
                  starting_config_src,
                  hparms_spec, 
                  training_script=None,
-                 logdir=None,
+                 logfile=None,
                  quiet=False,
                  dryrun=False,
                  unittesting=False):
@@ -85,9 +86,9 @@ class TrainScriptRunner(object):
             of which to run multiple copies. If None, will
             look in config for Path:train_script.
         @type training_script: {None | str}
-        @param logdir: where to log information. If None,
+        @param logfile: where to log runtime information. If None,
             log to console
-        @type logdir: {None | str}
+        @type logfile: {None | str}
         @param quiet: whether or not to report progress
         @type quiet: bool
         @param unittesting: set to True if unittesting so that
@@ -96,8 +97,8 @@ class TrainScriptRunner(object):
         @type bool
         '''
 
-        if logdir is None:
-            self.log = LoggingService(logdir=logdir)
+        if logfile is not None:
+            self.log = LoggingService(logfile=logfile)
         else:
             self.log = LoggingService()
 
@@ -505,42 +506,24 @@ class TrainScriptRunner(object):
         @rtype int
         '''
 
-        running_processes = []
         gpu_ids_to_use = self.gpu_landscape[self.hostname]['gpu_device_ids']
-        if self.gpu_landscape[self.hostname]['num_gpus'] == 0:
-            # Only have a CPU; in this context, pretend that 
-            # there is one GPU at ID 0:
-            gpu_ids_to_use = [0]
+        cpu_only = len(gpu_ids_to_use) == 0
 
-        # Map from process object to GPU ID (for debug msgs):
-        self.who_is_who = OrderedDict()
+        self.gpu_manager = GPUManager(gpu_ids_to_use)
 
-        available_gpus = gpu_ids_to_use.copy()
-        
         for config in run_configs:
 
-            # Used up all CPUs/GPUs?
-            if len(available_gpus) == 0:
-                # Wait for a GPU to free up:
-                freed_gpu = self.hold_for_free_processor(running_processes)
-                if freed_gpu >= 0:
-                    available_gpus.append(freed_gpu)
-                else:
-                    # If the process that terminated
-                    # had an error, stop spawning new ones.
-                    # (Fail early):
-                    break
+            # Get next available GPU ID, waiting
+            # for one to free up, if necessary:
+            
+            local_rank = self.gpu_manager.obtain_gpu()
 
             # Create a command that is fit for passing to
             # Popen; it will start one training script
             # process. The conditional expression accounts for 
             # machine with no GPU (which will run on CPU):
             
-            local_rank = 0 if len(gpu_ids_to_use) == 0 \
-                          else available_gpus.pop()
-            cmd = self.training_script_start_cmd(local_rank,
-                                                 gpu_ids_to_use,
-                                                 config)
+            cmd = self.training_script_start_cmd(local_rank, config)
                 
             # Copy stdin, and give the copy to the subprocess.
             # This enables the subprocess to ask user whether
@@ -557,106 +540,55 @@ class TrainScriptRunner(object):
                                    stdout=None,  # Script inherits this launch
                                    stderr=None   # ... script's stdout/stderr  
                                    )
+            
+            if cpu_only:
+                process.wait()
+                # CPU op is for debugging only;
+                # Rebel right away if something
+                # went wrong:
+                if process.returncode != 0:
+                    print("CPU job ran with errors; see log")
+                    return
+                continue
+            
             # Associate process instance with
-            # the GPU ID for error reporting later,
-            # but also so that we know to wait for
-            # that process if it is still running after
-            # we launched all the ones we want:
+            # the configuration it was to run.
             
-            self.who_is_who[process] = local_rank
-            
-            # Separately record the process
-            # so that we can keep track of freed
-            # GPUs in hold_for_free_processor():
-            
-            running_processes.append(process)
+            self.gpu_manager.process_register(RunConfig(process,
+                                                        local_rank,
+                                                        config,
+                                                        cmd
+                                                        )
+                                              )
+
+        # Launched all configurations; wait for
+        # the last of them to be done:
         
+        if cpu_only:
+            print("CPU job(s) ran OK")
+            return
+        
+        # Ask for GPUs until we accounted
+        # for all that we were allowed to
+        # use; that will be indication that
+        # all processes finished:
+        
+        for _i in len(gpu_ids_to_use):
+            self.gpu_manager.obtain_gpu() 
+
         if not self.quiet:
             print(f"Node {self.hostname} {os.path.basename(sys.argv[0])}: " \
-                  f"Num processes launched: {len(self.who_is_who)}")
-            if self.am_master_node:
-                print(f"Awaiting {self.WORLD_SIZE} process(es) to finish...")
-            else:
-                print(f"Awaiting {self.my_gpus} process(es) to finish...")
-        
-        failed_processes = []
-        try:
-            for process in self.who_is_who.keys():
-                process.wait()
-                if process.returncode != 0:
-                    failed_processes.append(process)
-                continue
-        except KeyboardInterrupt:
-            # Gently kill the training scripts:
-            self.handle_cnt_c()
-            pass # See which processes get the interrupt
+                  f"Processed {len(run_configs)} configurations")
+
+        failed_processes = self.gpu_manager.failures()
+        if len(failed_processes) > 0:
+            print(f"Failures: {len(failed_processes)} (Check log for error entries):")
             
-        num_failed = len(failed_processes)
-        if num_failed > 0:
-            print(f"Number of failed training scripts: {num_failed}")
-            for failed_process in failed_processes:
-                train_script   = self.training_script
-                failed_local_rank = self.who_is_who[failed_process]
-                msg = (f"Training script {train_script} (GPU ID {failed_local_rank}) encountered error(s); see logfile")
+            for failed_proc in failed_processes:
+                failed_config     = self.gpu_manager.process_config(failed_proc)
+                train_script      = self.training_script
+                msg = (f"Training script {train_script}: {str(failed_config)}")
                 print(msg)
-
-    #------------------------------------
-    # hold_for_free_processor 
-    #-------------------
-    
-    def hold_for_free_processor(self, running_processes):
-        '''
-        Waits for any of the launched training
-        script processes to finish. Returns 
-        either a positive number, which corresponds
-        to the GPU ID (a.k.a. local_rank) that the
-        now finished process was using. If the process
-        finished with an error, returns -1.
-        
-        @param running_processes: list of PIDs for processes
-            that are still running, as far as we know
-        @type running_processes: [int]
-        @returns GPU ID (i.e. local_rank), or -1
-        @rtype: int
-        '''
-
-        while True:
-            
-            freed_proc = None
-            
-            def proc_term_callback(proc):
-                # Declare nonlocal for permission
-                # to modify the outer var freed_proc:
-                nonlocal freed_proc
-                freed_proc = proc
-
-            while True:
-                
-                # Wait for a process to finish,
-                # and free up a GPU (or the CPU).
-                # Note: the 3 seconds is not to fix 
-                # race condition!!! It's just so we
-                # get out of the function at some point
-                # after proc_term_callback() was called:
-                
-                _gone, _alive = psutil.wait_procs(running_processes, 
-                                                  3,   # sec timeout
-                                                  proc_term_callback)
-                if freed_proc is not None:
-
-                    for proc in [goner for goner in _gone]:
-                        running_processes.remove(proc)
-                    
-                    # Callback occured, announcing one
-                    # process having terminated. Return
-                    # either the proc's error code, or
-                    # the GPU ID (local_rank) that was
-                    # used by the terminated proc:
-                    
-                    if freed_proc.returncode != 0:
-                        return -1
-                    else:
-                        return self.who_is_who[freed_proc]
 
     #------------------------------------
     # training_script_start_cmd 
@@ -664,7 +596,6 @@ class TrainScriptRunner(object):
 
     def training_script_start_cmd(self, 
                                   local_rank, 
-                                  gpus_used_this_machine, 
                                   config):
         '''
         From provided information, creates a legal 
@@ -673,10 +604,6 @@ class TrainScriptRunner(object):
         @param local_rank: GPU identifier (between 0 and 
             num of GPUs in this machine)
         @type local_rank: int
-        @param gpus_used_this_machine: number of GPU devices to 
-            be used, according to the world_map; may be less than
-            number of available GPUs
-        @type gpus_used_this_machine: int
         @param config: additional information in a config instance,
             or a path to a configuration file
         @type config: {NeuralNetConfig | str}
@@ -726,17 +653,8 @@ class TrainScriptRunner(object):
         @param procs:
         @type procs:
         '''
-        # Line processes up, highest rank first,
-        # master process last:
-        
-        procs_terminate = sorted([proc
-                                   for proc
-                                    in self.who_is_who.keys()
-                                  ],
-                                 key=lambda obj: self.who_is_who[obj],
-                                 reverse=True)
 
-        for process in procs_terminate:
+        for process in self.gpu_manager.process_list():
             # If process is no longer running,
             # forget about it:
             if process.poll is not None:
@@ -778,6 +696,249 @@ class TrainScriptRunner(object):
         except JSONError:
             return False
         return True
+
+# ----------------------- Class RunConfig ---------
+
+class RunConfig:
+    '''
+    Instances hold information about one
+    process launch. Used by run_configs(),
+    and the GPUManager
+    '''
+
+    #------------------------------------
+    # Constructor
+    #-------------------
+    
+    def __init__(self, gpu_id, proc, config, cmd):
+        self.gpu_id = gpu_id
+        self.proc = proc
+        self.config = config
+        self.cmd = cmd
+        
+        self.terminated = False
+        
+# ----------------------- Class GPUManager ---------
+
+class GPUManager:
+    
+    __instance = None
+    __is_initialized = False
+    
+    #-------------------------
+    # __new__ 
+    #--------------
+    
+    def __new__(cls, gpu_ids):
+        if GPUManager.__instance is None:
+            GPUManager.__instance = object.__new__(cls)
+        return GPUManager.__instance
+    
+    #-------------------------
+    # __repr__ 
+    #--------------
+    
+    def __repr__(self):
+        return f"<GPUManager {len(self.gpu_ids)} GPUS {hex(id(self))}>"
+        
+    #-------------------------
+    # Constructor 
+    #--------------
+    
+    def __init__(self, gpu_ids):
+        '''
+        ****
+        
+        @param gpu_ids: ids of GPUs on this machine
+            that may be used
+        @type gpu_ids: [int]
+        '''
+        
+        if GPUManager.__is_initialized:
+            return
+        else:
+            GPUManager.__is_initialized = True
+        
+        if len(gpu_ids) == 0:
+            self.cpu_only = True
+        else:
+            self.cpu_only = False
+            
+        self.gpu_ids = gpu_ids
+        self.who_is_who = {}
+        self.lock = Lock()
+        
+        # Callback for psutil.wait_proc() to 
+        # call when a process finishes. The
+        # currying is to get 'self' passed to the
+        # method, along with the finished process:
+        
+        self.proc_finished_callback = partial(self.proc_termination_callback, self)
+
+    #------------------------------------
+    # proc_termination_callback 
+    #-------------------
+    
+    def proc_termination_callback(self, terminated_process):
+        '''
+        Called by psutil.wait_proc() when a process
+        finishes. The wait_proc() call doesn't know about
+        'self', and only passes terminated_process. Therefore
+        the function passed to wait_proc() must be curried to
+        include 'self'; see __init__() method. 
+          
+        @param terminated_process: process that terminated
+        @type terminated_process: subprocess.CompletedProcess
+        '''
+
+        self.finished_procs.append(terminated_process)
+        self.update_process_record(terminated_process, 
+                                   'terminated', 
+                                   True
+                                   )
+        self.gpu_ids.append(self.process_info(terminated_process, 'gpu_id'))
+
+    #------------------------------------
+    # obtain_gpu 
+    #-------------------
+    
+    def obtain_gpu(self):
+        '''
+        Waits for any of the launched training
+        script processes to finish. Returns 
+        either a positive number, which corresponds
+        to the GPU ID (a.k.a. local_rank) that the
+        now finished process was using. If the process
+        finished with an error, raises RuntimerError.
+        
+        It is permitted to client to call obtain_gpu
+        again in the future to use the freed GPU.
+        
+        @returns GPU ID (i.e. local_rank)
+        @rtype: int
+        @raises RuntimeError if a process finished with error
+        '''
+        
+        if self.cpu_only:
+            # Caller is reponsible for awaiting
+            # CPU jobs. This method only manages
+            # GPUs:
+            
+            return 0
+        
+        if len(self.gpu_ids) != 0:
+            return self.gpu_ids.pop()
+
+        while True:
+            # Wait for a process to finish,
+            # and free up a GPU (or the CPU).
+            # Note: the 3 seconds is not to fix 
+            # race condition!!! It's just so we
+            # get out of the function at some point
+            # after proc_term_callback() was called.
+            # wait_procs() hangs till either *all*
+            # processes are finished, or a timeout
+            # occurs.
+            
+            # Note that these training process are
+            # long-running. So a bit of delay here
+            # is not the world.
+            
+            gone, _alive = psutil.wait_procs(self.running_procs.values(), 
+                                             3,   # sec timeout
+                                             self.proc_termination_callback
+                                             )
+            # Timed out?
+            if len(gone) == 0:
+                # Nobody terminated:
+                continue
+
+            # The callbacks already updated
+            # the process status for each proc
+            # in the gone list. Just return one
+            # of the now free GPU IDs
+            
+            return self.gpu_ids.pop() 
+
+    #------------------------------------
+    # process_register 
+    #-------------------
+    
+    def process_register(self, proc, config):
+        
+        with self.lock:
+            self.who_is_who[proc] = config
+
+    #------------------------------------
+    # process_list 
+    #-------------------
+    
+    def process_list(self):
+        '''
+        Return list of processes that have
+        been started so far. Some of them 
+        may have terminated. 
+        
+        Elements of this list may be used 
+        access process_info
+        
+        Since no keys of the self.who_is_who dict
+        are ever removed, we don't need to 
+        lock return of the keys iterator
+        
+        '''
+        return self.who_is_who.keys()
+
+    #------------------------------------
+    # process_config 
+    #-------------------
+    
+    def process_config(self, proc):
+        '''
+        Given a procss instance, return 
+        a copy of that process' RunConfig
+
+        @param proc: process whose run config to obtain 
+        @type proc: Popen
+        @return RunConfig
+        '''
+        
+        with self.lock:
+            config_copy = copy.copy(self.who_is_who[proc])
+            return config_copy
+
+    #------------------------------------
+    # process_info
+    #-------------------
+
+    def process_info(self, proc, config_key):
+        
+        with self.lock:
+            try:
+                config = self.who_is_who[proc]
+            except KeyError as e:
+                raise KeyError("Attempt to obtain process record for non-existing process") from e 
+            try:
+                return config[config_key]
+            except KeyError as e:
+                raise KeyError(f"Attempt to obtain non-existing process record key {config_key}")
+
+    #------------------------------------
+    # update_process_record 
+    #-------------------
+    
+    def update_process_record(self, proc, config_key, new_val):
+        
+        with self.lock:
+            try:
+                config = self.who_is_who[proc]
+            except KeyError as e:
+                raise KeyError("Attempt to alter process record for non-existing process") from e 
+            try:
+                config[config_key] = new_val
+            except KeyError as e:
+                raise KeyError(f"Attempt to alter non-existing process record key {config_key} to {new_val}")
+
 
 # ------------------------ Main ------------
 if __name__ == '__main__':
@@ -823,8 +984,8 @@ if __name__ == '__main__':
 
     #**************
     hparms_spec = {'lr' : [0.001],
-                   'optimizer'  : ['Adam', 'RMSprop', 'SGD'],
-                   'batch_size' : [32,64,128],
+                   'optimizer'  : ['Adam'],
+                   'batch_size' : [32],
                    'kernel_size': [3,7]
                    }
 #     hparms_spec = {'lr' : [0.001],

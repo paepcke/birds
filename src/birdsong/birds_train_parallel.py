@@ -30,6 +30,7 @@ import warnings
 
 import GPUtil
 from logging_service import LoggingService
+from seaborn.matrix import heatmap
 from torch import Size
 from torch import Tensor
 from torch import cuda
@@ -42,11 +43,6 @@ from torch.distributed import  reduce_op
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.tensorboard import SummaryWriter
 from torchvision.models.resnet import ResNet, BasicBlock
-from seaborn.matrix import heatmap
-
-sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-
 
 from birdsong.class_weight_discovery import ClassWeightDiscovery
 from birdsong.cross_validation_dataloader import MultiprocessingDataLoader, CrossValidatingDataLoader
@@ -56,10 +52,17 @@ from birdsong.utils import learning_phase
 from birdsong.utils.dottable_config import DottableConfigParser
 from birdsong.utils.learning_phase import LearningPhase
 from birdsong.utils.neural_net_config import NeuralNetConfig, ConfigError
-from birdsong.utils.tensorboard_plotter import TensorBoardPlotter
+from birdsong.utils.tensorboard_plotter import TensorBoardPlotter, \
+    SummaryWriterPlus
 import numpy as np
 import torch.distributed as dist
 import torch.nn as nn
+
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+
 
 
 # Needed to make Eclipse's type engine happy.
@@ -172,13 +175,71 @@ class BirdTrainer(object):
                  root_train_test_data=None,
                  batch_size=None,
                  checkpoint=None,   # Load if given path to saved
-                 logdir=None,      # ...partially trained model
+                 logdir=None,       #     ...partially trained model
+                 logfile=None,
                  logging_level=logging.INFO,
                  performance_log_dir=None,
                  testing_cuda_on_cpu=False,
                  comm_info=None,
                  unit_testing=False
                  ):
+        '''
+        
+        Logfile:
+        
+           o if logfile is None, check in config. 
+             If nothing found, log to stdout.
+           o if given logfile is a directory, a
+             filename is constructed inside that dir.
+             The name will contain this node's rank
+           o if file name is given, it is augmented 
+             with this node's rank.
+             
+        Comm Info:
+        
+             MASTER_ADDR = args.MASTER_ADDR
+    		 MASTER_PORT = int(args.MASTER_PORT)
+    		 RANK        = int(args.RANK)
+    		 LOCAL_RANK  = int(args.LOCAL_RANK)
+    		 MIN_RANK_THIS_MACHINE = int(args.MIN_RANK_THIS_MACHINE),
+    		 GPUS_USED_THIS_MACHINE = int(args.GPUS_USED_THIS_MACHINE)
+    		 WORLD_SIZE  = int(args.WORLD_SIZE)
+
+        @param config_info: a NeuralNetConfig instance, 
+            the path to a config file, or a JSON string containing
+            all configuration info. If None, look for config 
+            file in <proj-root>/config.cfg
+        @type config_info: {None | str | NeuralNetConfig
+        @param root_train_test_data: path to root of all training and 
+            validation data. If none, find the path in the configuration
+        @type root_train_test_data: {None | str}
+        @param batch_size: size of each batch during training. If None,
+            look for the value in the config
+        @type batch_size: {None | int|
+        @param checkpoint: optional path to a previously saved partially
+            trained model. If None, train from scratch
+        @type checkpoint: {None | str}
+        @param logdir: root directory for Tensorboard event files. If
+            None, use <script-dir>/runs
+        @type logdir: {None | str}
+        @param logfile: file where to log runtime activity info
+        @type logfile: {None | str}
+        @param logging_level: logging detail as per Python logging module
+        @type logging_level: {None | LoggingLevel}
+        @param performance_log_dir: directory for the JSON version of
+            result logging (legacy). If None: <script-dir>/runs_json
+        @type performance_log_dir: {None | str|
+        @param testing_cuda_on_cpu: if True, operations normally done
+            on a GPU are being tested on a CPU-only machine
+        @type testing_cuda_on_cpu: bool
+        @param comm_info: all information about computation distribution
+        @type comm_info: {str : Any}
+        @param unit_testing: whether or not to call all initialization
+            methods in __init__() that are usuall called. If True, only
+            a minimum of initialization is done, leaving calls to 
+            remaining method to unittests
+        @type unit_testing: bool
+        '''
 
         # Just for informative info/error messages:
         self.hostname = socket.gethostname()
@@ -224,7 +285,7 @@ class BirdTrainer(object):
 
 
         # The logger for runtime info/err messages:
-        self.log = self.find_log_path(logdir)
+        self.log = self.find_log_path(logfile)
         self.log.logging_level = logging_level
         
         # Replace None args with config file values:
@@ -334,12 +395,17 @@ class BirdTrainer(object):
                         f"gpus_here_{self.comm_info['GPUS_USED_THIS_MACHINE']}"
                         )
 
-            # Tensorboard will create a subdir called 
-            # the above string under <curr_dir>/runs.
+            # Tensorboard initialization:
             # The setup_tensorboard() method will create
             # the directory if needed:
             
-            exp_logdir = os.path.join(self.curr_dir, f"runs/{exp_info}")
+            if logdir is None:
+                logdir = os.path.join(self.curr_dir, 'runs')
+            # Create a subdirectory in the Tensorboard directory
+            # whose name reveals the configuration of this run.
+            # This process will log all Tensorboard events under
+            # this dir:
+            exp_logdir = os.path.join(logdir, exp_info)
             self.setup_tensorboard(logdir=exp_logdir)
 
             # Log a few example spectrograms to tensorboard;
@@ -355,7 +421,7 @@ class BirdTrainer(object):
             self.tensorboard_plotter.class_support_to_tensorboard(
                 dataset,
                 self.writer,
-                title='figs/Class Support'
+                title='Class Support'
                 )
 
         # A stack to allow clear_gpu() to
@@ -1089,7 +1155,7 @@ class BirdTrainer(object):
             epoch_results['epoch_conf_matrix'], 
             self.class_names,
             epoch=self.epoch,
-            title="figs/Confusion Matrix"
+            title=f"{str(self.config)}/Confusion Matrix Series"
             )
 
     #------------------------------------
@@ -1242,7 +1308,8 @@ class BirdTrainer(object):
 
                         
                     # Update the json based result record
-                    # in the file system:
+                    # in the file system, and write results
+                    # to tensorboard.
                     
                     if self.rank == 0 or self.independent_runs:
                         self.record_json_display_results(self.epoch)
@@ -2291,7 +2358,11 @@ class BirdTrainer(object):
         if not os.path.isdir(logdir):
             os.makedirs(logdir)
         
-        self.writer = SummaryWriter(log_dir=logdir)
+        # Use SummaryWriterPlus to avoid confusing
+        # directory creations when calling add_hparams()
+        # on the writer:
+        
+        self.writer = SummaryWriterPlus(log_dir=logdir)
         
         # Tensorboard image writing:
         self.tensorboard_plotter = TensorBoardPlotter()
@@ -2420,8 +2491,7 @@ class BirdTrainer(object):
                 'epoch_loss_val' : loss_val
                 }
         
-        self.writer.add_hparams(hparms_vals, metric_results, 
-                                run_name=f"hparams/{self.config.run_name()}")
+        self.writer.add_hparams(hparms_vals, metric_results)
 
     #------------------------------------
     # device_residence

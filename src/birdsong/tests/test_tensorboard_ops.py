@@ -165,10 +165,10 @@ class TensorBoardOpsTester(unittest.TestCase):
             self.fail('Second hparam line did not show')
 
     #------------------------------------
-    # test_prec_recall_curve 
+    # test_prec_recall_curves_binary 
     #-------------------
     
-    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_prec_recall_curves_binary(self):
         
         # Binary labels 0/1, len single-dim 100:
@@ -213,6 +213,24 @@ class TensorBoardOpsTester(unittest.TestCase):
         user_prompt = f"After refresh: {num_epochs_total} more PR curves for Exp2? "
         self.query_yes_no(user_prompt)
          
+    #------------------------------------
+    # test_prec_recall_curves_multi_class
+    #-------------------
+#*************** Next:    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_prec_recall_curves_multi_class(self):
+        
+        # Binary labels 0/1, len single-dim 100:
+        labels = torch.randint(0, 2, (100,))  
+        predictions = torch.rand(100)
+        epoch = 0
+        self.writer1.add_pr_curve('P/R Curve Binary Epoch 0',
+                                  labels,
+                                  predictions, 
+                                  global_step=epoch 
+                                  )
+        user_prompt = "After refresh: is there a PR curve for Exp1?: "
+        self.query_yes_no(user_prompt)
 
 # ------------------- Utils -----------
 

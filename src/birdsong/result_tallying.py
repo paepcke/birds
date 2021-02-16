@@ -620,6 +620,8 @@ class TrainResult:
         @type loss: Tensor
         @param predicted_class_ids:
         @type predicted_class_ids:
+        @param truth_labels: the true class labels
+        @type truth_labels: Tensor (1D)
         @param num_classes: number of target classes
         @type num_classes: int
         @param badly_predicted_labels: optionally, the labels that
