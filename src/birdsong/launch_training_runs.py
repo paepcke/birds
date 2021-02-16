@@ -146,6 +146,11 @@ class TrainScriptRunner(object):
                 print(configs)
             return
         
+        # Provide support for cnt-c terminating the training
+        # script processes nicely:
+
+        self.cnt_c_received = False
+        signal.signal(signal.SIGTERM, self.stop_training_runs)
         # Start one training script for each configuration:
         self.run_configurations(the_run_configs) 
         
@@ -654,6 +659,13 @@ class TrainScriptRunner(object):
         @type procs:
         '''
 
+        if self.cnt_c_received:
+            # Just quit after a second
+            # cnt-c:
+            print(f"Hard quit. May wish to check for stray {self.training_script} processes")
+            sys.exit(1)
+
+        self.cnt_c_received = True
         for process in self.gpu_manager.process_list():
             # If process is no longer running,
             # forget about it:
@@ -844,7 +856,7 @@ class GPUManager:
             # long-running. So a bit of delay here
             # is not the world.
             
-            gone, _alive = psutil.wait_procs(self.running_procs.values(), 
+            gone, _alive = psutil.wait_procs(self.process_list(), 
                                              3,   # sec timeout
                                              self.proc_termination_callback
                                              )
