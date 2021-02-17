@@ -1081,8 +1081,8 @@ class BirdTrainer(object):
             f.write(json.dumps(
                     [epoch, 
                      epoch_summary.epoch_loss_val,
-                     epoch_summary.mean_accuracy_training,
-                     epoch_summary.mean_accuracy_validating,
+                     epoch_summary.mean_accuracy_train,
+                     epoch_summary.mean_accuracy_val,
                      epoch_summary.epoch_mean_weighted_precision,
                      epoch_summary.epoch_mean_weighted_recall,
                      incorrect_paths,
@@ -1110,25 +1110,36 @@ class BirdTrainer(object):
                                      self.log
                                      )
         
-        training_quantities_to_report = ['mean_accuracy_training',
-                                         'epoch_loss_train',
+        training_quantities_to_report = ['mean_accuracy',
+                                         'epoch_loss',
                                          ]
 
-        validation_quantities_to_report = ['mean_accuracy_validating',
-                                           'epoch_loss_val',
+        validation_quantities_to_report = ['mean_accuracy',
+                                           'epoch_loss',
                                            'epoch_mean_weighted_precision',
                                            'epoch_mean_weighted_recall'
                                            ]
-        train_results = {measure_name : epoch_results.get(measure_name, None)
+        train_results = {measure_name : epoch_results.get(measure_name+'_train', 
+                                                          None)
                          for measure_name
                          in training_quantities_to_report
                          }
 
-        validation_results = {measure_name : epoch_results.get(measure_name,None)
-                              for measure_name
-                              in validation_quantities_to_report
-                              }
+
+        val_results_for_tensorboard = {}
         
+        # Internally we use mean_accuracy_train and 
+        # mean_accuracy_val. But in Tensorboard both
+        # need to be called mean_accuracy to end up
+        # in the same section; same for epoch_loss:
+        
+        for measure_name in validation_quantities_to_report:
+            if measure_name in ['mean_accuracy', 'epoch_loss']:
+                value_access_name = measure_name+'_val'
+            val_results_for_tensorboard[measure_name] = epoch_results.get(value_access_name,
+                                                                 None) 
+        # Write training phase results to tensorboard:
+
         for measure_name, val in train_results.items():
             if type(val) in (float, int, str):
                 try:
@@ -1137,7 +1148,9 @@ class BirdTrainer(object):
                 except AttributeError:
                     self.log.err(f"No train result tensorboard writer in process {self.rank}")
 
-        for measure_name, val in validation_results.items():
+        # Write validation phase results to tensorboard:
+
+        for measure_name, val in val_results_for_tensorboard.items():
             if type(val) in (float, int, str):
                 try:
                     self.writer.add_scalar(f"{measure_name}/validate", val, 
@@ -2474,10 +2487,10 @@ class BirdTrainer(object):
         
         Included in the measures are:
         
-           o mean_balanced_accuracy_training   
-           o mean_balanced_accuracy_validating
-           o mean_accuracy_training
-           o mean_accuracy_validating
+           o mean_balanced_accuracy_trai   
+           o mean_balanced_accuracy_val
+           o mean_accuracy_train
+           o mean_accuracy_val
            o epoch_mean_weighted_precision
            o epoch_mean_weighted_recall
            o epoch_loss_train
@@ -2513,10 +2526,10 @@ class BirdTrainer(object):
         
         
         metric_results = {
-                'mean_balanced_accuracy_training' : summary.mean_balanced_accuracy_training,
-                'mean_balanced_accuracy_validating':summary.mean_balanced_accuracy_validating,
-                'mean_accuracy_training' : summary.mean_accuracy_training,
-                'mean_accuracy_validating': summary.mean_accuracy_validating,
+                'mean_balanced_accuracy_train' : summary.mean_balanced_accuracy_train,
+                'mean_balanced_accuracy_val':summary.mean_balanced_accuracy_val,
+                'mean_accuracy_train' : summary.mean_accuracy_train,
+                'mean_accuracy_val': summary.mean_accuracy_val,
                 'epoch_mean_weighted_precision': summary.epoch_mean_weighted_precision,
                 'epoch_mean_weighted_recall' : summary.epoch_mean_weighted_recall,
                 'epoch_loss_train' : loss_train,

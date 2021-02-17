@@ -20,11 +20,6 @@ import numpy as np
 packet_root = os.path.abspath(__file__.split('/')[0])
 sys.path.insert(0,packet_root)
 
-
-
-
-
-
 # ---------------------- Class Train Result Collection --------
 class TrainResultCollection(dict):
     
@@ -36,9 +31,9 @@ class TrainResultCollection(dict):
         
         if initial_train_result is not None:
             self.results[initial_train_result] = initial_train_result
-        self.epoch_losses_training    = {}
-        self.epoch_losses_validation  = {}
-        self.epoch_losses_testing     = {}
+        self.epoch_losses_train    = {}
+        self.epoch_losses_val      = {}
+        self.epoch_losses_test     = {}
 
     #------------------------------------
     # tallies
@@ -418,9 +413,9 @@ class TrainResultCollection(dict):
     @classmethod
     def create_from(cls, other):
         new_inst = cls()
-        new_inst.epoch_losses_training = other.epoch_losses_training.copy()
-        new_inst.epoch_losses_validation = other.epoch_losses_validation.copy()
-        new_inst.epoch_losses_testing = other.epoch_losses_testing.copy()
+        new_inst.epoch_losses_train = other.epoch_losses_train.copy()
+        new_inst.epoch_losses_val   = other.epoch_losses_val.copy()
+        new_inst.epoch_losses_test  = other.epoch_losses_test.copy()
         
         for tally in other.tallies():
             new_inst.add(copy.deepcopy(tally))
@@ -470,11 +465,11 @@ class TrainResultCollection(dict):
     def fetch_loss_dict(self, learning_phase):
         
         if learning_phase == LearningPhase.TRAINING:
-            loss_dict = self.epoch_losses_training
+            loss_dict = self.epoch_losses_train
         elif learning_phase == LearningPhase.VALIDATING:
-            loss_dict = self.epoch_losses_validation
+            loss_dict = self.epoch_losses_val
         elif learning_phase == LearningPhase.TESTING:
-            loss_dict = self.epoch_losses_testing
+            loss_dict = self.epoch_losses_test
         else:
             raise ValueError(f"Learning phase must be a LearningPhase enum element, not '{learning_phase}'")
 
@@ -503,10 +498,10 @@ class EpochSummary(UserDict):
         resulting instance acts like a dict with 
         the following keys:
         
-           o mean_balanced_accuracy_training
-           o mean_balanced_accuracy_validating
-           o mean_accuracy_training
-           o mean_accuracy_validating
+           o mean_balanced_accuracy_train
+           o mean_balanced_accuracy_val
+           o mean_accuracy_train
+           o mean_accuracy_val
            o epoch_loss_train
            o epoch_loss_val
            o epoch_mean_weighted_precision
@@ -523,21 +518,21 @@ class EpochSummary(UserDict):
 
         super().__init__()
         
-        self['mean_balanced_accuracy_training'] = \
+        self['mean_balanced_accuracy_train'] = \
            tally_collection.mean_balanced_accuracy(epoch, 
                                                    learning_phase=LearningPhase.TRAINING)
 
-        self['mean_balanced_accuracy_validating'] = \
+        self['mean_balanced_accuracy_val'] = \
            tally_collection.mean_balanced_accuracy(epoch, 
                                                    learning_phase=LearningPhase.VALIDATING)
 
         # Mean of accuracies among the 
         # training splits of this epoch
-        self['mean_accuracy_training'] = \
+        self['mean_accuracy_train'] = \
            tally_collection.mean_accuracy(epoch, 
                                           learning_phase=LearningPhase.TRAINING)
            
-        self['mean_accuracy_validating'] = \
+        self['mean_accuracy_val'] = \
            tally_collection.mean_accuracy(epoch, 
                                           learning_phase=LearningPhase.VALIDATING)
         try:
@@ -847,7 +842,7 @@ class TrainResult:
         if lp == LearningPhase.TRAINING:
             learning_phase = 'Train'
         elif lp == LearningPhase.VALIDATING:
-            learning_phase = 'Val'
+            learning_phase = 'Validate'
         elif lp == LearningPhase.TESTING:
             learning_phase = 'Test'
         else:
