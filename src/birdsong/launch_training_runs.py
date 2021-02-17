@@ -4,6 +4,7 @@ Created on Feb 2, 2021
 @author: paepcke
 '''
 from _collections import OrderedDict
+from collections import UserDict
 import argparse
 import copy
 from functools import partial
@@ -559,7 +560,7 @@ class TrainScriptRunner(object):
             # Associate process instance with
             # the configuration it was to run.
             
-            self.gpu_manager.process_register(RunConfig(local_rank,
+            self.gpu_manager.process_register(RunInfo(local_rank,
                                                         process,
                                                         config,
                                                         cmd
@@ -590,7 +591,7 @@ class TrainScriptRunner(object):
             print(f"Failures: {len(failed_processes)} (Check log for error entries):")
             
             for failed_proc in failed_processes:
-                failed_config     = self.gpu_manager.process_config(failed_proc)
+                failed_config     = self.gpu_manager.process_info(failed_proc)
                 train_script      = self.training_script
                 msg = (f"Training script {train_script}: {str(failed_config)}")
                 print(msg)
@@ -709,9 +710,9 @@ class TrainScriptRunner(object):
             return False
         return True
 
-# ----------------------- Class RunConfig ---------
+# ----------------------- Class RunInfo ---------
 
-class RunConfig:
+class RunInfo(UserDict):
     '''
     Instances hold information about one
     process launch. Used by run_configs(),
@@ -723,12 +724,12 @@ class RunConfig:
     #-------------------
     
     def __init__(self, gpu_id, proc, config, cmd):
-        self.gpu_id = gpu_id
-        self.proc = proc
-        self.config = config
-        self.cmd = cmd
+        self['gpu_id'] = gpu_id
+        self['proc']   = proc
+        self['config'] = config
+        self['cmd']    = cmd
         
-        self.terminated = False
+        self['terminated'] = False
         
 # ----------------------- Class GPUManager ---------
 
@@ -808,7 +809,7 @@ class GPUManager:
                                    'terminated', 
                                    True
                                    )
-        self.gpu_ids.append(self.process_info(terminated_process, 'gpu_id'))
+        self.gpu_ids.append(self.process_info_item(terminated_process, 'gpu_id'))
 
     #------------------------------------
     # obtain_gpu 
@@ -879,10 +880,10 @@ class GPUManager:
     # process_register 
     #-------------------
     
-    def process_register(self, config):
+    def process_register(self, run_info):
         
         with self.lock:
-            self.who_is_who[config.proc] = config
+            self.who_is_who[run_info.proc] = run_info
 
     #------------------------------------
     # process_list 
@@ -905,36 +906,46 @@ class GPUManager:
         return self.who_is_who.keys()
 
     #------------------------------------
-    # process_config 
+    # process_info 
     #-------------------
     
-    def process_config(self, proc):
+    def process_info(self, proc):
         '''
         Given a procss instance, return 
-        a copy of that process' RunConfig
+        a copy of that process' RunInfo
 
         @param proc: process whose run config to obtain 
         @type proc: Popen
-        @return RunConfig
+        @return RunInfo
         '''
         
         with self.lock:
-            config_copy = copy.copy(self.who_is_who[proc])
-            return config_copy
+            proc_info_copy = copy.copy(self.who_is_who[proc])
+            return proc_info_copy
 
     #------------------------------------
-    # process_info
+    # process_info_item
     #-------------------
 
-    def process_info(self, proc, config_key):
+    def process_info_item(self, proc, config_key):
+        '''
+        Convenience method to avoid need for indirection
+        of getting a RunInfo, and then accessing an item
+        within it.
+        
+        @param proc: process whose RunInfo item to retrieve
+        @type proc: Popen
+        @param config_key: key into RunInfo whose value to get
+        @type config_key: str
+        '''
         
         with self.lock:
             try:
-                config = self.who_is_who[proc]
+                run_info = self.who_is_who[proc]
             except KeyError as e:
                 raise KeyError("Attempt to obtain process record for non-existing process") from e 
             try:
-                return config[config_key]
+                return run_info[config_key]
             except KeyError as e:
                 raise KeyError(f"Attempt to obtain non-existing process record key {config_key}")
 
@@ -942,17 +953,17 @@ class GPUManager:
     # update_process_record 
     #-------------------
     
-    def update_process_record(self, proc, config_key, new_val):
+    def update_process_record(self, proc, run_info_key, new_val):
         
         with self.lock:
             try:
-                config = self.who_is_who[proc]
+                run_info = self.who_is_who[proc]
             except KeyError as e:
                 raise KeyError("Attempt to alter process record for non-existing process") from e 
             try:
-                config[config_key] = new_val
+                run_info[run_info_key] = new_val
             except KeyError as e:
-                raise KeyError(f"Attempt to alter non-existing process record key {config_key} to {new_val}")
+                raise KeyError(f"Attempt to alter non-existing process record key {run_info_key} to {new_val}")
 
 
 # ------------------------ Main ------------
