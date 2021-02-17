@@ -884,7 +884,7 @@ class GPUManager:
     def process_register(self, run_info):
         
         with self.lock:
-            self.who_is_who[run_info.proc] = run_info
+            self.who_is_who[run_info['proc']] = run_info
 
     #------------------------------------
     # process_list 
