@@ -245,6 +245,21 @@ class SingleRootImageDataset:
         return np.array(list(self.sample_id_to_class.values()))
 
     #------------------------------------
+    # class_from_sample_id 
+    #-------------------
+    
+    def class_from_sample_id(self, sample_id):
+        '''
+        Given a sample ID, return its class index.
+        
+        @param sample_id: ID to look up
+        @type sample_id: int
+        @return: given sample's class ID
+        @rtype: int
+        '''
+        return self.sample_id_to_class[sample_id]
+
+    #------------------------------------
     # class_id_list 
     #-------------------
     

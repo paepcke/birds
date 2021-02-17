@@ -150,7 +150,7 @@ class TrainScriptRunner(object):
         # script processes nicely:
 
         self.cnt_c_received = False
-        signal.signal(signal.SIGTERM, self.stop_training_runs)
+        signal.signal(signal.SIGTERM, self.handle_cnt_c)
         # Start one training script for each configuration:
         self.run_configurations(the_run_configs) 
         

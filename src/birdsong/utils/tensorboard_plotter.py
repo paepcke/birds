@@ -5,6 +5,7 @@ Created on Jan 25, 2021
 '''
 from collections import Counter
 import os
+import random
 
 from PIL import Image, ImageDraw, ImageFont
 from matplotlib import cm as col_map
@@ -94,20 +95,36 @@ class TensorBoardPlotter:
     def class_support_to_tensorboard(self,
                                      data_src, 
                                      writer,
+                                     epoch=0,
+                                     custom_data=None,
                                      title='Class Support'):
         '''
-        Create a barchart showing number of samples
+        Create a barchart showing number of training samples
         in each class. The chart is converted to
         a tensor, and submitted to tensorboard.
-        The data_src may be a dataset in the 
-        pytorch sense. Or data_src may be a full path
-        the the root of a training data directory.
         
-        @param img_folder: either a path to samples,
+        The data_src may be:
+        
+           o a dataset in the pytorch sense, or 
+           o a full path the root of a training data directory, or
+           
+        If custom_data is None, a barchart with number of samples
+        in each class is created. Else custom_data is expected
+        to be a dict mapping class-id => num-samples in that class.
+        If provided, this data is bar-charted instead of the
+        entire dataset's distribution
+
+        @param data_src: either a path to samples,
             or a dataset
-        @type img_folder: {str | torch.utils.data.Dataset}
+        @type data_src: {str | {int : int} | torch.utils.data.Dataset}
         @param writer: a tensorboard summary writer
         @type writer: tensorboard.SummaryWriter
+        @param epoch: epoch for which support is shown
+        @type epoch: int
+        @param custom_data: an optional dict {class-id : sample-count} whose
+            per-class count is to be bar-charted instead of the entire
+            dataset
+        @type custom_data: {int : int}
         @param title: optional title above the figure
         @type title: str
         @return: dict {<class_name> : <num_samples_for_class_name>}
@@ -124,12 +141,20 @@ class TensorBoardPlotter:
             raise ValueError(f"Data source must be path to data root, or a dataset, not {data_src}")
         else:
             dataset = data_src
-        
-        # Get sample classes ordered by sample_id
-        # from 0-num_samples:
-        #   array([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1])
 
-        sample_classes   = dataset.sample_classes()
+        if custom_data is None:
+            # Get sample classes ordered by sample_id
+            # from 0-num_samples:
+            #   array([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1])
+    
+            sample_classes = dataset.sample_classes()
+            # Get {<class_id> : <num_samples>}:
+            # Something like: Counter({0: 6, 1: 6})
+            
+            support = Counter(sample_classes)
+            
+        else:
+            support = custom_data
         
         # Get dict: {<class_id> : <class_name>}
         class_id_to_name = {class_id : class_name
@@ -137,10 +162,6 @@ class TensorBoardPlotter:
                             in dataset.class_to_id.items() 
                             }
         
-        # Get {<class_id> : <num_samples>}:
-        # Something like: Counter({0: 6, 1: 6})
-        
-        support = Counter(sample_classes)
         barchart_class_names = np.array([])
         for class_id in support.keys():
             barchart_class_names = np.append(barchart_class_names, 
@@ -163,9 +184,7 @@ class TensorBoardPlotter:
         # Convert matplotlib figure into 
         # an image tensor for tensorboard:
         
-        # The zero for global-step arg means
-        # associate fig with epoch 0:
-        writer.add_figure(title, fig, 0)
+        writer.add_figure(title, fig, epoch)
         
         support_dict = {class_name : num_samples
                         for class_name, num_samples
@@ -551,12 +570,15 @@ class TensorBoardPlotter:
         If class_sample_file_pairs is provided,
         then num_imgs is ignored.
         
-        @param img_folder:
-        @type img_folder:
-        @param class_sample_file_pairs:
-        @type class_sample_file_pairs:
-        @param num_imgs:
-        @type num_imgs:
+        @param img_folder: folder instance with training images
+        @type img_folder: ImageFolder
+        @param class_sample_file_pairs: optionally, pairs of 
+            class-name and path to training images
+        @type class_sample_file_pairs: [(<class-name>, <sample-file-name>)]
+        @param num_imgs: for how many images to create spectrograms 
+        @type num_imgs: int
+        @return: a list of sample IDs
+        @rtype: int
         '''
 
         # Caller requests particular images?
@@ -610,22 +632,25 @@ class TensorBoardPlotter:
             except KeyError:
                 # First sample of this class:
                 class_dict[class_idx] = [i]
-            
+        
+        # Rough number of images to get per class:
         num_imgs_per_class = round(num_samples_to_get / num_classes)
         _remaining_imgs    = num_samples_to_get % num_classes
 
         to_get_idxs = []
         for class_idx, sample_idx_list in class_dict.items():
-            # Get a random sequence into the 
-            # sample_idx_list:
-            rand_sample_idxs = torch.randperm(num_imgs_per_class)
-            if len(sample_idx_list) < len(rand_sample_idxs):
-                # Grab them all:
+            # Get as many random picks from round's classs
+            # sample IDs as we want samples per class:
+            
+            # Do we have fewer samples in this class than
+            # we want from each class?
+            if len(sample_idx_list) < num_imgs_per_class:
+                # Yes: grab them all:
                 to_get_idxs.extend(sample_idx_list)
             else:
-                to_get_idxs.extend([sample_idx_list[rand_pick]
-                                    for rand_pick
-                                    in rand_sample_idxs])
+                sample_idxs = random.sample(sample_idx_list, num_imgs_per_class)
+                to_get_idxs.extend(sample_idxs)
+
         return to_get_idxs
 
 # -------------------- Class SummaryWriterPlus ----------

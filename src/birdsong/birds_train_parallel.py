@@ -415,15 +415,6 @@ class BirdTrainer(object):
                                                     len(self.class_names), # Num of train examples
                                                     )
 
-            # Log a barchart of how many samples for
-            # each class:
-
-            self.tensorboard_plotter.class_support_to_tensorboard(
-                dataset,
-                self.writer,
-                title='Class Support'
-                )
-
         # A stack to allow clear_gpu() to
         # remove all tensors from the GPU.
         # Requires that code below always
@@ -1103,6 +1094,17 @@ class BirdTrainer(object):
     
     def record_tensorboard_results(self, epoch):
         
+        # A new training sample class distribution
+        # barchart:
+        
+        self.tensorboard_plotter.class_support_to_tensorboard(
+            self.dataloader.dataset,
+            self.writer,
+            epoch=self.epoch,
+            custom_data=self.class_support,
+            title="Training Class Support"
+            )
+        
         epoch_results = EpochSummary(self.tally_collection, 
                                      epoch,
                                      self.log
@@ -1192,7 +1194,11 @@ class BirdTrainer(object):
         # of the respective epoch. Use ordered dict so that
         # successively entered epochs will stay in order:
         
-        accuracies = OrderedDict() 
+        accuracies = OrderedDict()
+        
+        # Tracking number of training samples used
+        # for each class during one epoch:
+        self.class_support = {} 
 
         try: # This try ensures cleanup via the 
             #  finally expression at the end
@@ -1218,7 +1224,11 @@ class BirdTrainer(object):
                     self.epoch += 1
                     self.num_train_samples_this_epoch = 0
                     self.num_val_samples = 0
-                    
+                    for class_id in range(self.num_classes):
+                        # So far: no training sample for any
+                        # of the classes: 
+                        self.class_support[class_id] = 0
+
                     # Places to accumulate output predictions
                     # and truth labels for training and 
                     # validation throughout one epoch:
@@ -1489,6 +1499,10 @@ class BirdTrainer(object):
             batch   = self.push_tensor(batch)
             targets = self.push_tensor(targets)
             self.num_train_samples_this_epoch += len(batch)
+            # Track how many training samples per class
+            # in this epoch:
+            self.update_class_support(targets)
+            
             #********
             #self.log.info(f"***** New batch: {batch.shape}, targets: {targets.shape}")
             #********
@@ -1700,6 +1714,24 @@ class BirdTrainer(object):
 
 
     # ------------- Utils -----------
+
+    #------------------------------------
+    # update_class_support 
+    #-------------------
+    
+    def update_class_support(self, targets):
+        '''
+        Given a tensor of class labels (target class IDs),
+        update the dict {class-id : num-samples-in-train-set}
+        by adding the the entries
+        
+        @param targets: class IDs
+        @type targets: tensor[int]
+        '''
+        
+        for class_id in range(self.num_classes):
+            self.class_support[class_id] += len(targets[targets == class_id])
+
 
     #------------------------------------
     # initialize_config_struct 

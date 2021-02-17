@@ -471,6 +471,21 @@ class CrossValidatingDataLoader(DataLoader):
         return self.dataset.file_from_sample_id(sample_id)
 
     #------------------------------------
+    # class_from_sample_id 
+    #-------------------
+    
+    def class_from_sample_id(self, sample_id):
+        '''
+        Given a sample ID, return its class index.
+        
+        @param sample_id: ID to look up
+        @type sample_id: int
+        @return: given sample's class ID
+        @rtype: int
+        '''
+        return self.dataset.sample_id_to_class[sample_id]
+
+    #------------------------------------
     # set_epoch 
     #-------------------
 
