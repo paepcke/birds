@@ -804,7 +804,6 @@ class GPUManager:
         @type terminated_process: subprocess.CompletedProcess
         '''
 
-        self.finished_procs.append(terminated_process)
         self.update_process_record(terminated_process, 
                                    'terminated', 
                                    True

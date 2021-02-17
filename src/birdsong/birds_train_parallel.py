@@ -1157,7 +1157,7 @@ class BirdTrainer(object):
             epoch_results['epoch_conf_matrix'], 
             self.class_names,
             epoch=self.epoch,
-            title=f"{str(self.config)}/Confusion Matrix Series"
+            title=f"Confusion Matrix Series"
             )
 
     #------------------------------------
