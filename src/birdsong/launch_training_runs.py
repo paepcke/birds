@@ -724,6 +724,7 @@ class RunInfo(UserDict):
     #-------------------
     
     def __init__(self, gpu_id, proc, config, cmd):
+        super().__init__()
         self['gpu_id'] = gpu_id
         self['proc']   = proc
         self['config'] = config
