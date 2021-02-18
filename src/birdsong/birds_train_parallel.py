@@ -1430,7 +1430,8 @@ class BirdTrainer(object):
         finally:
             # If two times cnt-c, exit no matter what
             if hard_stop:
-                sys.exit(0)
+                print("******* Hard stop---no cleanup.")
+                sys.exit(1)
             if self.device == self.cuda:
                 # Ensure all activity in different parts
                 # of the cuda device are done; uses the
@@ -1451,9 +1452,14 @@ class BirdTrainer(object):
                 self.log.info(f"Max GPU memory use: {self.human_readable(max_mem)}")
                 
                 self.cleanup()
+                after_cleanup_gpu_memory = cuda.memory_allocated(self.device)
+                left_on_gpu_after_cleanup = after_cleanup_gpu_memory - self.initial_GPU_memory
+                self.log.info(f"Memory not cleaned out from GPU: {left_on_gpu_after_cleanup}")
+                                
                 self.log.info(f"Process with node{self.rank} exiting.")
 
-        self.log.info("Training finished")
+            self.log.info("Training finished")
+            return(0)
 
     #------------------------------------
     # train_one_split 
@@ -2659,8 +2665,6 @@ class BirdTrainer(object):
         # Release GPU memory used by the cuda
         # allocator:
         cuda.empty_cache()
-        
-        self.device.reset()
 
     #------------------------------------
     # time_diff 
@@ -3037,12 +3041,13 @@ if __name__ == '__main__':
         # Won't happen, b/c argparse will enforce
         raise ValueError(f"Logging level {args.logginglevel} illegal.")
 
-    BirdTrainer(
-            config_info=args.config,
-            root_train_test_data=args.data,
-            checkpoint=args.resume,
-            batch_size=args.batchsize,
-            logfile=args.logfile,
-            logging_level=logging_level,
-            comm_info=comm_info
-            ).train()
+    ret_code = BirdTrainer(
+                config_info=args.config,
+                root_train_test_data=args.data,
+                checkpoint=args.resume,
+                batch_size=args.batchsize,
+                logfile=args.logfile,
+                logging_level=logging_level,
+                comm_info=comm_info
+                ).train()
+    sys.exit(ret_code)

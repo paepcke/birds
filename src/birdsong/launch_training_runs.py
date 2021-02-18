@@ -782,7 +782,8 @@ class GPUManager:
         #**************
         # No SIGSEGV or SIGABRT yet:
         self.hardware_error = False
-        faulthandler.enable(os.path.join(os.path.dirname(__file__), 'seg_abrt.log'))
+        stacktrace_fd = open(os.path.join(os.path.dirname(__file__), 'seg_abrt.log'), 'w')
+        faulthandler.enable(stacktrace_fd)        
         #**************
         
         self.log = LoggingService() if log is None else log
