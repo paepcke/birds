@@ -4,9 +4,10 @@ Created on Feb 2, 2021
 @author: paepcke
 '''
 from _collections import OrderedDict
-from collections import UserDict
 import argparse
+from collections import UserDict
 import copy
+import faulthandler
 from functools import partial
 from itertools import product
 from json.decoder import JSONDecodeError as JSONError
@@ -32,22 +33,22 @@ from birdsong.utils.neural_net_config import NeuralNetConfig, ConfigError
 # or different machine:
 #*****************
 #
-if socket.gethostname() in ('quintus', 'quatro', 'sparky'):
-    # Point to where the pydev server
-    # software is installed on the remote
-    # machine:
-    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
- 
-    import pydevd
-    global pydevd
-    # Uncomment the following if you
-    # want to break right on entry of
-    # this module. But you can instead just
-    # set normal Eclipse breakpoints:
-    #*************
-    print("About to call settrace()")
-    #*************
-    pydevd.settrace('localhost', port=4040)
+# if socket.gethostname() in ('quintus', 'quatro', 'sparky'):
+#     # Point to where the pydev server
+#     # software is installed on the remote
+#     # machine:
+#     sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
+#  
+#     import pydevd
+#     global pydevd
+#     # Uncomment the following if you
+#     # want to break right on entry of
+#     # this module. But you can instead just
+#     # set normal Eclipse breakpoints:
+#     #*************
+#     print("About to call settrace()")
+#     #*************
+#     pydevd.settrace('localhost', port=4040)
 #****************
 # ------------------------ Specialty Exceptions --------
 class TrainScriptRunner(object):
@@ -759,7 +760,7 @@ class GPUManager:
     # Constructor 
     #--------------
     
-    def __init__(self, gpu_ids):
+    def __init__(self, gpu_ids, log=None):
         '''
         ****
         
@@ -777,7 +778,14 @@ class GPUManager:
             self.cpu_only = True
         else:
             self.cpu_only = False
-            
+    
+        #**************
+        # No SIGSEGV or SIGABRT yet:
+        self.hardware_error = False
+        faulthandler.enable(os.path.join(os.path.dirname(__file__), 'seg_abrt.log'))
+        #**************
+        
+        self.log = LoggingService() if log is None else log
         self.gpus_available = len(gpu_ids)
         self.gpu_ids = gpu_ids
         self.who_is_who = {}
@@ -810,7 +818,11 @@ class GPUManager:
                                    'terminated', 
                                    True
                                    )
-        self.gpu_ids.append(self.process_info_item(terminated_process, 'gpu_id'))
+        
+        #*************
+        if terminated_process.returncode == 0:
+            self.gpu_ids.append(self.process_info_item(terminated_process, 'gpu_id'))
+        #*************
 
     #------------------------------------
     # obtain_gpu 

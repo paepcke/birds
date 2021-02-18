@@ -1118,28 +1118,18 @@ class BirdTrainer(object):
 
         validation_quantities_to_report = ['mean_accuracy',
                                            'epoch_loss',
-                                           'epoch_mean_weighted_precision',
-                                           'epoch_mean_weighted_recall'
+                                           'precision_recall',
                                            ]
+        
+        # For convenience: make an intermediate
+        # dict of train phase measure name/result:
+        
         train_results = {measure_name : epoch_results.get(measure_name+'_train', 
                                                           None)
                          for measure_name
                          in training_quantities_to_report
                          }
 
-
-        val_results_for_tensorboard = {}
-        
-        # Internally we use mean_accuracy_train and 
-        # mean_accuracy_val. But in Tensorboard both
-        # need to be called mean_accuracy to end up
-        # in the same section; same for epoch_loss:
-        
-        for measure_name in validation_quantities_to_report:
-            if measure_name in ['mean_accuracy', 'epoch_loss']:
-                value_access_name = measure_name+'_val'
-            val_results_for_tensorboard[measure_name] = epoch_results.get(value_access_name,
-                                                                 None) 
         # Write training phase results to tensorboard:
 
         for measure_name, val in train_results.items():
@@ -1148,18 +1138,29 @@ class BirdTrainer(object):
                     self.writer.add_scalar(f"{measure_name}/train", val, 
                                                  global_step=epoch)
                 except AttributeError:
-                    self.log.err(f"No train result tensorboard writer in process {self.rank}")
+                    self.log.err(f"No tensorboard writer in process {self.rank}")
 
         # Write validation phase results to tensorboard:
+        for measure_name in validation_quantities_to_report:
+            try:
+                if measure_name == 'mean_accuracy':
+                    val = epoch_results.get('mean_accuracy_val', None) 
+                    self.writer.add_scalar('mean_accuracy/validate', val)
 
-        for measure_name, val in val_results_for_tensorboard.items():
-            if type(val) in (float, int, str):
-                try:
-                    self.writer.add_scalar(f"{measure_name}/validate", val, 
-                                               global_step=epoch)
-                except AttributeError:
-                    self.log.err(f"No validation result tensorboard writer in process {self.rank}")
-                    
+                elif measure_name == 'epoch_loss':
+                    val = epoch_results.get('epoch_loss_val', None) 
+                    self.writer.add_scalar('epoch_loss/validate', val)
+
+                elif measure_name == 'precision_recall':
+                    val = epoch_results.get('epoch_mean_weighted_precision', None)
+                    self.writer.add_scalar('precision_recall/precision', val)
+
+                    val = epoch_results.get('epoch_mean_weighted_recall', None)
+                    self.writer.add_scalar('precision_recall/recall', val)
+            except AttributeError:
+                self.log.err(f"No tensorboard writer in process {self.rank}")
+
+
         # Submit the confusion matrix image
         # to the tensorboard. In the following:
         # do not provide a separate title, such as
@@ -1521,57 +1522,55 @@ class BirdTrainer(object):
             # Got another batch/targets pair:
             # Push sample and target tensors
             # to where the model is:
-            batch   = self.push_tensor(batch)
-            targets = self.push_tensor(targets)
-            self.num_train_samples_this_epoch += len(batch)
-            # Track how many training samples per class
-            # in this epoch:
-            self.update_class_support(targets)
-            
-            #********
-            #self.log.info(f"***** New batch: {batch.shape}, targets: {targets.shape}")
-            #********
-            
-            # Outputs will be on GPU if we are
-            # using one:
-            outputs = self.model(batch)
-            
-            loss = self.loss_fn(outputs, targets)
-            #self.log.debug(f"***** Train loss epoch {self.epoch}: {loss}")
-            
-            # Update the accumulating training loss
-            
-            # for this epoch: 
-            self.tally_collection.add_loss(self.epoch, 
-                                           loss,
-                                           LearningPhase.TRAINING
-                                           )
-            loss.backward()
-            if not self.independent_runs and \
-                self.comm_info['WORLD_SIZE'] > 1 \
-                and self.device != device('cpu'):
-                #**********
-                # Force synchronicity across all GPUs
-                # before averaging the gradients:
-                dist.barrier()
-                #**********
+            try:
+                batch   = self.push_tensor(batch)
+                targets = self.push_tensor(targets)
+                self.num_train_samples_this_epoch += len(batch)
+                # Track how many training samples per class
+                # in this epoch:
+                self.update_class_support(targets)
                 
-                # Average the model weights across
-                # all GPUs:
-                for param in self.model.parameters():
-                    # Skip the frozen layers:
-                    if param.grad is not None:
-                        dist.all_reduce(param.grad.data, 
-                                        op=reduce_op.SUM,
-                                        async_op=False)
-                        param.grad.data /= self.comm_info['WORLD_SIZE']
-            self.optimizer.step()
+                # Outputs will be on GPU if we are
+                # using one:
+                outputs = self.model(batch)
+                
+                loss = self.loss_fn(outputs, targets)
+                #self.log.debug(f"***** Train loss epoch {self.epoch}: {loss}")
+                
+                # Update the accumulating training loss
+                
+                # for this epoch: 
+                self.tally_collection.add_loss(self.epoch, 
+                                               loss,
+                                               LearningPhase.TRAINING
+                                               )
+                loss.backward()
+                if not self.independent_runs and \
+                    self.comm_info['WORLD_SIZE'] > 1 \
+                    and self.device != device('cpu'):
+                    #**********
+                    # Force synchronicity across all GPUs
+                    # before averaging the gradients:
+                    dist.barrier()
+                    #**********
+                    
+                    # Average the model weights across
+                    # all GPUs:
+                    for param in self.model.parameters():
+                        # Skip the frozen layers:
+                        if param.grad is not None:
+                            dist.all_reduce(param.grad.data, 
+                                            op=reduce_op.SUM,
+                                            async_op=False)
+                            param.grad.data /= self.comm_info['WORLD_SIZE']
+                self.optimizer.step()
             
-            # Free GPU memory:
-            targets = self.pop_tensor()
-            batch   = self.pop_tensor()
-            
-            outputs = outputs.to('cpu')
+            finally:
+                # Free GPU memory:
+                targets = self.pop_tensor()
+                batch   = self.pop_tensor()
+                
+                outputs = outputs.to('cpu')
 
             self.train_output_stack, self.train_label_stack = \
                 self.remember_output_and_label(outputs, 
@@ -2660,6 +2659,8 @@ class BirdTrainer(object):
         # Release GPU memory used by the cuda
         # allocator:
         cuda.empty_cache()
+        
+        self.device.reset()
 
     #------------------------------------
     # time_diff 
@@ -2716,6 +2717,7 @@ class BirdTrainer(object):
         processes. OK to call multiple times.
         '''
         self.clear_gpu()
+        
         try:
             self.writer.close()
         except Exception as e:
