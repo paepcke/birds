@@ -30,7 +30,6 @@ import warnings
 
 import GPUtil
 from logging_service import LoggingService
-from seaborn.matrix import heatmap
 from torch import Size
 from torch import Tensor
 from torch import cuda
@@ -41,7 +40,6 @@ from torch import optim
 import torch
 from torch.distributed import  reduce_op
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.utils.tensorboard import SummaryWriter
 from torchvision.models.resnet import ResNet, BasicBlock
 
 from birdsong.class_weight_discovery import ClassWeightDiscovery
@@ -264,6 +262,8 @@ class BirdTrainer(object):
         
         self.comm_info = comm_info
         self.rank = self.comm_info['RANK']
+        self.local_rank = self.comm_info['LOCAL_RANK']
+        
         # The lowest rank of the processes on this
         # machine. Used for cases like downloads to
         # local file system that should only be done
@@ -347,6 +347,8 @@ class BirdTrainer(object):
             num_gpus_used_here = cuda.device_count()
         
         batch_size = batch_size if batch_size is not None else train_parms.getint('batch_size')
+
+        self.epoch = 0
 
         #master_addr_in_environ = self.comm_info["MASTER_ADDR"]
         #master_port_in_environ = self.comm_info["MASTER_PORT"]
@@ -1178,6 +1180,20 @@ class BirdTrainer(object):
     #-------------------
 
     def train(self):
+        '''
+        Orchestrate the training and validation.
+        This method works with cross validation,
+        and interoperates closely with train_one_split()
+        and validate_one_split().
+        
+        Assumptions:
+            o self.epoch is either 0, or set to where a 
+                previously saved model left off
+            o self.model is ready to generate output
+
+        Method feeds results to Tensorboard.
+        
+        '''
 
         self.log.info("Begin training")
         
@@ -1190,10 +1206,6 @@ class BirdTrainer(object):
             # Reset statistics on max GPU memory use:
             cuda.reset_peak_memory_stats()
 
-        # If restarting from checkpoint:
-        # use the checkpointed epoch number:
-        self.epoch = 0 if self.epoch is None else self.epoch
-        
         # Similarly with self._diff_avg:
         self._diff_avg   = 100 if self._diff_avg is None else self._diff_avg
         
@@ -1915,7 +1927,7 @@ class BirdTrainer(object):
             self.log.info("Loading checkpoint done")
             self.log.info(f"Resume training at start of epoch {self.epoch}")
         else:
-            self.epoch = None
+            self.epoch = 0
             self._diff_avg = None
             self.tally_collection = None
 
@@ -2777,12 +2789,12 @@ class BirdTrainer(object):
                                               relative_to=self.curr_dir)
                 
                 log = LoggingService(logfile=logfile,
-                                     msg_identifier=f"Rank {self.rank}")
+                                     msg_identifier=f"Rank {self.rank}.{self.local_rank}")
                 return log
             except ValueError:
                 # No logfile specified in config.cfg
                 # Use stdout by omitting the logfile:
-                log = LoggingService(msg_identifier=f"Rank {self.rank}")
+                log = LoggingService(msg_identifier=f"Rank {self.rank}.{self.local_rank}")
                 return log
 
         # Add rank to logfile so each training process gets
@@ -2790,7 +2802,7 @@ class BirdTrainer(object):
 
         if os.path.isdir(logfile):
             # Create logfile below given dir:
-            final_file_name = os.path.join(logfile, f"node{self.rank}.log")
+            final_file_name = os.path.join(logfile, f"node{self.rank}_{self.local_rank}.log")
             
         else:
             # Was given a file path. Splice in the rank
@@ -2807,7 +2819,7 @@ class BirdTrainer(object):
             final_file_name = str(Path.joinpath(log_path.parent, new_logname))
 
         log = LoggingService(logfile=final_file_name, 
-                             msg_identifier=f"Rank {self.rank}")
+                             msg_identifier=f"Rank {self.rank}.{self.local_rank}")
         return log
 
 # ---------------------- Resnet18Grayscale ---------------
