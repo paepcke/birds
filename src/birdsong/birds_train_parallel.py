@@ -56,13 +56,6 @@ import numpy as np
 import torch.distributed as dist
 import torch.nn as nn
 
-
-sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-
-
-
-
 # Needed to make Eclipse's type engine happy.
 # I would prefer using torch.cuda, etc in the 
 # code, but Eclipse then marks those as errors
@@ -80,22 +73,22 @@ sys.path.insert(0,packet_root)
 # or different machine:
 #*****************
 # 
-# if socket.gethostname() in ('quintus', 'quatro', 'sparky'):
-#     # Point to where the pydev server 
-#     # software is installed on the remote
-#     # machine:
-#     sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
-#     
-#     import pydevd
-#     global pydevd
-#     # Uncomment the following if you
-#     # want to break right on entry of
-#     # this module. But you can instead just
-#     # set normal Eclipse breakpoints:
-#     #*************
-#     print("About to call settrace()")
-#     #*************
-#     pydevd.settrace('localhost', port=4040)
+if socket.gethostname() in ('quintus', 'quatro', 'sparky'):
+    # Point to where the pydev server 
+    # software is installed on the remote
+    # machine:
+    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
+     
+    import pydevd
+    global pydevd
+    # Uncomment the following if you
+    # want to break right on entry of
+    # this module. But you can instead just
+    # set normal Eclipse breakpoints:
+    #*************
+    print("About to call settrace()")
+    #*************
+    pydevd.settrace('localhost', port=4040)
 # **************** 
 
 #***********
@@ -360,7 +353,7 @@ class BirdTrainer(object):
                                        unit_testing=unit_testing)
         except Exception as e:
             # Errors were already logged at their source
-            return
+            return 1
 
         # Note: call to setup_tallying must
         # be after checkpoint restoration above.
