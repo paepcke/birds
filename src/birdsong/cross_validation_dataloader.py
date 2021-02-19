@@ -293,7 +293,7 @@ class CrossValidatingDataLoader(DataLoader):
             # 66 // 2 = 33
             
             self.total_num_batches = total_train_samples // self.batch_size
-            if self.total_num_batches is 0:
+            if self.total_num_batches == 0:
                 self.log.warn(f"Not enough data ({total_train_samples}) for even one batch (of size {self.batch_size})")
                         
             remainder_samples = total_train_samples % self.batch_size

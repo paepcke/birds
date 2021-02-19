@@ -340,12 +340,6 @@ class BirdTrainer(object):
         
         self.num_folds = self.config.Training.getint('num_folds')
         
-        # GPUSs used on *this* machine:
-        
-        num_gpus_used_here = self.comm_info['GPUS_USED_THIS_MACHINE']
-        if num_gpus_used_here is None:
-            num_gpus_used_here = cuda.device_count()
-        
         batch_size = batch_size if batch_size is not None else train_parms.getint('batch_size')
 
         self.epoch = 0
