@@ -533,6 +533,8 @@ class TrainScriptRunner(object):
                 # Be nice; leave 2 CPUs for others:
                 num_cpus -= 2
             gpu_id_pool = set(range(num_cpus))
+        else:
+            gpu_id_pool = set(gpu_ids_to_use.copy())
         
         who_is_who = {}
         
