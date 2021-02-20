@@ -559,7 +559,7 @@ class TrainScriptRunner(object):
             gpu_id = gpu_id_pool.pop()
             proc_name = f"Config{config_idx}_gpu{gpu_id}"
             proc = mp.Process(target=self.worker_starter,
-                              args=(config.to_json(), gpu_id, self.logfile),
+                              args=(config.to_json(), gpu_id),
                               name=proc_name
                               ) 
                                     
@@ -574,7 +574,7 @@ class TrainScriptRunner(object):
     # worker_starter 
     #-------------------
     
-    def worker_starter(self, config, gpu_id, parent_logfile=None):
+    def worker_starter(self, config, gpu_id):
         '''
         This method will run in each CHILD process,
         i.e. not in the run_configurations() that
@@ -592,7 +592,11 @@ class TrainScriptRunner(object):
         #return "It worked"
         #***********
 
-        self.log = LoggingService(logfile=parent_logfile)
+        if parent_log is None:
+            self.log = LoggingService()
+        else:
+            self.log = parent_log
+        
         self.log.info('Child checking in')
         
         comm_info = {}
@@ -604,22 +608,14 @@ class TrainScriptRunner(object):
         comm_info['WORLD_SIZE']  = 1
         comm_info['GPUS_USED_THIS_MACHINE']  = self.my_gpus
 
-        curr_dir = os.path.dirname(__file__)
         log_dir = os.path.join(curr_dir, 'runs_logs')
         if not os.path.exists(log_dir):
             os.makedirs(log_dir)
             
-        rank = comm_info['RANK']
-        node_id = f"node{rank}.{gpu_id}"
-        
-        new_log_file = self.timestamped_name(prefix=f"run_{node_id}_", 
-                                             suffix='.log')
-        log_path = os.path.join(log_dir, new_log_file)
-        
         res = BirdTrainer(
                   config_info=config,
                   checkpoint=False, #**********
-                  logfile=log_path,
+                  logfile=log_dir,
                   comm_info=comm_info
                   ).train()
 
