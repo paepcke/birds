@@ -119,6 +119,9 @@ class TrainScriptRunner(object):
         else:
             self.log = LoggingService()
 
+        # For passing on to children later:
+        self.logfile = logfile
+        
         self.quiet = quiet
 
         self.curr_dir = os.path.dirname(__file__)
@@ -554,9 +557,9 @@ class TrainScriptRunner(object):
                         del who_is_who[proc]
 
             gpu_id = gpu_id_pool.pop()
-            proc_name = f"Config{config_idx}_{gpu_id}"
+            proc_name = f"Config{config_idx}_gpu{gpu_id}"
             proc = mp.Process(target=self.worker_starter,
-                              args=(config.to_json(), gpu_id),
+                              args=(config.to_json(), gpu_id, self.logfile),
                               name=proc_name
                               ) 
                                     
