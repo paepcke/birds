@@ -43,22 +43,22 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 # or different machine:
 #*****************
 #
-# if socket.gethostname() in ('quintus', 'quatro', 'sparky'):
-#     # Point to where the pydev server
-#     # software is installed on the remote
-#     # machine:
-#     sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
-#   
-#     import pydevd
-#     global pydevd
-#     # Uncomment the following if you
-#     # want to break right on entry of
-#     # this module. But you can instead just
-#     # set normal Eclipse breakpoints:
-#     #*************
-#     print("About to call settrace()")
-#     #*************
-#     pydevd.settrace('localhost', port=4040)
+if socket.gethostname() in ('quintus', 'quatro', 'sparky'):
+    # Point to where the pydev server
+    # software is installed on the remote
+    # machine:
+    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
+   
+    import pydevd
+    global pydevd
+    # Uncomment the following if you
+    # want to break right on entry of
+    # this module. But you can instead just
+    # set normal Eclipse breakpoints:
+    #*************
+    print("About to call settrace()")
+    #*************
+    pydevd.settrace('localhost', port=4040)
 #****************
 #******************
 def test_multi(arg):
@@ -538,7 +538,7 @@ class TrainScriptRunner(object):
         
         who_is_who = {}
         
-        for config in run_configs:
+        for config_idx, config in enumerate(run_configs):
             
             # Put finished processes to rest, else
             # they'll be zombies:
@@ -554,25 +554,43 @@ class TrainScriptRunner(object):
                         del who_is_who[proc]
 
             gpu_id = gpu_id_pool.pop()
+            proc_name = f"Config{config_idx}_{self.rank}.{gpu_id}"
             proc = mp.Process(target=self.worker_starter,
-                              args=(config.to_json(), gpu_id)
+                              args=(config.to_json(), gpu_id),
+                              name=proc_name
                               ) 
                                     
             proc.start()
             who_is_who[proc] = gpu_id
             
-        return
+        for proc in who_is_who.keys():
+            self.log.info(f"Waiting for proc {proc.name} to finish...")
+            proc.join()
 
     #------------------------------------
     # worker_starter 
     #-------------------
     
-    def worker_starter(self, config, gpu_id):
+    def worker_starter(self, config, gpu_id, parent_logfile=None):
+        '''
+        This method will run in each CHILD process,
+        i.e. not in the run_configurations() that
+        forks the child.
+        @param config:
+        @type config:
+        @param gpu_id:
+        @type gpu_id:
+        @param parent_logfile:
+        @type parent_logfile:
+        '''
         
         #***********
         #print(f"Worker starter: {config}")
         #return "It worked"
         #***********
+
+        self.log = LoggingService(logfile=parent_logfile)
+        self.log.info('Child checking in')
         
         comm_info = {}
         comm_info['MASTER_ADDR'] = '127.0.0.1'
