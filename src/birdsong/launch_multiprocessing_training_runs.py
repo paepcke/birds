@@ -554,7 +554,7 @@ class TrainScriptRunner(object):
                         del who_is_who[proc]
 
             gpu_id = gpu_id_pool.pop()
-            proc_name = f"Config{config_idx}_{self.rank}.{gpu_id}"
+            proc_name = f"Config{config_idx}_{gpu_id}"
             proc = mp.Process(target=self.worker_starter,
                               args=(config.to_json(), gpu_id),
                               name=proc_name
