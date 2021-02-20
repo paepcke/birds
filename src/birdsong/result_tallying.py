@@ -124,18 +124,25 @@ class TrainResultCollection(dict):
         '''
 
         if epoch is None:
-            m = np.mean([tally.balanced_accuracy
-                         for tally 
-                         in self.values()
-                         if tally.learning_phase == learning_phase
-                         ])
+            balanced_accs = [tally.balanced_accuracy
+                             for tally 
+                             in self.values()
+                             if tally.learning_phase == learning_phase
+                             ]
         else:
-            m = np.mean([tally.balanced_accuracy
-                         for tally 
-                         in self.values() 
-                         if tally.epoch == epoch and \
-                            tally.learning_phase == learning_phase
-                         ])
+            balanced_accs = [tally.balanced_accuracy
+                             for tally 
+                             in self.values() 
+                             if tally.epoch == epoch and \
+                                tally.learning_phase == learning_phase
+                             ]
+        # If no accuracies are available,
+        # set the mean to nan
+        if len(balanced_accs) == 0:
+            return np.nan
+        else:
+            m = np.mean(balanced_accs)
+            
         # m is an np.float.
         # We want to return a Python float. The conversion
         # starts being inaccurate around the 6th digit.
@@ -174,18 +181,24 @@ class TrainResultCollection(dict):
         '''
 
         if epoch is None:
-            m = np.mean([tally.accuracy
+            accs = [tally.accuracy
                          for tally 
                          in self.values()
                          if tally.learning_phase == learning_phase
-                         ])
+                         ]
         else:
-            m = np.mean([tally.accuracy 
+            accs = [tally.accuracy 
                          for tally 
                          in self.values() 
                          if tally.epoch == epoch and \
                             tally.learning_phase == learning_phase
-                         ])
+                         ]
+
+        if len(accs) == 0:
+            return np.nan
+        else:
+            m = np.mean(accs)
+
         # m is an np.float.
         # We want to return a Python float. The conversion
         # starts being inaccurate around the 6th digit.
@@ -213,18 +226,23 @@ class TrainResultCollection(dict):
                                 epoch, 
                                 learning_phase=LearningPhase.VALIDATING):
         if epoch is None:
-            m = np.mean([tally.precision_weighted
-                         for tally 
-                         in self.values()
-                         if tally.learning_phase == learning_phase
-                         ])
+            weighted_precs = [tally.precision_weighted
+                              for tally 
+                              in self.values()
+                              if tally.learning_phase == learning_phase
+                              ] 
         else:
-            m = np.mean([tally.precision_weighted
-                         for tally 
-                         in self.values() 
-                         if tally.epoch == epoch and \
-                            tally.learning_phase == learning_phase
-                         ])
+            weighted_precs = ([tally.precision_weighted
+                               for tally 
+                               in self.values() 
+                               if tally.epoch == epoch and \
+                                  tally.learning_phase == learning_phase
+                               ])
+
+        if len(weighted_precs) == 0:
+            return np.nan
+        else:
+            m = np.mean(weighted_precs)
 
         # m is an np.float.
         # We want to return a Python float. The conversion
@@ -249,18 +267,24 @@ class TrainResultCollection(dict):
 
     def mean_weighted_recall(self, epoch, learning_phase=LearningPhase.VALIDATING):
         if epoch is None:
-            m = np.mean([tally.recall_weighted
-                         for tally 
-                         in self.values()
-                         if tally.learning_phase == learning_phase
-                         ])
+            weighted_recalls = [tally.recall_weighted
+                                for tally 
+                                in self.values()
+                                if tally.learning_phase == learning_phase
+                                ]
         else:
-            m = np.mean([tally.recall_weighted
-                         for tally 
-                         in self.values() 
-                         if tally.epoch == epoch and \
-                            tally.learning_phase == learning_phase
-                         ])
+            weighted_recalls = [tally.recall_weighted
+                                for tally 
+                                in self.values() 
+                                if tally.epoch == epoch and \
+                                tally.learning_phase == learning_phase
+                                ]
+
+        if len(weighted_recalls) == 0:
+            return np.nan
+        else:
+            m = np.mean(weighted_recalls)
+
 
         # m is an np.float.
         # We want to return a Python float. The conversion

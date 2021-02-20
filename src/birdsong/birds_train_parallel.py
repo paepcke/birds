@@ -1335,7 +1335,7 @@ class BirdTrainer(object):
                     # to tensorboard.
                     
                     if self.rank == 0 or self.independent_runs:
-                        self.record_json_display_results(self.epoch)
+                        #******self.record_json_display_results(self.epoch)
                         self.record_tensorboard_results(self.epoch)
                     
                     # Compute mean accuracy over all splits
@@ -1380,7 +1380,9 @@ class BirdTrainer(object):
 
                 if self.rank != self.local_leader_rank:
                     self.log.info(f"Leaving model saving to process {self.local_leader_rank}")
-                    return
+                    # Return GPU used if any, though with
+                    # the cnt-C it won't make a diff:
+                    return self.local_rank
                     
                 do_save = self.offer_model_save()
                 if do_save in ('y','Y','yes','Yes', ''):
@@ -1446,7 +1448,7 @@ class BirdTrainer(object):
                 self.log.info(f"Process with node{self.rank} exiting.")
 
             self.log.info("Training finished")
-            return(0)
+            return self.local_rank
 
     #------------------------------------
     # train_one_split 

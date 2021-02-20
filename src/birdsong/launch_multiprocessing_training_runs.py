@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 '''
 Created on Feb 2, 2021
 
@@ -6,26 +7,31 @@ Created on Feb 2, 2021
 from _collections import OrderedDict
 import argparse
 from collections import UserDict
-import copy
 import datetime
 import faulthandler
-from io import StringIO
 from itertools import product
 from json.decoder import JSONDecodeError as JSONError
-import logging
 from multiprocessing.pool import Pool
+from multiprocessing.queues import SimpleQueue
 import os
 import signal
 import socket
 import sys
+import time
 
 import json5
 from logging_service.logging_service import LoggingService
-import psutil
 
 from birdsong.birds_train_parallel import BirdTrainer
 from birdsong.utils.neural_net_config import NeuralNetConfig, ConfigError
 import multiprocessing as mp
+
+
+# Empty-queue exception:
+sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+
 
 
 # TODO: 
@@ -520,56 +526,47 @@ class TrainScriptRunner(object):
         # Else only make the queue as large as the
         # number of GPUs we are allowed:
         
-        max_workers = len(run_configs) if cpu_only else len(gpu_ids_to_use)
+        if cpu_only:
+            num_cpus = mp.cpu_count()
+            if num_cpus <= 2:
+                num_cpus = 1
+            else:
+                # Be nice; leave 2 CPUs for others:
+                num_cpus -= 2
+            gpu_id_pool = set(range(num_cpus))
         
-        # Callbacks for Pool to when a process finishes. 
-        # The currying is to get 'self' passed to the
-        # methods, along with the finished process or
-        # exception instance, respectively:
+        who_is_who = {}
         
-        #************ Remove
-#         proc_finished_callback    = partial(self.proc_termination_callback, self)
-#         proc_ended_badly_callback = partial(self.proc_error_callback, self)
-#         config_launcher           = partial(self.worker_starter, self)
-        #*************
+        for config in run_configs:
+            
+            # Put finished processes to rest, else
+            # they'll be zombies:
+            while len(gpu_id_pool) == 0:
+                time.sleep(3)
+                # Did any of the processes finish?
+                curr_procs = list(who_is_who.keys())
+                for proc in curr_procs: 
+                    if not proc.is_alive():
+                        # Harvest the proc's GPU ID:
+                        gpu_id_pool.add(who_is_who[proc])
+                        proc.join()
+                        del who_is_who[proc]
 
-        arg_tuples = [(config.to_json(),) for config in run_configs]
-        with Pool(max_workers) as pool:
-            queue_manager = mp.Manager()
-            self.gpu_id_q = queue_manager.Queue(max_workers)
-            pool.starmap_async(
-                               self.worker_starter,
-                               arg_tuples,
-                               chunksize=1, 
-                               callback=self.proc_termination_callback,
-                               error_callback=self.proc_error_callback
-                               )
-            if cpu_only:
-                num_cpus = mp.cpu_count()
-                if num_cpus <= 2:
-                    num_cpus = 1
-                else:
-                    # Be nice; leave 2 CPUs for others:
-                    num_cpus -= 2
-                self.gpu_id_pool = set(range(num_cpus))
+            gpu_id = gpu_id_pool.pop()
+            proc = mp.Process(target=self.worker_starter,
+                              args=(config.to_json(), gpu_id)
+                              ) 
+                                    
+            proc.start()
+            who_is_who[proc] = gpu_id
+            
+        return
 
-            # Initially, all GPUs (or CPUs) are available:
-            gpu_id_pool_copy = self.gpu_id_pool.copy()
-            for gpu_id in gpu_id_pool_copy:
-                self.gpu_id_pool.remove(gpu_id)
-                # Provide gpu ID to one of the
-                # hungry processes:
-                self.gpu_id_q.put(gpu_id)
-
-            # Wait for everyone:
-            pool.close()
-            pool.join()
-        
     #------------------------------------
     # worker_starter 
     #-------------------
     
-    def worker_starter(self, config):
+    def worker_starter(self, config, gpu_id):
         
         #***********
         #print(f"Worker starter: {config}")
@@ -580,196 +577,31 @@ class TrainScriptRunner(object):
         comm_info['MASTER_ADDR'] = '127.0.0.1'
         comm_info['MASTER_PORT'] = 5678
         comm_info['RANK']        = 0 # For now
-        comm_info['LOCAL_RANK']  = None
+        comm_info['LOCAL_RANK']  = gpu_id
         comm_info['MIN_RANK_THIS_MACHINE'] = 0
         comm_info['WORLD_SIZE']  = 1
+        comm_info['GPUS_USED_THIS_MACHINE']  = self.my_gpus
 
         curr_dir = os.path.dirname(__file__)
         log_dir = os.path.join(curr_dir, 'runs_logs')
         if not os.path.exists(log_dir):
             os.makedirs(log_dir)
             
-        # Get a GPU id, waiting if needed:
-        local_rank = self.gpu_id_q.get()
         rank = comm_info['RANK']
-        node_id = f"node{rank}.{local_rank}"
-        comm_info['LOCAL_RANK'] = local_rank 
+        node_id = f"node{rank}.{gpu_id}"
         
         new_log_file = self.timestamped_name(prefix=f"run_{node_id}_", 
                                              suffix='.log')
         log_path = os.path.join(log_dir, new_log_file)
-        BirdTrainer(
-                config_info=config,
-                checkpoint=False, #**********
-                logfile=log_path,
-                comm_info=comm_info
-                ).train()
-                
-        # Return the gpu_id we used
-        return comm_info['LOCAL_RANK']
         
-    #------------------------------------
-    # proc_termination_callback 
-    #-------------------
-    
-    def proc_termination_callback(self, terminated_process_res):
-        '''
-        Called by Pool object when one of the workers
-        finishes training a model. The result is a list
-        of one or more results returned from worker_starter().
-        These are GPU IDs that the terminated process(es) used.
-          
-        @param terminated_process_res: return code(s) from 
-            worker_starter(). Hopefully each is a GPU Id that
-            a terminated process used
-        @type terminated_process_res: [int]
-        '''
-        print(f"Results: {terminated_process_res}")
-        for gpu_id in terminated_process_res:
-            if type(gpu_id) == int:
-                self.gpu_id_pool.add(gpu_id)
-            else:
-                self.log.err(f"Process returned: {gpu_id}, not a GPU ID number")
-    #------------------------------------
-    # proc_error_callback 
-    #-------------------
-    
-    def proc_error_callback(self, exc):
-        tracebk = sys.exc_info()[-1]
-        buf = StringIO()
-        tracebk.print_exc(file=buf)
-        self.log.err(buf.getvalue())
-        buf.close()
+        res = BirdTrainer(
+                  config_info=config,
+                  checkpoint=False, #**********
+                  logfile=log_path,
+                  comm_info=comm_info
+                  ).train()
 
-#**************
-#         for config in run_configs:
-# 
-#             # Get next available GPU ID, waiting
-#             # for one to free up, if necessary:
-#             
-#             local_rank = self.gpu_manager.obtain_gpu()
-# 
-#             # Create a command that is fit for passing to
-#             # Popen; it will start one training script
-#             # process. The conditional expression accounts for 
-#             # machine with no GPU (which will run on CPU):
-#             
-#             cmd = self.training_script_start_cmd(local_rank, config)
-#                 
-#             # Copy stdin, and give the copy to the subprocess.
-#             # This enables the subprocess to ask user whether
-#             # to save training state in case of a cnt-C:
-#             newstdin = os.fdopen(os.dup(sys.stdin.fileno()))
-#             
-#             # Spawn one training script. Use psutil's 
-#             # Popen instead of subprocess.Popen to get
-#             # the wait_procs() method on the resulting
-#             # process instances:
-# 
-#             process = psutil.Popen(cmd,
-#                                    stdin=newstdin,
-#                                    stdout=None,  # Script inherits this launch
-#                                    stderr=None   # ... script's stdout/stderr  
-#                                    )
-#             
-#             if cpu_only:
-#                 process.wait()
-#                 # CPU op is for debugging only;
-#                 # Rebel right away if something
-#                 # went wrong:
-#                 if process.returncode != 0:
-#                     print("CPU job ran with errors; see log")
-#                     return
-#                 continue
-#             
-#             # Associate process instance with
-#             # the configuration it was to run.
-#             
-#             self.gpu_manager.process_register(RunInfo(local_rank,
-#                                                       process,
-#                                                       config,
-#                                                       cmd
-#                                                       )
-#                                               )
-# 
-#         # Launched all configurations; wait for
-#         # the last of them to be done:
-#         
-#         if cpu_only:
-#             print("CPU job(s) ran OK")
-#             return
-#         
-#         # Ask for GPUs until we accounted
-#         # for all that we were allowed to
-#         # use; that will be indication that
-#         # all processes finished:
-#         
-#         for _i in len(gpu_ids_to_use):
-#             self.gpu_manager.obtain_gpu() 
-# 
-#         if not self.quiet:
-#             print(f"Node {self.hostname} {os.path.basename(sys.argv[0])}: " \
-#                   f"Processed {len(run_configs)} configurations")
-# 
-#         failed_processes = self.gpu_manager.failures()
-#         if len(failed_processes) > 0:
-#             print(f"Failures: {len(failed_processes)} (Check log for error entries):")
-#             
-#             for failed_proc in failed_processes:
-#                 failed_config     = self.gpu_manager.process_info(failed_proc)
-#                 train_script      = self.training_script
-#                 msg = (f"Training script {train_script}: {str(failed_config)}")
-#                 print(msg)
-#**************
-    #------------------------------------
-    # training_script_start_cmd 
-    #-------------------
-
-    def training_script_start_cmd(self, 
-                                  local_rank, 
-                                  config):
-        '''
-        From provided information, creates a legal 
-        command string for starting the training script.
-        
-        @param local_rank: GPU identifier (between 0 and 
-            num of GPUs in this machine)
-        @type local_rank: int
-        @param config: additional information in a config instance,
-            or a path to a configuration file
-        @type config: {NeuralNetConfig | str}
-        '''
-
-        # Build the shell command line,
-        # starting with 'python -u':
-        cmd = [sys.executable, "-u", f"{self.training_script}"]
-
-        # Add the 'secret' args that tell the training
-        # script all the communication parameters:
-        
-        cmd.extend([f"--LOCAL_RANK={local_rank}",
-                    f"--WORLD_SIZE={self.WORLD_SIZE}",
-                    ])
-        
-        # Finally, the obligatory non-option arg
-        # to the training script: the configuration.
-        # Could be a file, a json string, or a 
-        # NeuralNetConfig instance:
-        
-        if isinstance(config, NeuralNetConfig):
-            # Turn into a JSON str for communicating
-            # to the script:
-            config_arg = config.to_json()
-            self.log.info(f"\nLAUNCHING TRAINING: " +\
-                          f"{NeuralNetConfig.json_human_readable(config_arg)}")
-        else:
-            config_arg = config
-            self.log.info(f"\nLAUNCHING TRAINING from file: {config_arg}")
-            
-        cmd.append(config_arg)
-        
-        #self.log.debug(f"****** Launch: the cmd is {cmd}")
-        return cmd
+        sys.exit(res)
 
 # ------------------- Utils --------------
 
@@ -847,7 +679,6 @@ class TrainScriptRunner(object):
         '''
         return True
 
-
     #------------------------------------
     # is_json_str
     #-------------------
@@ -867,28 +698,6 @@ class TrainScriptRunner(object):
         except JSONError:
             return False
         return True
-
-# ----------------------- Class RunInfo ---------
-
-class RunInfo(UserDict):
-    '''
-    Instances hold information about one
-    process launch. Used by run_configs(),
-    and the GPUManager
-    '''
-
-    #------------------------------------
-    # Constructor
-    #-------------------
-    
-    def __init__(self, gpu_id, proc, config, cmd):
-        super().__init__()
-        self['gpu_id'] = gpu_id
-        self['proc']   = proc
-        self['config'] = config
-        self['cmd']    = cmd
-        
-        self['terminated'] = False
 
 # ------------------------ Main ------------
 if __name__ == '__main__':
@@ -928,16 +737,16 @@ if __name__ == '__main__':
             raise FileNotFoundError(f"Could not find config file at {config_file}")
 
     #**************
-#     hparms_spec = {'lr' : [0.001],
-#                    'optimizer'  : ['Adam'],
-#                    'batch_size' : [32],
-#                    'kernel_size': [3,7]
-#                    }
     hparms_spec = {'lr' : [0.001],
-                   'optimizer'  : ['Adam', 'RMSprop', 'SGD'],
-                   'batch_size' : [4, 32,64,128],
+                   'optimizer'  : ['Adam'],
+                   'batch_size' : [32],
                    'kernel_size': [3,7]
                    }
+#     hparms_spec = {'lr' : [0.001],
+#                    'optimizer'  : ['Adam', 'RMSprop', 'SGD'],
+#                    'batch_size' : [4, 32,64,128],
+#                    'kernel_size': [3,7]
+#                    }
 
     #**************
 
