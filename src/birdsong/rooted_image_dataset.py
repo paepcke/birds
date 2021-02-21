@@ -160,9 +160,7 @@ class SingleRootImageDataset:
         # assign a class id the first time we
         # encounter any one class:
          
-        for class_id, class_path in enumerate(class_directory_paths.keys()):
-            class_name = class_path.stem
-            
+        for class_id, class_name in enumerate(class_directory_paths.keys()):
             # Add *only new* class and its ID to the class_to_id
             # dict. Skip dirs that start with dot ('.'), such
             # as ".DS_Store":
