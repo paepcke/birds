@@ -92,11 +92,16 @@ class SKFSampler(StratifiedKFold):
 
         '''
         There may be multiple processes (replicas)
-        of the training script running. Each of them
-        should be working on a subset of the dataset.
+        of the training script running. These might
+        each work on the entire dataset, or just on
+        their unique subset. 
+        
         The subsets should be disjoint, so the entire
         dataset is covered, but no sample is used
         by more than one replica.
+        
+        Whether or not multiple replicas exist is 
+        indicated by world_size.
         
         If the dataset length is evenly divisible by # of 
         replicas, then there is no need to drop any data, 

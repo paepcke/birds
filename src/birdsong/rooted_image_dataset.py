@@ -135,10 +135,24 @@ class SingleRootImageDataset:
         
         # Sort the directory such that "foo2" after "foo10".
         # Good for unittesting. Dataloaders can shuffle
-        # to introduce randomness later:
+        # to introduce randomness later.
         
-        class_paths = FileUtils.find_class_paths(filepath)
+        # Get list of directory paths that end with
+        # a class name. NOTE: there can be multiple
+        # paths for a given class:
+        #     .../train/SPECIES1
+        #     .../validate/SPECIES1
         
+        # Get {class-name : [Path1, Path2,...]}
+        # where Pathx are Path instances to directories
+        # that (exclusively) contain samples of class-name.
+        # No directories called '.' are included:
+        
+        class_directory_paths = FileUtils.find_class_paths(filepath)
+        
+        # Assign an int to each class in a way
+        # that all replicas of this process assign
+        # the same ints:
         self.class_to_id = OrderedDict()
 
         # Note: We can have images of a class
@@ -146,18 +160,20 @@ class SingleRootImageDataset:
         # assign a class id the first time we
         # encounter any one class:
          
-        for class_id, class_path in enumerate(class_paths):
+        for class_id, class_path in enumerate(class_directory_paths.keys()):
             class_name = class_path.stem
             
             # Add *only new* class and its ID to the class_to_id
             # dict. Skip dirs that start with dot ('.'), such
             # as ".DS_Store":
             
-            if class_name not in self.class_to_id.keys() and \
-                not class_name.startswith('.'):
-                
+            if class_name not in self.class_to_id.keys():
                 self.class_to_id[class_name] = class_id
-                
+        
+        # Generate integer sample IDs for each sample,
+        # ensuring that all replica processes assign the
+        # same number:
+        
         self.sample_id_to_path = OrderedDict({})
         self.sample_id_to_class = OrderedDict({})
         
@@ -171,42 +187,44 @@ class SingleRootImageDataset:
         # First sample ID:
         sample_id_start = 0
         
-        # Go through the samples in each folder (i.e. class):
+        # Go through the samples in each of the folders
+        # that hold samples of a class:
+        # Result: 
+        #    {class_id*****
         
-        for sample_folder in class_paths:
-            class_name    = os.path.basename(sample_folder)
-            class_id      = self.class_to_id[class_name]
-            
-            # List of full paths to each sample of current class.
-            # Exclude names that start with a dot, such as
-            # the .DS_Store that macos likes to spread around
-            # file systems:
-            folder_content  = [os.path.join(sample_folder, sample_path)
-                                 for sample_path 
-                                 in natsort.natsorted(os.listdir(sample_folder))
-                                 if not sample_path.startswith('.')
-                                 ]
-            # IDs we will assign to the samples in this folder:
-            sample_id_range = range(sample_id_start, sample_id_start + len(folder_content)) 
-            
-            # Create sample id --> filename map for just the 
-            # samples in this folder:
-            sample_id_map = OrderedDict({sample_id : folder_content[i]
-                                            for i, sample_id in enumerate(sample_id_range)
-                                         })
-            
-            # Append this folder's sample id --> filename to
-            # our emerging final map (dict1.update(dict2) appends):
-            self.sample_id_to_path.update(sample_id_map)
-            
-            # Build sample id --> class ID; the class ID is 
-            # the same for all samples in this folder:
-            self.sample_id_to_class.update({sample_id : class_id
-                                            for sample_id in sample_id_range 
-                                            })
-            # Update where to start the IDs for the
-            # next folder
-            sample_id_start += len(sample_id_range)
+        for class_name, sample_folder_list in class_directory_paths.items():
+            # Get integer ID of the class name:
+            class_id = self.class_to_id[class_name]
+
+            for sample_folder in sample_folder_list:
+
+                # List of full paths to each sample of current class.
+                folder_content  = [os.path.join(sample_folder, sample_path)
+                                   for sample_path 
+                                   in natsort.natsorted(os.listdir(sample_folder))
+                                   ]
+                # IDs we will assign to the samples in this folder:
+                sample_id_range = range(sample_id_start, 
+                                        sample_id_start + len(folder_content)) 
+                
+                # Create sample id --> filename map for just the 
+                # samples in this folder:
+                sample_id_map = OrderedDict({sample_id : folder_content[i]
+                                                for i, sample_id in enumerate(sample_id_range)
+                                             })
+                
+                # Append this folder's sample id --> filename
+                # dict to our emerging final map (dict1.update(dict2) appends):
+                self.sample_id_to_path.update(sample_id_map)
+                
+                # Build sample id --> class ID; the class ID is 
+                # the same for all samples in this folder:
+                self.sample_id_to_class.update({sample_id : class_id
+                                                for sample_id in sample_id_range 
+                                                })
+                # Update where to start the IDs for the
+                # next folder
+                sample_id_start += len(sample_id_range)
             
 
     #------------------------------------

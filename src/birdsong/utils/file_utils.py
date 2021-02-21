@@ -4,9 +4,12 @@ Created on Jan 21, 2021
 @author: paepcke
 '''
 
+from _collections import OrderedDict
 import os
-import natsort
 from pathlib import Path
+
+import natsort
+
 
 class FileUtils(object):
     '''
@@ -22,13 +25,13 @@ class FileUtils(object):
     @classmethod
     def find_class_paths(cls, data_root):
         '''
-        Given a root directory, return a list 
-        of Path instances that correspond to all 
-        directories under the root, which contain at 
-        least one image file.
+        Given a root directory, return an Ordered dict
+        mapping class names to lists of directories
+        that contain at least one sample of that class. 
         
-        The paths will be naturally sorted, and
-        absolute.
+        Both the class names (i.e. keys), and the
+        lists of directories (i.e. values) will be
+        naturally sorted, and absolute.
         
         Directory names that begin with a period ('.')
         are excluded.
@@ -40,9 +43,10 @@ class FileUtils(object):
 
         @param data_root: root directory for search 
         @type data_root: str
-        @return a list of Path instances fo rfull-path 
-            directories whose names are target classes.
-        @rtype [pathlib.Path]
+        @return dict mapping target classes to a list
+            of directories that contain samples of that
+            class. The directories will be Path objs
+        @rtype Ordered{str : [Path]}
         '''
         
         # If path is relative, compute abs
@@ -73,16 +77,35 @@ class FileUtils(object):
             # uniqeness of the gathered class names:
             
             class_paths = class_paths.union(set(full_paths))
-            
-        # Sort by the class names (not the full paths):
-        class_dict = {path.stem : path
-                         for path in class_paths
-                      }
-        sorted_by_class = natsort.natsorted(class_dict.keys())
-        class_paths_sorted = [class_dict[class_name]
-                                 for class_name in sorted_by_class
-                              ]
-        return class_paths_sorted
+        
+        # Order the paths so that all machines
+        # have the same sample-id assignements later:
+        
+        class_paths = natsort.natsorted(list(class_paths))
+         
+        # Get dict {class-name : [paths-to-samples-of-that-class]}
+        class_path_dict = OrderedDict()
+        
+        for class_path in class_paths:
+            try:
+                # dict[class-name] gets more
+                # paths that hold samples of class-name:
+                class_path_dict[class_path.stem].append(class_path)
+            except KeyError:
+                class_path_dict[class_path.stem] = [class_path]
+                
+        # Now ensure that the list of directories,
+        # (i.e. the values) for each class-name's entry
+        # are also sorted:
+
+        # Use copy of class_path_dict for iteration,
+        # b/c we modify class_path_dict in the loop:
+        
+        class_path_dict_copy = class_path_dict.copy()
+        for class_name, dirs in class_path_dict_copy.items():
+            class_path_dict[class_name] = natsort.natsorted(dirs)
+
+        return class_path_dict
 
     #------------------------------------
     # find_class_names 
