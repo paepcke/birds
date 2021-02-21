@@ -203,6 +203,11 @@ class SingleRootImageDataset:
                                    in natsort.natsorted(os.listdir(sample_folder))
                                    if Path(sample_path).suffix in FileUtils.IMG_EXTENSIONS
                                    ]
+                #*************
+                for f in folder_content:
+                    if Path(f).suffix not in FileUtils.IMG_EXTENSIONS:
+                        print(f)
+                #*************
                 # IDs we will assign to the samples in this folder:
                 sample_id_range = range(sample_id_start, 
                                         sample_id_start + len(folder_content)) 
