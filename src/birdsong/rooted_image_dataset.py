@@ -61,6 +61,7 @@ in the subclass MultiRootImageDataset.
 
 from _collections import OrderedDict
 import os
+from pathlib import Path
 
 import natsort
 import torch
@@ -200,6 +201,7 @@ class SingleRootImageDataset:
                 folder_content  = [os.path.join(sample_folder, sample_path)
                                    for sample_path 
                                    in natsort.natsorted(os.listdir(sample_folder))
+                                   if Path(sample_path).suffix in FileUtils.IMG_EXTENSIONS
                                    ]
                 # IDs we will assign to the samples in this folder:
                 sample_id_range = range(sample_id_start, 

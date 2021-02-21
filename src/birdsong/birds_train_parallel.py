@@ -1293,6 +1293,8 @@ class BirdTrainer(object):
                             break
                         except Exception as e:
                             self.log.err(f"Error sending split_num to split_training: {repr(e)}")
+                            # Give up
+                            return
                         self.validate_one_split()
     
                         # Time for sign of life?
