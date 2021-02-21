@@ -56,7 +56,7 @@ class ClassWeightDiscovery(object):
         # Full paths of all the non-dot-starting 
         # dirs under file_root:
 
-        #   OrderedDict{class_name : [list-of-dirs]
+        #   OrderedDict{class_name : [Path(dir1), Path(dir2)]
         # The class names are already sorted:
         class_name_paths_dir = FileUtils.find_class_paths(file_root)
         
