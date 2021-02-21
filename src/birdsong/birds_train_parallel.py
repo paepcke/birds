@@ -1292,9 +1292,10 @@ class BirdTrainer(object):
                             self.log.warn(f"Unexpectedly ran out of splits.")
                             break
                         except Exception as e:
-                            self.log.err(f"Error sending split_num to split_training: {repr(e)}")
-                            # Give up
-                            return
+                            msg = f"Error sending split_num to split_training: {repr(e)}"
+                            self.log.err(msg)
+                            raise ValueError(msg) from e
+
                         self.validate_one_split()
     
                         # Time for sign of life?
