@@ -332,8 +332,7 @@ class CrossValidatingDataLoader(DataLoader):
         # are to be used for validation in this
         # split:
          
-        for _i, (split_train_ids, split_test_ids) \
-            in enumerate(next(self.sampler)):
+        for split_train_ids, split_test_ids in self.sampler:
             
             # Keep track of which split we are working
             # on. Needed only as info for client; not

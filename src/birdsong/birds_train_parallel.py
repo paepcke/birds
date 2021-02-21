@@ -1418,7 +1418,6 @@ class BirdTrainer(object):
                     self.log.info(f"Training aborted by user, who requested not to save the model")
                 self.cleanup()
                 self.log.info("Exiting")
-                hard_stop = True
                 return
 
         finally:
