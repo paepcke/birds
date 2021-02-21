@@ -91,7 +91,7 @@ class CrossValidatingDataLoader(DataLoader):
     def __init__(self,
                  dataset,
                  batch_size=32,
-                 shuffle=False,
+                 shuffle=True,
                  seed=42,
                  num_workers=0,
                  pin_memory=False,

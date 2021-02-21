@@ -33,7 +33,7 @@ class SKFSampler(StratifiedKFold):
                  dataset,
                  num_folds=10,
                  seed=42,
-                 shuffle=False,
+                 shuffle=True,
                  drop_last=True
                  ):
         '''
