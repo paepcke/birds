@@ -1563,6 +1563,7 @@ class BirdTrainer(object):
                                             async_op=False)
                             param.grad.data /= self.comm_info['WORLD_SIZE']
                 self.optimizer.step()
+                loss = loss.to('cpu')
             
             finally:
                 # Free GPU memory:
