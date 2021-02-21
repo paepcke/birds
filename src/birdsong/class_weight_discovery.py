@@ -9,12 +9,9 @@ from pathlib import Path
 import sys
 
 from logging_service.logging_service import LoggingService
-import natsort
 import torch
 
 from birdsong.utils.file_utils import FileUtils
-from birdsong.utils.file_utils.FileUtils import IMG_EXTENSIONS
-
 
 class ClassWeightDiscovery(object):
     '''
@@ -78,7 +75,7 @@ class ClassWeightDiscovery(object):
                 num_samples += len([file_name 
                                      for file_name 
                                      in os.listdir(class_dir)
-                                     if Path(file_name).suffix in IMG_EXTENSIONS
+                                     if Path(file_name).suffix in FileUtils.IMG_EXTENSIONS
                                      ])
             class_populations[class_name] = num_samples
             
