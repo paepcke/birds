@@ -43,22 +43,22 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 # or different machine:
 #*****************
 #
-if socket.gethostname() in ('quintus', 'quatro', 'sparky'):
-    # Point to where the pydev server
-    # software is installed on the remote
-    # machine:
-    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
-   
-    import pydevd
-    global pydevd
-    # Uncomment the following if you
-    # want to break right on entry of
-    # this module. But you can instead just
-    # set normal Eclipse breakpoints:
-    #*************
-    print("About to call settrace()")
-    #*************
-    pydevd.settrace('localhost', port=4040)
+# if socket.gethostname() in ('quintus', 'quatro', 'sparky'):
+#     # Point to where the pydev server
+#     # software is installed on the remote
+#     # machine:
+#     sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
+#    
+#     import pydevd
+#     global pydevd
+#     # Uncomment the following if you
+#     # want to break right on entry of
+#     # this module. But you can instead just
+#     # set normal Eclipse breakpoints:
+#     #*************
+#     print("About to call settrace()")
+#     #*************
+#     pydevd.settrace('localhost', port=4040)
 #****************
 #******************
 def test_multi(arg):
@@ -589,16 +589,9 @@ class TrainScriptRunner(object):
         
         #***********
         #print(f"Worker starter: {config}")
-        #return "It worked"
+        print("Child checking in")
         #***********
 
-        if parent_log is None:
-            self.log = LoggingService()
-        else:
-            self.log = parent_log
-        
-        self.log.info('Child checking in')
-        
         comm_info = {}
         comm_info['MASTER_ADDR'] = '127.0.0.1'
         comm_info['MASTER_PORT'] = 5678
