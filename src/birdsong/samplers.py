@@ -4,10 +4,11 @@ Created on Dec 17, 2020
 @author: paepcke
 '''
 import math
+import random
 
-import torch
 from sklearn.model_selection._split import StratifiedKFold
 from torch import distributed as dist
+import torch
 
 import numpy as np
 
@@ -174,7 +175,12 @@ class SKFSampler(StratifiedKFold):
     
     def __next__(self):
         try:
-            return next(self.fold_generator)
+            train_sample_ids, validate_sample_ids = next(self.fold_generator)
+            if self.shuffle:
+                random.seed = self.seed + self.epoch
+                random.shuffle(train_sample_ids)
+                random.shuffle(validate_sample_ids)
+            return (train_sample_ids, validate_sample_ids)
         except StopIteration as e:
             self.folds_served += 1
             raise StopIteration from e 

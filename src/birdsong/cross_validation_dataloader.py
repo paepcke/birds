@@ -327,11 +327,13 @@ class CrossValidatingDataLoader(DataLoader):
         # validation.
         
         # Get one list of sample IDs that
-        # covers all samples in one split.
-        # And one list of sample IDs in the 
-        # test split:
+        # covers all train samples in one split.
+        # And one list of sample IDs that
+        # are to be used for validation in this
+        # split:
+         
         for _i, (split_train_ids, split_test_ids) \
-            in enumerate(self.sampler.get_split()):
+            in enumerate(next(self.sampler)):
             
             # Keep track of which split we are working
             # on. Needed only as info for client; not
@@ -384,9 +386,9 @@ class CrossValidatingDataLoader(DataLoader):
                 # Got one batch ready:
                 yield (batch, torch.tensor(y))
                 
-                # Client consumed one batch in current fold.
+                # Client consumed one batch in current split.
                 # Next batch: Starts another batch size
-                # samples onwards in the train folds:
+                # samples onwards in the train split:
                 
                 batch_start_idx += self.batch_size
                 
