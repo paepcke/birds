@@ -5,6 +5,7 @@ Created on Jan 21, 2021
 '''
 
 import os
+from pathlib import Path
 import sys
 
 from logging_service.logging_service import LoggingService
@@ -12,6 +13,7 @@ import natsort
 import torch
 
 from birdsong.utils.file_utils import FileUtils
+from birdsong.utils.file_utils.FileUtils import IMG_EXTENSIONS
 
 
 class ClassWeightDiscovery(object):
@@ -56,25 +58,36 @@ class ClassWeightDiscovery(object):
         
         # Full paths of all the non-dot-starting 
         # dirs under file_root:
-        
-        dirs = FileUtils.find_class_paths(file_root)
+
+        #   OrderedDict{class_name : [list-of-dirs]
+        # The class names are already sorted:
+        class_name_paths_dir = FileUtils.find_class_paths(file_root)
         
         # Create:
         #  {'class1' : <num_samples>,
         #   'class2' : <num_samples>,
         #         ...
-        #   } 
-        class_populations = {class_dir.stem : len(list(class_dir.iterdir()))
-                        		for class_dir in dirs
-                        		if not str(class_dir).startswith('.')
-                        		}
+        #   }
+        
+        class_populations = {}
+        for class_name in class_name_paths_dir.keys():
+            num_samples = 0
+            # Each class may have samples in multiple
+            # directories; add them up:
+            for class_dir in class_name_paths_dir[class_name]:
+                num_samples += len([file_name 
+                                     for file_name 
+                                     in os.listdir(class_dir)
+                                     if Path(file_name).suffix in IMG_EXTENSIONS
+                                     ])
+            class_populations[class_name] = num_samples
+            
         if len(class_populations) == 0:
             LoggingService().err(f"No target classes found under {file_root}")
             sys.exit(1)
         majority_class_population = max(class_populations.values())
-        sorted_classes = natsort.natsorted(class_populations.keys())
         weights = []
-        for class_name in sorted_classes:
+        for class_name in class_name_paths_dir.keys():
             weights.append(class_populations[class_name] / majority_class_population)
 
         return torch.tensor(weights) 

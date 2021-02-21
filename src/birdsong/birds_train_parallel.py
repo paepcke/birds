@@ -1859,7 +1859,9 @@ class BirdTrainer(object):
                                                    drop_last=True,
                                                    batch_size=batch_size 
                                                    )
-        
+        #***********
+        num_batches = len(dataloader)
+        #***********
         return dataloader
 
     #------------------------------------
