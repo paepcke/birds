@@ -542,6 +542,10 @@ class TrainScriptRunner(object):
         who_is_who = {}
         
         for config_idx, config in enumerate(run_configs):
+            #***************
+            self.worker_starter(config.to_json(), 0)
+            return
+            #***************
             
             # Put finished processes to rest, else
             # they'll be zombies:
@@ -601,6 +605,7 @@ class TrainScriptRunner(object):
         comm_info['WORLD_SIZE']  = 1
         comm_info['GPUS_USED_THIS_MACHINE']  = self.my_gpus
 
+        curr_dir = os.path.dirname(__file__)
         log_dir = os.path.join(curr_dir, 'runs_logs')
         if not os.path.exists(log_dir):
             os.makedirs(log_dir)
@@ -751,8 +756,14 @@ if __name__ == '__main__':
     hparms_spec = {'lr' : [0.001],
                    'optimizer'  : ['Adam'],
                    'batch_size' : [32],
-                   'kernel_size': [3,7]
+                   'kernel_size': [7]
                    }
+    
+#     hparms_spec = {'lr' : [0.001],
+#                    'optimizer'  : ['Adam'],
+#                    'batch_size' : [32],
+#                    'kernel_size': [3,7]
+#                    }
 #     hparms_spec = {'lr' : [0.001],
 #                    'optimizer'  : ['Adam', 'RMSprop', 'SGD'],
 #                    'batch_size' : [4, 32,64,128],
