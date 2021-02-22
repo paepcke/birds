@@ -60,11 +60,6 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 #     #*************
 #     pydevd.settrace('localhost', port=4040)
 #****************
-#******************
-def test_multi(arg):
-    print(f"Test_multi was called: {arg}")
-    return True
-#******************
 
 # ------------------------ Specialty Exceptions --------
 class TrainScriptRunner(object):
@@ -543,8 +538,8 @@ class TrainScriptRunner(object):
         
         for config_idx, config in enumerate(run_configs):
             #***************
-            self.worker_starter(config.to_json(), 0)
-            return
+            #self.worker_starter(config.to_json(), 0)
+            #return
             #***************
             
             # Put finished processes to rest, else
@@ -571,7 +566,8 @@ class TrainScriptRunner(object):
             who_is_who[proc] = gpu_id
             
         for proc in who_is_who.keys():
-            self.log.info(f"Waiting for proc {proc.name} to finish...")
+            if not self.quiet:
+                print(f"Waiting for proc {proc.name} to finish...")
             proc.join()
 
     #------------------------------------
@@ -753,22 +749,22 @@ if __name__ == '__main__':
             raise FileNotFoundError(f"Could not find config file at {config_file}")
 
     #**************
-    hparms_spec = {'lr' : [0.001],
-                   'optimizer'  : ['Adam'],
-                   'batch_size' : [32],
-                   'kernel_size': [7]
-                   }
+#     hparms_spec = {'lr' : [0.001],
+#                    'optimizer'  : ['Adam'],
+#                    'batch_size' : [32],
+#                    'kernel_size': [7]
+#                    }
     
 #     hparms_spec = {'lr' : [0.001],
 #                    'optimizer'  : ['Adam'],
 #                    'batch_size' : [32],
 #                    'kernel_size': [3,7]
 #                    }
-#     hparms_spec = {'lr' : [0.001],
-#                    'optimizer'  : ['Adam', 'RMSprop', 'SGD'],
-#                    'batch_size' : [4, 32,64,128],
-#                    'kernel_size': [3,7]
-#                    }
+    hparms_spec = {'lr' : [0.001],
+                   'optimizer'  : ['Adam', 'RMSprop', 'SGD'],
+                   'batch_size' : [4, 32,64,128],
+                   'kernel_size': [3,7]
+                   }
 
     #**************
 

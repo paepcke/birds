@@ -73,22 +73,22 @@ sys.path.insert(0,packet_root)
 # or different machine:
 #*****************
 # 
-if socket.gethostname() in ('quintus', 'quatro', 'sparky'):
-    # Point to where the pydev server 
-    # software is installed on the remote
-    # machine:
-    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
-      
-    import pydevd
-    global pydevd
-    # Uncomment the following if you
-    # want to break right on entry of
-    # this module. But you can instead just
-    # set normal Eclipse breakpoints:
-    #*************
-    print("About to call settrace()")
-    #*************
-    pydevd.settrace('localhost', port=4040)
+# if socket.gethostname() in ('quintus', 'quatro', 'sparky'):
+#     # Point to where the pydev server 
+#     # software is installed on the remote
+#     # machine:
+#     sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
+#       
+#     import pydevd
+#     global pydevd
+#     # Uncomment the following if you
+#     # want to break right on entry of
+#     # this module. But you can instead just
+#     # set normal Eclipse breakpoints:
+#     #*************
+#     print("About to call settrace()")
+#     #*************
+#     pydevd.settrace('localhost', port=4040)
 # **************** 
 
 #***********
@@ -1123,7 +1123,7 @@ class BirdTrainer(object):
             if type(val) in (float, int, str):
                 try:
                     self.writer.add_scalar(f"{measure_name}/train", val, 
-                                                 global_step=epoch)
+                                           global_step=epoch)
                 except AttributeError:
                     self.log.err(f"No tensorboard writer in process {self.rank}")
 
@@ -1132,18 +1132,25 @@ class BirdTrainer(object):
             try:
                 if measure_name == 'mean_accuracy':
                     val = epoch_results.get('mean_accuracy_val', None) 
-                    self.writer.add_scalar('mean_accuracy/validate', val)
+                    self.writer.add_scalar('mean_accuracy/validate', val,
+                                            global_step=epoch)
 
                 elif measure_name == 'epoch_loss':
                     val = epoch_results.get('epoch_loss_val', None) 
-                    self.writer.add_scalar('epoch_loss/validate', val)
+                    self.writer.add_scalar('epoch_loss/validate', val,
+                                           global_step=epoch
+                                           )
 
                 elif measure_name == 'precision_recall':
                     val = epoch_results.get('epoch_mean_weighted_precision', None)
-                    self.writer.add_scalar('precision_recall/precision', val)
+                    self.writer.add_scalar('precision_recall/precision', val,
+                                           global_step=epoch
+                                           )
 
                     val = epoch_results.get('epoch_mean_weighted_recall', None)
-                    self.writer.add_scalar('precision_recall/recall', val)
+                    self.writer.add_scalar('precision_recall/recall', val,
+                                           global_step=epoch
+                                           )
             except AttributeError:
                 self.log.err(f"No tensorboard writer in process {self.rank}")
 
@@ -1864,9 +1871,6 @@ class BirdTrainer(object):
                                                    drop_last=True,
                                                    batch_size=batch_size 
                                                    )
-        #***********
-        num_batches = len(dataloader)
-        #***********
         return dataloader
 
     #------------------------------------
