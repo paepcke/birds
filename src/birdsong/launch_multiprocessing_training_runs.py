@@ -108,12 +108,7 @@ class TrainScriptRunner(object):
             to call other methods individually
         @type bool
         '''
-
-        if logfile is not None:
-            self.log = LoggingService(logfile=logfile)
-        else:
-            self.log = LoggingService()
-
+        
         # For passing on to children later:
         self.logfile = logfile
         
