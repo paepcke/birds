@@ -103,46 +103,72 @@ class TrainResultCollection(dict):
         return float(res)
 
     #------------------------------------
-    # mean_balanced_accuracy
+    # balanced_accuracy_score
     #-------------------
     
-    def mean_balanced_accuracy(self, epoch=None, learning_phase=LearningPhase.TRAINING):
+    def balanced_accuracy_score(self, epoch=None, learning_phase=LearningPhase.TRAINING):
         '''
-        Computes the mean of all balanced accuracies in the given 
-        epoch and learning phase. Individual balanced accuracies
-        among all truth/prediction pairs are weighted to account
-        for class imbalance, and adjusted for chance.
+        Get accuracy adjusted for class support;
+        also adjust such that purely chance has
+        result of 0. Result of 1 is optimal:
         
         @param epoch: epoch during which tallies must have
-            been created to be included in the mean:
-        @type epoch: int
+            been created to be included in the computation.
+            If None, all epochs are included
+        @type epoch: {int | None}
         @param learning_phase: learning phase during which 
             included tallies must have been produced.
         @type learning_phase: LearningPhase
-        @return mean accuracy over the specified tallies
+        @return accuracy over the specified tallies
         @rtype float
         '''
 
         if epoch is None:
-            balanced_accs = [tally.balanced_accuracy
+            # Collect the list of predicted classes
+            # from each tally, and concatenate them
+            # in to one big list; same with truth labels:
+            all_preds = np.concatenate(
+                             [tally.predicted_class_ids
                              for tally 
                              in self.values()
                              if tally.learning_phase == learning_phase
-                             ]
+                             ])
+            all_labels = np.concatenate(
+                             [tally.truth_labels
+                             for tally 
+                             in self.values()
+                             if tally.learning_phase == learning_phase
+                             ])
         else:
-            balanced_accs = [tally.balanced_accuracy
+            all_preds = np.concatenate(
+                            [tally.predicted_class_ids
                              for tally 
                              in self.values() 
                              if tally.epoch == epoch and \
                                 tally.learning_phase == learning_phase
-                             ]
+                             ])
+            all_labels = np.concatenate(
+                            [tally.truth_labels
+                             for tally 
+                             in self.values() 
+                             if tally.epoch == epoch and \
+                                tally.learning_phase == learning_phase
+                             ])
+            
+        
+
         # If no accuracies are available,
         # set the mean to nan
-        if len(balanced_accs) == 0:
+        if len(all_preds) == 0:
             return np.nan
-        else:
-            m = np.mean(balanced_accs)
-            
+        
+        # Get accuracy adjusted for class support;
+        # also adjust such that purely chance has
+        # result of 0. Result of 1 is optimal:
+        m = metrics.balanced_accuracy_score(all_labels,
+                                            all_preds,
+                                            adjusted=True
+                                            )
         # m is an np.float.
         # We want to return a Python float. The conversion
         # starts being inaccurate around the 6th digit.
@@ -522,8 +548,8 @@ class EpochSummary(UserDict):
         resulting instance acts like a dict with 
         the following keys:
         
-           o mean_balanced_accuracy_train
-           o mean_balanced_accuracy_val
+           o balanced_accuracy_score_train
+           o balanced_accuracy_score_val
            o mean_accuracy_train
            o mean_accuracy_val
            o epoch_loss_train
@@ -542,12 +568,12 @@ class EpochSummary(UserDict):
 
         super().__init__()
         
-        self['mean_balanced_accuracy_train'] = \
-           tally_collection.mean_balanced_accuracy(epoch, 
+        self['balanced_accuracy_score_train'] = \
+           tally_collection.balanced_accuracy_score(epoch, 
                                                    learning_phase=LearningPhase.TRAINING)
 
-        self['mean_balanced_accuracy_val'] = \
-           tally_collection.mean_balanced_accuracy(epoch, 
+        self['balanced_accuracy_score_val'] = \
+           tally_collection.balanced_accuracy_score(epoch, 
                                                    learning_phase=LearningPhase.VALIDATING)
 
         # Mean of accuracies among the 
@@ -658,18 +684,11 @@ class TrainResult:
         self.loss           = loss
         self.badly_predicted_labels = badly_predicted_labels
         self.num_classes    = num_classes
+        self.predicted_class_ids = predicted_class_ids
+        self.truth_labels   = truth_labels
                 
         self.conf_matrix = self.compute_confusion_matrix(predicted_class_ids,
                                                          truth_labels)
-
-        # Accuracy:
-        
-        # The accuracy weighted by class support,
-        # and adjusted for correctness by chance:
-        self.balanced_accuracy = metrics.balanced_accuracy_score(truth_labels,
-                                                                 predicted_class_ids,
-                                                                 adjusted=True
-                                                                 )
 
         # Find classes that are present in the
         # truth labels; all others will be excluded
@@ -689,7 +708,13 @@ class TrainResult:
                                                        average='micro',
                                                        zero_division=0
                                                        )
-
+            
+        # Calculate metrics for each label, and find their 
+        # average weighted by support (the number of true 
+        # instances for each label). This alters ‘macro’ to 
+        # account for label imbalance; it can result in 
+        # an F-score that is not between precision and recall.
+        
         self.precision_weighted = metrics.precision_score(truth_labels, 
                                                           predicted_class_ids,
                                                           average='weighted',

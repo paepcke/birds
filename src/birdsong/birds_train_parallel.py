@@ -25,6 +25,7 @@ import random  # Just so we can fix seed for testing
 import re
 import signal
 import socket
+import numpy as np
 from threading import Timer
 import warnings
 
@@ -39,6 +40,8 @@ from torch import no_grad
 from torch import optim
 import torch
 from torch.distributed import  reduce_op
+import torch.distributed as dist
+import torch.nn as nn
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torchvision.models.resnet import ResNet, BasicBlock
 
@@ -52,9 +55,6 @@ from birdsong.utils.learning_phase import LearningPhase
 from birdsong.utils.neural_net_config import NeuralNetConfig, ConfigError
 from birdsong.utils.tensorboard_plotter import TensorBoardPlotter, \
     SummaryWriterPlus
-import numpy as np
-import torch.distributed as dist
-import torch.nn as nn
 
 # Needed to make Eclipse's type engine happy.
 # I would prefer using torch.cuda, etc in the 
@@ -364,6 +364,15 @@ class BirdTrainer(object):
                                 self.config.Training.getint('batch_size'),
                                 json_log_dir=performance_log_dir
                                 )
+        
+        # A LogSoftmax function to use when turning
+        # losses returned from CrossEntropyLoss(loss)
+        # into probabilities. The dim=2 picks the
+        # list of raw predictions from a tensor 
+        #   (num-batches, ?, num-classes):
+        
+        self.log_softmax = nn.LogSoftmax(dim=2) 
+        
         # If this process is to report results,
         # set up tensorboard reporting:
         
@@ -981,7 +990,7 @@ class BirdTrainer(object):
         #    ...
         #    ]
         #                   ...
-        pred_classes_each_batch = pred_prob_tns.softmax(dim=2).argmax(dim=2)
+        pred_classes_each_batch = self.log_softmax(pred_prob_tns).argmax(dim=2)
 
         #  For a batch size of 2 we would now have:
         #                 tensor([[3, 0],  <-- result batch 1 above
@@ -1100,10 +1109,12 @@ class BirdTrainer(object):
                                      )
         
         training_quantities_to_report = ['mean_accuracy',
+                                         'balanced_accuracy_score',
                                          'epoch_loss',
                                          ]
 
         validation_quantities_to_report = ['mean_accuracy',
+                                           'balanced_accuracy_score',
                                            'epoch_loss',
                                            'precision_recall',
                                            ]
@@ -1133,6 +1144,11 @@ class BirdTrainer(object):
                 if measure_name == 'mean_accuracy':
                     val = epoch_results.get('mean_accuracy_val', None) 
                     self.writer.add_scalar('mean_accuracy/validate', val,
+                                            global_step=epoch)
+
+                if measure_name == 'balanced_accuracy_score':
+                    val = epoch_results.get('balanced_accuracy_score_val', None) 
+                    self.writer.add_scalar('balanced_accuracy_score/validate', val,
                                             global_step=epoch)
 
                 elif measure_name == 'epoch_loss':
@@ -1440,6 +1456,9 @@ class BirdTrainer(object):
                 cuda.synchronize()
                 
                 self.model.to('cpu')
+                if self.weighted:
+                    self.device_resident_weights.to('cpu')
+                    
                 self.ending_GPU_memory = cuda.memory_allocated(self.device)
                 if self.ending_GPU_memory >= self.initial_GPU_memory:
                     left_on_gpu = self.ending_GPU_memory - self.initial_GPU_memory
@@ -1754,7 +1773,7 @@ class BirdTrainer(object):
         '''
         Given a tensor of class labels (target class IDs),
         update the dict {class-id : num-samples-in-train-set}
-        by adding the the entries
+        by adding the entries
         
         @param targets: class IDs
         @type targets: tensor[int]
@@ -1937,25 +1956,35 @@ class BirdTrainer(object):
             self.tally_collection = None
 
         if self.config.getboolean('Training', 'weighted', True):
+            
+            self.weighted = True
             # Get path to samples, relative to current
             # dir, if the file path in the config file 
             # is relative:
             class_root = self.config.getpath('Paths',
                                              'root_train_test_data',
                                              relative_to = self.curr_dir)
-            weights = ClassWeightDiscovery.get_weights(class_root)
+            self.weights = ClassWeightDiscovery.get_weights(class_root)
             # Put weights to the device where the model
             # was placed: CPU, or GPU_n:
-            device_resident_weights = weights.to(self.device_residence(self.model))
+            self.device_resident_weights = self.weights.to(self.device_residence(self.model))
         else:
-            weights = None
+            self.weighted = False
+            self.weights  = None
             
         # Loss function:
         #self.loss_fn = self.select_loss_function(self.config)
-        self.loss_fn = nn.CrossEntropyLoss(weight=device_resident_weights)
+        self.loss_fn = nn.CrossEntropyLoss(weight=self.device_resident_weights)
         
-        # Scheduler:
-        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer)
+        # Scheduler: at each step (after each epoch)
+        # we will call the scheduler with the latest
+        # validation loss. If it has not decreased within
+        # patience epochs, decrease learning rate by factor
+        # of 10:
+        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer,
+                                                              factor=0.1,
+                                                              patience=3
+                                                              )
 
         self.log.info(f"Model resides on device: {self.device_residence(self.model)}")
         
@@ -2504,8 +2533,8 @@ class BirdTrainer(object):
         
         Included in the measures are:
         
-           o mean_balanced_accuracy_trai   
-           o mean_balanced_accuracy_val
+           o balanced_accuracy_score_train
+           o balanced_accuracy_score_val
            o mean_accuracy_train
            o mean_accuracy_val
            o epoch_mean_weighted_precision
@@ -2543,14 +2572,14 @@ class BirdTrainer(object):
         
         
         metric_results = {
-                'mean_balanced_accuracy_train' : summary.mean_balanced_accuracy_train,
-                'mean_balanced_accuracy_val':summary.mean_balanced_accuracy_val,
-                'mean_accuracy_train' : summary.mean_accuracy_train,
-                'mean_accuracy_val': summary.mean_accuracy_val,
-                'epoch_mean_weighted_precision': summary.epoch_mean_weighted_precision,
-                'epoch_mean_weighted_recall' : summary.epoch_mean_weighted_recall,
-                'epoch_loss_train' : loss_train,
-                'epoch_loss_val' : loss_val
+                'hp_balanced_accuracy_score_train' : summary.balanced_accuracy_score_train,
+                'hp_balanced_accuracy_score_val':summary.balanced_accuracy_score_val,
+                'hp_mean_accuracy_train' : summary.mean_accuracy_train,
+                'hp_mean_accuracy_val': summary.mean_accuracy_val,
+                'hp_epoch_mean_weighted_precision': summary.epoch_mean_weighted_precision,
+                'hp_epoch_mean_weighted_recall' : summary.epoch_mean_weighted_recall,
+                'hp_epoch_loss_train' : loss_train,
+                'hp_epoch_loss_val' : loss_val
                 }
         
         self.writer.add_hparams(hparms_vals, metric_results)
