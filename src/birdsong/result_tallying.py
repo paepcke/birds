@@ -12,6 +12,7 @@ import os, sys
 from sklearn import metrics
 from sklearn.metrics import confusion_matrix
 import torch
+from torch import Tensor
 
 from birdsong.utils.learning_phase import LearningPhase
 import numpy as np
@@ -122,70 +123,7 @@ class TrainResultCollection(dict):
         @return accuracy over the specified tallies
         @rtype float
         '''
-
-        if epoch is None:
-            # Collect the list of predicted classes
-            # from each tally, and concatenate them
-            # in to one big list; same with truth labels:
-            all_preds = np.concatenate(
-                             [tally.predicted_class_ids
-                             for tally 
-                             in self.values()
-                             if tally.learning_phase == learning_phase
-                             ])
-            all_labels = np.concatenate(
-                             [tally.truth_labels
-                             for tally 
-                             in self.values()
-                             if tally.learning_phase == learning_phase
-                             ])
-        else:
-            all_preds = np.concatenate(
-                            [tally.predicted_class_ids
-                             for tally 
-                             in self.values() 
-                             if tally.epoch == epoch and \
-                                tally.learning_phase == learning_phase
-                             ])
-            all_labels = np.concatenate(
-                            [tally.truth_labels
-                             for tally 
-                             in self.values() 
-                             if tally.epoch == epoch and \
-                                tally.learning_phase == learning_phase
-                             ])
-            
-        
-
-        # If no accuracies are available,
-        # set the mean to nan
-        if len(all_preds) == 0:
-            return np.nan
-        
-        # Get accuracy adjusted for class support;
-        # also adjust such that purely chance has
-        # result of 0. Result of 1 is optimal:
-        m = metrics.balanced_accuracy_score(all_labels,
-                                            all_preds,
-                                            adjusted=True
-                                            )
-        # m is an np.float.
-        # We want to return a Python float. The conversion
-        # starts being inaccurate around the 6th digit.
-        # Example:
-        #      torch.tensor(0.9).item() --> 0.8999999761581421  
-        # This inaccuracy is 'inherited' into the np.float32. 
-        # The following gymnastics are a work-around:
-        # Round in numpy country:
-        
-        mean_acc_tensor = (m * 10**6).round() / (10**6)
-        
-        # Convert to Python float, and round that
-        # float to 6 digits:
-        
-        mean_acc = round(mean_acc_tensor.item(), 6) 
-        
-        return mean_acc
+        return self._get_attribute_mean('truth_labels', epoch=epoch, learning_phase=learning_phase)
 
     #------------------------------------
     # mean_accuracy
@@ -205,112 +143,119 @@ class TrainResultCollection(dict):
         @return mean accuracy over the specified tallies
         @rtype float
         '''
+        return self._get_attribute_mean('accuracy', epoch=epoch, learning_phase=learning_phase)
 
-        if epoch is None:
-            accs = [tally.accuracy
-                         for tally 
-                         in self.values()
-                         if tally.learning_phase == learning_phase
-                         ]
-        else:
-            accs = [tally.accuracy 
-                         for tally 
-                         in self.values() 
-                         if tally.epoch == epoch and \
-                            tally.learning_phase == learning_phase
-                         ]
+    #------------------------------------
+    # mean_macro_precision 
+    #-------------------
+    
+    def mean_macro_precision(self, epoch=None, learning_phase=LearningPhase.TRAINING):
+        return self._get_attribute_mean('precision_macro', epoch=epoch, learning_phase=learning_phase)
 
-        if len(accs) == 0:
-            return np.nan
-        else:
-            m = np.mean(accs)
-
-        # m is an np.float.
-        # We want to return a Python float. The conversion
-        # starts being inaccurate around the 6th digit.
-        # Example:
-        #      torch.tensor(0.9).item() --> 0.8999999761581421  
-        # This inaccuracy is 'inherited' into the np.float32. 
-        # The following gymnastics are a work-around:
-        # Round in numpy country:
-        
-        mean_acc_tensor = (m * 10**6).round() / (10**6)
-        
-        # Convert to Python float, and round that
-        # float to 6 digits:
-        
-        mean_acc = round(mean_acc_tensor.item(), 6) 
-        
-        return mean_acc
+    #------------------------------------
+    # mean_micro_precision 
+    #-------------------
+    
+    def mean_micro_precision(self, epoch=None, learning_phase=LearningPhase.TRAINING):
+        return self._get_attribute_mean('precision_micro', epoch=epoch, learning_phase=learning_phase)
 
     #------------------------------------
     # mean_weighted_precision 
     #-------------------
-    
-    
+
     def mean_weighted_precision(self, 
-                                epoch, 
+                                epoch=None, 
                                 learning_phase=LearningPhase.VALIDATING):
-        if epoch is None:
-            weighted_precs = [tally.precision_weighted
-                              for tally 
-                              in self.values()
-                              if tally.learning_phase == learning_phase
-                              ] 
-        else:
-            weighted_precs = ([tally.precision_weighted
-                               for tally 
-                               in self.values() 
-                               if tally.epoch == epoch and \
-                                  tally.learning_phase == learning_phase
-                               ])
+        return self._get_attribute_mean('precision_weighted', epoch=epoch, learning_phase=learning_phase)
+    
+    #------------------------------------
+    # mean_macro_recall 
+    #-------------------
 
-        if len(weighted_precs) == 0:
-            return np.nan
-        else:
-            m = np.mean(weighted_precs)
+    def mean_macro_recall(self, 
+                          epoch=None, 
+                          learning_phase=LearningPhase.VALIDATING):
+        return self._get_attribute_mean('recall_macro', epoch=epoch, learning_phase=learning_phase)
+    
+    #------------------------------------
+    # mean_micro_recall 
+    #-------------------
 
-        # m is an np.float.
-        # We want to return a Python float. The conversion
-        # starts being inaccurate around the 6th digit.
-        # Example:
-        #      torch.tensor(0.9).item() --> 0.8999999761581421  
-        # This inaccuracy is 'inherited' into the np.float32. 
-        # The following gymnastics are a work-around:
-        # Round in numpy country:
-        
-        mean_prec_tensor = (m * 10**6).round() / (10**6)
-        
-        # Convert to Python float, and round that
-        # float to 6 digits:
-        
-        mean_precision = round(mean_prec_tensor.item(), 6)
-        return mean_precision
+    def mean_micro_recall(self, 
+                          epoch=None, 
+                          learning_phase=LearningPhase.VALIDATING):
+        return self._get_attribute_mean('recall_micro', epoch=epoch, learning_phase=learning_phase)
 
+    
     #------------------------------------
     # mean_weighted_recall
     #-------------------
 
     def mean_weighted_recall(self, epoch, learning_phase=LearningPhase.VALIDATING):
-        if epoch is None:
-            weighted_recalls = [tally.recall_weighted
-                                for tally 
-                                in self.values()
-                                if tally.learning_phase == learning_phase
-                                ]
-        else:
-            weighted_recalls = [tally.recall_weighted
-                                for tally 
-                                in self.values() 
-                                if tally.epoch == epoch and \
-                                tally.learning_phase == learning_phase
-                                ]
+        return self._get_attribute_mean('recall_weighted', epoch=epoch, learning_phase=learning_phase)
 
-        if len(weighted_recalls) == 0:
+    #------------------------------------
+    # _get_attribute_mean 
+    #-------------------
+    
+    def _get_attribute_mean(self, tally_attr_name, epoch=None, learning_phase=LearningPhase.TRAINING):
+        '''
+        Given the name of an attribute provided
+        by tally (i.e. TrainResult) instances, retrieve
+        that attribute from all tallies in this collection.
+        Limit to the tallies in the given epoch and learning
+        phase. Then take the mean of the values, round to
+        six places, and return the value as a Python float.
+        
+        If epoch is None, the tallies of all epochs from the
+        learning phase are included; else only the ones created
+        during the given epoch.
+        
+        Example:
+        
+            <tally_collection>._get_attribute_mean('mean_weighted_recall', 
+                                                    epoch=1, 
+                                                    learning_phase=LearningPhase.VALIDATING
+                                                    )
+                                                    
+        The return value is rounded to six places, 
+        because no rounding errors interfere with unit
+        test equality assertions between two values.
+        
+        @param tally_attr_name: tally attribute whose mean to compute
+        @type tally_attr_name: str
+        @param epoch: epoch to which tally origin is to be restricted
+        @type epoch: {None | int}
+        @param learning_phase: the learning phase to which the tally
+            origin is to be restricted
+        @type learning_phase: LearningPhase
+        @return computed mean, rounded to 6 places
+        @rtype float
+        '''
+        if epoch is None:
+            # Get either a list of numbers, 
+            # or a one-element list containing
+            # a tensor:
+            results = [tally.__getattribute__(tally_attr_name)
+                       for tally 
+                       in self.values()
+                       if tally.learning_phase == learning_phase
+                       ]
+        else:
+            results = [tally.__getattribute__(tally_attr_name)
+                       for tally 
+                       in self.values() 
+                       if tally.epoch == epoch and \
+                          tally.learning_phase == learning_phase
+                       ]
+
+        if len(results) == 0:
             return np.nan
         else:
-            m = np.mean(weighted_recalls)
-
+            if type(results[0]) == Tensor:
+                m = np.mean(results[0].numpy())
+            else:
+                m = np.mean(results)
 
         # m is an np.float.
         # We want to return a Python float. The conversion
@@ -321,13 +266,16 @@ class TrainResultCollection(dict):
         # The following gymnastics are a work-around:
         # Round in numpy country:
         
-        mean_recall_tensor = (m * 10**6).round() / (10**6)
+        mean_results_tensor = (m * 10**6).round() / (10**6)
         
         # Convert to Python float, and round that
         # float to 6 digits:
         
-        mean_recall = round(mean_recall_tensor.item(), 6)
-        return mean_recall
+        mean_results = round(mean_results_tensor.item(), 6) 
+        
+        return mean_results
+    
+
 
     #------------------------------------
     # conf_matrix_aggregated 
@@ -567,58 +515,83 @@ class EpochSummary(UserDict):
         '''
 
         super().__init__()
-        
-        self['balanced_accuracy_score_train'] = \
-           tally_collection.balanced_accuracy_score(epoch, 
-                                                   learning_phase=LearningPhase.TRAINING)
 
-        self['balanced_accuracy_score_val'] = \
-           tally_collection.balanced_accuracy_score(epoch, 
-                                                   learning_phase=LearningPhase.VALIDATING)
-
-        # Mean of accuracies among the 
-        # training splits of this epoch
-        self['mean_accuracy_train'] = \
-           tally_collection.mean_accuracy(epoch, 
-                                          learning_phase=LearningPhase.TRAINING)
-           
-        self['mean_accuracy_val'] = \
-           tally_collection.mean_accuracy(epoch, 
-                                          learning_phase=LearningPhase.VALIDATING)
         try:
-            self['epoch_loss_train'] = tally_collection[(epoch, 'Training')].loss
-        except KeyError:
-            msg = f"Training loss for epoch {epoch} not avaible: add_loss() was never called."
-            if logger is None:
-                print(msg)
-            else:
-                logger.warn(msg)
+            self['balanced_accuracy_score_train'] = \
+               tally_collection.balanced_accuracy_score(epoch, 
+                                                       learning_phase=LearningPhase.TRAINING)
+    
+            self['balanced_accuracy_score_val'] = \
+               tally_collection.balanced_accuracy_score(epoch, 
+                                                       learning_phase=LearningPhase.VALIDATING)
+    
+            # Mean of accuracies among the 
+            # training splits of this epoch
+            self['mean_accuracy_train'] = \
+               tally_collection.mean_accuracy(epoch, 
+                                              learning_phase=LearningPhase.TRAINING)
+               
+            self['mean_accuracy_val'] = \
+               tally_collection.mean_accuracy(epoch, 
+                                              learning_phase=LearningPhase.VALIDATING)
+            try:
+                self['epoch_loss_train'] = tally_collection[(epoch, 'Training')].loss
+            except KeyError:
+                msg = f"Training loss for epoch {epoch} not avaible: add_loss() was never called."
+                if logger is None:
+                    print(msg)
+                else:
+                    logger.warn(msg)
+                    
+            try:
+                self['epoch_loss_val']   = tally_collection[(epoch, 'Validating')].loss
+            except KeyError:
+                msg = f"Validation loss for epoch {epoch} not avaible: add_loss() was never called."
+                if logger is None:
+                    print(msg)
+                else:
+                    logger.warn(msg)
+    
+            self['epoch_mean_macro_precision'] = \
+               tally_collection.mean_macro_precision(epoch,
+                                                     learning_phase=LearningPhase.VALIDATING
+                                                     )
+    
+            self['epoch_mean_micro_precision'] = \
+               tally_collection.mean_micro_precision(epoch,
+                                                     learning_phase=LearningPhase.VALIDATING
+                                                     )
+    
+            self['epoch_mean_weighted_precision'] = \
+               tally_collection.mean_weighted_precision(epoch,
+                                                        learning_phase=LearningPhase.VALIDATING
+                                                        )
+    
+            self['epoch_mean_macro_recall'] = \
+               tally_collection.mean_macro_recall(epoch,
+                                                  learning_phase=LearningPhase.VALIDATING
+                                                  )
+    
+            self['epoch_mean_micro_recall'] = \
+               tally_collection.mean_micro_recall(epoch,
+                                                  learning_phase=LearningPhase.VALIDATING
+                                                  )
+    
                 
-        try:
-            self['epoch_loss_val']   = tally_collection[(epoch, 'Validating')].loss
-        except KeyError:
-            msg = f"Validation loss for epoch {epoch} not avaible: add_loss() was never called."
-            if logger is None:
-                print(msg)
-            else:
-                logger.warn(msg)
+            self['epoch_mean_weighted_recall'] = \
+               tally_collection.mean_weighted_recall(epoch,
+                                                     learning_phase=LearningPhase.VALIDATING
+                                                     )
 
-        self['epoch_mean_weighted_precision'] = \
-           tally_collection.mean_weighted_precision(epoch,
-                                                    learning_phase=LearningPhase.VALIDATING
-                                                    )
-            
-        self['epoch_mean_weighted_recall'] = \
-           tally_collection.mean_weighted_recall(epoch,
-                                                 learning_phase=LearningPhase.VALIDATING
-                                                 )
+            # For the confusion matrix: add all 
+            # the confusion matrices from Validation
+            # runs:
+            self['epoch_conf_matrix'] = tally_collection.conf_matrix_aggregated(epoch=epoch,
+                                                                                learning_phase=LearningPhase.VALIDATING
+                                                                                )
+        except Exception as e:
+            raise ValueError(f"Error creating EpochSummary: {repr(e)}")
 
-        # For the confusion matrix: add all 
-        # the confusion matrices from Validation
-        # runs:
-        self['epoch_conf_matrix'] = tally_collection.conf_matrix_aggregated(epoch=epoch,
-                                                                            learning_phase=LearningPhase.VALIDATING
-                                                                            )
         # Maybe not greatest style but:
         # Allow clients to use dot notation in addition
         # to dict format:

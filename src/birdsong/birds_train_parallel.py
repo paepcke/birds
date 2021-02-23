@@ -1107,68 +1107,109 @@ class BirdTrainer(object):
                                      epoch,
                                      self.log
                                      )
+        # The following quantities will be writen
+        # to tensorboard for training/validation:
         
-        training_quantities_to_report = ['mean_accuracy',
-                                         'balanced_accuracy_score',
-                                         'epoch_loss',
-                                         ]
-
-        validation_quantities_to_report = ['mean_accuracy',
-                                           'balanced_accuracy_score',
-                                           'epoch_loss',
-                                           'precision_recall',
-                                           ]
-        
-        # For convenience: make an intermediate
-        # dict of train phase measure name/result:
-        
-        train_results = {measure_name : epoch_results.get(measure_name+'_train', 
-                                                          None)
-                         for measure_name
-                         in training_quantities_to_report
-                         }
+        # training_quantities_to_report = ['mean_accuracy',
+        #                                  'balanced_accuracy_score',
+        #                                  'epoch_loss',
+        #                                  ]
+        # 
+        # validation_quantities_to_report = ['mean_accuracy',
+        #                                    'balanced_accuracy_score',
+        #                                    'epoch_loss',
+        #                                    'precision_recall',
+        #                                    ]
 
         # Write training phase results to tensorboard:
 
-        for measure_name, val in train_results.items():
-            if type(val) in (float, int, str):
-                try:
-                    self.writer.add_scalar(f"{measure_name}/train", val, 
-                                           global_step=epoch)
-                except AttributeError:
-                    self.log.err(f"No tensorboard writer in process {self.rank}")
+        try:
+            # epoch_loss (train):
+            
+            val = epoch_results.get('epoch_loss_train', None) 
+            self.writer.add_scalar('epoch_loss/train', val,
+                                   global_step=epoch)
 
-        # Write validation phase results to tensorboard:
-        for measure_name in validation_quantities_to_report:
-            try:
-                if measure_name == 'mean_accuracy':
-                    val = epoch_results.get('mean_accuracy_val', None) 
-                    self.writer.add_scalar('mean_accuracy/validate', val,
-                                            global_step=epoch)
+            # mean_accuracy (train):
+            
+            val = epoch_results.get('mean_accuracy_train', None)
+            self.writer.add_scalar(f"mean_accuracy/train", val, 
+                                   global_step=epoch)
 
-                if measure_name == 'balanced_accuracy_score':
-                    val = epoch_results.get('balanced_accuracy_score_val', None) 
-                    self.writer.add_scalar('balanced_accuracy_score/validate', val,
-                                            global_step=epoch)
+            # balanced_accuracy_score (train):
+            
+            val = epoch_results.get('balanced_accuracy_score_train', None) 
+            self.writer.add_scalar('balanced_accuracy_score/train', val,
+                                   global_step=epoch)
+                
 
-                elif measure_name == 'epoch_loss':
-                    val = epoch_results.get('epoch_loss_val', None) 
-                    self.writer.add_scalar('epoch_loss/validate', val,
-                                           global_step=epoch
-                                           )
+            # Write validation phase results to tensorboard:
 
-                elif measure_name == 'precision_recall':
-                    val = epoch_results.get('epoch_mean_weighted_precision', None)
-                    self.writer.add_scalar('precision_recall/precision', val,
-                                           global_step=epoch
-                                           )
+            # epoch_loss (validate)
+            val = epoch_results.get('epoch_loss_val', None) 
+            self.writer.add_scalar('epoch_loss/validate', val,
+                                   global_step=epoch
+                                   )
+            
+            # mean_accuracy (validate):
+            
+            val = epoch_results.get('mean_accuracy_val', None) 
+            self.writer.add_scalar('mean_accuracy/validate', val,
+                                    global_step=epoch)
 
-                    val = epoch_results.get('epoch_mean_weighted_recall', None)
-                    self.writer.add_scalar('precision_recall/recall', val,
-                                           global_step=epoch
-                                           )
-            except AttributeError:
-                self.log.err(f"No tensorboard writer in process {self.rank}")
+            # balanced_accuracy_score (validate):
+            
+            val = epoch_results.get('balanced_accuracy_score_val', None) 
+            self.writer.add_scalar('balanced_accuracy_score/validate', val,
+                                    global_step=epoch)
+
+
+            # precision_recall (validate only):
+                
+            # Precision macro
+            val = epoch_results.get('epoch_mean_macro_precision', None)
+            self.writer.add_scalar('precision_recall_macro/precision', val,
+                                   global_step=epoch
+                                   )
+                
+            # Precision micro:
+            val = epoch_results.get('epoch_mean_micro_precision', None)
+            self.writer.add_scalar('precision_recall_micro/precision', val,
+                                   global_step=epoch
+                                   )
+
+            # Precision weighted by class support:
+            val = epoch_results.get('epoch_mean_weighted_precision', None)
+            self.writer.add_scalar('precision_recall_weighted/precision', val,
+                                   global_step=epoch
+                                   )
+
+            # Recall (validate only):
+
+            # Recall macro:
+            val = epoch_results.get('epoch_mean_macro_recall', None)
+            self.writer.add_scalar('precision_recall_macro/recall', val,
+                                   global_step=epoch
+                                   )
+                
+            # Recall micro:
+            val = epoch_results.get('epoch_mean_micro_recall', None)
+            self.writer.add_scalar('precision_recall_micro/recall', val,
+                                   global_step=epoch
+                                   )
+                
+            # Recall weighted:
+            val = epoch_results.get('epoch_mean_weighted_recall', None)
+            self.writer.add_scalar('precision_recall_weighted/recall', val,
+                                   global_step=epoch
+                                   )
+
+        except AttributeError:
+            self.log.err(f"No tensorboard writer in process {self.rank}")
+        except Exception as e:
+            msg = f"Error while reporting to tensorboard: {repr(e)}"
+            self.log.err(msg)
+            raise ValueError(msg) from e
 
 
         # Submit the confusion matrix image
