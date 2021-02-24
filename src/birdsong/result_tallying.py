@@ -104,14 +104,15 @@ class TrainResultCollection(dict):
         return float(res)
 
     #------------------------------------
-    # balanced_accuracy_score
+    # balanced_adj_accuracy_score
     #-------------------
     
-    def balanced_accuracy_score(self, epoch=None, learning_phase=LearningPhase.TRAINING):
+    def balanced_adj_accuracy_score(self, epoch=None, learning_phase=LearningPhase.TRAINING):
         '''
         Get accuracy adjusted for class support;
         also adjust such that purely chance has
-        result of 0. Result of 1 is optimal:
+        result of 0. Result of 1 is optimal. Score
+        range: [-1,1]
         
         @param epoch: epoch during which tallies must have
             been created to be included in the computation.
@@ -123,7 +124,18 @@ class TrainResultCollection(dict):
         @return accuracy over the specified tallies
         @rtype float
         '''
-        return self._get_attribute_mean('truth_labels', epoch=epoch, learning_phase=learning_phase)
+        y_true = self._get_attribute_from_tallies('truth_labels', 
+                                                  epoch=epoch, 
+                                                  learning_phase=learning_phase,
+                                                  calc_mean=False)
+        y_pred = self._get_attribute_from_tallies('predicted_class_ids', 
+                                                  epoch=epoch, 
+                                                  learning_phase=learning_phase,
+                                                  calc_mean=False)
+        
+        balanced_adj_accuracy_score = metrics.balanced_accuracy_score(y_true, y_pred, adjusted=True)
+        
+        return balanced_adj_accuracy_score
 
     #------------------------------------
     # mean_accuracy
@@ -143,21 +155,21 @@ class TrainResultCollection(dict):
         @return mean accuracy over the specified tallies
         @rtype float
         '''
-        return self._get_attribute_mean('accuracy', epoch=epoch, learning_phase=learning_phase)
+        return self._get_attribute_from_tallies('accuracy', epoch=epoch, learning_phase=learning_phase)
 
     #------------------------------------
     # mean_macro_precision 
     #-------------------
     
     def mean_macro_precision(self, epoch=None, learning_phase=LearningPhase.TRAINING):
-        return self._get_attribute_mean('precision_macro', epoch=epoch, learning_phase=learning_phase)
+        return self._get_attribute_from_tallies('precision_macro', epoch=epoch, learning_phase=learning_phase)
 
     #------------------------------------
     # mean_micro_precision 
     #-------------------
     
     def mean_micro_precision(self, epoch=None, learning_phase=LearningPhase.TRAINING):
-        return self._get_attribute_mean('precision_micro', epoch=epoch, learning_phase=learning_phase)
+        return self._get_attribute_from_tallies('precision_micro', epoch=epoch, learning_phase=learning_phase)
 
     #------------------------------------
     # mean_weighted_precision 
@@ -166,7 +178,7 @@ class TrainResultCollection(dict):
     def mean_weighted_precision(self, 
                                 epoch=None, 
                                 learning_phase=LearningPhase.VALIDATING):
-        return self._get_attribute_mean('precision_weighted', epoch=epoch, learning_phase=learning_phase)
+        return self._get_attribute_from_tallies('precision_weighted', epoch=epoch, learning_phase=learning_phase)
     
     #------------------------------------
     # mean_macro_recall 
@@ -175,7 +187,7 @@ class TrainResultCollection(dict):
     def mean_macro_recall(self, 
                           epoch=None, 
                           learning_phase=LearningPhase.VALIDATING):
-        return self._get_attribute_mean('recall_macro', epoch=epoch, learning_phase=learning_phase)
+        return self._get_attribute_from_tallies('recall_macro', epoch=epoch, learning_phase=learning_phase)
     
     #------------------------------------
     # mean_micro_recall 
@@ -184,7 +196,7 @@ class TrainResultCollection(dict):
     def mean_micro_recall(self, 
                           epoch=None, 
                           learning_phase=LearningPhase.VALIDATING):
-        return self._get_attribute_mean('recall_micro', epoch=epoch, learning_phase=learning_phase)
+        return self._get_attribute_from_tallies('recall_micro', epoch=epoch, learning_phase=learning_phase)
 
     
     #------------------------------------
@@ -192,19 +204,26 @@ class TrainResultCollection(dict):
     #-------------------
 
     def mean_weighted_recall(self, epoch, learning_phase=LearningPhase.VALIDATING):
-        return self._get_attribute_mean('recall_weighted', epoch=epoch, learning_phase=learning_phase)
+        return self._get_attribute_from_tallies('recall_weighted', epoch=epoch, learning_phase=learning_phase)
 
     #------------------------------------
-    # _get_attribute_mean 
+    # _get_attribute_from_tallies 
     #-------------------
     
-    def _get_attribute_mean(self, tally_attr_name, epoch=None, learning_phase=LearningPhase.TRAINING):
+    def _get_attribute_from_tallies(self, 
+                            tally_attr_name, 
+                            epoch=None, 
+                            learning_phase=LearningPhase.TRAINING,
+                            calc_mean=True
+                            ):
         '''
         Given the name of an attribute provided
         by tally (i.e. TrainResult) instances, retrieve
-        that attribute from all tallies in this collection.
-        Limit to the tallies in the given epoch and learning
-        phase. Then take the mean of the values, round to
+        that attribute from all tallies in this collection
+        into a list, but limiting retrieval to the tallies 
+        in the given epoch and learning phase. 
+        
+        If calc_mean is True, take the mean of the values, round to
         six places, and return the value as a Python float.
         
         If epoch is None, the tallies of all epochs from the
@@ -213,7 +232,7 @@ class TrainResultCollection(dict):
         
         Example:
         
-            <tally_collection>._get_attribute_mean('mean_weighted_recall', 
+            <tally_collection>._get_attribute_from_tallies('mean_weighted_recall', 
                                                     epoch=1, 
                                                     learning_phase=LearningPhase.VALIDATING
                                                     )
@@ -229,8 +248,11 @@ class TrainResultCollection(dict):
         @param learning_phase: the learning phase to which the tally
             origin is to be restricted
         @type learning_phase: LearningPhase
-        @return computed mean, rounded to 6 places
-        @rtype float
+        @param calc_mean: if True, return mean of values from
+            the tallies. Else, return the list
+        @type calc_mean: bool
+        @return computed mean, rounded to 6 places, or list of values
+        @rtype {(Any) | float}
         '''
         if epoch is None:
             # Get either a list of numbers, 
@@ -251,11 +273,14 @@ class TrainResultCollection(dict):
 
         if len(results) == 0:
             return np.nan
-        else:
-            if type(results[0]) == Tensor:
-                m = np.mean(results[0].numpy())
-            else:
-                m = np.mean(results)
+
+        if type(results[0]) == Tensor:
+            results = results[0].numpy()
+        
+        if not calc_mean:
+            return results
+        
+        m = np.mean(results)
 
         # m is an np.float.
         # We want to return a Python float. The conversion
@@ -274,8 +299,6 @@ class TrainResultCollection(dict):
         mean_results = round(mean_results_tensor.item(), 6) 
         
         return mean_results
-    
-
 
     #------------------------------------
     # conf_matrix_aggregated 
@@ -496,8 +519,8 @@ class EpochSummary(UserDict):
         resulting instance acts like a dict with 
         the following keys:
         
-           o balanced_accuracy_score_train
-           o balanced_accuracy_score_val
+           o balanced_adj_accuracy_score_train
+           o balanced_adj_accuracy_score_val
            o mean_accuracy_train
            o mean_accuracy_val
            o epoch_loss_train
@@ -517,12 +540,12 @@ class EpochSummary(UserDict):
         super().__init__()
 
         try:
-            self['balanced_accuracy_score_train'] = \
-               tally_collection.balanced_accuracy_score(epoch, 
+            self['balanced_adj_accuracy_score_train'] = \
+               tally_collection.balanced_adj_accuracy_score(epoch, 
                                                        learning_phase=LearningPhase.TRAINING)
     
-            self['balanced_accuracy_score_val'] = \
-               tally_collection.balanced_accuracy_score(epoch, 
+            self['balanced_adj_accuracy_score_val'] = \
+               tally_collection.balanced_adj_accuracy_score(epoch, 
                                                        learning_phase=LearningPhase.VALIDATING)
     
             # Mean of accuracies among the 
@@ -800,11 +823,12 @@ class TrainResult:
         try:
             return self._within_class_recalls
         except AttributeError:
-            #  For each class C: 
-            #     num_correctly_predicted-C-samples / num-samples-in-class-C
-            diag = torch.diagonal(self.conf_matrix)
-            self._within_class_recalls = diag / torch.sum(self.conf_matrix, 
-                                                          axis = 0)
+            # The average == None causes prediction
+            # to be returned for all classes:
+            self._within_class_precisions = metrics.recall_score(self.truth_labels,
+                                                                 self.predicted_class_ids,
+                                                                 average=None
+                                                                 )
             return self._within_class_recalls
             
     #------------------------------------
@@ -822,11 +846,12 @@ class TrainResult:
         try:
             return self._within_class_precisions
         except AttributeError:
-            #  For each class C:
-            #     For each class C: num_correctly_predicted-C-samples / num-samples-predicted-to-be-in-class-C
-            diag = torch.diagonal(self.conf_matrix)
-            self._within_class_precisions = diag / torch.sum(self.conf_matrix, 
-                                                            axis = 1)
+            # The average == None causes prediction
+            # to be returned for all classes:
+            self._within_class_precisions = metrics.precision_score(self.truth_labels,
+                                                                    self.predicted_class_ids,
+                                                                    average=None
+                                                                    )
             return self._within_class_precisions
 
     #------------------------------------
@@ -838,7 +863,7 @@ class TrainResult:
         try:
             return self._accuracy
         except AttributeError:            
-            self._accuracy = self.num_correct / self.num_samples
+            self._accuracy = metrics.accuracy_score(self.truth_labels, self.predicted_class_ids)
             return self._accuracy
 
     #------------------------------------

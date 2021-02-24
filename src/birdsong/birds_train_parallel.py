@@ -28,6 +28,7 @@ import socket
 import numpy as np
 from threading import Timer
 import warnings
+import traceback as tb
 
 import GPUtil
 from logging_service import LoggingService
@@ -1138,7 +1139,7 @@ class BirdTrainer(object):
 
             # balanced_accuracy_score (train):
             
-            val = epoch_results.get('balanced_accuracy_score_train', None) 
+            val = epoch_results.get('balanced_adj_accuracy_score_train', None) 
             self.writer.add_scalar('balanced_accuracy_score/train', val,
                                    global_step=epoch)
                 
@@ -1159,7 +1160,7 @@ class BirdTrainer(object):
 
             # balanced_accuracy_score (validate):
             
-            val = epoch_results.get('balanced_accuracy_score_val', None) 
+            val = epoch_results.get('balanced_adj_accuracy_score_val', None) 
             self.writer.add_scalar('balanced_accuracy_score/validate', val,
                                     global_step=epoch)
 
@@ -1209,7 +1210,7 @@ class BirdTrainer(object):
         except Exception as e:
             msg = f"Error while reporting to tensorboard: {repr(e)}"
             self.log.err(msg)
-            raise ValueError(msg) from e
+            raise ValueError from e
 
 
         # Submit the confusion matrix image
@@ -1489,6 +1490,11 @@ class BirdTrainer(object):
             if hard_stop:
                 print("******* Hard stop---no cleanup.")
                 sys.exit(1)
+            # Did an error occur?
+            if sys.exc_info() is not None:
+                # Yes; don't raise, but print the 
+                # backtrace. Then continue cleaning up:
+                tb.print_exc()
             if self.device == self.cuda:
                 # Ensure all activity in different parts
                 # of the cuda device are done; uses the
@@ -2574,8 +2580,8 @@ class BirdTrainer(object):
         
         Included in the measures are:
         
-           o balanced_accuracy_score_train
-           o balanced_accuracy_score_val
+           o balanced_adj_accuracy_score_train
+           o balanced_adj_accuracy_score_val
            o mean_accuracy_train
            o mean_accuracy_val
            o epoch_mean_weighted_precision
@@ -2613,8 +2619,8 @@ class BirdTrainer(object):
         
         
         metric_results = {
-                'hp_balanced_accuracy_score_train' : summary.balanced_accuracy_score_train,
-                'hp_balanced_accuracy_score_val':summary.balanced_accuracy_score_val,
+                'hp_balanced_adj_accuracy_score_train' : summary.balanced_adj_accuracy_score_train,
+                'hp_balanced_adj_accuracy_score_val':summary.balanced_adj_accuracy_score_val,
                 'hp_mean_accuracy_train' : summary.mean_accuracy_train,
                 'hp_mean_accuracy_val': summary.mean_accuracy_val,
                 'hp_epoch_mean_weighted_precision': summary.epoch_mean_weighted_precision,
