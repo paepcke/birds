@@ -747,12 +747,17 @@ if __name__ == '__main__':
             raise FileNotFoundError(f"Could not find config file at {config_file}")
 
     #**************
-    hparms_spec = {'lr' : [0.01],
-                   'optimizer'  : ['RMSProp'],
+#     hparms_spec = {'lr' : [0.01],
+#                    'optimizer'  : ['RMSProp'],
+#                    'batch_size' : [4],
+#                    'kernel_size': [7]
+#                    }
+    hparms_spec = {'lr' : [0.001],
+                   'optimizer'  : ['Adam'],
                    'batch_size' : [4],
-                   'kernel_size': [7]
+                   'kernel_size': [3]
                    }
-    
+
 #     hparms_spec = {'lr' : [0.001],
 #                    'optimizer'  : ['Adam'],
 #                    'batch_size' : [32],

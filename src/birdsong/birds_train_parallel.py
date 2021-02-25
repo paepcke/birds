@@ -1397,7 +1397,7 @@ class BirdTrainer(object):
                                                                            )
                     
                     if self.num_train_samples_this_epoch == 0:
-                        self.log.warn(f"No samples available in epoch {self.epoch}")
+                        self.log.warn(f"No samples available in epoch {self.epoch}. Batch size > num_samples?")
                         avg_train_loss = total_train_loss
                     else:
                         avg_train_loss = total_train_loss / self.num_folds

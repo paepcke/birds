@@ -134,7 +134,16 @@ class TrainResultCollection(dict):
                                                   learning_phase=learning_phase,
                                                   calc_mean=False)
         
-        balanced_adj_accuracy_score = metrics.balanced_accuracy_score(y_true, y_pred, adjusted=True)
+        # If for some reasons no training samples
+        # were processed, np.nan results, and would
+        # cause error in metrics.balanced_adj_accuracy_score():
+        
+        if np.nan in (y_true, y_pred):
+            return np.nan
+        
+        balanced_adj_accuracy_score = metrics.balanced_accuracy_score(y_true, 
+                                                                      y_pred,
+                                                                      adjusted=True)
         
         return balanced_adj_accuracy_score
 
