@@ -551,14 +551,17 @@ class TrainScriptRunner(object):
                         del who_is_who[proc]
 
             gpu_id = gpu_id_pool.pop()
-            proc_name = f"Config{config_idx}_gpu{gpu_id}"
-            proc = mp.Process(target=self.worker_starter,
-                              args=(config.to_json(), gpu_id),
-                              name=proc_name
-                              ) 
-                                    
-            proc.start()
-            who_is_who[proc] = gpu_id
+            #*******************
+            self.worker_starter(config.to_json(), gpu_id)
+#             proc_name = f"Config{config_idx}_gpu{gpu_id}"
+#             proc = mp.Process(target=self.worker_starter,
+#                               args=(config.to_json(), gpu_id),
+#                               name=proc_name
+#                               ) 
+#                                     
+#             proc.start()
+#             who_is_who[proc] = gpu_id
+            #*******************            
             
         for proc in who_is_who.keys():
             if not self.quiet:
