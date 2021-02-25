@@ -1221,7 +1221,8 @@ class BirdTrainer(object):
                                    )
             
             # History of learning rate adjustments:
-            self.writer.add_scalar('learning_rate', self.optimizer.lr,
+            lr_this_epoch = self.optimizer.param_groups[0]['lr']
+            self.writer.add_scalar('learning_rate', lr_this_epoch,
                                    global_step=epoch
                                    )
 
