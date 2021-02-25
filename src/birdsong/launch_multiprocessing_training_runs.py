@@ -8,7 +8,7 @@ from _collections import OrderedDict
 import argparse
 from collections import UserDict
 import datetime
-import faulthandler
+#import faulthandler
 from itertools import product
 from json.decoder import JSONDecodeError as JSONError
 from multiprocessing.pool import Pool

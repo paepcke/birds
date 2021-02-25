@@ -91,6 +91,7 @@ class TrainResultCollection(dict):
                                          dtype=float))
         else:
             try:
+                # Loss measures accumulated over one epoch: 
                 res = loss_dict[epoch]
             except KeyError:
                 # Happens if add_loss() was never

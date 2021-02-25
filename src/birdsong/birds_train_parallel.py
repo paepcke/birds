@@ -32,15 +32,14 @@ import traceback as tb
 
 import GPUtil
 from logging_service import LoggingService
+import torch
 from torch import Size
 from torch import Tensor
 from torch import cuda
 from torch import device
-from torch import hub
 from torch import no_grad
 from torch import optim
-import torch
-from torch.distributed import  reduce_op
+
 import torch.distributed as dist
 import torch.nn as nn
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -54,8 +53,9 @@ from birdsong.utils import learning_phase
 from birdsong.utils.dottable_config import DottableConfigParser
 from birdsong.utils.learning_phase import LearningPhase
 from birdsong.utils.neural_net_config import NeuralNetConfig, ConfigError
-from birdsong.utils.tensorboard_plotter import TensorBoardPlotter, \
-    SummaryWriterPlus
+from birdsong.utils.tensorboard_plotter import TensorBoardPlotter, SummaryWriterPlus
+from birdsong.nets import NetUtils
+from birdsong.nets import BasicNet
 
 # Needed to make Eclipse's type engine happy.
 # I would prefer using torch.cuda, etc in the 
@@ -353,8 +353,10 @@ class BirdTrainer(object):
             self.init_neural_net_parms(checkpoint, 
                                        unit_testing=unit_testing)
         except Exception as e:
+            msg = f"During net init: {repr(e)}"
+            self.log.err(msg)
             # Errors were already logged at their source
-            return 1
+            raise ValueError(msg) from e
 
         # Note: call to setup_tallying must
         # be after checkpoint restoration above.
@@ -597,11 +599,17 @@ class BirdTrainer(object):
         '''
         Takes a (usually CPU-resident) model,
         and:
-           o if a GPU will be used, wraps the model
-             in a DistributedDataModel instance for
-             participation in distributed data parallel
-             operations. The result will reside on 
-             GPU with ID (index) local_rank
+           o moves is to GPU if possible
+        
+           o if self.independent_runs is False,
+             concludes that running in distributed data parallel
+             (DDP) and: 
+             
+             if a GPU will be used, wraps the model
+                in a DistributedDataModel instance for
+                participation in distributed data parallel
+                operations. The result will reside on 
+                GPU with ID (index) local_rank
 
            o Without GPU in use, returns the model unchanged
         
@@ -611,11 +619,11 @@ class BirdTrainer(object):
         @type local_rank: int
         '''
         
-        if self.device == device('cuda'):
-            model.to(self.device)
-
         if self.independent_runs:
+            model.to(self.device)
             return model
+
+        # Running in distributed data parallel:
         
         if self.device == device('cuda'):
         
@@ -1379,7 +1387,7 @@ class BirdTrainer(object):
                         self.log.warn(f"No samples available in epoch {self.epoch}")
                         avg_train_loss = total_train_loss
                     else:
-                        avg_train_loss = total_train_loss / self.num_train_samples_this_epoch
+                        avg_train_loss = total_train_loss / self.num_folds
 
                     if self.train_output_stack is None:
                         self.log.warn(f"No samples were processed for epoch {self.epoch}; no result reported")
@@ -1392,7 +1400,7 @@ class BirdTrainer(object):
                     total_val_loss = self.tally_collection.cumulative_loss(epoch=self.epoch,
                                                                            learning_phase=LearningPhase.VALIDATING
                                                                            )
-                    avg_val_loss = total_val_loss / self.num_val_samples
+                    avg_val_loss = total_val_loss / self.num_folds
                     self.tally_result(self.val_label_stack,
                                       self.val_output_stack,
                                       avg_val_loss, 
@@ -1631,8 +1639,9 @@ class BirdTrainer(object):
                     for param in self.model.parameters():
                         # Skip the frozen layers:
                         if param.grad is not None:
+                            # The SUM is from torch.distributed.reduce_ops:
                             dist.all_reduce(param.grad.data, 
-                                            op=reduce_op.SUM,
+                                            op=dist.ReduceOp.SUM,
                                             async_op=False)
                             param.grad.data /= self.comm_info['WORLD_SIZE']
                 self.optimizer.step()
@@ -1968,7 +1977,26 @@ class BirdTrainer(object):
         # to_app
         #  
         
-        raw_model = self.get_resnet18_partially_trained(self.num_classes)
+        if self.independent_runs:
+            #*************
+            ks = self.config.Training.kernel_size
+            raw_model = BasicNet(self.num_classes, 
+                                 batch_size=self.batch_size, 
+                                 kernel_size=ks, 
+                                 processor=None)
+
+#             raw_model = NetUtils.get_resnet_partially_trained(self.num_classes,
+#                                                               num_layers_to_retain=6,
+#                                                               resnet_version=18
+#                                                               )
+            #*************
+        else:
+            raw_model = NetUtils.get_model_ddp(self.rank, 
+                                               self.local_leader_rank, 
+                                               self.log,
+                                               resnet_version=18,
+                                               num_layers_to_retain=6
+                                               )
         
         # Wrapper to handle distributed training, and
         # move to GPU, if appropriate. 
@@ -2020,8 +2048,11 @@ class BirdTrainer(object):
             self.weights  = None
             
         # Loss function:
+        #************************* Eventually: call select_loss_function!
         #self.loss_fn = self.select_loss_function(self.config)
-        self.loss_fn = nn.CrossEntropyLoss(weight=self.device_resident_weights)
+        #******self.loss_fn = nn.CrossEntropyLoss(weight=self.device_resident_weights)
+        self.loss_fn = nn.CrossEntropyLoss()
+        #*************************
         
         # Scheduler: at each step (after each epoch)
         # we will call the scheduler with the latest
@@ -2168,93 +2199,6 @@ class BirdTrainer(object):
         np.random.seed(seed)
         os.environ['PYTHONHASHSEED'] = str(seed)
         random.seed = seed
-
-    #------------------------------------
-    # get_resnet18_partially_trained 
-    #-------------------
-
-    def get_resnet18_partially_trained(self, num_classes, num_layers_to_retain=6):
-        '''
-        Obtains the pretrained resnet18 model from the Web
-        if not cached. Then freezes num_layers_to_retain
-        layers to preserve the pre-training.
-        
-        If running under Distributed Data Processing (DDP) 
-        protocol, only the master node will download, and
-        then share with the others.
-        
-        @param num_classes: number of target classes
-        @type num_classes: int
-        @param num_layers_to_retain: how many layers to
-            freeze, protecting them from training.
-        @type num_layers_to_retain: int
-        '''
-        
-        # Which protocol is in use?
-        if self.independent_runs:
-            model = hub.load('pytorch/vision:v0.6.0', 'resnet18', pretrained=True)
-        else:
-            self.get_model_ddp()
-        
-        # Freeze the bottom num_layers_to_retain layers:
-        for (i, child) in enumerate(model.children()):
-            for param in child.parameters():
-                param.requires_grad = False
-            if i >= num_layers_to_retain:
-                break
-        num_in_features = model.fc.in_features
-        
-        model.fc = nn.Linear(num_in_features, num_classes)
-        
-        # Create a property on the model that 
-        # returns the number of output classes:
-        model.num_classes = model.fc.out_features
-        return model
-
-    #------------------------------------
-    # get_model_ddp 
-    #-------------------
-    
-    def get_model_ddp(self):  # @DontTrace
-        '''
-        Determine whether this process is the
-        master node. If so, obtain the pretrained
-        resnet18 model. Then distributed the model
-        to the other nodes. 
-        '''
-
-        # Let the local leader download
-        # the model from the Internet,
-        # in case it is not already cached
-        # locally:
-        
-        # Case 1: not on a GPU machine:
-        if self.device == device('cpu'):
-            model = hub.load('pytorch/vision:v0.6.0', 'resnet18', pretrained=True)
-            
-        # Case2a: GPU machine, and this is this machine's 
-        #         leader process. So it is reponsible for
-        #         downloading the model if it is not cached:
-        elif self.rank == self.local_leader_rank:
-            self.log.info(f"Procss with rank {self.rank} on {self.hostname} loading model")
-            model = hub.load('pytorch/vision:v0.6.0', 'resnet18', pretrained=True)
-            # Allow the others on this machine
-            # to load the model (guaranteed to 
-            # be locally cached now):
-            self.log.info(f"Procss with rank {self.rank} on {self.hostname} waiting for others to laod model")
-            dist.barrier()
-        # Case 2b: GPU machine, but not the local leader. Just
-        #          wait for the local leader to be done downloading:
-        else:
-            # Wait for leader to download the
-            # model for everyone on this machine:
-            self.log.info(f"Process with rank {self.rank} on {self.hostname} waiting for leader to laod model")
-            dist.barrier()
-            # Get the cached version:
-            self.log.info(f"Procss with rank {self.rank} on {self.hostname} laoding model")
-            model = hub.load('pytorch/vision:v0.6.0', 'resnet18', pretrained=True)
-
-        return model
 
     #------------------------------------
     # save_model_checkpoint 
