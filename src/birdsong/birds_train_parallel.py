@@ -826,7 +826,10 @@ class BirdTrainer(object):
             raise ValueError(msg)
             
         if optimizer_name == 'adam':
-            optimizer = optim.Adam(model.parameters(),lr=lr)
+            optimizer = optim.Adam(model.parameters(),
+                                   lr=lr,
+                                   eps=1e-3,
+                                   amsgrad=True)
             return optimizer
         
         if optimizer_name == 'sgd':
