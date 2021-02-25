@@ -1100,6 +1100,13 @@ class BirdTrainer(object):
     #-------------------
     
     def record_tensorboard_results(self, epoch):
+        '''
+        Called at the end of each epoch. Writes
+        all epoch-level measures to tensorboard.
+
+        @param epoch:
+        @type epoch:
+        '''
         
         # A new training sample class distribution
         # barchart:
@@ -1212,6 +1219,11 @@ class BirdTrainer(object):
             self.writer.add_scalar('precision_recall_weighted/recall', val,
                                    global_step=epoch
                                    )
+            
+            # History of learning rate adjustments:
+            self.writer.add_scalar('learning_rate', self.optimizer.lr,
+                                   global_step=epoch
+                                   )
 
         except AttributeError:
             self.log.err(f"No tensorboard writer in process {self.rank}")
@@ -1267,7 +1279,7 @@ class BirdTrainer(object):
             # Reset statistics on max GPU memory use:
             cuda.reset_peak_memory_stats()
 
-        # Similarly with self._diff_avg:
+        # Plateau discovery:
         self._diff_avg   = 100 if self._diff_avg is None else self._diff_avg
         
         time_start = datetime.datetime.now()
@@ -1499,7 +1511,7 @@ class BirdTrainer(object):
                 print("******* Hard stop---no cleanup.")
                 sys.exit(1)
             # Did an error occur?
-            if sys.exc_info() is not None:
+            if sys.exc_info() != (None, None, None):
                 # Yes; don't raise, but print the 
                 # backtrace. Then continue cleaning up:
                 tb.print_exc()
@@ -1645,6 +1657,7 @@ class BirdTrainer(object):
                                             async_op=False)
                             param.grad.data /= self.comm_info['WORLD_SIZE']
                 self.optimizer.step()
+                self.optimizer.zero_grad()
                 loss = loss.to('cpu')
             
             finally:
@@ -2540,7 +2553,7 @@ class BirdTrainer(object):
         
         summary = EpochSummary(tally_coll, epoch, logger=self.log)
         hparms_vals = {
-            'lr' : self.config.Training.lr,
+            'lr_initial' : self.config.Training.lr,
             'optimizer' : self.config.Training.optimizer,
             'batch_size': self.config.Training.batch_size,
             'kernel_size' : self.config.Training.kernel_size
