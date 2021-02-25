@@ -138,7 +138,7 @@ class TrainResultCollection(dict):
         # were processed, np.nan results, and would
         # cause error in metrics.balanced_adj_accuracy_score():
         
-        if np.nan in (y_true, y_pred):
+        if y_true == np.nan or y_pred == np.nan:
             return np.nan
         
         balanced_adj_accuracy_score = metrics.balanced_accuracy_score(y_true, 
