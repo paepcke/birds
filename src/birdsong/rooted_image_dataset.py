@@ -321,6 +321,25 @@ class SingleRootImageDataset:
         return os.path.abspath(self.sample_id_to_path[sample_id])
 
     #------------------------------------
+    # sample_distribution 
+    #-------------------
+    
+    def sample_distribution(self):
+        '''
+        Returns number of samples for each class
+        in the dataset
+        
+        @return: list of tuples: (class_id, num_samples);
+            one such tuple for each class_id
+        @rtype: [(int, int)]
+        '''
+        
+        class_ids, sample_counts = np.unique(self.sample_classes(), 
+                                             return_counts=True
+                                             )
+        return list(zip(class_ids, sample_counts))
+
+    #------------------------------------
     # __len__
     #-------------------
 

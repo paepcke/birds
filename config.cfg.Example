@@ -28,6 +28,10 @@ train_script = birds_train_parallel.py
 [Training]
 
 net_name      = resnet18
+# For networks available pretrained: how many
+# layers to retain of the retraining. Use
+# zero to train from scratch:
+num_pretrained_layers = 6
 min_epochs    = 15
 max_epochs    = 100
 batch_size    = 32

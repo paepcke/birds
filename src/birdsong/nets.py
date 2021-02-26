@@ -15,16 +15,29 @@ import torch.nn.functional as F
 class NetUtils:
     
     #------------------------------------
+    # get_net
+    #-------------------
+    
+    @classmethod
+    def get_net(cls, net_name, **kwargs):
+        if net_name.lower() == 'basicnet':
+            return BasicNet(**kwargs)
+        elif net_name.lower() == 'resnet':
+            return cls.get_resnet_partially_trained(**kwargs)
+        else:
+            raise NotImplementedError(f"Network {net_name} unavailable")
+
+    #------------------------------------
     # get_resnet_partially_trained 
     #-------------------
 
     @classmethod
     def get_resnet_partially_trained(cls, 
-                                       num_classes, 
-                                       num_layers_to_retain=6,
-                                       resnet_version=18,
-                                       to_grayscale=False
-                                       ): 
+                                     num_classes=None, 
+                                     num_layers_to_retain=6,
+                                     resnet_version=18,
+                                     to_grayscale=False
+                                     ): 
 
         '''
         Obtains the pretrained resnet18 model from the Web
@@ -56,7 +69,9 @@ class NetUtils:
         @return: a fresh model
         @rtype: pytorch.nn 
         '''
-        
+
+        if num_classes is None:
+            raise ValueError("Resnetxx requires a num_classes argument")
         if resnet_version not in (18,50):
             raise ValueError("Resnet version must be 18 or 50")
         
@@ -271,15 +286,19 @@ class NetUtils:
 
 class BasicNet(nn.Module):
     def __init__(self, 
-                 num_class, 
+                 num_classes=None, 
                  batch_size=32, 
                  kernel_size=5, 
                  processor=None):
+        
+        if num_classes is None:
+            raise ValueError("Resnetxx requires a num_classes argument")
+        
         super(BasicNet, self).__init__()
         self.gpu = processor
         self.bs = batch_size
         self.ks = kernel_size
-        self.num_class = num_class
+        self.num_classes = num_classes
         self.conv1 = nn.Conv2d(3, 6, self.ks)
         self.pool = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(6, self.bs, self.ks)
@@ -287,7 +306,7 @@ class BasicNet(nn.Module):
         print("kernel size: " + str(self.ks))
         self.fc1 = nn.Linear(self.bs * int((99 - (self.ks + 1) / 2) ** 2), 120)
         self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, self.num_class)
+        self.fc3 = nn.Linear(84, self.num_classes)
 
     def forward(self, x):
         if self.gpu is not None:
@@ -299,69 +318,3 @@ class BasicNet(nn.Module):
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
         return x
-
-
-# ------------------ Class Resnet18Grayscale --------------
-
-# class Resnet18Grayscale(ResNet):
-class Resnet18Grayscale(nn.Module):
-    '''
-    Not Tested in a Long Time
-    
-    A Resnet18 variant that accepts single-channel
-    grayscale images instead of RGB.
-    Using this class saves space from not having
-    to replicate our single-layer spectrograms three
-    times to pretend they are RGB images.
-    '''
-
-    # ------------------------------------
-    # Constructor
-    # -------------------
-
-    def __init__(self, *args, **kwargs):
-        '''
-        Args and kwargs as per https://github.com/pytorch/vision/blob/master/torchvision/models/resnet.py
-        class ResNet.__init__()
-        '''
-        # The [2,2,2,2] is an instruction to the
-        # superclass' __init__() for how many layers
-        # of each type to create. This info makes the
-        # ResNet into a ResNet18:
-        self.num_class = 10
-        super().__init__(BasicBlock, [2, 2, 2, 2], *args, **kwargs)
-
-        # Change expected channels from 3 to 1
-        # The superclass created first layer
-        # with the first argument being a 3.
-        # We just replace the first layer:
-        self.inplanes = 64  # ******* Should be batch size?
-        self.conv1 = nn.Conv2d(1, self.inplanes, kernel_size=7, stride=2, padding=3,
-                               bias=False)
-
-    # ------------------------------------
-    # forward
-    # -------------------
-
-    def forward(self, x):
-        out_logit = super().forward(x)
-
-        # Since we have binary classification,
-        # the Sigmoid function does what a
-        # softmax would do for multi-class:
-
-        out_probs = nn.Sigmoid()(out_logit)
-        return out_probs
-
-    # ------------------------------------
-    # device_residence
-    # -------------------
-
-    def device_residence(self):
-        '''
-        Returns device_residence where model resides.
-        Can use like this to move a tensor
-        to wherever the model is:
-            some_tensor.to(<model_instance>.device_residence())
-        '''
-        return next(self.parameters()).device

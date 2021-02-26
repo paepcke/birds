@@ -297,6 +297,8 @@ class BirdTrainer(object):
             batch_size = self.config.getint('Training', 'batch_size')
         self.batch_size = batch_size
         
+        self.min_epochs = self.config.Training.getint('min_epochs')
+        
         self.seed = self.config.getint('Training', 'seed')
         self.set_seed(self.seed)
         self.started_from_launch = started_from_launch
@@ -350,13 +352,14 @@ class BirdTrainer(object):
         self.log.info(f"Samples in loader: {len(self.dataloader)}")
 
         try:
+            # Among others, set self.net_name:
             self.init_neural_net_parms(checkpoint, 
                                        unit_testing=unit_testing)
         except Exception as e:
             msg = f"During net init: {repr(e)}"
             self.log.err(msg)
             # Errors were already logged at their source
-            raise ValueError(f"Original trace above) {msg}") from e
+            raise ValueError(f"(Original trace above) {msg}") from e
 
         # Note: call to setup_tallying must
         # be after checkpoint restoration above.
@@ -829,7 +832,8 @@ class BirdTrainer(object):
             optimizer = optim.Adam(model.parameters(),
                                    lr=lr,
                                    eps=1e-3,
-                                   amsgrad=True)
+                                   amsgrad=True
+                                   )
             return optimizer
         
         if optimizer_name == 'sgd':
@@ -1113,14 +1117,17 @@ class BirdTrainer(object):
         
         # A new training sample class distribution
         # barchart:
-        
-        self.tensorboard_plotter.class_support_to_tensorboard(
-            self.dataloader.dataset,
-            self.writer,
-            epoch=self.epoch,
-            custom_data=self.class_support,
-            title="Training Class Support"
-            )
+
+        if epoch == 0:
+            # Barchart with class support only
+            # needed once:
+            self.tensorboard_plotter.class_support_to_tensorboard(
+                self.dataloader.dataset,
+                self.writer,
+                epoch=self.epoch,
+                custom_data=self.get_class_support(),
+                title="Training Class Support"
+                )
         
         epoch_results = EpochSummary(self.tally_collection, 
                                      epoch,
@@ -1319,7 +1326,7 @@ class BirdTrainer(object):
                 
                 while (self.epoch < self.config.Training.getint('max_epochs') \
                        and (self._diff_avg >= 0.05 or \
-                            self.epoch <= self.config.Training.getint('min_epochs')
+                            self.epoch <= self.min_epochs
                             )
                        ):
 
@@ -1383,7 +1390,7 @@ class BirdTrainer(object):
                         except Exception as e:
                             msg = f"Error sending split_num to split_training: {repr(e)}"
                             self.log.err(msg)
-                            raise ValueError(msg) from e
+                            raise ValueError(f"{msg}. Most useful: the trace *above* this one") from e
 
                         self.validate_one_split()
     
@@ -1394,6 +1401,8 @@ class BirdTrainer(object):
     
                     # Done with one epoch:
                     self.log.info(f"Finished epoch {self.epoch}")
+                    
+                    self.scheduler.step()
                     
                     total_train_loss = self.tally_collection.cumulative_loss(epoch=self.epoch,
                                                                            learning_phase=LearningPhase.TRAINING
@@ -1437,7 +1446,7 @@ class BirdTrainer(object):
                     accuracies[self.epoch] = self.tally_collection.mean_accuracy(epoch=self.epoch, 
                                                                                  learning_phase=LearningPhase.TRAINING)
     
-                    if self.epoch <= self.config.Training.getint('min_epochs'):
+                    if self.epoch <= self.min_epochs:
                         # Haven't trained for the minimum of epochs:
                         continue
                     
@@ -1460,7 +1469,10 @@ class BirdTrainer(object):
                 # overall result of the final epoch for the 
                 # hparms config used in this process:
                 
-                self.report_hparams_summary(self.tally_collection, self.epoch)
+                self.report_hparams_summary(self.tally_collection, 
+                                            self.epoch,
+                                            self.net_name,
+                                            self.num_pretrained_layers)
     
             except (KeyboardInterrupt, InterruptTraining) as _e:
                 # Stop brutal-shutdown time; we will be gentle here:
@@ -1622,10 +1634,7 @@ class BirdTrainer(object):
                 batch   = self.push_tensor(batch)
                 targets = self.push_tensor(targets)
                 self.num_train_samples_this_epoch += len(batch)
-                # Track how many training samples per class
-                # in this epoch:
-                self.update_class_support(targets)
-                
+
                 # Outputs will be on GPU if we are
                 # using one:
                 outputs = self.model(batch)
@@ -1661,7 +1670,6 @@ class BirdTrainer(object):
                                             async_op=False)
                             param.grad.data /= self.comm_info['WORLD_SIZE']
                 self.optimizer.step()
-                self.optimizer.zero_grad()
                 loss = loss.to('cpu')
             
             finally:
@@ -1732,11 +1740,6 @@ class BirdTrainer(object):
                                                loss,
                                                LearningPhase.VALIDATING
                                                )
-                # Have scheduler decrease the learning
-                # rate if validation loss stops changing
-                # much:
-                
-                self.scheduler.step(loss)
 
                 # Free GPU memory:
                 val_sample = val_sample.to('cpu')
@@ -1839,22 +1842,19 @@ class BirdTrainer(object):
     # ------------- Utils -----------
 
     #------------------------------------
-    # update_class_support 
+    # get_class_support 
     #-------------------
     
-    def update_class_support(self, targets):
+    def get_class_support(self, targets):
         '''
-        Given a tensor of class labels (target class IDs),
-        update the dict {class-id : num-samples-in-train-set}
-        by adding the entries
+        Returns the distribution of samples
+        in the underlying dataset by class
         
-        @param targets: class IDs
-        @type targets: tensor[int]
+        @return: list of tuples: (class_id, num_samples);
+            one such tuple for each class_id
+        @rtype: [(int, int)]
         '''
-        
-        for class_id in range(self.num_classes):
-            self.class_support[class_id] += len(targets[targets == class_id])
-
+        return self.dataloader.dataset.sample_distribution()
 
     #------------------------------------
     # initialize_config_struct 
@@ -1986,19 +1986,24 @@ class BirdTrainer(object):
         @param unit_testing: early return if unit testing
         @type unit_testing: bool
         '''
+
+        self.net_name = self.config.Training.net_name
         
         # Resnet18 retain 6 layers of pretraining.
         # Train the remaining 4 layers with your own
         # dataset. This is the model without capability
         # for parallel training. Will be adjusted in
         # to_app
-        #  
+
+        self.num_pretrained_layers = self.config.Training.getint('num_pretrained_layers',
+                                                                 0) # Default: train from scratch
         
         if self.independent_runs:
             #*************
-            raw_model = NetUtils.get_resnet_partially_trained(
-                4,  # num_classes
-                num_layers_to_retain=0,
+            raw_model = NetUtils.get_net(
+                self.net_name,
+                num_classes=self.num_classes,  # num_classes
+                num_layers_to_retain=self.num_pretrained_layers,
                 resnet_version=18,
                 to_grayscale=True
                 )
@@ -2013,6 +2018,8 @@ class BirdTrainer(object):
 #                                                               )
             #*************
         else:
+            # When re-trying DDP: update this branch
+            # to match the upper branch where appropriate
             raw_model = NetUtils.get_model_ddp(self.rank, 
                                                self.local_leader_rank, 
                                                self.log,
@@ -2081,9 +2088,12 @@ class BirdTrainer(object):
         # validation loss. If it has not decreased within
         # patience epochs, decrease learning rate by factor
         # of 10:
-        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer,
-                                                              factor=0.1,
-                                                              patience=3
+#         self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer,
+#                                                               factor=0.1,
+#                                                               patience=3
+#                                                               )
+        self.scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, 
+                                                              self.min_epochs
                                                               )
 
         self.log.info(f"Model resides on device: {self.device_residence(self.model)}")
@@ -2357,6 +2367,7 @@ class BirdTrainer(object):
                  'sample_height' : int,
                  'seed' : int,
                  'pytorch_comm_port' : int,
+                 'num_pretrained_layers' : int,
                  
                  'root_train_test_data': str,
                  'net_name' : str,
@@ -2406,6 +2417,7 @@ class BirdTrainer(object):
 
         sec_training = {
             'net_name'      : 'resnet18',
+            'num_pretrained_layers' : 6,
             'epochs'        : 5,
             'batch_size'    : 32,
             'seed'          : 42,
@@ -2531,7 +2543,12 @@ class BirdTrainer(object):
     # report_hparams_summary 
     #-------------------
     
-    def report_hparams_summary(self, tally_coll, epoch):
+    def report_hparams_summary(self, 
+                               tally_coll, 
+                               epoch,
+                               network_name,
+                               num_pretrained_layers
+                               ):
         '''
         Called at the end of training. Constructs
         a summary to report for the hyperparameters
@@ -2562,7 +2579,8 @@ class BirdTrainer(object):
         
         summary = EpochSummary(tally_coll, epoch, logger=self.log)
         hparms_vals = {
-            'lr_initial' : self.config.Training.lr,
+            'pretrained_layers' : f"{network_name}_{num_pretrained_layers}",
+            'lr_initial': self.config.Training.lr,
             'optimizer' : self.config.Training.optimizer,
             'batch_size': self.config.Training.batch_size,
             'kernel_size' : self.config.Training.kernel_size
@@ -2585,14 +2603,14 @@ class BirdTrainer(object):
         
         
         metric_results = {
-                'hp_balanced_adj_accuracy_score_train' : summary.balanced_adj_accuracy_score_train,
-                'hp_balanced_adj_accuracy_score_val':summary.balanced_adj_accuracy_score_val,
-                'hp_mean_accuracy_train' : summary.mean_accuracy_train,
-                'hp_mean_accuracy_val': summary.mean_accuracy_val,
-                'hp_epoch_mean_weighted_precision': summary.epoch_mean_weighted_precision,
-                'hp_epoch_mean_weighted_recall' : summary.epoch_mean_weighted_recall,
-                'hp_epoch_loss_train' : loss_train,
-                'hp_epoch_loss_val' : loss_val
+                'zz_balanced_adj_accuracy_score_train' : summary.balanced_adj_accuracy_score_train,
+                'zz_balanced_adj_accuracy_score_val':summary.balanced_adj_accuracy_score_val,
+                'zz_mean_accuracy_train' : summary.mean_accuracy_train,
+                'zz_mean_accuracy_val': summary.mean_accuracy_val,
+                'zz_epoch_mean_weighted_precision': summary.epoch_mean_weighted_precision,
+                'zz_epoch_mean_weighted_recall' : summary.epoch_mean_weighted_recall,
+                'zz_epoch_loss_train' : loss_train,
+                'zz_epoch_loss_val' : loss_val
                 }
         
         self.writer.add_hparams(hparms_vals, metric_results)
@@ -2869,21 +2887,6 @@ class BirdTrainer(object):
         log = LoggingService(logfile=final_file_name, 
                              msg_identifier=f"Rank {self.rank}.{self.local_rank}")
         return log
-
-#************** OLD ******8
-#     #------------------------------------
-#     # setup_tallying 
-#     #-------------------
-#     
-#     def setup_tallying(self):
-# 
-#         now = datetime.datetime.now()
-#         self.log_filepath = now.strftime("%d-%m-%Y") + '_' + now.strftime("%H-%M") + "_K" + str(
-#             self.kernel_size) + '_B' + str(self.batch_size) + '.jsonl'
-#         with open(self.log_filepath, 'w') as f:
-#             f.write(json.dumps(['epoch', 'loss', 'training_accuracy', 'testing_accuracy', 'precision', 'recall', 'incorrect_paths', 'confusion_matrix']) + "\n")
-#**************
-
 
 # ------------------------ Main ------------
 if __name__ == '__main__':
