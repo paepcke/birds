@@ -753,7 +753,7 @@ if __name__ == '__main__':
 #                    'kernel_size': [7]
 #                    }
     hparms_spec = {'lr' : [0.001],
-                   'optimizer'  : ['Adam'],
+                   'optimizer'  : ['SGD'],
                    'batch_size' : [4],
                    'kernel_size': [7]
                    }
