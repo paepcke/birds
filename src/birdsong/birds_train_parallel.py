@@ -356,7 +356,7 @@ class BirdTrainer(object):
             msg = f"During net init: {repr(e)}"
             self.log.err(msg)
             # Errors were already logged at their source
-            raise ValueError(msg) from e
+            raise ValueError(f"Original trace above) {msg}") from e
 
         # Note: call to setup_tallying must
         # be after checkpoint restoration above.
@@ -1996,11 +1996,16 @@ class BirdTrainer(object):
         
         if self.independent_runs:
             #*************
-            ks = self.config.Training.kernel_size
-            raw_model = BasicNet(self.num_classes, 
-                                 batch_size=self.batch_size, 
-                                 kernel_size=ks, 
-                                 processor=None)
+            raw_model = NetUtils.get_resnet_partially_trained(
+                4,  # num_classes
+                num_layers_to_retain=0,
+                resnet_version=18,
+                to_grayscale=True
+                )
+#             raw_model = BasicNet(self.num_classes, 
+#                                  batch_size=self.batch_size, 
+#                                  kernel_size=ks, 
+#                                  processor=None)
 
 #             raw_model = NetUtils.get_resnet_partially_trained(self.num_classes,
 #                                                               num_layers_to_retain=6,
@@ -2865,83 +2870,19 @@ class BirdTrainer(object):
                              msg_identifier=f"Rank {self.rank}.{self.local_rank}")
         return log
 
-# ---------------------- Resnet18Grayscale ---------------
-
-class Resnet18Grayscale(ResNet):
-    '''
-    A Resnet18 variant that accepts single-channel
-    grayscale images instead of RGB.
-    
-    Using this class saves space from not having 
-    to replicate our single-layer spectrograms three 
-    times to pretend they are RGB images.
-    '''
-
-    #------------------------------------
-    # Constructor 
-    #-------------------
-    
-    def __init__(self, *args, **kwargs):
-        '''
-        Args and kwargs as per https://github.com/pytorch/vision/blob/master/torchvision/models/resnet.py
-        class ResNet.__init__()
-        
-        '''
-        # The [2,2,2,2] is an instruction to the
-        # superclass' __init__() for how many layers
-        # of each type to create. This info makes the
-        # ResNet into a ResNet18:
-        super().__init__(BasicBlock, [2,2,2,2], *args, **kwargs)
-        
-        # Change expected channels from 3 to 1
-        # The superclass created first layer
-        # with the first argument being a 3.
-        # We just replace the first layer:
-        self.inplanes = 64 #******* Should be batch size?
-        self.conv1 = nn.Conv2d(1, self.inplanes, kernel_size=7, stride=2, padding=3,
-                               bias=False)
-        
-    #------------------------------------
-    # forward 
-    #-------------------
-    
-    def forward(self, x):
-        out_logit = super().forward(x)
-
-        # Since we have binary classification,
-        # the Sigmoid function does what a 
-        # softmax would do for multi-class:
-
-        out_probs  = nn.Sigmoid()(out_logit)
-        return out_probs
-
-    #------------------------------------
-    # device_residence 
-    #-------------------
-    
-    def device_residence(self):
-        '''
-        Returns device_residence where model resides.
-        Can use like this to move a tensor
-        to wherever the model is:
-        
-            some_tensor.to(self.device_residence(<model_instance>)
-
-        '''
-        return next(self.parameters()).device
-
-    #------------------------------------
-    # setup_tallying 
-    #-------------------
-    
-    def setup_tallying(self):
-
-        now = datetime.datetime.now()
-        self.log_filepath = now.strftime("%d-%m-%Y") + '_' + now.strftime("%H-%M") + "_K" + str(
-            self.kernel_size) + '_B' + str(self.batch_size) + '.jsonl'
-        with open(self.log_filepath, 'w') as f:
-            f.write(json.dumps(['epoch', 'loss', 'training_accuracy', 'testing_accuracy', 'precision', 'recall', 'incorrect_paths', 'confusion_matrix']) + "\n")
-            
+#************** OLD ******8
+#     #------------------------------------
+#     # setup_tallying 
+#     #-------------------
+#     
+#     def setup_tallying(self):
+# 
+#         now = datetime.datetime.now()
+#         self.log_filepath = now.strftime("%d-%m-%Y") + '_' + now.strftime("%H-%M") + "_K" + str(
+#             self.kernel_size) + '_B' + str(self.batch_size) + '.jsonl'
+#         with open(self.log_filepath, 'w') as f:
+#             f.write(json.dumps(['epoch', 'loss', 'training_accuracy', 'testing_accuracy', 'precision', 'recall', 'incorrect_paths', 'confusion_matrix']) + "\n")
+#**************
 
 
 # ------------------------ Main ------------

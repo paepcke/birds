@@ -1,8 +1,9 @@
+import copy
 import socket
 
 from torch import device
 from torch import hub, cuda
-from torchvision.models import resnet18
+import torch
 from torchvision.models.resnet import BasicBlock
 
 import torch.distributed as dist
@@ -21,14 +22,25 @@ class NetUtils:
     def get_resnet_partially_trained(cls, 
                                        num_classes, 
                                        num_layers_to_retain=6,
-                                       resnet_version=18
+                                       resnet_version=18,
+                                       to_grayscale=False
                                        ): 
 
         '''
         Obtains the pretrained resnet18 model from the Web
-        if not cached. Then freezes num_layers_to_retain
-        layers to preserve the pre-training. If num_layers_to_retain
-        is zero, the untrained version is used.
+        if not cached. Then:
+           o Freezes the leftmost num_layers_to_retain layers
+             so that they are unaffected by subsequent training.
+             
+           o Modifies the number of output classes from resnet's
+             defaulat 1000 to num_classes.
+             
+           o Modifies the input layer to expect grayscale,
+             i.e. only one channel, instead of three. The
+             weights are retained from the pretrained model.
+              
+        If num_layers_to_retain is zero, the untrained version 
+        is used.
         
         If running under Distributed Data Processing (DDP) 
         protocol, only the master node will download, and
@@ -53,6 +65,9 @@ class NetUtils:
                          pretrained=True if num_layers_to_retain > 0 else False
                          )
 
+        if to_grayscale:
+            model = cls._first_layer_to_in_channel1(model, resnet_version)
+
         cls.freeze_model_layers(model, num_layers_to_retain)
 
         num_in_features = model.fc.in_features
@@ -62,6 +77,83 @@ class NetUtils:
         # Create a property on the model that 
         # returns the number of output classes:
         model.num_classes = model.fc.out_features
+        return model
+    
+    #------------------------------------
+    # _first_layer_to_in_channel1
+    #-------------------
+
+    @classmethod
+    def _first_layer_to_in_channel1(cls, model, resnet_version):
+        '''
+        For resnet18, the first layer has
+        two blocks:
+        
+        model.layer1
+        Sequential(
+          (0): BasicBlock(
+            (conv1): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+            (conv2): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          )
+          (1): BasicBlock(
+            (conv1): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+            (conv2): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          )
+        )
+        
+        @param cls:
+        @type cls:
+        @param model:
+        @type model:
+        @param resnet_version:
+        @type resnet_version:
+        '''
+        
+        # One could get the first layer's block0
+        # conv1 layer like this:
+        #   list(model.layer1.children())[0].conv1
+        # But this is shorter:
+        l0_b0_conv1 = model.conv1
+        saved_conv1_weight = copy.deepcopy(l0_b0_conv1.weight)
+        saved_conv1_bias   = copy.deepcopy(l0_b0_conv1.bias)
+        curr_conv_layer_attrs = {
+            'kernel_size' : l0_b0_conv1.kernel_size,
+            'out_channels' : l0_b0_conv1.out_channels,
+            'stride' : l0_b0_conv1.stride,
+            'padding' : l0_b0_conv1.padding,
+            'bias' : l0_b0_conv1.bias
+            }
+        # Create a Conv2d layer just like the existing one, 
+        # but change the input channel (from its default 64) to 1:
+        new_l0_b0_conv1 = nn.Conv2d(1, **curr_conv_layer_attrs)
+        
+        # The original conv1 weights contain three channels,
+        # for RG&B. Average them to collapse into one input
+        # channel. We start with:
+        #
+        #     saved_conv1_weight.shape 
+        #        --> torch.Size([64, 3, 7, 7])
+        #
+        # and want to end up with: torch.Size([64, 1, 7, 7])
+        # The keepdim=True is required, b/c otherwise the mean
+        # method removes dim1 from the result:
+        
+        grayscale_weight = torch.mean(saved_conv1_weight, 
+                                      dim=1, 
+                                      keepdim=True)
+        # ***** Confused about Parameter vs. its data
+        saved_conv1_weight.data = grayscale_weight
+        
+        new_l0_b0_conv1.weight.data = saved_conv1_weight
+        new_l0_b0_conv1.bias        = saved_conv1_bias
+        
+        model.conv1 = new_l0_b0_conv1
         return model
 
     #------------------------------------

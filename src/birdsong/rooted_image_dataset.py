@@ -116,7 +116,9 @@ class SingleRootImageDataset:
         '''
         self.transform_img = transforms.Compose([
                 transforms.Resize((sample_width, sample_height)),  # should actually be 1:3 but broke the system
-                transforms.ToTensor()])
+                transforms.ToTensor(),
+                transforms.Grayscale()
+                ])
 
         # Build three data structures:
         #     class_name --> class id int needed for model building
