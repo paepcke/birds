@@ -178,19 +178,19 @@ class NetUtils:
         new_l0_b0_conv1 = nn.Conv2d(1, **curr_conv_layer_attrs)
         
         # The original conv1 weights contain three channels,
-        # for RG&B. Average them to collapse into one input
+        # for RG&B. Sum them to collapse into one input
         # channel. We start with:
         #
         #     saved_conv1_weight.shape 
         #        --> torch.Size([64, 3, 7, 7])
         #
         # and want to end up with: torch.Size([64, 1, 7, 7])
-        # The keepdim=True is required, b/c otherwise the mean
+        # The keepdim=True is required, b/c otherwise the sum
         # method removes dim1 from the result:
         
-        grayscale_weight = torch.mean(saved_conv1_weight, 
-                                      dim=1, 
-                                      keepdim=True)
+        grayscale_weight = torch.sum(saved_conv1_weight, 
+                                     dim=1, 
+                                     keepdim=True)
         # ***** Confused about Parameter vs. its data
         saved_conv1_weight.data = grayscale_weight
         
