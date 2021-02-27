@@ -387,6 +387,10 @@ class NeuralNetConfig(DottableConfigParser):
         conf_dict = self.Training
         conf_dict['net_name'] = new_name
 
+    def set_num_pretrained_layers(self, new_name):
+        conf_dict = self.Training
+        conf_dict['num_pretrained_layers'] = new_name
+
     def set_min_epochs(self, new_val):
         
         assert type(new_val) == int, 'Epochs must be ints'
