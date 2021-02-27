@@ -3,7 +3,6 @@ Created on Jan 25, 2021
 
 @author: paepcke
 '''
-from collections import Counter
 import os
 import random
 

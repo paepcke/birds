@@ -114,11 +114,21 @@ class SingleRootImageDataset:
         @rtype MultiRootImageDataset
         @raises ValueError if any of the roots is not a string.
         '''
+        #*******************
+#         self.transform_img = transforms.Compose([
+#                 transforms.Resize((sample_width, sample_height)),  # should actually be 1:3 but broke the system
+#                 transforms.ToTensor(),
+#                 transforms.Grayscale()
+#                 ])
         self.transform_img = transforms.Compose([
                 transforms.Resize((sample_width, sample_height)),  # should actually be 1:3 but broke the system
                 transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                 std=[0.229, 0.224, 0.225]),
                 transforms.Grayscale()
                 ])
+
+        #*******************        
 
         # Build three data structures:
         #     class_name --> class id int needed for model building

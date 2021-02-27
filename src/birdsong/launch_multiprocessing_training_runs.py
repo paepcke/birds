@@ -751,11 +751,18 @@ if __name__ == '__main__':
 
     #**************
     hparms_spec = {'lr' : [0.001],
-                   'net_name'   : ['resnet18', 'resnet50'],
-                   'num_pretrained_layers' : [6,2], 
+                   'net_name'   : ['resnet18'],
+                   'num_pretrained_layers' : [6], 
                    'optimizer'  : ['SGD'],
-                   'batch_size' : [32, 64],
+                   'batch_size' : [4],
                    }
+    
+#     hparms_spec = {'lr' : [0.001],
+#                    'net_name'   : ['resnet18', 'resnet50'],
+#                    'num_pretrained_layers' : [6,2], 
+#                    'optimizer'  : ['SGD'],
+#                    'batch_size' : [32, 64],
+#                    }
     
 #     hparms_spec = {'lr' : [0.01],
 #                    'optimizer'  : ['RMSProp'],

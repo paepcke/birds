@@ -43,7 +43,6 @@ from torch import optim
 import torch.distributed as dist
 import torch.nn as nn
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torchvision.models.resnet import ResNet, BasicBlock
 
 from birdsong.class_weight_discovery import ClassWeightDiscovery
 from birdsong.cross_validation_dataloader import MultiprocessingDataLoader, CrossValidatingDataLoader
@@ -55,7 +54,6 @@ from birdsong.utils.learning_phase import LearningPhase
 from birdsong.utils.neural_net_config import NeuralNetConfig, ConfigError
 from birdsong.utils.tensorboard_plotter import TensorBoardPlotter, SummaryWriterPlus
 from birdsong.nets import NetUtils
-from birdsong.nets import BasicNet
 
 # Needed to make Eclipse's type engine happy.
 # I would prefer using torch.cuda, etc in the 
@@ -400,7 +398,9 @@ class BirdTrainer(object):
             timestamp = timestamp.replace(':', '_')
             
             # Experiment info:
-            exp_info = (f"Exp{timestamp}_lr_{self.config.Training.lr}_" +
+            exp_info = (f"Exp{timestamp}_{self.config.Training.net_name}_" +
+                        f"pretrain_{self.config.Training.num_pretrained_layers}_"
+                        f"lr_{self.config.Training.lr}_"
                         f"opt_{self.config.Training.optimizer}_"
                         f"bs_{self.config.Training.batch_size}_" +
                         f"kernel_{self.config.Training.kernel_size}_" +
@@ -2008,9 +2008,16 @@ class BirdTrainer(object):
                 self.net_name,
                 num_classes=self.num_classes,  # num_classes
                 num_layers_to_retain=self.num_pretrained_layers,
-                resnet_version=18,
                 to_grayscale=True
                 )
+            
+#             raw_model = NetUtils.get_net(
+#                 self.net_name,
+#                 num_classes=self.num_classes,  # num_classes
+#                 num_layers_to_retain=self.num_pretrained_layers,
+#                 resnet_version=18,
+#                 to_grayscale=True
+#                 )
 #             raw_model = BasicNet(self.num_classes, 
 #                                  batch_size=self.batch_size, 
 #                                  kernel_size=ks, 
