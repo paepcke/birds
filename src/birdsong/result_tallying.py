@@ -108,7 +108,9 @@ class TrainResultCollection(dict):
     # balanced_adj_accuracy_score
     #-------------------
     
-    def balanced_adj_accuracy_score(self, epoch=None, learning_phase=LearningPhase.TRAINING):
+    def balanced_adj_accuracy_score(self, 
+                                    epoch=None, 
+                                    learning_phase=LearningPhase.TRAINING):
         '''
         Get accuracy adjusted for class support;
         also adjust such that purely chance has
@@ -141,9 +143,10 @@ class TrainResultCollection(dict):
         if (y_true == np.nan).any() or (y_pred == np.nan).any():
             return np.nan
         
-        balanced_adj_accuracy_score = metrics.balanced_accuracy_score(y_true, 
-                                                                      y_pred,
-                                                                      adjusted=True)
+        balanced_adj_accuracy_score = \
+            metrics.balanced_accuracy_score(y_true, 
+                                            y_pred,
+                                            adjusted=True)
         
         return balanced_adj_accuracy_score
 
@@ -623,7 +626,9 @@ class EpochSummary(UserDict):
                                                                                 learning_phase=LearningPhase.VALIDATING
                                                                                 )
         except Exception as e:
-            raise ValueError(f"Error creating EpochSummary: {repr(e)}")
+            msg = f"Error creating EpochSummary: {repr(e)}"
+            
+            raise ValueError(f"(Relevant trace further up) {msg}")
 
         # Maybe not greatest style but:
         # Allow clients to use dot notation in addition

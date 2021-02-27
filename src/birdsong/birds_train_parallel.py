@@ -346,6 +346,16 @@ class BirdTrainer(object):
         self.dataloader = self.initialize_data_access(batch_size)
 
         dataset = self.dataloader.dataset
+        
+        # Ensure there is at least one batch worth
+        # of samples to train with:
+        
+        num_samples = len(dataset)
+        if num_samples < batch_size and self.drop_last:
+            msg = f"Only {num_samples} samples available with batch size {batch_size}: no complete batch"
+            self.log.err(msg)
+            raise TrainError(msg)
+        
         self.num_classes = len(dataset.class_id_list())
         self.class_names = dataset.class_names()
         
@@ -1118,14 +1128,13 @@ class BirdTrainer(object):
         # A new training sample class distribution
         # barchart:
 
-        if epoch == 0:
+        if epoch == 1:
             # Barchart with class support only
             # needed once:
             self.tensorboard_plotter.class_support_to_tensorboard(
                 self.dataloader.dataset,
                 self.writer,
                 epoch=self.epoch,
-                custom_data=self.get_class_support(),
                 title="Training Class Support"
                 )
         
@@ -1304,10 +1313,6 @@ class BirdTrainer(object):
         # successively entered epochs will stay in order:
         
         accuracies = OrderedDict()
-        
-        # Tracking number of training samples used
-        # for each class during one epoch:
-        self.class_support = {} 
 
         try: # This try ensures cleanup via the 
             #  finally expression at the end
@@ -1333,10 +1338,6 @@ class BirdTrainer(object):
                     self.epoch += 1
                     self.num_train_samples_this_epoch = 0
                     self.num_val_samples = 0
-                    for class_id in range(self.num_classes):
-                        # So far: no training sample for any
-                        # of the classes: 
-                        self.class_support[class_id] = 0
 
                     # Places to accumulate output predictions
                     # and truth labels for training and 
@@ -1402,6 +1403,9 @@ class BirdTrainer(object):
                     # Done with one epoch:
                     self.log.info(f"Finished epoch {self.epoch}")
                     
+                    # Must be called after optimizer.step(),
+                    # which was called as part of the epoch
+                    # abobe:
                     self.scheduler.step()
                     
                     total_train_loss = self.tally_collection.cumulative_loss(epoch=self.epoch,
@@ -1845,7 +1849,7 @@ class BirdTrainer(object):
     # get_class_support 
     #-------------------
     
-    def get_class_support(self, targets):
+    def get_class_support(self):
         '''
         Returns the distribution of samples
         in the underlying dataset by class

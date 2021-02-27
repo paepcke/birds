@@ -96,7 +96,6 @@ class TensorBoardPlotter:
                                      data_src, 
                                      writer,
                                      epoch=0,
-                                     custom_data=None,
                                      title='Class Support'):
         '''
         Create a barchart showing number of training samples
@@ -141,20 +140,6 @@ class TensorBoardPlotter:
             raise ValueError(f"Data source must be path to data root, or a dataset, not {data_src}")
         else:
             dataset = data_src
-
-        if custom_data is None:
-            # Get sample classes ordered by sample_id
-            # from 0-num_samples:
-            #   array([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1])
-    
-            sample_classes = dataset.sample_classes()
-            # Get {<class_id> : <num_samples>}:
-            # Something like: Counter({0: 6, 1: 6})
-            
-            support = Counter(sample_classes)
-            
-        else:
-            support = custom_data
         
         # Get dict: {<class_id> : <class_name>}
         class_id_to_name = {class_id : class_name
@@ -162,22 +147,36 @@ class TensorBoardPlotter:
                             in dataset.class_to_id.items() 
                             }
         
-        barchart_class_names = np.array([])
-        for class_id in support.keys():
-            barchart_class_names = np.append(barchart_class_names, 
-                                             [class_id_to_name[class_id]])
-
-        barchart_counts = np.array(list(support.values()))
+        # Goal is corresponding np arrays: 
+        #    class-name, num-samples-in-class.
         
+        # First, get correponding tuples of 
+        # class *ids* and sample counts. The
+        # 'zip(*<list-of-tuples>) notation is
+        # the inverse of a zip(): 
+        # take [(c1,n1), (c2,n2),...] that is returned
+        # from sample_distribution(), and create two
+        # arrays: [c1,c2,...], and [n1,n2,...]
+        
+        [class_id_tuple, 
+         sample_count_tuple] = zip(*dataset.sample_distribution())
+
+        # Create np array of class *names* from the class ID tuple:
+        class_names   = np.array([class_id_to_name[class_id]
+                                  for class_id
+                                  in class_id_tuple
+                                  ])
+        sample_counts = np.array(sample_count_tuple)
+
         # Make a horizontal chart, so class names are
         # Y-axis labels:
-        y_pos = np.arange(len(barchart_class_names))
+        y_pos = np.arange(len(class_names))
         
         fig, ax = plt.subplots()
         fig.suptitle('Number of Samples in Each Class')
         _bar_container = ax.barh(y_pos,
-                                 barchart_counts,  # Bar length (i.e. width) 
-                                 tick_label=barchart_class_names,
+                                 sample_counts,  # Bar length (i.e. width) 
+                                 tick_label=class_names,
                                  align='center')
         ax.set_xlabel('Number of Samples')
         
@@ -188,8 +187,7 @@ class TensorBoardPlotter:
         
         support_dict = {class_name : num_samples
                         for class_name, num_samples
-                        in zip(barchart_class_names, 
-                               barchart_counts)
+                        in zip(class_names, sample_counts)
                         }
         return support_dict
 

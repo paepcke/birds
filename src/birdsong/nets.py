@@ -1,10 +1,10 @@
 import copy
 import socket
+import re
 
 from torch import device
 from torch import hub, cuda
 import torch
-from torchvision.models.resnet import BasicBlock
 
 import torch.distributed as dist
 import torch.nn as nn
@@ -13,6 +13,17 @@ import torch.nn.functional as F
 
 # ---------------------- Class NetUtils ----------------
 class NetUtils:
+    '''
+    Creating neural networks. Main entry point
+    is method get_net(). Serves out a basic network
+    BasicNet, or a version of resnet (18, 34, 50).
+    When requesting resnets, caller can specify a nunmber
+    of layers to have pretrained. Thus a fully, or
+    partially pretrained resnet model can be obtained. 
+    
+    '''
+    
+    resnet_pattern = re.compile(r'resnet([0-9]*)$')
     
     #------------------------------------
     # get_net
@@ -20,19 +31,35 @@ class NetUtils:
     
     @classmethod
     def get_net(cls, net_name, **kwargs):
+        
+        # In case of resnet: deal with net_name containing
+        # the version, like resnet18, resnet50, rather
+        # than (or in addition to) having the kwarg
+        # 'resnet_version' set. Remove the version, and
+        # add (or overwrite an existing) resnet_version
+        # keyword before entering the network conditional:  
+        
+        resnet_match = cls.resnet_pattern.match(net_name)
+        if resnet_match is not None:
+            # Version number is in regex group0:
+            resnet_version = int(resnet_match.groups()[0])
+            # Note the version in a kwarg for get_resnet_partially_trained:
+            kwargs['resnet_version'] = resnet_version
+            net_name = 'resnet'
+        
         if net_name.lower() == 'basicnet':
             return BasicNet(**kwargs)
         elif net_name.lower() == 'resnet':
-            return cls.get_resnet_partially_trained(**kwargs)
+            return cls._get_resnet_partially_trained(**kwargs)
         else:
             raise NotImplementedError(f"Network {net_name} unavailable")
 
     #------------------------------------
-    # get_resnet_partially_trained 
+    # _get_resnet_partially_trained 
     #-------------------
 
     @classmethod
-    def get_resnet_partially_trained(cls, 
+    def _get_resnet_partially_trained(cls, 
                                      num_classes=None, 
                                      num_layers_to_retain=6,
                                      resnet_version=18,
@@ -72,11 +99,13 @@ class NetUtils:
 
         if num_classes is None:
             raise ValueError("Resnetxx requires a num_classes argument")
-        if resnet_version not in (18,50):
-            raise ValueError("Resnet version must be 18 or 50")
+        available_versions = (18,34,50)
+        
+        if resnet_version not in available_versions:
+            raise ValueError(f"Resnet version must be one of {available_versions}")
         
         model = hub.load('pytorch/vision:v0.6.0', 
-                         'resnet18' if resnet_version == 18 else 'resnet50', 
+                         f'resnet{resnet_version}',
                          pretrained=True if num_layers_to_retain > 0 else False
                          )
 
