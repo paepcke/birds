@@ -43,6 +43,8 @@ class NeuralNetConfig(DottableConfigParser):
     '''
     
     NEURAL_NET_ATTRS = {
+            'net_name'   : 'Training',
+            'num_pretrained_layers' : 'Training',
             'min_epochs' : 'Training',
             'max_epochs' : 'Training',
             'batch_size' : 'Training',
