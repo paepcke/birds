@@ -37,8 +37,8 @@ def time_shift(in_dir, out_dir, species=None):
     for file_name in os.listdir(in_dir):
         if species is None or species in file_name:
             y, sample_rate = librosa.load(os.path.join(in_dir, file_name))
-            length = 95 * librosa.get_duration(y, sample_rate)
-            # shifts the recording by a random amount between 0 and 5 seconds by a multiple of 10 ms
+            length = librosa.get_duration(y, sample_rate)
+            # shifts the recording by a random amount between 0 and length of recording by a multiple of 10 ms
             amount = random.randrange(1, int(length), 1) * 0.01
 
             # create two seperate sections of the audio
@@ -47,11 +47,10 @@ def time_shift(in_dir, out_dir, species=None):
 
             # combine the wav data
             y2 = np.append(y0, y1)
-
+            assert(len(y) == len(y2))
             # output the new wav data to a file
             librosa.output.write_wav(os.path.join(out_dir, file_name[:len(file_name) - 4])
                                      + "_shift" + str(amount) + ".wav", y2, sample_rate0)
-
 
 def change_volume(in_dir, out_dir, species=None):
     """
