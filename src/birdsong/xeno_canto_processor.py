@@ -215,20 +215,24 @@ class XenoCantoCollection(UserDict):
     #-------------------
 
     def xeno_canto_get_bird_metadata(self, bird_names):
+        num_to_get = len(bird_names)
         metadata = []
         for bird_name in bird_names:
+            
             url = "https://www.xeno-canto.org/api/2/recordings"
             http_query = f"{url}?query={bird_name}+len:5-60+q_gt:C"
             
-            self.log.info(f"Downloading metadata for {len(bird_names)} bird(s)...")
+            self.log.info(f"Downloading metadata #{len(metadata) + 1} / {num_to_get} bird(s)...")
             try:
                 response = requests.get(http_query)
             except Exception as e:
                 self.log.err(f"Failed to download metadata for {bird_name}: {repr(e)}")
                 time.sleep(self.courtesy_delay)
                 continue
-            self.log.info(f"Done downloading metadata for {len(bird_names)} bird(s)...")
+            self.log.info(f"Done download")
+            
             time.sleep(self.courtesy_delay)
+            
             try:
                 metadata.append(response.json())
             except Exception as e:
@@ -469,11 +473,20 @@ class XenoCantoCollection(UserDict):
         if dest is None:
             curr_dir  = os.path.dirname(__file__)
             dest_dir  = os.path.join(curr_dir, 'xeno_canto_collections')
-            dest      = os.path.join(dest_dir, self.create_filename(dest_dir))  
+            if not os.path.exists(dest_dir):
+                self.os.makedirs(dest_dir)
+            dest = os.path.join(dest_dir, self.create_filename(dest_dir))  
 
         elif os.path.isdir(dest) and not os.path.exists(dest):
             os.makedirs(dest_dir)
             dest = os.path.join(dest_dir, self.create_filename(dest_dir))  
+
+        # dest is a file at this point.
+        if os.path.exists(dest):
+            answer = input(f"File {os.path.basename(dest)} exists; overwrite? (y/N): ")
+            if answer not in ('y','Y','yes','Yes', ''):
+                self.log.info("Collection save aborted")
+                return None
 
         # At this point dest is a non-existing file
         with open(dest, 'wb') as fd:
