@@ -68,8 +68,10 @@ import re
 import sys
 import time
 
-import librosa
-import librosa.display
+#**************
+#import librosa
+#import librosa.display
+#**************
 from logging_service import LoggingService
 import requests
 from scipy import signal
@@ -475,7 +477,9 @@ class XenoCantoCollection(UserDict):
 
         # At this point dest is a non-existing file
         with open(dest, 'wb') as fd:
-            pickle.dump(sound_collection, fd)            
+            pickle.dump(sound_collection, fd)
+            
+        return dest
 
     #------------------------------------
     # load
@@ -718,12 +722,14 @@ if __name__ == '__main__':
     if ('collect_info' in  todo) or ('download' in todo):
         sound_collection = XenoCantoCollection(birds_to_process,
                                                load_dir=args.destdir)
+        sound_collection.save()
         
     if 'download' in todo:
         sound_collection.download(birds_to_process,
                                   one_per_species=args.one_per_species, 
                                   courtesy_delay=args.timedelay)
-        
+        sound_collection.save()
+
     sound_collection.log.info(f"Done with {todo}")
 
 # ------------------------ Testing Only ----------------
