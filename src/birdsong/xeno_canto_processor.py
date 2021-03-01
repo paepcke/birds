@@ -1,21 +1,25 @@
+#!/usr/bin/env python3
 """
 Functions involved in downloading birds from xeno-canto
 """
 
+import argparse
+from collections import UserDict
 import os
 from pathlib import Path
-from collections import UserDict
+import re
+import sys
 import time
 
 import librosa
 import librosa.display
+from logging_service import LoggingService
 import requests
 from scipy import signal
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-from logging_service import LoggingService
 
 class XenoCantoProcessor:
     
@@ -102,11 +106,16 @@ class XenoCantoCollection(UserDict):
     # Constructor 
     #-------------------
     
-    def __init__(self, bird_names, load_dir=None):
+    def __init__(self, 
+                 bird_names,
+                 courtesy_delay=1.0,
+                 load_dir=None):
 
         super().__init__()
         
         self.log = LoggingService()
+        self.courtesy_delay = courtesy_delay
+        
         curr_dir = os.path.dirname(__file__)
         if load_dir is None:
             self.load_dir = os.path.join(curr_dir, 'recordings')
@@ -118,41 +127,57 @@ class XenoCantoCollection(UserDict):
         # Default behavior of iterator (see comment in __iter__):
         self.one_per_bird_phylo=True
     
-        collection_metadata = self.xeno_canto_get_bird_metadata(bird_names)
-        self.num_recordings = collection_metadata['numRecordings']
-        self.num_species = collection_metadata['numSpecies']
-        recordings_list  = collection_metadata['recordings']
-
-        # Create XenoCantoRecording instances
-        # without sound file download. That is
-        # done lazily:
-        
-        for rec_dict in recordings_list:
-            rec_obj  = XenoCantoRecording(rec_dict, 
-                                          load_dir=self.load_dir, 
-                                          log=self.log)
-            try:
-                phylo_name = rec_obj.phylo_name
-                self[phylo_name].append(rec_obj)
-            except KeyError:
-                # First time seen this species:
-                self[phylo_name] = [rec_obj]
+        collections_metadata = self.xeno_canto_get_bird_metadata(bird_names)
+        for species_recs_metadata in collections_metadata:
+            # Metadata about XC holdings for one genus/species:
+            self.num_recordings = species_recs_metadata['numRecordings']
+            self.num_species = species_recs_metadata['numSpecies']
+            # List of dicts, each describing one 
+            # recording:
+            recordings_list  = species_recs_metadata['recordings']
+    
+            # Create XenoCantoRecording instances
+            # without sound file download. That is
+            # done lazily:
+            
+            for rec_dict in recordings_list:
+                rec_obj  = XenoCantoRecording(rec_dict, 
+                                              load_dir=self.load_dir, 
+                                              log=self.log)
+                try:
+                    phylo_name = rec_obj.phylo_name
+                    self[phylo_name].append(rec_obj)
+                except KeyError:
+                    # First time seen this species:
+                    self[phylo_name] = [rec_obj]
 
     #------------------------------------
     # xeno_canto_get_bird_metadata 
     #-------------------
 
     def xeno_canto_get_bird_metadata(self, bird_names):
+        metadata = []
         for bird_name in bird_names:
             url = "https://www.xeno-canto.org/api/2/recordings"
             http_query = f"{url}?query={bird_name}+len:5-60+q_gt:C"
             
-            self.log.info(f"Downloading metadata for {len(bird_names)} birds...")
-            response = requests.get(http_query)
-            self.log.info(f"Done downloading metadata for {len(bird_names)} birds...")
-            
-            collection_metadata = response.json()
-            return collection_metadata
+            self.log.info(f"Downloading metadata for {len(bird_names)} bird(s)...")
+            try:
+                response = requests.get(http_query)
+            except Exception as e:
+                self.log.err(f"Failed to download metadata for {bird_name}: {repr(e)}")
+                time.sleep(self.courtesy_delay)
+                continue
+            self.log.info(f"Done downloading metadata for {len(bird_names)} bird(s)...")
+            time.sleep(self.courtesy_delay)
+            try:
+                metadata.append(response.json())
+            except Exception as e:
+                self.log.err(f"Error reading JSON version of response: {repr(e)}")
+                somewhat_readable = re.sub(r'<[^>]+>', '', str(response.content))
+                self.log.err(somewhat_readable)
+                continue
+        return metadata
 
     #------------------------------------
     # __iter__ 
@@ -256,13 +281,78 @@ class XenoCantoCollection(UserDict):
     
     def values(self):
         return self.data.values()
+    
+    #------------------------------------
+    # download 
+    #-------------------
+    
+    def download(self, 
+                 birds_to_process=None,
+                 one_per_species=True, 
+                 courtesy_delay=1.0):
+        '''
+        Download a given list of species, or
+        all the species in the collection. 
+        
+        If one_per_species is True, only one recording
+        from the list of each species' recordings is
+        downloaded; else all recordings of each requested
+        species.
+        
+        Courtesy delay is time to wait between sound file
+        downloads.
+        
+        @param birds_to_process: list of bird species names
+        @type birds_to_process: [str]
+        @param one_per_species: whether or not to download all 
+            recordings of each species, or just one
+        @type one_per_species: bool
+        @param courtesy_delay: time between requests to XC server
+        @type courtesy_delay: {int | float}
+        '''
+        
+        if birds_to_process is None:
+            birds_to_process = list(self.keys())
+
+        # Get number of sound files to download:
+        if one_per_species:
+            num_to_download = len(birds_to_process)
+        else:
+            num_to_download = 0
+            for species in birds_to_process:
+                try:
+                    num_to_download += self[species]
+                except KeyError:
+                    self.log.err(f"Species {species} not represented in collection")
+
+        downloaded = 1
+        for rec in self(one_per_bird_phylo=one_per_species):
+            self.log.info(f"{downloaded}/{num_to_download}")
+            rec.download()
+            time.sleep(courtesy_delay)
 
     #------------------------------------
     # __len__ 
     #-------------------
     
     def __len__(self):
+        '''
+        Returns number of genus-species are in the
+        collection. But does not sum up all the 
+        recordings for each genus-species. To get
+        that total number, use len_all()
+        '''
         return len(self.data)
+
+    #------------------------------------
+    # len_all 
+    #-------------------
+    
+    def len_all(self):
+        num_recordings = 0
+        for recs_list in self.data.values():
+            num_recordings += len(recs_list)
+        return num_recordings
 
     #------------------------------------
     # __repr__ 
@@ -451,23 +541,94 @@ if __name__ == '__main__':
              'Catharus+ustulatus', 'Parula+pitiayumi', 'Henicorhina+leucosticta', 'Corapipo+altera', 
              'Empidonax+flaviventris']
 
-    loader = XenoCantoProcessor(load_dir='/tmp')
-    
-    # Testing
-    sound_collection = XenoCantoCollection(['Tangara+gyrola', 
-                                            'Amazilia+decora'],
-                                            load_dir='/tmp'
-                                            )
-    #rec = next(iter(sound_collection, one_per_bird_phylo=False))
-    for rec in sound_collection(one_per_bird_phylo=False):
-        print(rec.full_name)
-    for rec in sound_collection(one_per_bird_phylo=True):
-        print(rec.full_name)
-        
-    rec.download()
-    print(sound_collection)
+    parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
+                                     formatter_class=argparse.RawTextHelpFormatter,
+                                     description="Download and process Xeno Canto bird sounds"
+                                     )
 
+    parser.add_argument('-d', '--destdir',
+                        help='fully qualified directory for downloads. Default: /tmp',
+                        default='/tmp')
+    parser.add_argument('-t', '--timedelay',
+                        type=float,
+                        help='time between downloads for politeness to XenoCanto server. Ex: 1.0',
+                        default=1.0)
+    # Things user wants to do:
+    parser.add_argument('--collect_info',
+                        action='store_true',
+                        help="download metadata for the bird calls, but don't download sounds"
+                        )
+    parser.add_argument('--download',
+                        action='store_true',
+                        help="download the sound files (implies --collect_info"
+                        )
+    parser.add_argument('--one_each_species',
+                        action='store_true',
+                        help="only download one recording for each bird; default: True",
+                        default=True
+                        )
+    parser.add_argument('birds_to_process',
+                        type=str,
+                        nargs='*',
+                        help='Repeatable: <genus>+<species>. Ex: Tangara_gyrola',
+                        default=[bird.replace('+', '_') for bird in birds])
+
+    args = parser.parse_args()
+
+    # For reporting to user: list
+    # of actions to do:
+    todo = [action_name 
+            for action_name
+            in ['collect_info', 'download']
+            if args.__getattribute__(action_name)
+            ]
     
-    #birds_of_interest = [birds[i] for i in range(11,13)]
-    #loader = XenoCantoProcessor(birds_of_interest)
+    if len(todo) == 0:
+        print("No action specified on command line; nothing done")
+        print(parser.print_help())
+        sys.exit(0)
+            
+    # Fix bird names to make HTTP happy later.
+    # B/c we allow -b and --bird in args, 
+    # argparse constructs a name:
+    
+    birds_to_process = args.birds_to_process
+    
+    if len(birds_to_process) == 0:
+        birds_to_process = birds
+    else:
+        # Replace the underscores needed for
+        # not confusing bash with the '+' signs
+        # required in URLs:
+        birds_to_process = [bird.replace('_', '+') for bird in birds_to_process]
+
+    #if len(birds_to_process) == 0:
+    #    print("No birds specified; nothing done")
+    #    sys.exit(0)
+        
+    if ('collect_info' in  todo) or ('download' in todo):
+        sound_collection = XenoCantoCollection(birds_to_process,
+                                               load_dir=args.destdir)
+        
+    if 'download' in todo:
+        sound_collection.download(birds_to_process,
+                                  one_per_species=args.one_per_species, 
+                                  courtesy_delay=args.timedelay)
+        
+    sound_collection.log.info(f"Done with {todo}")
+
+# ------------------------ Testing Only ----------------
+    # Testing
+#     sound_collection = XenoCantoCollection(['Tangara+gyrola', 
+#                                             'Amazilia+decora'],
+#                                             load_dir='/tmp'
+#                                             )
+#     #rec = next(iter(sound_collection, one_per_bird_phylo=False))
+#     for rec in sound_collection(one_per_bird_phylo=False):
+#         print(rec.full_name)
+#     for rec in sound_collection(one_per_bird_phylo=True):
+#         print(rec.full_name)
+#         
+#     rec.download()
+#     print(sound_collection)
 
