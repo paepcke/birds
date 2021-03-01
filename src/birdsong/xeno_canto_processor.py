@@ -384,7 +384,7 @@ class XenoCantoCollection(UserDict):
             num_to_download = 0
             for species in birds_to_process:
                 try:
-                    num_to_download += self[species]
+                    num_to_download += len(self[species])
                 except KeyError:
                     self.log.err(f"Species {species} not represented in collection")
 
@@ -392,6 +392,7 @@ class XenoCantoCollection(UserDict):
         for rec in self(one_per_bird_phylo=one_per_species):
             self.log.info(f"{downloaded}/{num_to_download}")
             rec.download()
+            downloaded += 1
             time.sleep(courtesy_delay)
 
     #------------------------------------
@@ -474,7 +475,7 @@ class XenoCantoCollection(UserDict):
             curr_dir  = os.path.dirname(__file__)
             dest_dir  = os.path.join(curr_dir, 'xeno_canto_collections')
             if not os.path.exists(dest_dir):
-                self.os.makedirs(dest_dir)
+                os.makedirs(dest_dir)
             dest = os.path.join(dest_dir, self.create_filename(dest_dir))  
 
         elif os.path.isdir(dest) and not os.path.exists(dest):
