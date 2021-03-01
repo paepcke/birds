@@ -1,12 +1,69 @@
 #!/usr/bin/env python3
 """
 Functions involved in downloading birds from xeno-canto
+
+Three classes:
+  o XenoCantoProcessor for creating spectrograms
+  o XenoCantoRecording to hold metadata about available XC
+        sound files
+  o XenoCantoCollection to hold XenoCantoRecording instances
+
+A XenoCantoCollection instance acts like a dict whose keys are
+concatenations of genus and species names, e.g. 'Tangaragyrola'
+Each value in the dict is a *list* of XenoCantoRecording instances 
+for that type of bird.
+
+So the keys of a XenoCantoCollection instance might look like:
+
+{'Tangaragyrola' : [rec1, rec2, rec3]
+ 'Amaziliadecora': [rec4, rec5]
+}
+
+A XenoCantoRecording also behaves like a dict:
+
+Keys are:
+        genus
+        species
+        phylo_name       # 'Tangaragyrola'
+        full_name        # Unique name like 'Tangaragyrola_xc3562156' 
+        country
+        loc              # Name of park/city/preserve 
+        recording_date
+        length
+        encoding         # ['mpeg', 'wav.vpn']
+        type             # ['call', 'song']
+
+        _xeno_canto_id
+        _filename (if downloaded)
+        _url
+        
+A XenoCantoCollection instance can also act as an iterator:
+
+	 for recording in my_coll(one_per_bird_phylo=True):
+	     print(recording.full_name)
+
+The one_per_bird_phylo kwarg controls whether
+only one of each species' recordings are included
+in the iteration, or whether the list of all recordings 
+for all species are served out.
+
+The interaction model is to pull metadata for each
+desired species by running this script from the command
+line either with or without downloading the actual sound 
+files. That process creates a XenoCantoCollection, which
+is saved to disk as a pickle.
+
+One can ask the XenoCantoCollection instance to
+download some or all recordings. Individual XenoCantoRecording
+instances also know how to download.
 """
 
 import argparse
 from collections import UserDict
+import datetime
 import os
 from pathlib import Path
+import pickle
 import re
 import sys
 import time
@@ -401,6 +458,58 @@ class XenoCantoCollection(UserDict):
         self.one_per_bird_phylo=one_per_bird_phylo
         return self
 
+    #------------------------------------
+    # save 
+    #-------------------
+    
+    def save(self, dest=None):
+        
+        if dest is None:
+            curr_dir  = os.path.dirname(__file__)
+            dest_dir  = os.path.join(curr_dir, 'xeno_canto_collections')
+            dest      = os.path.join(dest_dir, self.create_filename(dest_dir))  
+
+        elif os.path.isdir(dest) and not os.path.exists(dest):
+            os.makedirs(dest_dir)
+            dest = os.path.join(dest_dir, self.create_filename(dest_dir))  
+
+        # At this point dest is a non-existing file
+        with open(dest, 'wb') as fd:
+            pickle.dump(sound_collection, fd)            
+
+    #------------------------------------
+    # load
+    #-------------------
+    
+    @classmethod
+    def load(cls, src):
+        
+        with open(src, 'rb') as fd:
+            return pickle.load(fd)
+
+    #------------------------------------
+    # create_filename
+    #-------------------
+    
+    def create_filename(self, dest_dir):
+        '''
+        Create a file name that is not in the 
+        given directory.
+        
+        @param dest_dir:
+        @type dest_dir:
+        @return filename 
+        @rtype str
+        '''
+        t = datetime.datetime.now()
+        orig_filename = t.isoformat().replace('-','_').replace(':','_')
+        uniquifier = 0
+        filename = orig_filename
+        while os.path.exists(filename):
+            uniquifier += 1
+            filename = f"{orig_filename}_{str(uniquifier)}"
+            
+        return filename
 
 # --------------------------- Class XenoCantoRecording
 
