@@ -675,10 +675,10 @@ if __name__ == '__main__':
                         action='store_true',
                         help="download the sound files (implies --collect_info"
                         )
-    parser.add_argument('--one_each_species',
+    parser.add_argument('--all_recordings',
                         action='store_true',
-                        help="only download one recording for each bird; default: True",
-                        default=True
+                        help="download all recordings rather than one per species; default: one per.",
+                        default=False
                         )
     parser.add_argument('birds_to_process',
                         type=str,
@@ -725,8 +725,9 @@ if __name__ == '__main__':
         sound_collection.save()
         
     if 'download' in todo:
+        one_per_species = not args.all_recordings
         sound_collection.download(birds_to_process,
-                                  one_per_species=args.one_per_species, 
+                                  one_per_species=one_per_species,
                                   courtesy_delay=args.timedelay)
         sound_collection.save()
 
