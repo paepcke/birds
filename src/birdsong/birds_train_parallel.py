@@ -2010,7 +2010,7 @@ class BirdTrainer(object):
                 self.net_name,
                 num_classes=self.num_classes,  # num_classes
                 num_layers_to_retain=self.num_pretrained_layers,
-                to_grayscale=True
+                to_grayscale=False
                 )
             
 #             raw_model = NetUtils.get_net(
