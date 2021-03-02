@@ -751,11 +751,18 @@ if __name__ == '__main__':
 
     #**************
     hparms_spec = {'lr' : [0.001],
-                   'net_name'   : ['resnet18'],
+                   'net_name'   : ['densenet201'],
                    'num_pretrained_layers' : [6], 
                    'optimizer'  : ['SGD'],
                    'batch_size' : [4],
                    }
+    
+#     hparms_spec = {'lr' : [0.001],
+#                    'net_name'   : ['resnet18'],
+#                    'num_pretrained_layers' : [6], 
+#                    'optimizer'  : ['SGD'],
+#                    'batch_size' : [4],
+#                    }
     
 #     hparms_spec = {'lr' : [0.001],
 #                    'net_name'   : ['resnet18', 'resnet50'],

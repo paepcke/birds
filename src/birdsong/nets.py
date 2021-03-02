@@ -23,6 +23,11 @@ class NetUtils:
     
     '''
     
+    # Regex pattern to separate 'resnet18' into ('resnet', '18'),
+    # or 'resnet' without version into ('resnet', ''):
+     
+    net_name_separation_pat = re.compile(r'([a-zA-Z]*)([0-9]*)$')
+    
     resnet_pattern = re.compile(r'resnet([0-9]*)$')
     
     #------------------------------------
@@ -32,25 +37,16 @@ class NetUtils:
     @classmethod
     def get_net(cls, net_name, **kwargs):
         
-        # In case of resnet: deal with net_name containing
-        # the version, like resnet18, resnet50, rather
-        # than (or in addition to) having the kwarg
-        # 'resnet_version' set. Remove the version, and
-        # add (or overwrite an existing) resnet_version
-        # keyword before entering the network conditional:  
-        
-        resnet_match = cls.resnet_pattern.match(net_name)
-        if resnet_match is not None:
-            # Version number is in regex group0:
-            resnet_version = int(resnet_match.groups()[0])
-            # Note the version in a kwarg for get_resnet_partially_trained:
-            kwargs['resnet_version'] = resnet_version
-            net_name = 'resnet'
-        
-        if net_name.lower() == 'basicnet':
+        (net_name, net_version) = cls.name_and_version_from_net_name(net_name)
+        kwargs['net_version'] = net_version
+        net_name = net_name.lower()
+
+        if net_name == 'basicnet':
             return BasicNet(**kwargs)
-        elif net_name.lower() == 'resnet':
+        elif net_name == 'resnet':
             return cls._get_resnet_partially_trained(**kwargs)
+        elif net_name == 'densenet':
+            return cls._get_densenet_partially_trained(**kwargs)
         else:
             raise NotImplementedError(f"Network {net_name} unavailable")
 
@@ -62,7 +58,7 @@ class NetUtils:
     def _get_resnet_partially_trained(cls, 
                                      num_classes=None, 
                                      num_layers_to_retain=6,
-                                     resnet_version=18,
+                                     net_version=18,
                                      to_grayscale=False
                                      ): 
 
@@ -91,26 +87,29 @@ class NetUtils:
         @param num_layers_to_retain: how many layers to
             freeze, protecting them from training.
         @type num_layers_to_retain: int
-        @param resnet_version: which Resnet to return: 18 or 50
-        @type resnet_version: int
+        @param net_version: which Resnet to return: 18 or 50
+        @type net_version: int
         @return: a fresh model
         @rtype: pytorch.nn 
         '''
 
+        
         if num_classes is None:
-            raise ValueError("Resnetxx requires a num_classes argument")
+            raise ValueError("Num_classes argument is required")
+        
+        net_name = 'resnet'
         available_versions = (18,34,50)
         
-        if resnet_version not in available_versions:
-            raise ValueError(f"Resnet version must be one of {available_versions}")
+        if net_version not in available_versions:
+            raise ValueError(f"{net_name} version must be one of {available_versions}")
         
         model = hub.load('pytorch/vision:v0.6.0', 
-                         f'resnet{resnet_version}',
+                         f'{net_name}{net_version}',
                          pretrained=True if num_layers_to_retain > 0 else False
                          )
 
         if to_grayscale:
-            model = cls._first_layer_to_in_channel1(model, resnet_version)
+            model = cls._first_layer_to_in_channel1(model, net_version)
 
         cls.freeze_model_layers(model, num_layers_to_retain)
 
@@ -124,11 +123,52 @@ class NetUtils:
         return model
     
     #------------------------------------
+    # _get_densenet_partially_trained 
+    #-------------------
+
+    @classmethod
+    def _get_densenet_partially_trained(cls,
+                                        num_classes=None, 
+                                        num_layers_to_retain=6,
+                                        net_version=201,
+                                        to_grayscale=False
+                                        ):
+
+        if num_classes is None:
+            raise ValueError("Num_classes argument is required")
+        
+        net_name = 'densenet'
+        available_versions = (121,161,169,201)
+        
+        if net_version not in available_versions:
+            raise ValueError(f"{net_name} version must be one of {available_versions}")
+        
+        model = hub.load('pytorch/vision:v0.6.0', 
+                         f'{net_name}{net_version}',
+                         pretrained=True if num_layers_to_retain > 0 else False
+                         )
+
+        if to_grayscale:
+            model = cls._first_layer_to_in_channel1(model, net_version)
+
+        cls.freeze_model_layers(model, num_layers_to_retain)
+
+        # Reduce from 1000 to num_classes targets:
+        num_in_features = model.fc.in_features
+        model.fc = nn.Linear(num_in_features, num_classes)
+        
+        # Create a property on the model that 
+        # returns the number of output classes:
+        model.num_classes = model.fc.out_features
+        return model
+
+    
+    #------------------------------------
     # _first_layer_to_in_channel1
     #-------------------
 
     @classmethod
-    def _first_layer_to_in_channel1(cls, model, resnet_version):
+    def _first_layer_to_in_channel1(cls, model, net_version):
         '''
         For resnet18, the first layer has
         two blocks:
@@ -155,8 +195,8 @@ class NetUtils:
         @type cls:
         @param model:
         @type model:
-        @param resnet_version:
-        @type resnet_version:
+        @param net_version:
+        @type net_version:
         '''
         
         # One could get the first layer's block0
@@ -209,7 +249,7 @@ class NetUtils:
                       rank, 
                       local_leader_rank, 
                       log,
-                      resnet_version,
+                      net_version,
                       num_layers_to_retain
                       ):  # @DontTrace
         '''
@@ -227,7 +267,7 @@ class NetUtils:
         @type log: LoggingService
         '''
 
-        if resnet_version not in (18,50):
+        if net_version not in (18,50):
             raise ValueError("Resnet version must be 18 or 50")
 
         hostname = socket.gethostname()
@@ -240,7 +280,7 @@ class NetUtils:
         device = device('cuda' if cuda.is_available() else 'cpu')
         if device == device('cpu'):
             model = hub.load('pytorch/vision:v0.6.0', 
-                             'resnet18' if resnet_version == 18 else 'resnet50', 
+                             'resnet18' if net_version == 18 else 'resnet50', 
                              pretrained=True if num_layers_to_retain > 0 else False
                              )
             
@@ -250,7 +290,7 @@ class NetUtils:
         elif rank == local_leader_rank:
             log.info(f"Procss with rank {rank} on {hostname} loading model")
             model = hub.load('pytorch/vision:v0.6.0', 
-                             'resnet18' if resnet_version == 18 else 'resnet50', 
+                             'resnet18' if net_version == 18 else 'resnet50', 
                              pretrained=True if num_layers_to_retain > 0 else False
                              )
 
@@ -269,7 +309,7 @@ class NetUtils:
             # Get the cached version:
             log.info(f"Procss with rank {rank} on {hostname} laoding model")
             model = hub.load('pytorch/vision:v0.6.0', 
-                             'resnet18' if resnet_version == 18 else 'resnet50', 
+                             'resnet18' if net_version == 18 else 'resnet50', 
                              pretrained=True if num_layers_to_retain > 0 else False
                              )
 
@@ -310,6 +350,41 @@ class NetUtils:
             layers_frozen += 1
         return model
         
+    #------------------------------------
+    # name_and_version_from_net_name 
+    #-------------------
+    
+    @classmethod
+    def name_and_version_from_net_name(cls, net_name_and_version):
+        '''
+        Given a network name with or without version, 
+        return:
+           o (<network_name>, <network_version>)
+           o None if name cannot possibly be a traditionally
+             formatted network name (e.g. starts with a digit)
+           o (<network_name>, None) if network name had no
+             version.
+             
+        Ex: returns ('resnet', 18) for input 'resnet18'
+            returns ('resnet', None) for input 'resnet'
+             
+        @param net_name_and_version: name of network, such as 'resnet18'
+        @type net_name_and_version: str
+        @return: tuple of network name, and version
+        @rtype:  {None | (str, {None | int}}
+        '''
+
+        match = cls.net_name_separation_pat.match(net_name_and_version)
+        if match is None:
+            return None
+        (net_name, version) = match.groups()
+        try:
+            version = int(version)
+        except ValueError:
+            # No version was part of the name
+            version = None
+        return (net_name, version)
+
 
 # ---------------------- BasicNet --------------
 

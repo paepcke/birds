@@ -2015,7 +2015,7 @@ class BirdTrainer(object):
 #                 self.net_name,
 #                 num_classes=self.num_classes,  # num_classes
 #                 num_layers_to_retain=self.num_pretrained_layers,
-#                 resnet_version=18,
+#                 net_version=18,
 #                 to_grayscale=True
 #                 )
 #             raw_model = BasicNet(self.num_classes, 
@@ -2025,7 +2025,7 @@ class BirdTrainer(object):
 
 #             raw_model = NetUtils.get_resnet_partially_trained(self.num_classes,
 #                                                               num_layers_to_retain=6,
-#                                                               resnet_version=18
+#                                                               net_version=18
 #                                                               )
             #*************
         else:
@@ -2034,7 +2034,7 @@ class BirdTrainer(object):
             raw_model = NetUtils.get_model_ddp(self.rank, 
                                                self.local_leader_rank, 
                                                self.log,
-                                               resnet_version=18,
+                                               net_version=18,
                                                num_layers_to_retain=6
                                                )
         
