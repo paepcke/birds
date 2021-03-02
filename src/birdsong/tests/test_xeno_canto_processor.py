@@ -12,8 +12,8 @@ from logging_service.logging_service import LoggingService
 from birdsong.xeno_canto_processor import XenoCantoCollection, XenoCantoRecording
 
 
-#*****TEST_ALL = True
-TEST_ALL = False
+TEST_ALL = True
+#TEST_ALL = False
 
 class XenoCantoProcessorTester(unittest.TestCase):
 
@@ -55,8 +55,8 @@ class XenoCantoProcessorTester(unittest.TestCase):
     # test_to_json_xc_recording 
     #-------------------
     
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    def test_to_json_xc_recording(self):
+    #****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_recording_to_json_xc_recording(self):
         coll = XenoCantoCollection.load(self.tst_file)
         rec  = coll['Tangaragyrola'][0]
         
