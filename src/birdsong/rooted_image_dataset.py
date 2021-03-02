@@ -133,7 +133,7 @@ class SingleRootImageDataset:
         if to_grayscale:
             img_transforms.append(transforms.Grayscale())
                           
-        self.transform_img = transforms.Compose(transforms)
+        self.transform_img = transforms.Compose(img_transforms)
 
         #*******************        
 
