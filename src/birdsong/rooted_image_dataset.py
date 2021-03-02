@@ -98,7 +98,8 @@ class SingleRootImageDataset:
     def __init__(self, 
                  filepath,
                  sample_width=SAMPLE_WIDTH,
-                 sample_height=SAMPLE_HEIGHT
+                 sample_height=SAMPLE_HEIGHT,
+                 to_grayscale=False
                  ):
         '''
         
@@ -110,6 +111,9 @@ class SingleRootImageDataset:
             to be scaled
         @type sample_height: pixel height to which images are 
             to be scaled
+        @param to_grayscale: do or do not convert images
+            to 1-channel grayscale
+        @type to_grayscale: bool
         @return: new instance of MultiRootImageDataset
         @rtype MultiRootImageDataset
         @raises ValueError if any of the roots is not a string.
@@ -120,13 +124,16 @@ class SingleRootImageDataset:
 #                 transforms.ToTensor(),
 #                 transforms.Grayscale()
 #                 ])
-        self.transform_img = transforms.Compose([
-                transforms.Resize((sample_width, sample_height)),  # should actually be 1:3 but broke the system
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225]),
-                transforms.Grayscale()
-                ])
+
+        img_transforms = [transforms.Resize((sample_width, sample_height)),  # should actually be 1:3 but broke the system
+                          transforms.ToTensor(),
+                          transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                               std=[0.229, 0.224, 0.225])
+                          ]
+        if to_grayscale:
+            img_transforms.append(transforms.Grayscale())
+                          
+        self.transform_img = transforms.Compose(transforms)
 
         #*******************        
 

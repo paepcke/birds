@@ -45,9 +45,12 @@ momentum      = 0.9
 # same on all collaborating machines:
 seed          = 42
 
-# Training images should be scaled to (in pixels):
+# Training images should be scaled to (in pixels),
+# and maybe transformed to 1-channel grayscale:
 sample_width  = 400
-sample_height = 400 
+sample_height = 400
+to_grayscale  = False
+
 verbose       = yes
 # Number of seconds between printing status
 # to the console, if verbose is 'yes':

@@ -343,7 +343,10 @@ class BirdTrainer(object):
         #master_addr_in_environ = self.comm_info["MASTER_ADDR"]
         #master_port_in_environ = self.comm_info["MASTER_PORT"]
 
-        self.dataloader = self.initialize_data_access(batch_size)
+        self.dataloader = self.initialize_data_access(
+            batch_size,
+            to_grayscale=self.config.Training.getboolean('to_grayscale')
+            )
 
         dataset = self.dataloader.dataset
         
@@ -1919,7 +1922,7 @@ class BirdTrainer(object):
     # initialize_data_access 
     #-------------------
     
-    def initialize_data_access(self, batch_size):
+    def initialize_data_access(self, batch_size, to_grayscale=False):
         '''
         Creates dataset and dataloader instances.
         If operating in Distributed Data Parallel,
@@ -1927,6 +1930,10 @@ class BirdTrainer(object):
         
         @param batch_size: desired batch size
         @type batch_size: int
+        @param to_grayscale: do or do not tell dataset
+            to convert images to grayscale as the
+            are pulled from disk
+        @type to_grayscale: bool
         @return: a dataloader in the pytorch sense
         @rtype CrossValidatingDataLoader, or subclass
         '''
@@ -1938,7 +1945,8 @@ class BirdTrainer(object):
         
         dataset  = MultiRootImageDataset(self.root_train_test_data,
                                          sample_width=self.config.Training.getint('sample_width'),
-                                         sample_height=self.config.Training.getint('sample_width')
+                                         sample_height=self.config.Training.getint('sample_width'),
+                                         to_grayscale=to_grayscale
                                          )
 
 
