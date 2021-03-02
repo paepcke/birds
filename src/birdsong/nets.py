@@ -1,4 +1,3 @@
-import copy
 import socket
 import re
 
@@ -190,6 +189,8 @@ class NetUtils:
             return cls._resnet_replace_first_layer(model)
         elif net_name == 'densenet':
             return cls._densenet_replace_first_layer(model)
+        else:
+            raise NotImplementedError(f"Network {net_name} not supported")
 
     #------------------------------------
     # _densenet_replace_first_layer 
