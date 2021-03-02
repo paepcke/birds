@@ -64,14 +64,21 @@ import datetime
 import os
 from pathlib import Path
 import pickle
+
+# Use json for writing:
+import json
+
+# Use json5 for reading. It can handle
+# slightly looser json, such as
+# single-quotes around keys, instead
+# of insisting on double_quotes:
+
+import json5
+
 import re
 import sys
 import time
 
-#**************
-#import librosa
-#import librosa.display
-#**************
 from logging_service import LoggingService
 import requests
 from scipy import signal
@@ -80,6 +87,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
+#**************
+#import librosa
+#import librosa.display
+#**************
 class XenoCantoProcessor:
     
     def __init__(self, load_dir=None, bird_names=None):
@@ -173,6 +184,14 @@ class XenoCantoCollection(UserDict):
         super().__init__()
         
         self.log = LoggingService()
+        
+        # 'Secret' entry: used when creating
+        # from json string (see from_json()):
+        
+        if bird_names is None:
+            # Have caller initialize the instance vars
+            return
+        
         self.courtesy_delay = courtesy_delay
         
         curr_dir = os.path.dirname(__file__)
@@ -346,6 +365,13 @@ class XenoCantoCollection(UserDict):
         return self.data.values()
     
     #------------------------------------
+    # items
+    #-------------------
+    
+    def items(self):
+        return self.data.items()
+    
+    #------------------------------------
     # download 
     #-------------------
     
@@ -419,6 +445,19 @@ class XenoCantoCollection(UserDict):
         return num_recordings
 
     #------------------------------------
+    # __eq__ 
+    #-------------------
+    
+    def __eq__(self, other_coll):
+        
+        for phylo_name, rec_obj_list in self.items():
+            other_rec_obj_list = other_coll[phylo_name]
+            for rec_obj_this, rec_obj_other in zip(rec_obj_list, other_rec_obj_list):
+                if rec_obj_this != rec_obj_other:
+                    return False
+        return True
+
+    #------------------------------------
     # __repr__ 
     #-------------------
     
@@ -486,12 +525,12 @@ class XenoCantoCollection(UserDict):
         if os.path.exists(dest):
             answer = input(f"File {os.path.basename(dest)} exists; overwrite? (y/N): ")
             if answer not in ('y','Y','yes','Yes', ''):
-                self.log.info("Collection save aborted")
+                self.log.info("Collection pickle save aborted on request")
                 return None
 
         # At this point dest is a non-existing file
         with open(dest, 'wb') as fd:
-            pickle.dump(sound_collection, fd)
+            pickle.dump(self, fd)
             
         return dest
 
@@ -504,6 +543,98 @@ class XenoCantoCollection(UserDict):
         
         with open(src, 'rb') as fd:
             return pickle.load(fd)
+
+    #------------------------------------
+    # to_json 
+    #-------------------
+    
+    def to_json(self, dest=None, force=False):
+        '''
+        Creates a JSON string from this 
+        collection. If dest is a string,
+        it is assumed to be a destination
+        file where the json will be saved.
+        If none, the string is returned.
+        
+        If the file exists, the user is warned,
+        unless force is True.
+        
+        
+        @param dest: optional destination file
+        @type dest: {None | str}
+        @param force: set to True if OK to overwrite
+            dest file. Default: ask permission
+        @type force: bool
+        @return destination file name if written to
+            file, else the JSON string
+        '''
+
+        jstr = "{"
+        for phylo_name, rec_list in self.items():
+            # Each species entry's phylo name (i.e. key)
+            # is a key in the collection level JSON: 
+            jstr += f'"{phylo_name}" : ['
+            # The value is a JSON list of jsonized recordings:
+            for rec_obj in rec_list:
+                jstr += f"{rec_obj.to_json()},"
+            
+            # Replace the trailing with the JSON closing bracket,
+            # and a comma in prep of the next collection
+            # level recording entry:
+            jstr = f"{jstr[:-1]}],"
+
+        # All done: replace trailing comma
+        # with closing brace of top level:
+        jstr = f"{jstr[:-1]}}}"
+
+        if dest is None:
+            return jstr
+        
+        if os.path.exists(dest) and not force:
+            answer = input(f"File {os.path.basename(dest)} exists; overwrite? (y/N): ")
+            if answer not in ('y','Y','yes','Yes', ''):
+                self.log.info("Collection JSON save aborted on request")
+                return None
+
+        # At this point dest is a non-existing file,
+        # or one that exists but ok to overwrite:
+        with open(dest, 'w') as fd:
+            fd.write(jstr)
+            
+        return dest
+
+    #------------------------------------
+    # from_json 
+    #-------------------
+    
+    @classmethod
+    def from_json(cls, json_str=None, src=None):
+        
+        if json_str is None and src is None:
+            raise ValueError("One of json_str or src must be non-None")
+        if json_str is not None and src is not None:
+            raise ValueError("Only one of json_str or src can be non-None")
+        
+        if src is not None:
+            # Read JSON from file:
+            if not os.path.exists(src):
+                raise FileNotFoundError(f"File {src} not found")
+            with open(src, 'rb') as fd:
+                json_str = fd.read()
+            
+        inst_vars = json5.loads(json_str)
+        inst = XenoCantoCollection(None)
+        # Recover the individual recordings into
+        # XenoCantoRecording instances:
+        for phylo_name in inst_vars.keys():
+            jstr_list = inst_vars[phylo_name]
+            rec_obj_list = []
+            for rec_jstr in jstr_list:
+                rec_obj_list.append(XenoCantoRecording.from_json(rec_jstr))
+            inst_vars[phylo_name] = rec_obj_list
+            
+        inst.data.update(inst_vars)
+        return inst
 
     #------------------------------------
     # create_filename
@@ -561,6 +692,14 @@ class XenoCantoRecording:
             self.log = LoggingService()
         else:
             self.log = log
+            
+        # 'Secret' entry: used when creating
+        # from json string (see from_json()):
+        
+        if recording_metadata is None:
+            # Have caller initialize the instance vars
+            return
+         
         curr_dir = os.path.dirname(__file__)
         if load_dir is None:
             self.load_dir = os.path.join(curr_dir, 'recordings')
@@ -625,28 +764,6 @@ class XenoCantoRecording:
         return 
 
     #------------------------------------
-    # read_recording_specs 
-    #-------------------
-    
-    def read_recording_specs(self, filename):
-        '''
-        If possible, reads the following properties
-        from the sound file:
-        
-            Audio file properties
-            File type	mp3
-            Length	42.3 (s)
-            Sampling rate	48000 (Hz)
-            Bitrate of mp3	196496 (bps)
-            Channels	2 (stereo)
-                    
-        @param filename:
-        @type filename:
-        '''
-        
-        pass
-
-    #------------------------------------
     # __repr__ 
     #-------------------
     
@@ -659,6 +776,53 @@ class XenoCantoRecording:
     
     def __str__(self):
         return self.__repr__()
+
+    #------------------------------------
+    # __eq__
+    #-------------------
+    
+    def __eq__(self, other_recording):
+        for inst_var_nm, inst_var_val in self.__dict__.items():
+            if type(inst_var_val) == str:
+                if other_recording.__dict__[inst_var_nm] != inst_var_val:
+                    return False
+            elif type(inst_var_val) == LoggingService:
+                if type(other_recording.__dict__[inst_var_nm]) != LoggingService:
+                    return False
+            else:
+                # Inst var of unexpected type:
+                return False
+        return True
+
+    #------------------------------------
+    # to_json 
+    #-------------------
+    
+    def to_json(self):
+        
+        as_dict = {inst_var_nm : inst_var_value
+                   for inst_var_nm, inst_var_value
+                   in self.__dict__.items()
+                   if type(inst_var_value) == str
+                   }
+        # Use json, not json5, b/c the latter
+        # does not quote the first key...bug there!
+        return json.dumps(as_dict)
+
+    #------------------------------------
+    # from_json 
+    #-------------------
+    
+    @classmethod
+    def from_json(cls, json_str):
+        # Use json5, which can handle
+        # slightly looser json, such as
+        # single-quotes around keys, instead
+        # of insisting on double_quotes:
+        inst_vars = json5.loads(json_str)
+        inst = XenoCantoRecording(None)
+        inst.__dict__.update(inst_vars)
+        return inst
 
 # ------------------------ Main ------------
 if __name__ == '__main__':
@@ -687,7 +851,7 @@ if __name__ == '__main__':
                         )
     parser.add_argument('--download',
                         action='store_true',
-                        help="download the sound files (implies --collect_info"
+                        help="download the (birds_to_process) sound files (implies --collect_info"
                         )
     parser.add_argument('--all_recordings',
                         action='store_true',
@@ -700,10 +864,12 @@ if __name__ == '__main__':
                         help='Repeatable: <genus>+<species>. Ex: Tangara_gyrola',
                         default=[bird.replace('+', '_') for bird in birds])
 
+
     args = parser.parse_args()
 
     # For reporting to user: list
-    # of actions to do:
+    # of actions to do by getting them
+    # as strings from the args instance:
     todo = [action_name 
             for action_name
             in ['collect_info', 'download']
