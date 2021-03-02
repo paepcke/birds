@@ -231,6 +231,8 @@ class BirdTrainer(object):
         @type unit_testing: bool
         '''
 
+        if unit_testing:
+            return
         # Just for informative info/error messages:
         self.hostname = socket.gethostname()
         

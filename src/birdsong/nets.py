@@ -109,7 +109,7 @@ class NetUtils:
                          )
 
         if to_grayscale:
-            model = cls._first_layer_to_in_channel1(model, net_version)
+            model = cls._first_layer_to_in_channel1(model, net_name)
 
         cls.freeze_model_layers(model, num_layers_to_retain)
 
@@ -130,7 +130,7 @@ class NetUtils:
     def _get_densenet_partially_trained(cls,
                                         num_classes=None, 
                                         num_layers_to_retain=6,
-                                        net_version=201,
+                                        net_version=161,
                                         to_grayscale=False
                                         ):
 
@@ -149,17 +149,18 @@ class NetUtils:
                          )
 
         if to_grayscale:
-            model = cls._first_layer_to_in_channel1(model, net_version)
+            model = cls._first_layer_to_in_channel1(model, net_name)
 
         cls.freeze_model_layers(model, num_layers_to_retain)
 
         # Reduce from 1000 to num_classes targets:
-        num_in_features = model.fc.in_features
-        model.fc = nn.Linear(num_in_features, num_classes)
+        model = cls._mod_classifier_num_classes(model, 
+                                                net_name, 
+                                                num_classes)
         
         # Create a property on the model that 
         # returns the number of output classes:
-        model.num_classes = model.fc.out_features
+        model.num_classes = num_classes
         return model
 
     
@@ -168,7 +169,82 @@ class NetUtils:
     #-------------------
 
     @classmethod
-    def _first_layer_to_in_channel1(cls, model, net_version):
+    def _first_layer_to_in_channel1(cls, model, net_name):
+        '''
+        Replace input layer with an equivalent
+        layer that expects only one channel
+        (grayscale), rather than the default 
+        three (RGB). There are differences in how
+        the network families call their layers.
+        So, need to distinguish:
+                
+        @param cls:
+        @type cls:
+        @param model:
+        @type model:
+        @param net_name:
+        @type net_name:
+        '''
+        
+        if net_name == 'resnet':
+            return cls._resnet_replace_first_layer(model)
+        elif net_name == 'densenet':
+            return cls._densenet_replace_first_layer(model)
+
+    #------------------------------------
+    # _densenet_replace_first_layer 
+    #-------------------
+    
+    @classmethod
+    def _densenet_replace_first_layer(cls, model):
+        
+        
+        # Get the input layer module, which
+        # is a torch.Conv2d instance:
+        
+        l_in = model.features.conv0
+        
+        # l_in.weight.shape is: torch.Size([96, 3, 7, 7])
+        # Get the sum of the RGB planes (the dim that has 3):
+        grayscale_weight = torch.sum(l_in.weight,
+                                     dim=1, 
+                                     keepdim=True)
+
+        # Now: grayscale_weight.shape: 
+        #    torch.Size([96, 1, 7, 7])
+        
+        # Make a new input layer with the
+        # same parameters as the current one:
+        l_in_new = nn.Conv2d(
+                1, # in-channel
+                l_in.out_channels,
+                kernel_size=l_in.kernel_size,
+                stride=l_in.stride,
+                padding=l_in.padding,
+                dilation=l_in.dilation,
+                groups=l_in.groups,
+                bias=l_in.bias,
+                padding_mode=l_in.padding_mode
+                )
+
+        
+        # Suppress tracking of the dimension
+        # change by the layer; therefore the
+        # no_grad():
+        with torch.no_grad():
+            del l_in_new.weight
+            l_in_new.weight = nn.Parameter(grayscale_weight)
+
+        model.features.conv0 = l_in_new
+        
+        return model
+    
+    #------------------------------------
+    # _resnet_replace_first_layer 
+    #-------------------
+    
+    @classmethod
+    def _resnet_replace_first_layer(cls, model):
         '''
         For resnet18, the first layer has
         two blocks:
@@ -191,55 +267,83 @@ class NetUtils:
           )
         )
         
-        @param cls:
-        @type cls:
         @param model:
         @type model:
-        @param net_version:
-        @type net_version:
         '''
+        # Get input layer whose weight attr is torch.Size([64, 3, 7, 7])
+        l_in = model.conv1
         
-        # One could get the first layer's block0
-        # conv1 layer like this:
-        #   list(model.layer1.children())[0].conv1
-        # But this is shorter:
-        l0_b0_conv1 = model.conv1
-        saved_conv1_weight = copy.deepcopy(l0_b0_conv1.weight)
-        saved_conv1_bias   = copy.deepcopy(l0_b0_conv1.bias)
-        curr_conv_layer_attrs = {
-            'kernel_size' : l0_b0_conv1.kernel_size,
-            'out_channels' : l0_b0_conv1.out_channels,
-            'stride' : l0_b0_conv1.stride,
-            'padding' : l0_b0_conv1.padding,
-            'bias' : l0_b0_conv1.bias
-            }
-        # Create a Conv2d layer just like the existing one, 
-        # but change the input channel (from its default 64) to 1:
-        new_l0_b0_conv1 = nn.Conv2d(1, **curr_conv_layer_attrs)
-        
-        # The original conv1 weights contain three channels,
-        # for RG&B. Sum them to collapse into one input
-        # channel. We start with:
-        #
-        #     saved_conv1_weight.shape 
-        #        --> torch.Size([64, 3, 7, 7])
-        #
-        # and want to end up with: torch.Size([64, 1, 7, 7])
-        # The keepdim=True is required, b/c otherwise the sum
-        # method removes dim1 from the result:
-        
-        grayscale_weight = torch.sum(saved_conv1_weight, 
+        # Weights are: l_in.weight.shape
+        # torch.Size([64, 3, 7, 7])
+        # Get the sum of the RGB planes (the dim that has 3):
+        grayscale_weight = torch.sum(l_in.weight,
                                      dim=1, 
                                      keepdim=True)
-        # ***** Confused about Parameter vs. its data
-        saved_conv1_weight.data = grayscale_weight
+        # Now: grayscale_weight.shape: 
+        #    torch.Size([64, 1, 7, 7])
         
-        new_l0_b0_conv1.weight.data = saved_conv1_weight
-        new_l0_b0_conv1.bias        = saved_conv1_bias
+        # Make a new input layer with the
+        # same parameters as the current one:
+        l_in_new = nn.Conv2d(
+                1, # in-channel
+                l_in.out_channels,
+                kernel_size=l_in.kernel_size,
+                stride=l_in.stride,
+                padding=l_in.padding,
+                dilation=l_in.dilation,
+                groups=l_in.groups,
+                bias=l_in.bias,
+                padding_mode=l_in.padding_mode
+                )
         
-        model.conv1 = new_l0_b0_conv1
+        # l_in_new.weight.shape: 
+        # torch.Size([64, 1, 7, 7])        
+
+        # Suppress tracking of the dimension
+        # change by the layer; therefore the
+        # no_grad():
+        with torch.no_grad():
+            del l_in_new.weight
+            l_in_new.weight = nn.Parameter(grayscale_weight)
+
+        model.conv1 = l_in_new
+        
         return model
 
+    #------------------------------------
+    # _mod_classifier_num_classes 
+    #-------------------
+    
+    @classmethod
+    def _mod_classifier_num_classes(cls, model, net_name, new_num_classes):
+        '''
+        Replaces the output layer such that
+        it outputs only as many class logits
+        as we have classes. Models pretrained
+        on ImageNet come with 1000 class outputs.
+        
+        @param model: model instance to modify
+        @type model: torchvision.model
+        @param net_name: resnet or densenet
+        @type net_name: str
+        @param new_num_classes: desired number of 
+            output classes
+        @type new_num_classes: int
+        @return: modified model instance
+        @rtype: torchvision.model
+        '''
+        
+        if net_name == 'resnet':
+            num_in_features = model.fc.in_features
+            model.fc = nn.Linear(num_in_features, new_num_classes)
+        elif net_name == 'densenet':
+            num_in_features = model.classifier.in_features
+            model.classifier = nn.Linear(num_in_features, new_num_classes)
+        else:
+            raise NotImplementedError(f"Model {net_name} not supported")
+
+        return model
+    
     #------------------------------------
     # get_model_ddp 
     #-------------------
