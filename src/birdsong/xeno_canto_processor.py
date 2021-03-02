@@ -56,6 +56,50 @@ is saved to disk as a pickle.
 One can ask the XenoCantoCollection instance to
 download some or all recordings. Individual XenoCantoRecording
 instances also know how to download.
+
+Working with the collection:
+
+Clients can import the module, rather than calling
+from the command line. The resource can therefore
+be integrated into a workflow. 
+
+After the sound files are downloaded, the following
+is a template for use without re-contacting the Xeno Canto
+server:
+
+from birdsong.xeno_canto_processor import XenoCantoCollection, XenoCantoRecording
+coll = XenoCantoCollection.load('<path to pickled collection')
+
+# The following iterates through
+# XenoCantoRecording instances, *one*
+# recording of each species:
+
+for recording in coll:
+    print(recording.full_name)
+    print(recording.filepath)
+
+# The same, but all recordings of
+# every species:
+
+for recording in coll(one_per_bird_phylo=False):
+    print(recording.full_name)
+    print(recording.filepath)
+
+TODO:
+    o The filepath values in the XenoCantoRecording
+      instances will be stale as soon as downloaded
+      files are moved. Needed:
+      
+          In class XenoCantoCollection:
+          
+          def adjust_filepaths(self, to_replace, replacement, pattern=None):
+          
+              # runs through all XenoCantoRecording instances,
+              # and replaces the filepath value.
+              # Arguments would be flexible in that a regex
+              # pattern can be passed, or just a straight
+              # replacement
+
 """
 
 import argparse
