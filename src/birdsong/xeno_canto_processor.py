@@ -64,14 +64,21 @@ import datetime
 import os
 from pathlib import Path
 import pickle
+
+# Use json for writing:
+import json
+
+# Use json5 for reading. It can handle
+# slightly looser json, such as
+# single-quotes around keys, instead
+# of insisting on double_quotes:
+
+import json5
+
 import re
 import sys
 import time
 
-#**************
-#import librosa
-#import librosa.display
-#**************
 from logging_service import LoggingService
 import requests
 from scipy import signal
@@ -80,6 +87,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
+#**************
+#import librosa
+#import librosa.display
+#**************
 class XenoCantoProcessor:
     
     def __init__(self, load_dir=None, bird_names=None):
@@ -346,6 +357,13 @@ class XenoCantoCollection(UserDict):
         return self.data.values()
     
     #------------------------------------
+    # items
+    #-------------------
+    
+    def items(self):
+        return self.data.items()
+    
+    #------------------------------------
     # download 
     #-------------------
     
@@ -491,7 +509,7 @@ class XenoCantoCollection(UserDict):
 
         # At this point dest is a non-existing file
         with open(dest, 'wb') as fd:
-            pickle.dump(sound_collection, fd)
+            pickle.dump(self, fd)
             
         return dest
 
@@ -504,6 +522,44 @@ class XenoCantoCollection(UserDict):
         
         with open(src, 'rb') as fd:
             return pickle.load(fd)
+
+    #------------------------------------
+    # to_json 
+    #-------------------
+    
+    def to_json(self):
+
+        jstr = "{"
+        for phylo_name, rec_list in self.items():
+            # Each species entry's phylo name (i.e. key)
+            # is a key in the collection level JSON: 
+            jstr += f'"{phylo_name}" : ['
+            # The value is a JSON list of jsonized recordings:
+            for rec_obj in rec_list:
+                jstr += f"{rec_obj.to_json()},"
+            
+            # Replace the trailing with the JSON closing bracket,
+            # and a comma in prep of the next collection
+            # level recording entry:
+            jstr = f"{jstr[:-1]}],"
+
+        # All done: replace trailing comma
+        # with closing brace of top level:
+        jstr = f"{jstr[:-1]}}}"
+             
+        return jstr
+
+    #------------------------------------
+    # from_json 
+    #-------------------
+    
+    @classmethod
+    def from_json(cls, json_str):
+        inst_vars = json5.loads(json_str)
+        inst = XenoCantoRecording(None)
+        inst.__dict__.update(inst_vars)
+        return inst
+
 
     #------------------------------------
     # create_filename
@@ -561,6 +617,14 @@ class XenoCantoRecording:
             self.log = LoggingService()
         else:
             self.log = log
+            
+        # 'Secret' entry: used when creating
+        # from json string (see from_json()):
+        
+        if recording_metadata is None:
+            # Have caller initialize the instance vars
+            return
+         
         curr_dir = os.path.dirname(__file__)
         if load_dir is None:
             self.load_dir = os.path.join(curr_dir, 'recordings')
@@ -625,28 +689,6 @@ class XenoCantoRecording:
         return 
 
     #------------------------------------
-    # read_recording_specs 
-    #-------------------
-    
-    def read_recording_specs(self, filename):
-        '''
-        If possible, reads the following properties
-        from the sound file:
-        
-            Audio file properties
-            File type	mp3
-            Length	42.3 (s)
-            Sampling rate	48000 (Hz)
-            Bitrate of mp3	196496 (bps)
-            Channels	2 (stereo)
-                    
-        @param filename:
-        @type filename:
-        '''
-        
-        pass
-
-    #------------------------------------
     # __repr__ 
     #-------------------
     
@@ -659,6 +701,37 @@ class XenoCantoRecording:
     
     def __str__(self):
         return self.__repr__()
+
+
+    #------------------------------------
+    # to_json 
+    #-------------------
+    
+    def to_json(self):
+        
+        as_dict = {inst_var_nm : inst_var_value
+                   for inst_var_nm, inst_var_value
+                   in self.__dict__.items()
+                   if type(inst_var_value) == str
+                   }
+        # Use json, not json5, b/c the latter
+        # does not quote the first key...bug there!
+        return json.dumps(as_dict)
+
+    #------------------------------------
+    # from_json 
+    #-------------------
+    
+    @classmethod
+    def from_json(cls, json_str):
+        # Use json5, which can handle
+        # slightly looser json, such as
+        # single-quotes around keys, instead
+        # of insisting on double_quotes:
+        inst_vars = json5.loads(json_str)
+        inst = XenoCantoRecording(None)
+        inst.__dict__.update(inst_vars)
+        return inst
 
 # ------------------------ Main ------------
 if __name__ == '__main__':
@@ -687,7 +760,7 @@ if __name__ == '__main__':
                         )
     parser.add_argument('--download',
                         action='store_true',
-                        help="download the sound files (implies --collect_info"
+                        help="download the (birds_to_process) sound files (implies --collect_info"
                         )
     parser.add_argument('--all_recordings',
                         action='store_true',
@@ -700,10 +773,12 @@ if __name__ == '__main__':
                         help='Repeatable: <genus>+<species>. Ex: Tangara_gyrola',
                         default=[bird.replace('+', '_') for bird in birds])
 
+
     args = parser.parse_args()
 
     # For reporting to user: list
-    # of actions to do:
+    # of actions to do by getting them
+    # as strings from the args instance:
     todo = [action_name 
             for action_name
             in ['collect_info', 'download']
