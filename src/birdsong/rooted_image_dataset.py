@@ -427,7 +427,8 @@ class MultiRootImageDataset(SingleRootImageDataset):
     def __new__(cls,
                 roots,
                 sample_width=SAMPLE_WIDTH,
-                sample_height=SAMPLE_HEIGHT
+                sample_height=SAMPLE_HEIGHT,
+                to_grayscale=False
                 ):
         '''
         Creates a dataset with images from multiple
@@ -479,7 +480,9 @@ class MultiRootImageDataset(SingleRootImageDataset):
         # under the first root dir: 
         self = SingleRootImageDataset(roots[0], 
                                       sample_width, 
-                                      sample_height)
+                                      sample_height,
+                                      to_grayscale=to_grayscale
+                                      )
         self.sample_width  = sample_width
         self.sample_height = sample_height
 

@@ -345,7 +345,7 @@ class BirdTrainer(object):
 
         self.dataloader = self.initialize_data_access(
             batch_size,
-            to_grayscale=self.config.Training.getboolean('to_grayscale')
+            to_grayscale=self.config.getboolean('Training', 'to_grayscale')
             )
 
         dataset = self.dataloader.dataset
