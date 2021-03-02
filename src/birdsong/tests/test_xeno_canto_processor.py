@@ -6,6 +6,7 @@ Created on Mar 1, 2021
 import json5
 import os
 import unittest
+import tempfile
 
 from logging_service.logging_service import LoggingService
 
@@ -102,7 +103,7 @@ class XenoCantoProcessorTester(unittest.TestCase):
     # test_to_json_collection 
     #-------------------
     
-    #****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_to_json_collection(self):
         
         coll = XenoCantoCollection.load(self.tst_file)
@@ -133,6 +134,36 @@ class XenoCantoProcessorTester(unittest.TestCase):
             for rec_jstr in rec_dict_jstr_list:
                 rec_obj = XenoCantoRecording.from_json(rec_jstr)
                 self.assertEqual(rec_obj.phylo_name, phylo_nm)
+
+    #------------------------------------
+    # test_coll_json_to_file
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_coll_json_to_file(self):
+        coll = XenoCantoCollection.load(self.tst_file)
+        
+        tmp_obj = tempfile.NamedTemporaryFile(suffix='.json', 
+                                              prefix='xeno_canto_tst', 
+                                              dir='/tmp', 
+                                              delete=False)
+        fname = tmp_obj.name
+        
+        new_coll = None
+        try:
+            # Write to file (which will already exist,
+            # therefore the force, so no request for confimation:
+            coll.to_json(dest=fname, force=True)
+            
+            # Get it back:
+            new_coll = XenoCantoCollection.from_json(src=fname)
+        finally:
+            os.remove(fname)
+        
+        #**********
+        #new_coll.__eq__(coll)
+        #**********
+        self.assertTrue(new_coll == coll) 
 
 # -------------- Main ---------
 if __name__ == "__main__":

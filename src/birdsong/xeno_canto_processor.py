@@ -184,6 +184,14 @@ class XenoCantoCollection(UserDict):
         super().__init__()
         
         self.log = LoggingService()
+        
+        # 'Secret' entry: used when creating
+        # from json string (see from_json()):
+        
+        if bird_names is None:
+            # Have caller initialize the instance vars
+            return
+        
         self.courtesy_delay = courtesy_delay
         
         curr_dir = os.path.dirname(__file__)
@@ -437,6 +445,19 @@ class XenoCantoCollection(UserDict):
         return num_recordings
 
     #------------------------------------
+    # __eq__ 
+    #-------------------
+    
+    def __eq__(self, other_coll):
+        
+        for phylo_name, rec_obj_list in self.items():
+            other_rec_obj_list = other_coll[phylo_name]
+            for rec_obj_this, rec_obj_other in zip(rec_obj_list, other_rec_obj_list):
+                if rec_obj_this != rec_obj_other:
+                    return False
+        return True
+
+    #------------------------------------
     # __repr__ 
     #-------------------
     
@@ -504,7 +525,7 @@ class XenoCantoCollection(UserDict):
         if os.path.exists(dest):
             answer = input(f"File {os.path.basename(dest)} exists; overwrite? (y/N): ")
             if answer not in ('y','Y','yes','Yes', ''):
-                self.log.info("Collection save aborted")
+                self.log.info("Collection pickle save aborted on request")
                 return None
 
         # At this point dest is a non-existing file
@@ -527,7 +548,26 @@ class XenoCantoCollection(UserDict):
     # to_json 
     #-------------------
     
-    def to_json(self):
+    def to_json(self, dest=None, force=False):
+        '''
+        Creates a JSON string from this 
+        collection. If dest is a string,
+        it is assumed to be a destination
+        file where the json will be saved.
+        If none, the string is returned.
+        
+        If the file exists, the user is warned,
+        unless force is True.
+        
+        
+        @param dest: optional destination file
+        @type dest: {None | str}
+        @param force: set to True if OK to overwrite
+            dest file. Default: ask permission
+        @type force: bool
+        @return destination file name if written to
+            file, else the JSON string
+        '''
 
         jstr = "{"
         for phylo_name, rec_list in self.items():
@@ -546,20 +586,55 @@ class XenoCantoCollection(UserDict):
         # All done: replace trailing comma
         # with closing brace of top level:
         jstr = f"{jstr[:-1]}}}"
-             
-        return jstr
+
+        if dest is None:
+            return jstr
+        
+        if os.path.exists(dest) and not force:
+            answer = input(f"File {os.path.basename(dest)} exists; overwrite? (y/N): ")
+            if answer not in ('y','Y','yes','Yes', ''):
+                self.log.info("Collection JSON save aborted on request")
+                return None
+
+        # At this point dest is a non-existing file,
+        # or one that exists but ok to overwrite:
+        with open(dest, 'w') as fd:
+            fd.write(jstr)
+            
+        return dest
 
     #------------------------------------
     # from_json 
     #-------------------
     
     @classmethod
-    def from_json(cls, json_str):
+    def from_json(cls, json_str=None, src=None):
+        
+        if json_str is None and src is None:
+            raise ValueError("One of json_str or src must be non-None")
+        if json_str is not None and src is not None:
+            raise ValueError("Only one of json_str or src can be non-None")
+        
+        if src is not None:
+            # Read JSON from file:
+            if not os.path.exists(src):
+                raise FileNotFoundError(f"File {src} not found")
+            with open(src, 'rb') as fd:
+                json_str = fd.read()
+            
         inst_vars = json5.loads(json_str)
-        inst = XenoCantoRecording(None)
-        inst.__dict__.update(inst_vars)
+        inst = XenoCantoCollection(None)
+        # Recover the individual recordings into
+        # XenoCantoRecording instances:
+        for phylo_name in inst_vars.keys():
+            jstr_list = inst_vars[phylo_name]
+            rec_obj_list = []
+            for rec_jstr in jstr_list:
+                rec_obj_list.append(XenoCantoRecording.from_json(rec_jstr))
+            inst_vars[phylo_name] = rec_obj_list
+            
+        inst.data.update(inst_vars)
         return inst
-
 
     #------------------------------------
     # create_filename
@@ -702,6 +777,22 @@ class XenoCantoRecording:
     def __str__(self):
         return self.__repr__()
 
+    #------------------------------------
+    # __eq__
+    #-------------------
+    
+    def __eq__(self, other_recording):
+        for inst_var_nm, inst_var_val in self.__dict__.items():
+            if type(inst_var_val) == str:
+                if other_recording.__dict__[inst_var_nm] != inst_var_val:
+                    return False
+            elif type(inst_var_val) == LoggingService:
+                if type(other_recording.__dict__[inst_var_nm]) != LoggingService:
+                    return False
+            else:
+                # Inst var of unexpected type:
+                return False
+        return True
 
     #------------------------------------
     # to_json 
