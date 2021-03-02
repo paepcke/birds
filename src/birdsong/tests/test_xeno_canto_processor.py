@@ -134,8 +134,6 @@ class XenoCantoProcessorTester(unittest.TestCase):
                 rec_obj = XenoCantoRecording.from_json(rec_jstr)
                 self.assertEqual(rec_obj.phylo_name, phylo_nm)
 
-        print(jstr)
-
 # -------------- Main ---------
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']
