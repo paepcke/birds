@@ -17,14 +17,35 @@ import sys
 
 # A list of the scientific names for the bird species in this study
 
+# List of bird species to download. List of tuples (species_name, split call and song?)
+# Not in list but was previously in this set: 'Catharus+ustulatus',
+BIRD_LIST = [('Amazilia+decora', True), ('Arremon+aurantiirostris', True),
+         ('Corapipo+altera', True),('Hylophilus+decurtatus', False),
+         ('Dysithamnus+mentalis', True),
+         ('Empidonax+flaviventris', False), ('Euphonia+imitans', False),
+         ('Henicorhina+leucosticta', True),
+         ('Lophotriccus+pileatus', True),
+         ('Parula+pitiayumi', True),
+         ('Tangara+gyrola', False), ('Tangara+icterocephala', False)
+        ]
 
-birds = ['Tangara+gyrola', 'Amazilia+decora', 'Hylophilus+decurtatus', 'Arremon+aurantiirostris',
-         'Dysithamnus+mentalis', 'Lophotriccus+pileatus', 'Euphonia+imitans', 'Tangara+icterocephala',
-         'Catharus+ustulatus', 'Parula+pitiayumi', 'Henicorhina+leucosticta', 'Corapipo+altera',
-         'Empidonax+flaviventris']
+def folder_prefix(birdname):
+    name_list = birdname.split('+')
+    #Folder prefix is first three letters of first and second part of birdname
+    folder_prefix = name_list[0][:3] + name_list[1][:3]
+    return folder_prefix.upper()
 
+def download_bird_samples(birds, out_dir, num_samples_per_species):
+    """
+    Wrapper function for downloading birds. Iterates through list birds and calls download function for each
+    species.
+    """
+    for birdname, split_call_song in birds:
+        # download samples from zeno-canto
+        num_records = download_bird(birdname, out_dir, folder_prefix(birdname), split_call_song, to_download=num_samples_per_species)
+        print(f"Downloaded {num_records} records for {birdname}.")
 
-def download_bird(bird, out_dir):
+def download_bird(birdname, out_dir, folder_prefix, split_call_song, to_download = -1):
     """
     Downloads all recording of a specifc bird species from zeno-canto
 
@@ -34,24 +55,56 @@ def download_bird(bird, out_dir):
     :type out_dir: str
     :returns num: returns the number of records downloaded for the bird
     """
+    # Create folders for samples to go in
+    # TODO: once merged with takao branch, use utils.make_folder
+    if split_call_song:
+        # Make folder for call and song
+        if not os.path.exists(os.path.join(out_dir, folder_prefix + "_S")):
+            os.mkdir(os.path.join(out_dir, folder_prefix + "_S"))
+        if not os.path.exists(os.path.join(out_dir, folder_prefix + "_C")):
+            os.mkdir(os.path.join(out_dir, folder_prefix + "_C"))
+    else:
+        # Make one folder for the species
+        if not os.path.exists(os.path.join(out_dir, folder_prefix)):
+            os.mkdir(os.path.join(out_dir, folder_prefix))
+
     response = requests.get("https://www.xeno-canto.org/api/2/recordings?query=" + birdname + "+len:5-60+q_gt:C")
     data = response.json()
 
     num_downloaded = 0
+    to_download = len(data['recordings']) if to_download == -1 else to_download
     for record in data['recordings']: # each bird may have multiple records
         #download file
         url = 'http:' + record['url'] + '/download'
         try:
             birdsong = requests.get(url)
-            num_downloaded += 1
         except:
             print(f"Could not download url: {url}")
             continue
         #write to file
         record_name = record['gen'] + record['sp'] + record['id']
-        filepath = os.path.join(out_dir, record_name) + '.wav'
+        if split_call_song:
+            if isinstance(record['type'], str):
+                type_list = record['type'].lower()
+            else:
+                type_list = [type.lower() for type in record['type']]
+            if 'song' in type_list:
+                folder_name = folder_prefix + "_S"
+            elif 'call' in type_list:
+                folder_name = folder_prefix + "_C"
+            else:
+                folder_name = folder_prefix
+                print(f"Unknown record type: type_list = {type_list}. Skipping {record_name}...")
+                continue
+            filepath = os.path.join(out_dir, folder_name, record_name) + '.wav'
+        else:
+            print("came here")
+            filepath = os.path.join(out_dir, folder_prefix, record_name) + '.wav'
+
         with open(filepath, 'wb') as f:
             f.write(birdsong.content)
+        num_downloaded += 1
+        if num_downloaded == to_download: break
     return num_downloaded
 
 
@@ -166,20 +219,27 @@ if __name__ == '__main__':
     """
     Parses the command line parameters and calls the appropriate functions..
     """
-    if len(sys.argv) == 4:
+    if len(sys.argv) <= 5:
         filepath_out = str(sys.argv[3])
         if sys.argv[1] in ["-d", "-da"]:  # user wants to download, second argument is the bird name, third is directory to save download
-
-            if not os.path.isdir(filepath_out):
-                os.mkdir(filepath_out)
-
             # if -d download only for input bird, otherwise download all birds in birds list
-            birds = [sys.argv[2]] if sys.argv[1] == "-d" else birds
+            if sys.argv[1] == "-d":
+                input_birdname = sys.argv[2].split(',')
+                if len(input_birdname) == 2:
+                    birds = [(input_birdname[0], input_birdname[1] == "True")]
+                else:
+                    print("ERROR: specify birdname in format: birdn_name,True/False")
+                # if there is a fifth argument, it specifies samples per species. -1 to download all samples
+                num_samples_per_species = int(sys.argv[4]) if len(sys.argv) == 5 else -1
+            else:
+                birds = BIRD_LIST
+                # if there is a fourth argument, it specifies samples per species. -1 to download all samples
+                num_samples_per_species = int(sys.argv[3]) if len(sys.argv) == 4 else -1
+                # for -da flag, file_out path is specified afer flag
+                filepath_out = str(sys.argv[2])
 
-            for birdname in birds:
-                # download samples from zeno-canto
-                num_records = download_bird(birdname, filepath_out)
-                print(f"Downloaded {num_records} records for {birdname}.")
+            download_bird_samples(birds, filepath_out, num_samples_per_species)
+
         elif sys.argv[1] in ["-f", "-s"]:  # these flags can only be used after sample(s) are downloaded
             filepath_in = str(sys.argv[2])
 
@@ -191,6 +251,6 @@ if __name__ == '__main__':
                 elif sys.argv[1] == "-s": # convert to a spectrogram
                     create_spectrogram(sample, instance, audio, sr, filepath_out, filepath_in)
         else:
-            print("ERROR: invalid flag argument. \n Accepted flags: -d, -f, -s")
+            print("ERROR: invalid flag argument. \n Accepted flags: -d, -da, -f, -s")
     else:
         print(f"ERROR: invlaid number of arguments: Given {len(sys.argv)} arguments")
