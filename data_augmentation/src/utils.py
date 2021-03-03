@@ -2,6 +2,7 @@ import random
 import numpy as np
 import pandas as pd
 import os
+import librosa
 
 def noise_multiplier(orig_recording, noise):
     MIN_SNR, MAX_SNR = 3, 30  # min and max sound to noise ratio (in dB)
@@ -33,6 +34,20 @@ def sample_compositions_by_species(path, augmented):
         else:
             num_samples_in[species] = {"num_samples":len(os.listdir(os.path.join(path, species)))}
     return pd.DataFrame.from_dict(num_samples_in, orient='index').sort_index()
+
+def find_total_recording_length(species_dir_path):
+    total_duration = 0
+    for recording in os.listdir(species_dir_path):
+        y, sr = librosa.load(os.path.join(species_dir_path, recording))
+        total_duration += librosa.get_duration(y, sr)
+    return total_duration
+
+def recording_lengths_by_species(path):
+    num_samples_in = {} # initialize dict - usage num_samples_in['CORALT_S'] = 64
+    for species in os.listdir(path):
+        num_samples_in[species] = {"total_recording_length": find_total_recording_length(os.path.join(path, species))}
+    return pd.DataFrame.from_dict(num_samples_in, orient='index').sort_index()
+
 
 def count_max_augs(distribution):
     count = 0
