@@ -158,17 +158,18 @@ class BirdsTrainBasic:
                 labels  = self.to_device(labels, 'cpu')
                 loss    = self.to_device(loss, 'cpu')
 
-                del images
-                del outputs
-                del labels
-                del loss
-                
                 self.remember_results('train',
                                       epoch,
                                       outputs,
                                       labels,
                                       loss
                                       )
+
+                del images
+                del outputs
+                del labels
+                del loss
+                torch.cuda.empty_cache()
 
             # Validation
             self.model.eval()
