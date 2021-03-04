@@ -36,13 +36,14 @@ class NetUtils:
     @classmethod
     def get_net(cls, net_name, **kwargs):
         
+        if net_name == 'basicnet':
+            return BasicNet(**kwargs)
+
         (net_name, net_version) = cls.name_and_version_from_net_name(net_name)
         kwargs['net_version'] = net_version
         net_name = net_name.lower()
 
-        if net_name == 'basicnet':
-            return BasicNet(**kwargs)
-        elif net_name == 'resnet':
+        if net_name == 'resnet':
             return cls._get_resnet_partially_trained(**kwargs)
         elif net_name == 'densenet':
             return cls._get_densenet_partially_trained(**kwargs)
@@ -497,29 +498,30 @@ class BasicNet(nn.Module):
     def __init__(self, 
                  num_classes=None, 
                  batch_size=32, 
-                 kernel_size=5, 
-                 processor=None):
+                 kernel_size=5
+                 ):
+                #processor=None):
         
         if num_classes is None:
             raise ValueError("Resnetxx requires a num_classes argument")
         
         super(BasicNet, self).__init__()
-        self.gpu = processor
+        #self.gpu = processor
         self.bs = batch_size
         self.ks = kernel_size
         self.num_classes = num_classes
         self.conv1 = nn.Conv2d(3, 6, self.ks)
         self.pool = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(6, self.bs, self.ks)
-        print("batch size: " + str(self.bs))
-        print("kernel size: " + str(self.ks))
+        #print("batch size: " + str(self.bs))
+        #print("kernel size: " + str(self.ks))
         self.fc1 = nn.Linear(self.bs * int((99 - (self.ks + 1) / 2) ** 2), 120)
         self.fc2 = nn.Linear(120, 84)
         self.fc3 = nn.Linear(84, self.num_classes)
 
     def forward(self, x):
-        if self.gpu is not None:
-            x.cuda(self.gpu)
+        #if self.gpu is not None:
+        #    x.cuda(self.gpu)
         x = self.pool(F.relu(self.conv1(x)))
         x = self.pool(F.relu(self.conv2(x)))
         x = x.view(x.size(0), self.bs * int((99 - (self.ks + 1) / 2) ** 2))

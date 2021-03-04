@@ -80,6 +80,10 @@ class FileMover(object):
         
         num_to_move = int(np.round(num_files * self.perc / 100))
         
+        if num_to_move == 0:
+            print(f"With only {num_files} in src, {self.perc}% means no files to move")
+            return
+
         # A generator of numbers:
         rng = np.random.default_rng()
         
