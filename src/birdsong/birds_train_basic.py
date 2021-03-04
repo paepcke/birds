@@ -286,26 +286,25 @@ class BirdsTrainBasic:
         recall_weighted= recall_score(labels, preds, average='weighted',
                                       zero_division=0)
         
-        self.writer.add_scalars('prec_rec',
-                                {'macro' : prec_macro,
-                                 'micro' : prec_micro,
-                                 'weighted' : prec_weighted
-                                 },
-                                global_step=epoch
-                                )
-        
-#********************* REMOVE
-#         self.writer.add_scalar('prec_rec/train', 
-#                                prec_macro, 
-#                                global_step=epoch)
-#         self.writer.add_scalar('prec_rec/train', 
-#                                prec_micro,
-#                                global_step=epoch)
-#         self.writer.add_scalar('prec_rec/train', 
-#                                prec_weighted,
-#                                global_step=epoch)
-#*********************
-#   
+#*****************
+#         self.writer.add_scalars('prec_rec',
+#                                 {'macro' : prec_macro,
+#                                  'micro' : prec_micro,
+#                                  'weighted' : prec_weighted
+#                                  },
+#                                 global_step=epoch
+#                                 )
+
+        self.writer.add_scalar('prec_rec/macro', 
+                               prec_macro, 
+                               global_step=epoch)
+        self.writer.add_scalar('prec_rec/micro', 
+                               prec_micro,
+                               global_step=epoch)
+        self.writer.add_scalar('prec_rec/weighted', 
+                               prec_weighted,
+                               global_step=epoch)
+
     #------------------------------------
     # get_dataloaders 
     #-------------------
