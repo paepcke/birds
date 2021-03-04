@@ -32,8 +32,27 @@ from birdsong.utils.file_utils import FileUtils
 from birdsong.utils.neural_net_config import NeuralNetConfig, ConfigError
 from birdsong.utils.tensorboard_plotter import SummaryWriterPlus, \
     TensorBoardPlotter
-import numpy as np
 
+#*****************
+# 
+import socket
+if socket.gethostname() in ('quintus', 'quatro', 'sparky'):
+    # Point to where the pydev server 
+    # software is installed on the remote
+    # machine:
+    sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
+       
+    import pydevd
+    global pydevd
+    # Uncomment the following if you
+    # want to break right on entry of
+    # this module. But you can instead just
+    # set normal Eclipse breakpoints:
+    #*************
+    print("About to call settrace()")
+    #*************
+    pydevd.settrace('localhost', port=4040)
+# **************** 
 
 class BirdsTrainBasic:
     '''
@@ -127,6 +146,7 @@ class BirdsTrainBasic:
 
                 images = self.to_device(batch, 'gpu')
                 labels = self.to_device(targets, 'gpu')
+                
                 outputs = self.model(images)
                 loss = self.loss_fn(outputs, labels)
                 self.optimizer.zero_grad()
@@ -146,6 +166,7 @@ class BirdsTrainBasic:
             for batch, targets in self.val_loader:
                 images = self.to_device(batch, 'gpu')
                 labels = self.to_device(targets, 'gpu')
+                
                 outputs = self.model(images)
                 loss = self.loss_fn(outputs, labels)
                 
@@ -661,7 +682,7 @@ if __name__ == '__main__':
                                          formatter_class=argparse.RawTextHelpFormatter,
                                          description="Basic training setup."
                                          )
-    
+
         parser.add_argument('-c', '--config',
                             help='fully qualified path to config.cfg file',
                             )
