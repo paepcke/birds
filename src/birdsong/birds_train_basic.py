@@ -13,6 +13,7 @@ import sys
 
 from logging_service.logging_service import LoggingService
 from torch import cuda
+import numpy as np
 
 from sklearn.metrics import balanced_accuracy_score
 from sklearn.metrics import accuracy_score
@@ -153,12 +154,20 @@ class BirdsTrainBasic:
                 loss.backward()
                 self.optimizer.step()
                 
-                self.to_device(images, 'cpu'),
+                outputs = self.to_device(outputs, 'cpu')
+                labels  = self.to_device(labels, 'cpu')
+                loss    = self.to_device(loss, 'cpu')
+
+                del images
+                del outputs
+                del labels
+                del loss
+                
                 self.remember_results('train',
                                       epoch,
-                                      self.to_device(outputs, 'cpu'),
-                                      self.to_device(labels, 'cpu'),
-                                      self.to_device(loss, 'cpu')
+                                      outputs,
+                                      labels,
+                                      loss
                                       )
 
             # Validation
