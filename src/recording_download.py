@@ -20,14 +20,14 @@ import sys
 # List of bird species to download. List of tuples (species_name, split call and song?)
 # Not in list but was previously in this set: 'Catharus+ustulatus',
 BIRD_LIST = [('Amazilia+decora', True), ('Arremon+aurantiirostris', True),
-         ('Corapipo+altera', True),('Hylophilus+decurtatus', False),
-         ('Dysithamnus+mentalis', True),
-         ('Empidonax+flaviventris', False), ('Euphonia+imitans', False),
-         ('Henicorhina+leucosticta', True),
-         ('Lophotriccus+pileatus', True),
-         ('Parula+pitiayumi', True),
-         ('Tangara+gyrola', False), ('Tangara+icterocephala', False)
-        ]
+             ('Corapipo+altera', True),
+             ('Dysithamnus+mentalis', True),
+             ('Empidonax+flaviventris', False), ('Euphonia+imitans', False),
+             ('Henicorhina+leucosticta', True), ('Hylophilus+decurtatus', False),
+             ('Lophotriccus+pileatus', True),
+             ('Parula+pitiayumi', True),
+             ('Tangara+gyrola', False), ('Tangara+icterocephala', False)
+            ]
 
 def folder_prefix(birdname):
     name_list = birdname.split('+')
@@ -73,6 +73,7 @@ def download_bird(birdname, out_dir, folder_prefix, split_call_song, to_download
 
     num_downloaded = 0
     to_download = len(data['recordings']) if to_download == -1 else to_download
+    print(f"Request for {birdname} returned {len(data['recordings'])} recordings. ")
     for record in data['recordings']: # each bird may have multiple records
         #download file
         url = 'http:' + record['url'] + '/download'
@@ -98,7 +99,6 @@ def download_bird(birdname, out_dir, folder_prefix, split_call_song, to_download
                 continue
             filepath = os.path.join(out_dir, folder_name, record_name) + '.wav'
         else:
-            print("came here")
             filepath = os.path.join(out_dir, folder_prefix, record_name) + '.wav'
 
         with open(filepath, 'wb') as f:
@@ -220,10 +220,11 @@ if __name__ == '__main__':
     Parses the command line parameters and calls the appropriate functions..
     """
     if len(sys.argv) <= 5:
-        filepath_out = str(sys.argv[3])
+
         if sys.argv[1] in ["-d", "-da"]:  # user wants to download, second argument is the bird name, third is directory to save download
             # if -d download only for input bird, otherwise download all birds in birds list
             if sys.argv[1] == "-d":
+                filepath_out = str(sys.argv[3])
                 input_birdname = sys.argv[2].split(',')
                 if len(input_birdname) == 2:
                     birds = [(input_birdname[0], input_birdname[1] == "True")]
@@ -242,7 +243,7 @@ if __name__ == '__main__':
 
         elif sys.argv[1] in ["-f", "-s"]:  # these flags can only be used after sample(s) are downloaded
             filepath_in = str(sys.argv[2])
-
+            filepath_out = str(sys.argv[3])
             for sample in os.listdir(filepath_in):
                 audio, sr = librosa.load(os.path.join(filepath_in, sample))
                 instance = ""
