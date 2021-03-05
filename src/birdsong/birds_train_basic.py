@@ -6,20 +6,20 @@ Created on Mar 2, 2021
 '''
 from _ast import arg
 import argparse
+import csv
 import os
 from pathlib import Path
 import random
+import socket
 import sys
 
 from logging_service.logging_service import LoggingService
-from torch import cuda
-import numpy as np
-
-from sklearn.metrics import balanced_accuracy_score
 from sklearn.metrics import accuracy_score
+from sklearn.metrics import balanced_accuracy_score
 from sklearn.metrics import precision_score
 from sklearn.metrics import recall_score
-
+from sklearn.metrics import f1_score
+from torch import cuda
 from torch import nn
 from torch import optim
 import torch
@@ -29,14 +29,15 @@ from torchvision.datasets.folder import ImageFolder
 
 from birdsong.nets import NetUtils
 from birdsong.utils.dottable_config import DottableConfigParser
-from birdsong.utils.file_utils import FileUtils
+from birdsong.utils.file_utils import FileUtils, CSVWriterCloseable
 from birdsong.utils.neural_net_config import NeuralNetConfig, ConfigError
 from birdsong.utils.tensorboard_plotter import SummaryWriterPlus, \
     TensorBoardPlotter
+import numpy as np
+
 
 #*****************
 # 
-import socket
 if socket.gethostname() in ('quintus', 'quatro', 'sparky'):
     # Point to where the pydev server 
     # software is installed on the remote
@@ -90,32 +91,34 @@ class BirdsTrainBasic:
             raise ValueError("Config file must contain an entry 'root_train_test_data' in section 'Paths'") from e
 
         self.batch_size = self.config.getint('Training', 'batch_size')
-        kernel_size     = self.config.getint('Training', 'kernel_size')
+        self.kernel_size= self.config.getint('Training', 'kernel_size')
         self.min_epochs = self.config.Training.getint('min_epochs')
         self.max_epochs = self.config.Training.getint('max_epochs')
+        self.lr         = self.config.Training.getfloat('lr')
 
         self.set_seed(42)
         
-        log_dir = os.path.join(self.curr_dir, 'runs')
-        self.setup_tensorboard(log_dir)
-
         self.fastest_device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.num_classes = self.find_num_classes(self.root_train_test_data)
         
-        self.model    = NetUtils.get_net('basicnet',
+        self.net_name = 'basicnet'
+        self.pretrain = 0
+        
+        self.model    = NetUtils.get_net(self.net_name,
                                          num_classes=self.num_classes,
                                          batch_size=self.batch_size,
-                                         kernel_size=kernel_size,
+                                         kernel_size=self.kernel_size,
                                          )
         self.to_device(self.model, 'gpu')
         
-        lr       = self.config.getfloat('Training', 'lr', 0.001)
-        opt_name =  self.config.Training.get('optimizer', 
+        # No cross validation:
+        self.folds    = 0
+        self.opt_name =  self.config.Training.get('optimizer', 
                                              'Adam') # Default
         self.optimizer = self.get_optimizer(
-            opt_name, 
+            self.opt_name, 
             self.model, 
-            lr)
+            self.lr)
         
         self.loss_fn = nn.CrossEntropyLoss()
         self.scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, 
@@ -127,8 +130,13 @@ class BirdsTrainBasic:
         self.train_loader, self.val_loader = self.get_dataloaders(sample_width, 
                                                                   sample_height
                                                                   )
+        log_dir      = os.path.join(self.curr_dir, 'runs')
+        raw_data_dir = os.path.join(self.curr_dir, 'runs_raw_results')
+        self.setup_tensorboard(log_dir, raw_data_dir=raw_data_dir)
+        
         try:
-            self.train()
+            final_epoch = self.train()
+            self.visualize_final_epoch_results(final_epoch)
         finally:
             self.close_tensorboard()
         
@@ -190,8 +198,14 @@ class BirdsTrainBasic:
             self.scheduler.step()
             ##**** Do epoch-level consolidation*****
             self.visualize_epoch(epoch)
+            
+            # Fresh results tallying 
+            self.results['train'] = []
+            self.results['val']   = []
             # Back around to next epoch
-        
+
+        # The final epoch number:
+        return epoch
     # ------------- Utils -----------
 
     #------------------------------------
@@ -222,7 +236,6 @@ class BirdsTrainBasic:
                                                     labels, 
                                                     loss))
 
-
     #------------------------------------
     # visualize_epochs 
     #-------------------
@@ -230,7 +243,8 @@ class BirdsTrainBasic:
     def visualize_epoch(self, epoch):
         '''
         Take the PredictionResult instances
-        in self.results, and report appropriate
+        in self.results, plus the label/preds
+        csv files and report appropriate
         aggregates to tensorboard.
 
         Separately for train and validation
@@ -239,13 +253,19 @@ class BirdsTrainBasic:
         array of labels. Also, average the
         loss across all instances.
         '''
-        preds      = []
-        labels     = []
-        loss       = torch.tensor([])
+        train_preds      = []
+        train_labels     = []
+        val_preds        = []
+        val_labels       = []
+
+        train_loss       = torch.tensor([])
+        val_loss         = torch.tensor([])
 #****         summed_loss_per_sample   = 0
 #         num_samples= 0
         
-        for res in self.results['train']:
+        for train_res, val_res in zip(self.results['train'],
+                                      self.results['val']
+                                      ):
             # For a batch_size of 2 we output logits like:
             #
             #     tensor([[0.0162, 0.0096, 0.0925, 0.0157],
@@ -253,7 +273,8 @@ class BirdsTrainBasic:
             #
             # Turn into probabilities along each row:
             
-            batch_pred_probs = torch.softmax(res.outputs, dim=1)
+            batch_train_pred_probs = torch.softmax(train_res.outputs, dim=1)
+            batch_val_pred_probs   = torch.softmax(val_res.outputs, dim=1)
             
             # Now have:
             #
@@ -266,24 +287,61 @@ class BirdsTrainBasic:
             #
             #  first to tensor([2,2]) then to [2,2]
             
-            batch_pred_tensor = torch.argmax(batch_pred_probs, dim=1)
+            batch_train_pred_tensor = torch.argmax(batch_train_pred_probs, dim=1)
+            batch_val_pred_tensor   = torch.argmax(batch_val_pred_probs, dim=1)
             
-            pred_class_list = batch_pred_tensor.tolist()
-            preds.extend(pred_class_list)
+            train_pred_class_list = batch_train_pred_tensor.tolist()
+            val_pred_class_list   = batch_val_pred_tensor.tolist()
+             
+            train_preds.extend(train_pred_class_list)
+            val_preds.extend(val_pred_class_list)
 
-            labels.extend(res.labels.tolist())
+            train_labels.extend(train_res.labels.tolist())
+            val_labels.extend(val_res.labels.tolist())
             
             # Loss in PredictionResult instances
             # is per batch. Convert the number
             # to loss per sample (within each batch):
-            new_loss = res.loss.detach() / self.batch_size
-            loss = torch.cat((loss, torch.unsqueeze(new_loss, dim=0)))
-            #*****loss.append(res.loss / self.batch_size)
+            train_new_loss = train_res.loss.detach() / self.batch_size
+            train_loss = torch.cat((train_loss, torch.unsqueeze(train_new_loss, dim=0)))
             
+            val_new_loss = train_res.loss.detach() / self.batch_size
+            val_loss     = torch.cat((val_loss, torch.unsqueeze(val_new_loss, dim=0)))
+            
+            #*****loss.append(res.loss / self.batch_size)
+
+        # Now we have two long sequences: predicted classes
+        # (resolved from logits into actual class IDs), and
+        # another seq with the corresponding correct labels.
+        
+        # If we are to write preds and labels to
+        # .csv for later additional processing:
+
+        if self.csv_writers is not None:
+            self.csv_writers['preds'].writerow(val_preds)
+            self.csv_writers['labels'].writerow(val_labels)
+            
+        
+        # Save these lates results in case
+        # this is the final epoch, and we'll
+        # want results only on it. We'll overwrite
+        # if there is another epoch after this one:
+        
+        self.latest_results = {'train_preds' : train_preds,
+                               'train_labels': train_labels,
+                               'val_preds'   : val_preds,
+                               'val_labels'  : val_labels
+                               }
+
         # Mean loss over all batches
-        mean_loss = torch.mean(loss)
+        train_mean_loss = torch.mean(train_loss)
+        val_mean_loss   = torch.mean(val_loss)
         self.writer.add_scalar('loss/train', 
-                               mean_loss, 
+                               train_mean_loss, 
+                               global_step=epoch
+                               )
+        self.writer.add_scalar('loss/val', 
+                               val_mean_loss, 
                                global_step=epoch
                                )
         
@@ -291,51 +349,168 @@ class BirdsTrainBasic:
         # number of classes, and shift to [-1,1] with
         # zero being chance:
          
-        balanced_acc = balanced_accuracy_score(labels, 
-                                               preds,
-                                               adjusted=True)
+        train_balanced_acc = balanced_accuracy_score(train_labels, 
+                                                     train_preds,
+                                                     adjusted=True)
         self.writer.add_scalar('balanced_accuracy_score/train', 
-                               balanced_acc, 
+                               train_balanced_acc, 
                                epoch
                                )
+
+        val_balanced_acc = balanced_accuracy_score(val_labels, 
+                                                   val_preds,
+                                                   adjusted=True)
+        self.writer.add_scalar('balanced_accuracy_score/val', 
+                               val_balanced_acc, 
+                               epoch
+                               )
+
         
-        acc = accuracy_score(labels, preds, normalize=True)
+        train_acc = accuracy_score(train_labels, train_preds, normalize=True)
         self.writer.add_scalar('accuracy_score/train', 
-                               acc, 
+                               train_acc, 
                                epoch
                                )
-        prec_macro   = precision_score(labels, preds, average='macro',
-                                       zero_division=0)
-        prec_micro   = precision_score(labels, preds, average='micro',
-                                       zero_division=0)
-        prec_weighted= precision_score(labels, preds, average='weighted',
-                                       zero_division=0)
-
-        recall_macro   = recall_score(labels, preds, average='macro',
-                                      zero_division=0)
-        recall_micro   = recall_score(labels, preds, average='micro',
-                                      zero_division=0)
-        recall_weighted= recall_score(labels, preds, average='weighted',
-                                      zero_division=0)
+        val_acc = accuracy_score(val_labels, val_preds, normalize=True)
+        self.writer.add_scalar('accuracy_score/val', 
+                               val_acc, 
+                               epoch
+                               )
         
-#*****************
-#         self.writer.add_scalars('prec_rec',
-#                                 {'macro' : prec_macro,
-#                                  'micro' : prec_micro,
-#                                  'weighted' : prec_weighted
-#                                  },
-#                                 global_step=epoch
-#                                 )
+        prec_macro   = precision_score(val_labels, val_preds, average='macro',
+                                       zero_division=0
+                                       )
+        prec_micro   = precision_score(val_labels, val_preds, average='micro',
+                                       zero_division=0
+                                       )
+        prec_weighted= precision_score(val_labels, val_preds, average='weighted',
+                                       zero_division=0
+                                       )
 
-        self.writer.add_scalar('prec_rec/macro', 
+        recall_macro   = recall_score(val_labels, val_preds, average='macro',
+                                      zero_division=0
+                                      )
+        recall_micro   = recall_score(val_labels, val_preds, average='micro',
+                                      zero_division=0
+                                      )
+        recall_weighted= recall_score(val_labels, val_preds, average='weighted',
+                                      zero_division=0
+                                      )
+        
+        self.writer.add_scalar('val_prec/macro', 
                                prec_macro, 
                                global_step=epoch)
-        self.writer.add_scalar('prec_rec/micro', 
+        self.writer.add_scalar('val_prec/micro', 
                                prec_micro,
                                global_step=epoch)
-        self.writer.add_scalar('prec_rec/weighted', 
+        self.writer.add_scalar('val_prec/weighted', 
                                prec_weighted,
                                global_step=epoch)
+
+        self.writer.add_scalar('val_recall/macro', 
+                               recall_macro, 
+                               global_step=epoch)
+        self.writer.add_scalar('val_recall/micro', 
+                               recall_micro,
+                               global_step=epoch)
+        self.writer.add_scalar('val_recall/weighted', 
+                               recall_weighted,
+                               global_step=epoch)
+
+
+    #------------------------------------
+    # visualize_final_epoch_results 
+    #-------------------
+    
+    def visualize_final_epoch_results(self, epoch):
+        '''
+        Reports to tensorboard just for the
+        final epoch.
+            self.latest_results is {'train_preds' : sequence of class predictions
+                                    'train_labels : corresponding labels
+                                    'val_preds'   : sequence of class predictions
+                                    'val_labels   : corresponding labels
+                                    }
+                                    
+        where train_preds and val_preds are the processed,
+        final class IDs, not the raw logits or probabilities
+        '''
+        train_preds  = self.latest_results['train_preds']
+        train_labels = self.latest_results['train_labels']
+        
+        val_preds    = self.latest_results['val_preds']
+        val_labels   = self.latest_results['val_labels']
+        
+        # First: the table of f1 scores:
+        
+        train_f1_macro = f1_score(train_labels,
+                                        train_preds,
+                                        average='macro'
+                                        ).round(1)
+        val_f1_macro   = f1_score(val_labels,
+                                        val_preds,
+                                        average='macro'
+                                        ).round(1)
+        
+        train_f1_per_class = f1_score(train_labels,
+                                            train_preds,
+                                            average=None # get f1 separately for each class
+                                            ).round(1) 
+        val_f1_per_class = f1_score(train_labels,
+                                          train_preds,
+                                          average=None # get f1 separately for each class
+                                          ).round(1)
+        
+        # Doesn't matter whether the class name
+        # to int id comes from the train_loader, 
+        # or the val_loader:
+        classes_to_ids = self.train_loader.dataset.class_to_idx
+        
+        # Get reverse lookup: class_id --> class_name:
+        ids_to_classes = {class_id : class_name
+                          for class_name, class_id
+                           in list(classes_to_ids.items()) 
+                          }
+        
+        # Build table: class ID => class name:
+        class_key = (f"Class ID|Class Name  \n"
+                      "--------|------      \n"
+                      )
+        for cname, cidx in classes_to_ids.items():
+            class_key += f"{cidx}|{cname}  \n"
+            
+        self.writer.add_text('class_key', 
+                             class_key,
+                             global_step=epoch)
+        
+        
+        # Build:
+        # |phase |f1_macro        |
+        # |------|----------------|
+        # |Train |{train_f1_macro}|
+        # |Val   |{val_f1_macro}  |
+
+        tbl =  (f"|phase|f1_macro|  \n"
+                f"|------|-------| \n"
+                f"|Train|{train_f1_macro}|  \n"
+                f"|Val  |{val_f1_macro}  |  \n"
+                )
+        
+        self.writer.add_text('f1/macro', tbl, epoch)
+               
+        # Build f1 for each class separately:
+        
+        per_class_tbl = (f"|Class|F1 train|F1 validation|  \n"
+                         f"|-----|--------|-------------|  \n"
+                         )
+        
+        for class_id, (train_f1, val_f1) in enumerate(zip(train_f1_per_class, 
+                                                          val_f1_per_class
+                                                          )):
+            class_nm = ids_to_classes[class_id] 
+            per_class_tbl += f"|{class_nm}|{train_f1}|{val_f1}|  \n"
+            
+        self.writer.add_text('f1/macro', per_class_tbl, epoch)
 
     #------------------------------------
     # get_dataloaders 
@@ -435,12 +610,16 @@ class BirdsTrainBasic:
     # setup_tensorboard 
     #-------------------
     
-    def setup_tensorboard(self, logdir):
+    def setup_tensorboard(self, logdir, raw_data_dir=True):
         '''
         Initialize tensorboard. To easily compare experiments,
         use runs/exp1, runs/exp2, etc.
         
         Method creates the dir if needed.
+        
+        Additionally, sets self.csv_pred_writer and self.csv_label_writer
+        to None, or open CSV writers, depending on the value of raw_data_dir,
+        see set_csv_writers()
         
         @param logdir: root for tensorboard events
         @type logdir: str
@@ -448,7 +627,9 @@ class BirdsTrainBasic:
         
         if not os.path.isdir(logdir):
             os.makedirs(logdir)
-        
+            
+        self.set_csv_writers(raw_data_dir)
+
         # Use SummaryWriterPlus to avoid confusing
         # directory creations when calling add_hparams()
         # on the writer:
@@ -462,15 +643,137 @@ class BirdsTrainBasic:
         self.results = {'train' : [],
                         'val'   : []
                         }
+        # For just the most recent result:
+        self.latest_results = {'train': None,
+                               'val'  : None
+                               }
         
         
         self.log.info(f"To view tensorboard charts: in shell: tensorboard --logdir {logdir}; then browser: localhost:6006")
+
+    #------------------------------------
+    # set_csv_writers 
+    #-------------------
+    
+    def set_csv_writers(self, raw_data_dir):
+        '''
+        If raw_data_dir is provided as a str, it is
+        taken as the directory where csv files with predictions
+        and labels are to be written. The dir is created if necessary.
+         
+        If the arg is instead set to True, a dir 'runs_raw_results' is
+        created under this script's directory if it does not
+        exist. Then a subdirectory is created for this run,
+        using the hparam settings to build a file name. The dir
+        is created if needed. Result ex.:
+        
+              <script_dir>
+                   runs_raw_results
+                       Run_lr_0.001_br_32
+                           pred_2021_05_ ... _lr_0.001_br_32.csv
+                           labels_2021_05_ ... _lr_0.001_br_32.csv
+                           
+        
+                         
+        
+        Then two .csv file names created, again from the run
+        hparam settings. If one of those files exists, user is asked whether
+        to remove or append. The inst var dict self.csv_writers is
+        initialized to
+           {'pred_writer'   : <csv predictions writer>,
+            'labels_writer' : <csv labels writer>,
+        
+           o With None if csv file exists, but is not to 
+             be overwritten or appended-to
+           o A filed descriptor for a file open for either
+             'write' or 'append.
+        
+        @param raw_data_dir: If simply True, create dir and file names
+            from hparams, and create as needed. If a string, it is 
+            assumed to be the directory where a .csv file is to be
+            created. If None, self.csv_writer is set to None.
+        @type raw_data_dir: {None | True | str|
+        '''
+
+        # Ensure the csv file root dir exists if
+        # we'll do a csv dir and run-file below it:
+        
+        if type(raw_data_dir) == str:
+            raw_data_root = raw_data_dir
+        else:
+            raw_data_root = os.path.join(self.curr_dir, 'runs_raw_results')
+
+        if not os.path.exists(raw_data_root):
+            os.mkdir(raw_data_root)
+
+        # Can rely on raw_data_root being defined and existing:
+        
+        if raw_data_dir is None:
+            self.csv_writers = None
+            return
+
+        # Create both a raw dir sub-directory and a .csv file
+        # for this run:
+
+        fname_elements = {'net' : self.net_name,
+                          'pretrain': self.pretrain,
+                          'lr' : self.lr,
+                          'opt' : self.opt_name,
+                          'bs'  : self.batch_size,
+                          'ks'  : self.kernel_size,
+                          'folds'   : 0,
+                          'classes' : self.num_classes
+                          }
+        csv_subdir_name = FileUtils.construct_filename(fname_elements, 
+                                                       prefix='Run', 
+                                                       incl_date=True)
+        os.makedirs(csv_subdir_name)
+        
+        # Create a csv file name:
+        csv_preds_file_nm = FileUtils.construct_filename(fname_elements, 
+                                                         prefix='pred',
+                                                         suffix='.csv',
+                                                         incl_date=True)
+        csv_labels_file_nm = FileUtils.construct_filename(fname_elements, 
+                                                          prefix='labels',
+                                                          suffix='.csv',
+                                                          incl_date=True)
+        
+        csv_preds_fn = os.path.join(raw_data_root, csv_preds_file_nm)
+        csv_labels_fn = os.path.join(raw_data_root, csv_labels_file_nm)
+        
+        # Get csv_raw_fd appropriately:
+        
+        if os.path.exists(csv_preds_file_nm):
+            do_overwrite = FileUtils.user_confirm(f"File {self.csv_pred_file_nm} exists; overwrite?", default='N')
+            if not do_overwrite:
+                do_append = FileUtils.user_confirm(f"Append instead?", default='N')
+                if not do_append:
+                    self.csv_writers = None
+                else:
+                    mode = 'a'
+        else:
+            mode = 'w'
+            
+        self.csv_writers = {
+            'preds'  : CSVWriterCloseable(csv_preds_fn, mode=mode, delimiter=','),
+            'labels' : CSVWriterCloseable(csv_labels_fn, mode=mode, delimiter=',')
+            }
 
     #------------------------------------
     # close_tensorboard 
     #-------------------
     
     def close_tensorboard(self):
+        if self.csv_writers is not None:
+            try:
+                self.csv_writers['preds'].close()
+            except Exception as e:
+                self.log.warn(f"Could not close csv file: {repr(e)}")
+            try:
+                self.csv_writers['labels'].close()
+            except Exception as e:
+                self.log.warn(f"Could not close csv file: {repr(e)}")
         try:
             self.writer.close()
         except AttributeError:

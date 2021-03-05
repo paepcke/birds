@@ -5,8 +5,11 @@ Created on Jan 21, 2021
 '''
 
 from _collections import OrderedDict
+import datetime
 import os
 from pathlib import Path
+import re
+import csv
 
 import natsort
 
@@ -136,3 +139,169 @@ class FileUtils(object):
                                                       ])
                                                       )              
         return natsort.natsorted(class_names)
+
+    #------------------------------------
+    # construct_filename 
+    #-------------------
+    
+    @classmethod
+    def construct_filename(cls, 
+                           property_dict,
+                           prefix=None,
+                           suffix=None, 
+                           incl_date=False):
+        '''
+        Given a dict of property names and
+        associated values, create a filename
+        that includes all the information held
+        in the keys and values of the dict.
+        Ex:
+             {
+               'lr' : 0.001,
+               'bs' : 32,
+               optimizer : 'Adam'
+             }
+             
+        would return the string:
+            
+            'lr_0.001_bs_32_optimizer_Adam'
+            
+        If a prefix is provided, it will lead the
+        string. Example: "Exp" would yield:
+        
+            'EXP_lr_0.001_bs_32_optimizer_Adam'
+            
+        If suffix is provided, it will be appended to the
+        name: Example, suffix='.csv':
+        
+            'EXP_lr_0.001_bs_32_optimizer_Adam.csv'
+            
+        Finally, if incl_date is True, a timestamp is added
+        at the start of the returned name, or right after
+        the prefix
+        
+        @param property_dict: names and values to include
+        @type property_dict: {str : Any}
+        @param prefix: leading part of file name
+        @type prefix: str
+        @param suffix: trailing part of file name
+        @type suffix: str
+        @param incl_date: whether or not to include current
+            data in the file name
+        @type incl_date: bool
+        @return: a string appropriate for use as a filename
+        @rtype: str
+        '''
+        fname = prefix if prefix is not None else ''
+        if incl_date:
+            fname += f"_{cls.file_timestamp()}"
+        for prop_name, prop_val in property_dict.items():
+            fname += f"_{prop_name}_{str(prop_val)}"
+            
+        if suffix is not None:
+            fname += suffix
+            
+        return fname
+
+
+    #------------------------------------
+    # user_confirm
+    #-------------------
+    
+    @classmethod
+    def user_confirm(cls, prompt_for_yes_no, default='Y'):
+        resp = input(f"{prompt_for_yes_no} (default {default}): ")
+        if resp in ('y','Y','yes','Yes', ''):
+            return True
+        else:
+            return False
+
+    #------------------------------------
+    # file_timestamp
+    #-------------------
+    
+    @classmethod
+    def file_timestamp(cls):
+        '''
+        Finds current time, removes milliseconds,
+        and replaces colons with underscores. The
+        returned string is fit for inclusion in a
+        filename.
+        
+        @return: string for inclusion in filename
+        @rtype: str
+        '''
+        # Remove the msecs part:
+        # Replace colons with underscores:
+        timestamp = datetime.datetime.now().isoformat()
+        timestamp = re.sub(r'[.][0-9]{6}', '', timestamp)
+        timestamp = timestamp.replace(':', '_')
+        return timestamp
+        
+# ----------------------- CSVWriterFDAccessible -------
+
+class CSVWriterCloseable:
+    '''
+    Wrapper around csv writer: takes a 
+    file name to use and:
+    
+       o Creates intermediate dirs if needed,
+       o Opens the file in the given mode
+       o Adds close() method which closes that 
+         underlying fd.
+       o Creates a writer object into an inst var.
+
+    Only supports the writerow() method of
+    csv writers.
+    
+    This class should inherit from a csv.Writer
+    class if it existed. But as of Python 3.9 it
+    does not. 
+    '''
+    
+    #------------------------------------
+    # Constructor 
+    #-------------------
+    
+    def __init__(self, fname, mode='w', **kwargs):
+        
+        acceptable_modes = ['w','a']
+        if mode not in acceptable_modes:
+            raise ValueError(f"Mode must be one of {acceptable_modes}")
+        
+        try:
+            os.makedirs(os.path.dirname(fname))
+        except FileExistsError:
+            # All intermediate dirs exist
+            pass
+        self._fname = fname
+        self._fd = open(fname, mode, newline='')
+        self.writer = csv.writer(self._fd, **kwargs)
+
+    #------------------------------------
+    # writerow 
+    #-------------------
+    
+    def writerow(self, seq):
+        self.writer.writerow(seq)
+
+    #------------------------------------
+    # close 
+    #-------------------
+    
+    def close(self):
+        try:
+            self._fd.close()
+        except Exception as e:
+            raise IOError(f"Could not close CSV writer: {repr(e)}")
+
+    # --------- Properties ----------
+    
+    @property
+    def fd(self):
+        return self._fd
+
+    @property
+    def fname(self):
+        return self._fname
+    
