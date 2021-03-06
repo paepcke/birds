@@ -5,13 +5,14 @@ Created on Jan 21, 2021
 '''
 
 from _collections import OrderedDict
+import csv
 import datetime
 import os
 from pathlib import Path
 import re
-import csv
 
 import natsort
+import torch
 
 
 class FileUtils(object):
@@ -237,7 +238,43 @@ class FileUtils(object):
         timestamp = re.sub(r'[.][0-9]{6}', '', timestamp)
         timestamp = timestamp.replace(':', '_')
         return timestamp
+
+    #------------------------------------
+    # gpu_memory_report 
+    #-------------------
+    
+    @classmethod
+    def gpu_memory_report(cls, 
+                          device=None, 
+                          printout=False):
         
+        subset_keys = [
+            'allocation.all.current',
+            'allocation.all.freed',
+            'active_bytes.all.allocated',
+            'active_bytes.all.current',
+            'active_bytes.all.freed',
+            'reserved_bytes.all.allocated',
+            'reserved_bytes.all.current',
+            'reserved_bytes.all.freed'
+            ]
+        if device is None:
+            # Use current device
+            device = torch.device
+        mem_dict = torch.cuda.memory_stats()
+        
+        info_subset = {info_name : mem_dict[info_name]
+                       for info_name
+                       in subset_keys
+                       }
+        if printout:
+            longest_info_name = max(subset_keys, key=len)
+            
+            print('***** GPU Mem Summary')
+            for info_name, info_val in info_subset.items():
+                num_spaces = longest_info_name - len(info_name)
+                print(f"{' ' * num_spaces}: {info_val}")
+
 # ----------------------- CSVWriterFDAccessible -------
 
 class CSVWriterCloseable:
