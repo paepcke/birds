@@ -220,29 +220,30 @@ class BirdsTrainBasic:
             self.log.info(f"Starting epoch {epoch} validation")
             
             self.model.eval()
-            for batch, targets in self.val_loader:
-                images = self.to_device(batch, 'gpu')
-                labels = self.to_device(targets, 'gpu')
-                
-                outputs = self.model(images)
-                loss = self.loss_fn(outputs, labels)
-                
-                images  = self.to_device(images, 'cpu')
-                outputs = self.to_device(outputs, 'cpu')
-                labels  = self.to_device(labels, 'cpu')
-                loss    = self.to_device(loss, 'cpu')
-                
-                self.remember_results('val',
-                                      epoch,
-                                      outputs,
-                                      labels,
-                                      loss
-                                      )
-                del images
-                del outputs
-                del labels
-                del loss
-                torch.cuda.empty_cache()
+            with torch.no_grad():
+                for batch, targets in self.val_loader:
+                    images = self.to_device(batch, 'gpu')
+                    labels = self.to_device(targets, 'gpu')
+                    
+                    outputs = self.model(images)
+                    loss = self.loss_fn(outputs, labels)
+                    
+                    images  = self.to_device(images, 'cpu')
+                    outputs = self.to_device(outputs, 'cpu')
+                    labels  = self.to_device(labels, 'cpu')
+                    loss    = self.to_device(loss, 'cpu')
+                    
+                    self.remember_results('val',
+                                          epoch,
+                                          outputs,
+                                          labels,
+                                          loss
+                                          )
+                    del images
+                    del outputs
+                    del labels
+                    del loss
+                    torch.cuda.empty_cache()
 
             self.log.debug(f"After eval: \n{torch.cuda.memory_summary()}")
             
