@@ -5,20 +5,18 @@ Created on Mar 2, 2021
 @author: paepcke
 '''
 import argparse
+import datetime
 import os
 from pathlib import Path
 import random
-import socket
 import sys
-
-import numpy as np
 
 from logging_service.logging_service import LoggingService
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import balanced_accuracy_score
+from sklearn.metrics import f1_score
 from sklearn.metrics import precision_score
 from sklearn.metrics import recall_score
-from sklearn.metrics import f1_score
 from torch import cuda
 from torch import nn
 from torch import optim
@@ -28,15 +26,18 @@ from torchvision import transforms
 from torchvision.datasets.folder import ImageFolder
 
 from birdsong.nets import NetUtils
+from birdsong.result_tallying import EpochSummary
 from birdsong.utils.dottable_config import DottableConfigParser
 from birdsong.utils.file_utils import FileUtils, CSVWriterCloseable
 from birdsong.utils.neural_net_config import NeuralNetConfig, ConfigError
 from birdsong.utils.tensorboard_plotter import SummaryWriterPlus, TensorBoardPlotter
-#from birdsong.result_tallying import TrainResult, TrainResultCollection, EpochSummary
-from birdsong.result_tallying import EpochSummary
+import numpy as np
 
+
+#from birdsong.result_tallying import TrainResult, TrainResultCollection, EpochSummary
 #*****************
-# 
+#
+# import socket
 # if socket.gethostname() in ('quintus', 'quatro', 'sparky'):
 #     # Point to where the pydev server 
 #     # software is installed on the remote
@@ -54,7 +55,6 @@ from birdsong.result_tallying import EpochSummary
 #     #*************
 #     pydevd.settrace('localhost', port=4040)
 # **************** 
-
 class BirdsTrainBasic:
     '''
     classdocs
@@ -94,19 +94,25 @@ class BirdsTrainBasic:
         self.min_epochs = self.config.Training.getint('min_epochs')
         self.max_epochs = self.config.Training.getint('max_epochs')
         self.lr         = self.config.Training.getfloat('lr')
+        self.net_name = self.config.Training.net_name
+        self.pretrain = self.config.Training.getint('num_pretrained_layers')
 
         self.set_seed(42)
         
+        self.log.info("Parameter summary:")
+        self.log.info(f"network     {self.net_name}")
+        self.log.info(f"pretrain    {self.pretrain}")
+        self.log.info(f"min epochs  {self.min_epochs}")
+        self.log.info(f"max epochs  {self.max_epochs}")
+        self.log.info(f"batch_size  {self.batch_size}")
+        
         self.fastest_device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.num_classes = self.find_num_classes(self.root_train_test_data)
-        
-        self.net_name = 'basicnet'
-        self.pretrain = 0
-        
+
         self.model    = NetUtils.get_net(self.net_name,
                                          num_classes=self.num_classes,
-                                         batch_size=self.batch_size,
-                                         kernel_size=self.kernel_size,
+                                         num_layers_to_retain=self.pretrain,
+                                         to_grayscale=False
                                          )
         self.to_device(self.model, 'gpu')
         
@@ -148,6 +154,8 @@ class BirdsTrainBasic:
         for epoch in range(self.max_epochs):
             
             self.log.info(f"Starting epoch {epoch} training")
+            start_time = datetime.datetime.now()
+            
             # Set model to train mode:
             self.model.train()
             
@@ -181,8 +189,16 @@ class BirdsTrainBasic:
                 torch.cuda.empty_cache()
 
             # Validation
-            self.log.info(f"Done epoch {epoch} training")
+            end_time = datetime.datetime.now()
+            train_time_duration = end_time - start_time
+            # A human readable duration st down to minues:
+            duration_str = self.time_delta_str(train_time_duration, granularity=4)
+            
+            self.log.info(f"Done epoch {epoch} training (duration: {duration_str})")
+            
+            start_time = datetime.datetime.now()
             self.log.info(f"Starting epoch {epoch} validation")
+            
             self.model.eval()
             for batch, targets in self.val_loader:
                 images = self.to_device(batch, 'gpu')
@@ -198,6 +214,18 @@ class BirdsTrainBasic:
                                       self.to_device(labels, 'cpu'),
                                       self.to_device(loss, 'cpu')
                                       )
+            end_time = datetime.datetime.now()
+            val_time_duration = end_time - start_time
+            # A human readable duration st down to minues:
+            duration_str = self.time_delta_str(val_time_duration, granularity=4)
+            self.log.info(f"Done validation (duration: {duration_str})")
+            
+            
+            total_duration = train_time_duration + val_time_duration
+            duration_str = self.time_delta_str(total_duration, granularity=4)
+            
+            self.log.info(f"Done epoch {epoch}  (total duration: {duration_str})")
+
             self.scheduler.step()
             ##**** Do epoch-level consolidation*****
             self.visualize_epoch(epoch)
@@ -1085,6 +1113,67 @@ class BirdsTrainBasic:
         np.random.seed(seed)
         os.environ['PYTHONHASHSEED'] = str(seed)
         random.seed = seed
+
+    #------------------------------------
+    # time_delta_str 
+    #-------------------
+    
+    def time_delta_str(self, epoch_delta, granularity=2):
+        '''
+        Takes the difference between two datetime times:
+        
+               start_time = datetime.datetime.now()
+               <some time elapses>
+               end_time = datetime.datetime.now()
+               
+               delta = end_time - start_time
+               time_delta_str(delta
+        
+        Depending on granularity, returns a string like:
+        
+            Granularity:
+                      1  '160.0 weeks'
+                      2  '160.0 weeks, 4.0 days'
+                      3  '160.0 weeks, 4.0 days, 6.0 hours'
+                      4  '160.0 weeks, 4.0 days, 6.0 hours, 42.0 minutes'
+                      5  '160.0 weeks, 4.0 days, 6.0 hours, 42.0 minutes, 13.0 seconds'
+        
+            For smaller time deltas, such as 10 seconds,
+            does not include leading zero times. For
+            any granularity:
+            
+                          '10.0 seconds'
+
+            If duration is less than second, returns '< 1sec>'
+            
+        @param epoch_delta:
+        @type epoch_delta:
+        @param granularity:
+        @type granularity:
+        '''
+        intervals = (
+            ('weeks', 604800),  # 60 * 60 * 24 * 7
+            ('days', 86400),    # 60 * 60 * 24
+            ('hours', 3600),    # 60 * 60
+            ('minutes', 60),
+            ('seconds', 1),
+            )
+        secs = epoch_delta.total_seconds()
+        result = []
+        for name, count in intervals:
+            value = secs // count
+            if value:
+                secs -= value * count
+                if value == 1:
+                    name = name.rstrip('s')
+                result.append("{} {}".format(value, name))
+        dur_str = ', '.join(result[:granularity])
+        if len(dur_str) == 0:
+            dur_str = '< 1sec>'
+        return dur_str
+        
+        
+
 
 # ------------------------- Class PredictionResult -----------
 
