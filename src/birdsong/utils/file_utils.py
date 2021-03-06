@@ -268,13 +268,15 @@ class FileUtils(object):
                        in subset_keys
                        }
         if printout:
-            longest_info_name = max(subset_keys, key=len)
+            longest_info_name = len(max(subset_keys, key=len))
             
             print('***** GPU Mem Summary')
             for info_name, info_val in info_subset.items():
                 num_spaces = longest_info_name - len(info_name)
-                print(f"{' ' * num_spaces}: {info_val}")
+                print(f"{' ' * num_spaces}{info_name}: {info_val}")
 
+        return info_subset
+    
 # ----------------------- CSVWriterFDAccessible -------
 
 class CSVWriterCloseable:
