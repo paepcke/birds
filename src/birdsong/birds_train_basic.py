@@ -4,14 +4,14 @@ Created on Mar 2, 2021
 
 @author: paepcke
 '''
-from _ast import arg
 import argparse
-import csv
 import os
 from pathlib import Path
 import random
 import socket
 import sys
+
+import numpy as np
 
 from logging_service.logging_service import LoggingService
 from sklearn.metrics import accuracy_score
@@ -31,10 +31,9 @@ from birdsong.nets import NetUtils
 from birdsong.utils.dottable_config import DottableConfigParser
 from birdsong.utils.file_utils import FileUtils, CSVWriterCloseable
 from birdsong.utils.neural_net_config import NeuralNetConfig, ConfigError
-from birdsong.utils.tensorboard_plotter import SummaryWriterPlus, \
-    TensorBoardPlotter
-import numpy as np
-
+from birdsong.utils.tensorboard_plotter import SummaryWriterPlus, TensorBoardPlotter
+#from birdsong.result_tallying import TrainResult, TrainResultCollection, EpochSummary
+from birdsong.result_tallying import EpochSummary
 
 #*****************
 # 
@@ -147,6 +146,8 @@ class BirdsTrainBasic:
     def train(self): 
         
         for epoch in range(self.max_epochs):
+            
+            self.log.info(f"Starting epoch {epoch} training")
             # Set model to train mode:
             self.model.train()
             
@@ -180,6 +181,8 @@ class BirdsTrainBasic:
                 torch.cuda.empty_cache()
 
             # Validation
+            self.log.info(f"Done epoch {epoch} training")
+            self.log.info(f"Starting epoch {epoch} validation")
             self.model.eval()
             for batch, targets in self.val_loader:
                 images = self.to_device(batch, 'gpu')
@@ -204,6 +207,7 @@ class BirdsTrainBasic:
             self.results['val']   = []
             # Back around to next epoch
 
+        self.log.info(f"Training complete after {epoch + 1} epochs")
         # The final epoch number:
         return epoch
     # ------------- Utils -----------
@@ -376,6 +380,19 @@ class BirdsTrainBasic:
                                val_acc, 
                                epoch
                                )
+
+        # The following metrics are only 
+        # reported for validation set:
+        
+        f1_macro    = f1_score(val_labels, val_preds, average='macro',
+                               zero_division=0
+                               )
+        f1_micro   = precision_score(val_labels, val_preds, average='micro',
+                                     zero_division=0
+                                     )
+        f1_weighted  = f1_score(val_labels, val_preds, average='weighted',
+                                zero_division=0
+                                )
         
         prec_macro   = precision_score(val_labels, val_preds, average='macro',
                                        zero_division=0
@@ -396,6 +413,21 @@ class BirdsTrainBasic:
         recall_weighted= recall_score(val_labels, val_preds, average='weighted',
                                       zero_division=0
                                       )
+
+        # Versions of the f1 score:
+        
+        self.writer.add_scalar('val_f1/macro', 
+                               f1_macro, 
+                               global_step=epoch)
+        self.writer.add_scalar('val_f1/micro', 
+                               f1_micro,
+                               global_step=epoch)
+        self.writer.add_scalar('val_f1/weighted', 
+                               f1_weighted,
+                               global_step=epoch)
+
+
+        # Versions of precision/recall:
         
         self.writer.add_scalar('val_prec/macro', 
                                prec_macro, 
@@ -511,6 +543,82 @@ class BirdsTrainBasic:
             per_class_tbl += f"|{class_nm}|{train_f1}|{val_f1}|  \n"
             
         self.writer.add_text('f1/macro', per_class_tbl, epoch)
+
+    #------------------------------------
+    # report_hparams_summary 
+    #-------------------
+    
+    def report_hparams_summary(self, 
+                               tally_coll, 
+                               epoch,
+                               network_name,
+                               num_pretrained_layers
+                               ):
+        '''
+        Called at the end of training. Constructs
+        a summary to report for the hyperparameters
+        used in this process. Reports to the tensorboard.
+        
+        Hyperparameters reported:
+        
+           o lr
+           o optimizer
+           o batch_size
+           o kernel_size
+        
+        Included in the measures are:
+        
+           o balanced_adj_accuracy_score_train
+           o balanced_adj_accuracy_score_val
+           o mean_accuracy_train
+           o mean_accuracy_val
+           o epoch_mean_weighted_precision
+           o epoch_mean_weighted_recall
+           o epoch_loss_train
+           o epoch_loss_val
+        
+        @param tally_coll: the collection of results for
+            each epoch
+        @type tally_coll: TrainResultCollection
+        '''
+        
+        summary = EpochSummary(tally_coll, epoch, logger=self.log)
+        hparms_vals = {
+            'pretrained_layers' : f"{network_name}_{num_pretrained_layers}",
+            'lr_initial': self.config.Training.lr,
+            'optimizer' : self.config.Training.optimizer,
+            'batch_size': self.config.Training.batch_size,
+            'kernel_size' : self.config.Training.kernel_size
+            }
+        
+        # Epoch loss summaries may be 
+        # unavailable, because not even enough
+        # data for a single batch was available.
+        # Put in -1 as a warning; it's unlikely
+        # we could send nan to tensorboard:
+        try:
+            loss_train = summary.epoch_loss_train
+        except AttributeError:
+            loss_train = -1.0
+            
+        try:
+            loss_val = summary.epoch_loss_val
+        except AttributeError:
+            loss_val = -1.0
+        
+        
+        metric_results = {
+                'zz_balanced_adj_accuracy_score_train' : summary.balanced_adj_accuracy_score_train,
+                'zz_balanced_adj_accuracy_score_val':summary.balanced_adj_accuracy_score_val,
+                'zz_mean_accuracy_train' : summary.mean_accuracy_train,
+                'zz_mean_accuracy_val': summary.mean_accuracy_val,
+                'zz_epoch_mean_weighted_precision': summary.epoch_mean_weighted_precision,
+                'zz_epoch_mean_weighted_recall' : summary.epoch_mean_weighted_recall,
+                'zz_epoch_loss_train' : loss_train,
+                'zz_epoch_loss_val' : loss_val
+                }
+        
+        self.writer.add_hparams(hparms_vals, metric_results)
 
     #------------------------------------
     # get_dataloaders 
