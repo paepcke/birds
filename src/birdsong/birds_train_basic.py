@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import random
 import sys
+from logging import DEBUG
 
 from logging_service.logging_service import LoggingService
 from sklearn.metrics import accuracy_score
@@ -65,12 +66,14 @@ class BirdsTrainBasic:
     #-------------------
 
 
-    def __init__(self, config_info):
+    def __init__(self, config_info, debugging=False):
         '''
         Constructor
         '''
         
         self.log = LoggingService()
+        if debugging:
+            self.log.logging_level = DEBUG
         
         self.curr_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -114,7 +117,11 @@ class BirdsTrainBasic:
                                          num_layers_to_retain=self.pretrain,
                                          to_grayscale=False
                                          )
+        self.log.debug(f"Before any gpu push: \n{torch.cuda.memory_summary()}")
+        
         self.to_device(self.model, 'gpu')
+        
+        self.log.debug(f"Before after model push: \n{torch.cuda.memory_summary()}")
         
         # No cross validation:
         self.folds    = 0
@@ -138,6 +145,8 @@ class BirdsTrainBasic:
         log_dir      = os.path.join(self.curr_dir, 'runs')
         raw_data_dir = os.path.join(self.curr_dir, 'runs_raw_results')
         self.setup_tensorboard(log_dir, raw_data_dir=raw_data_dir)
+        
+        self.log.debug(f"Just before train: \n{torch.cuda.memory_summary()}")
         
         try:
             final_epoch = self.train()
@@ -163,6 +172,8 @@ class BirdsTrainBasic:
             # Training
             for batch, targets in self.train_loader:
 
+                self.log.debug(f"Top of training loop: \n{torch.cuda.memory_summary()}")
+                
                 images = self.to_device(batch, 'gpu')
                 labels = self.to_device(targets, 'gpu')
                 
@@ -171,6 +182,8 @@ class BirdsTrainBasic:
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
+
+                self.log.debug(f"Just before clearing gpu: \n{torch.cuda.memory_summary()}")
                 
                 outputs = self.to_device(outputs, 'cpu')
                 labels  = self.to_device(labels, 'cpu')
@@ -188,8 +201,13 @@ class BirdsTrainBasic:
                 del labels
                 del loss
                 torch.cuda.empty_cache()
+                
+                self.log.debug(f"Just after clearing gpu: \n{torch.cuda.memory_summary()}")                
 
             # Validation
+            
+            self.log.debug(f"Start of validation: \n{torch.cuda.memory_summary()}")
+            
             end_time = datetime.datetime.now()
             train_time_duration = end_time - start_time
             # A human readable duration st down to minues:
@@ -215,6 +233,15 @@ class BirdsTrainBasic:
                                       self.to_device(labels, 'cpu'),
                                       self.to_device(loss, 'cpu')
                                       )
+                
+                del images
+                del outputs
+                del labels
+                del loss
+                torch.cuda.empty_cache()
+
+            self.log.debug(f"After eval: \n{torch.cuda.memory_summary()}")
+            
             end_time = datetime.datetime.now()
             val_time_duration = end_time - start_time
             # A human readable duration st down to minues:
@@ -1198,6 +1225,13 @@ if __name__ == '__main__':
                                          description="Basic training setup."
                                          )
 
+        parser.add_argument('-d', '--debug',
+                            action='store_true',
+                            help='maximally detailed debug message (default False)',
+                            default=False
+                            )
+
+
         parser.add_argument('-c', '--config',
                             help='fully qualified path to config.cfg file',
                             )
@@ -1209,5 +1243,5 @@ if __name__ == '__main__':
                                    '../../config.cfg'
                                    )
         #*************
-        BirdsTrainBasic(args.config)
+        BirdsTrainBasic(args.config, args.debug)
         print('Done')

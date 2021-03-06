@@ -274,6 +274,7 @@ class FileUtils(object):
             for info_name, info_val in info_subset.items():
                 num_spaces = longest_info_name - len(info_name)
                 print(f"{' ' * num_spaces}{info_name}: {info_val}")
+            print('*****')
 
         return info_subset
     
