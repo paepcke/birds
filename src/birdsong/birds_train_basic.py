@@ -185,6 +185,7 @@ class BirdsTrainBasic:
 
                 self.log.debug(f"Just before clearing gpu: \n{torch.cuda.memory_summary()}")
                 
+                images  = self.to_device(images, 'cpu')
                 outputs = self.to_device(outputs, 'cpu')
                 labels  = self.to_device(labels, 'cpu')
                 loss    = self.to_device(loss, 'cpu')
@@ -206,14 +207,14 @@ class BirdsTrainBasic:
 
             # Validation
             
-            self.log.debug(f"Start of validation: \n{torch.cuda.memory_summary()}")
-            
             end_time = datetime.datetime.now()
             train_time_duration = end_time - start_time
             # A human readable duration st down to minues:
             duration_str = self.time_delta_str(train_time_duration, granularity=4)
             
             self.log.info(f"Done epoch {epoch} training (duration: {duration_str})")
+
+            self.log.debug(f"Start of validation: \n{torch.cuda.memory_summary()}")
             
             start_time = datetime.datetime.now()
             self.log.info(f"Starting epoch {epoch} validation")
@@ -226,14 +227,17 @@ class BirdsTrainBasic:
                 outputs = self.model(images)
                 loss = self.loss_fn(outputs, labels)
                 
-                self.to_device(images, 'cpu')
+                images  = self.to_device(images, 'cpu')
+                outputs = self.to_device(outputs, 'cpu')
+                labels  = self.to_device(labels, 'cpu')
+                loss    = self.to_device(loss, 'cpu')
+                
                 self.remember_results('val',
                                       epoch,
-                                      self.to_device(outputs, 'cpu'),
-                                      self.to_device(labels, 'cpu'),
-                                      self.to_device(loss, 'cpu')
+                                      outputs,
+                                      labels,
+                                      loss
                                       )
-                
                 del images
                 del outputs
                 del labels
