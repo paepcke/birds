@@ -151,6 +151,7 @@ class BirdsTrainBasic:
 
     def train(self): 
         
+        overall_start_time = datetime.datetime.now()
         for epoch in range(self.max_epochs):
             
             self.log.info(f"Starting epoch {epoch} training")
@@ -221,10 +222,14 @@ class BirdsTrainBasic:
             self.log.info(f"Done validation (duration: {duration_str})")
             
             
-            total_duration = train_time_duration + val_time_duration
-            duration_str = self.time_delta_str(total_duration, granularity=4)
+            epoch_duration = train_time_duration + val_time_duration
+            epoch_dur_str  = self.time_delta_str(epoch_duration, granularity=4)
             
-            self.log.info(f"Done epoch {epoch}  (total duration: {duration_str})")
+            cumulative_dur = end_time - overall_start_time
+            cum_dur_str    = self.time_delta_str(cumulative_dur, granularity=4)
+            
+            msg = f"Done epoch {epoch}  (epoch duration: {epoch_dur_str}; cumulative: {cum_dur_str})"
+            self.log.info(msg)
 
             self.scheduler.step()
             ##**** Do epoch-level consolidation*****
