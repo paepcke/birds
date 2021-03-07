@@ -64,7 +64,7 @@ class BirdsTrainBasic:
     # Number of intermediate models to save
     # during training:
      
-    MODEL_ARCHIVE_SIZE = 8
+    MODEL_ARCHIVE_SIZE = 20
     
     #------------------------------------
     # Constructor 
