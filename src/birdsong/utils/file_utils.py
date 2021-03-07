@@ -240,6 +240,43 @@ class FileUtils(object):
         return timestamp
 
     #------------------------------------
+    # save_model 
+    #-------------------
+    
+    @classmethod
+    def save_model(cls, model, epoch, history_len):
+        '''
+        If necessary, creates a subdirectory 'models'
+        below this script's directory. Using the 
+        construct_filename() method, a run-specific
+        subdirectory under 'models' is then created.
+        
+        The subdirectory name contains a timestamp,
+        and the run information elements, that construct_filename()
+        includes.
+
+        Within this subdir the method maintains a circlular
+        set of files of cardinality history_len: 
+        
+                 fname_1.pth
+                 fname_2.pth
+                 fname_<history_len>.pth
+                 
+        When history_len model files are already present, removes the oldest.
+                 
+        @param model: model to save
+        @type model: nn.module
+        @param epoch: the epoch that created the model
+        @type epoch: int
+        @param history_len: number of snapshot to retain
+        @type history_len: int
+        '''
+        
+        
+        
+
+
+    #------------------------------------
     # gpu_memory_report 
     #-------------------
     

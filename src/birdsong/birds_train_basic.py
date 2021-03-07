@@ -6,11 +6,12 @@ Created on Mar 2, 2021
 '''
 import argparse
 import datetime
+from logging import DEBUG
 import os
 from pathlib import Path
 import random
+import socket
 import sys
-from logging import DEBUG
 
 from logging_service.logging_service import LoggingService
 from sklearn.metrics import accuracy_score
@@ -30,6 +31,7 @@ from birdsong.nets import NetUtils
 from birdsong.result_tallying import EpochSummary
 from birdsong.utils.dottable_config import DottableConfigParser
 from birdsong.utils.file_utils import FileUtils, CSVWriterCloseable
+from birdsong.utils.model_archive import ModelArchive
 from birdsong.utils.neural_net_config import NeuralNetConfig, ConfigError
 from birdsong.utils.tensorboard_plotter import SummaryWriterPlus, TensorBoardPlotter
 import numpy as np
@@ -38,7 +40,6 @@ import numpy as np
 #from birdsong.result_tallying import TrainResult, TrainResultCollection, EpochSummary
 #*****************
 #
-import socket
 if socket.gethostname() in ('quintus', 'quatro', 'sparky'):
     # Point to where the pydev server 
     # software is installed on the remote
@@ -60,13 +61,20 @@ class BirdsTrainBasic:
     '''
     classdocs
     '''
-
+    # Number of intermediate models to save
+    # during training:
+     
+    MODEL_ARCHIVE_SIZE = 8
+    
     #------------------------------------
     # Constructor 
     #-------------------
 
 
-    def __init__(self, config_info, debugging=False):
+    def __init__(self, 
+                 config_info, 
+                 debugging=False
+                 ):
         '''
         Constructor
         '''
@@ -117,11 +125,11 @@ class BirdsTrainBasic:
                                          num_layers_to_retain=self.pretrain,
                                          to_grayscale=False
                                          )
-        self.log.debug(f"Before any gpu push: \n{torch.cuda.memory_summary()}")
+        self.log.debug(f"Before any gpu push: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
         
         self.to_device(self.model, 'gpu')
         
-        self.log.debug(f"Before after model push: \n{torch.cuda.memory_summary()}")
+        self.log.debug(f"Before after model push: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
         
         # No cross validation:
         self.folds    = 0
@@ -146,7 +154,7 @@ class BirdsTrainBasic:
         raw_data_dir = os.path.join(self.curr_dir, 'runs_raw_results')
         self.setup_tensorboard(log_dir, raw_data_dir=raw_data_dir)
         
-        self.log.debug(f"Just before train: \n{torch.cuda.memory_summary()}")
+        self.log.debug(f"Just before train: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
         
         try:
             final_epoch = self.train()
@@ -172,7 +180,7 @@ class BirdsTrainBasic:
             # Training
             for batch, targets in self.train_loader:
 
-                self.log.debug(f"Top of training loop: \n{torch.cuda.memory_summary()}")
+                self.log.debug(f"Top of training loop: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
                 
                 images = self.to_device(batch, 'gpu')
                 labels = self.to_device(targets, 'gpu')
@@ -183,7 +191,7 @@ class BirdsTrainBasic:
                 loss.backward()
                 self.optimizer.step()
 
-                self.log.debug(f"Just before clearing gpu: \n{torch.cuda.memory_summary()}")
+                self.log.debug(f"Just before clearing gpu: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
                 
                 images  = self.to_device(images, 'cpu')
                 outputs = self.to_device(outputs, 'cpu')
@@ -203,7 +211,7 @@ class BirdsTrainBasic:
                 del loss
                 torch.cuda.empty_cache()
                 
-                self.log.debug(f"Just after clearing gpu: \n{torch.cuda.memory_summary()}")                
+                self.log.debug(f"Just after clearing gpu: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")                
 
             # Validation
             
@@ -214,7 +222,7 @@ class BirdsTrainBasic:
             
             self.log.info(f"Done epoch {epoch} training (duration: {duration_str})")
 
-            self.log.debug(f"Start of validation: \n{torch.cuda.memory_summary()}")
+            self.log.debug(f"Start of validation: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
             
             start_time = datetime.datetime.now()
             self.log.info(f"Starting epoch {epoch} validation")
@@ -245,7 +253,7 @@ class BirdsTrainBasic:
                     del loss
                     torch.cuda.empty_cache()
 
-            self.log.debug(f"After eval: \n{torch.cuda.memory_summary()}")
+            self.log.debug(f"After eval: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
             
             end_time = datetime.datetime.now()
             val_time_duration = end_time - start_time
@@ -263,6 +271,9 @@ class BirdsTrainBasic:
             msg = f"Done epoch {epoch}  (epoch duration: {epoch_dur_str}; cumulative: {cum_dur_str})"
             self.log.info(msg)
 
+            # Save model, keeping self.model_archive_size models: 
+            self.model_archive.save_model(self.model, epoch)
+
             self.scheduler.step()
             ##**** Do epoch-level consolidation*****
             self.visualize_epoch(epoch)
@@ -275,6 +286,8 @@ class BirdsTrainBasic:
         self.log.info(f"Training complete after {epoch + 1} epochs")
         # The final epoch number:
         return epoch
+    
+    
     # ------------- Utils -----------
 
     #------------------------------------
@@ -932,6 +945,16 @@ class BirdsTrainBasic:
             'preds'  : CSVWriterCloseable(csv_preds_fn, mode=mode, delimiter=','),
             'labels' : CSVWriterCloseable(csv_labels_fn, mode=mode, delimiter=',')
             }
+        
+        # Place to save models. Have
+        # the archive log to the same
+        # place as this trainer:
+         
+        self.model_archive = ModelArchive(self.config,
+                                          self.num_classes,
+                                          history_len=self.MODEL_ARCHIVE_SIZE,
+                                          log=self.log
+                                          )
 
     #------------------------------------
     # close_tensorboard 
