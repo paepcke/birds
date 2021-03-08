@@ -150,11 +150,11 @@ class BirdsTrainBasic:
         self.train_loader, self.val_loader = self.get_dataloaders(sample_width, 
                                                                   sample_height
                                                                   )
+        self.class_names = self.train_loader.dataset.classes
+        
         log_dir      = os.path.join(self.curr_dir, 'runs')
         raw_data_dir = os.path.join(self.curr_dir, 'runs_raw_results')
         self.setup_tensorboard(log_dir, raw_data_dir=raw_data_dir)
-        #self.class_names = self.train_loader.dataset.class_names()
-        self.class_names = self.train_loader.dataset.classes
 
         # Log a few example spectrograms to tensorboard;
         # one per class:
@@ -500,6 +500,31 @@ class BirdsTrainBasic:
         recall_weighted= recall_score(val_labels, val_preds, average='weighted',
                                       zero_division=0
                                       )
+
+        # A confusion matrix whose entries
+        # are normalized to show percentage
+        # of all samples in a row the classifier
+        # got rigth:
+        
+        conf_matrix_val = self.tensorboard_plotter\
+            .compute_confusion_matrix(val_labels,
+                                      val_preds,
+                                      len(self.classes),
+                                      normalize=True) 
+        # Submit the confusion matrix image
+        # to the tensorboard. In the following:
+        # do not provide a separate title, such as
+        #  title=f"Confusion Matrix (Validation): Epoch{epoch}"
+        # That will put each matrix into its own slot
+        # on tensorboard, rather than having a time slider
+        
+        self.tensorboard_plotter.conf_matrix_to_tensorboard(
+            self.writer,
+            conf_matrix_val,
+            self.class_names,
+            epoch=epoch,
+            title=f"Confusion Matrix Series"
+            )
 
         # Versions of the f1 score:
         

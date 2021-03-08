@@ -16,10 +16,13 @@ from torchvision import transforms
 from torchvision.datasets.folder import ImageFolder, default_loader
 from torchvision.utils import make_grid
 
-from birdsong.rooted_image_dataset import SingleRootImageDataset
+from sklearn.metrics import confusion_matrix
+
 import matplotlib.ticker as mticker
 import numpy as np
 import seaborn as sns
+
+from birdsong.rooted_image_dataset import SingleRootImageDataset
 
 
 #*****************
@@ -416,6 +419,39 @@ class TensorBoardPlotter:
                                    )
         return fig
 
+
+    #------------------------------------
+    # compute_confusion_matrix
+    #-------------------
+    
+    def compute_confusion_matrix(self, 
+                                 truth_labels, 
+                                 predicted_class_ids,
+                                 num_classes,
+                                 normalize=False
+                                 ):
+        # Example Confustion matrix for 16 samples,
+        # in 3 classes:
+        # 
+        #              C_1-pred, C_2-pred, C_3-pred
+        #  C_1-true        3         1        0
+        #  C_2-true        2         6        1
+        #  C_3-true        0         0        3
+        
+        # The class IDs (labels kwarg) is needed for
+        # sklearn to know about classes that were not
+        # encountered:
+        
+        conf_matrix = torch.tensor(confusion_matrix(
+            truth_labels,          # Truth
+            predicted_class_ids,   # Prediction
+            labels=list(range(num_classes)) # Class labels
+            ))
+
+        if normalize:
+            conf_matrix = self.calc_conf_matrix_norm(conf_matrix)
+             
+        return conf_matrix
 
     #------------------------------------
     # calc_conf_matrix_norm
