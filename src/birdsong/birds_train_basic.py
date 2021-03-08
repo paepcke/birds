@@ -153,7 +153,16 @@ class BirdsTrainBasic:
         log_dir      = os.path.join(self.curr_dir, 'runs')
         raw_data_dir = os.path.join(self.curr_dir, 'runs_raw_results')
         self.setup_tensorboard(log_dir, raw_data_dir=raw_data_dir)
-        
+        #self.class_names = self.train_loader.dataset.class_names()
+        self.class_names = self.train_loader.dataset.classes
+
+        # Log a few example spectrograms to tensorboard;
+        # one per class:
+        self.tensorboard_plotter.write_img_grid(self.writer,
+                                                self.root_train_test_data,
+                                                len(self.class_names), # Num of train examples
+                                                )
+
         self.log.debug(f"Just before train: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
         
         try:
