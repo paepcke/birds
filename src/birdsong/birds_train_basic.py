@@ -13,11 +13,6 @@ import random
 import sys
 
 from logging_service.logging_service import LoggingService
-from sklearn.metrics import accuracy_score
-from sklearn.metrics import balanced_accuracy_score
-from sklearn.metrics import f1_score
-from sklearn.metrics import precision_score
-from sklearn.metrics import recall_score
 from torch import cuda
 from torch import nn
 from torch import optim
@@ -27,9 +22,10 @@ from torchvision import transforms
 from torchvision.datasets.folder import ImageFolder
 
 from birdsong.nets import NetUtils
-from birdsong.result_tallying import EpochSummary
+from birdsong.result_tallying import ResultTally, ResultCollection
 from birdsong.utils.dottable_config import DottableConfigParser
 from birdsong.utils.file_utils import FileUtils, CSVWriterCloseable
+from birdsong.utils.learning_phase import LearningPhase
 from birdsong.utils.model_archive import ModelArchive
 from birdsong.utils.neural_net_config import NeuralNetConfig, ConfigError
 from birdsong.utils.tensorboard_plotter import SummaryWriterPlus, TensorBoardPlotter
@@ -158,13 +154,12 @@ class BirdsTrainBasic:
 
         # Log a few example spectrograms to tensorboard;
         # one per class:
-        self.tensorboard_plotter.write_img_grid(self.writer,
-                                                self.root_train_test_data,
-                                                len(self.class_names), # Num of train examples
-                                                )
+        TensorBoardPlotter.write_img_grid(self.writer,
+                                          self.root_train_test_data,
+                                          len(self.class_names), # Num of train examples
+                                          )
 
         self.log.debug(f"Just before train: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
-        
         try:
             final_epoch = self.train()
             self.visualize_final_epoch_results(final_epoch)
@@ -207,7 +202,7 @@ class BirdsTrainBasic:
                 labels  = self.to_device(labels, 'cpu')
                 loss    = self.to_device(loss, 'cpu')
 
-                self.remember_results('train',
+                self.remember_results(LearningPhase.TRAINING,
                                       epoch,
                                       outputs,
                                       labels,
@@ -250,7 +245,7 @@ class BirdsTrainBasic:
                     labels  = self.to_device(labels, 'cpu')
                     loss    = self.to_device(loss, 'cpu')
                     
-                    self.remember_results('val',
+                    self.remember_results(LearningPhase.VALIDATING,
                                           epoch,
                                           outputs,
                                           labels,
@@ -284,15 +279,25 @@ class BirdsTrainBasic:
             self.model_archive.save_model(self.model, epoch)
 
             self.scheduler.step()
-            ##**** Do epoch-level consolidation*****
+
             self.visualize_epoch(epoch)
             
             # Fresh results tallying 
-            self.results['train'] = []
-            self.results['val']   = []
+            self.results.clear()
+
             # Back around to next epoch
 
         self.log.info(f"Training complete after {epoch + 1} epochs")
+        
+        # All seems to have gone well. Report the 
+        # overall result of the final epoch for the 
+        # hparms config used in this process:
+        
+        self.report_hparams_summary(self.latest_result,
+                                    epoch,
+                                    self.net_name,
+                                    self.num_pretrained_layers)
+
         # The final epoch number:
         return epoch
     
@@ -322,195 +327,92 @@ class BirdsTrainBasic:
                          loss,
                          ):
 
-        self.results[phase].append(PredictionResult(epoch, 
-                                                    outputs, 
-                                                    labels, 
-                                                    loss))
+        # Add the results 
+        tally = ResultTally(epoch,
+                            phase, 
+                            outputs, 
+                            labels, 
+                            loss,
+                            self.num_classes,
+                            self.batch_size)
+        # Add result to results collection of
+        # tallies:
+        self.results[epoch] = tally
 
     #------------------------------------
-    # visualize_epochs 
+    # visualize_epoch 
     #-------------------
     
     def visualize_epoch(self, epoch):
         '''
-        Take the PredictionResult instances
-        in self.results, plus the label/preds
-        csv files and report appropriate
-        aggregates to tensorboard.
+        Take the ResultTally instances
+        in the train and val ResultCollections
+        in self.results, and report appropriate
+        aggregates to tensorboard. Computes
+        f1 scores, accuracies, etc. for given
+        epoch.
 
         Separately for train and validation
         results: build one long array 
         of predictions, and a corresponding
         array of labels. Also, average the
         loss across all instances.
-        '''
-        train_preds      = []
-        train_labels     = []
-        val_preds        = []
-        val_labels       = []
-
-        train_loss       = torch.tensor([])
-        val_loss         = torch.tensor([])
-#****         summed_loss_per_sample   = 0
-#         num_samples= 0
         
-        for train_res, val_res in zip(self.results['train'],
-                                      self.results['val']
-                                      ):
-            # For a batch_size of 2 we output logits like:
-            #
-            #     tensor([[0.0162, 0.0096, 0.0925, 0.0157],
-            #             [0.0208, 0.0087, 0.0922, 0.0141]], grad_fn=<AddmmBackward>)
-            #
-            # Turn into probabilities along each row:
-            
-            batch_train_pred_probs = torch.softmax(train_res.outputs, dim=1)
-            batch_val_pred_probs   = torch.softmax(val_res.outputs, dim=1)
-            
-            # Now have:
-            #
-            #     tensor([[0.2456, 0.2439, 0.2650, 0.2454],
-            #             [0.2466, 0.2436, 0.2648, 0.2449]])
-            #
-            # Find index of largest probability for each
-            # of the batch_size prediction probs along each
-            # row to get:
-            #
-            #  first to tensor([2,2]) then to [2,2]
-            
-            batch_train_pred_tensor = torch.argmax(batch_train_pred_probs, dim=1)
-            batch_val_pred_tensor   = torch.argmax(batch_val_pred_probs, dim=1)
-            
-            train_pred_class_list = batch_train_pred_tensor.tolist()
-            val_pred_class_list   = batch_val_pred_tensor.tolist()
-             
-            train_preds.extend(train_pred_class_list)
-            val_preds.extend(val_pred_class_list)
+        The the preds and labels as rows to csv 
+        files.
+        
+        @return: a ResultTally instance with all
+            metrics computed for display
+        @rtype: ResultTally
+        '''
 
-            train_labels.extend(train_res.labels.tolist())
-            val_labels.extend(val_res.labels.tolist())
-            
-            # Loss in PredictionResult instances
-            # is per batch. Convert the number
-            # to loss per sample (within each batch):
-            train_new_loss = train_res.loss.detach() / self.batch_size
-            train_loss = torch.cat((train_loss, torch.unsqueeze(train_new_loss, dim=0)))
-            
-            val_new_loss = train_res.loss.detach() / self.batch_size
-            val_loss     = torch.cat((val_loss, torch.unsqueeze(val_new_loss, dim=0)))
-            
-            #*****loss.append(res.loss / self.batch_size)
+        val_tally   = self.results[(epoch, str(LearningPhase.VALIDATING))]
+        train_tally = self.results[(epoch, str(LearningPhase.TRAINING))]
 
-        # Now we have two long sequences: predicted classes
-        # (resolved from logits into actual class IDs), and
-        # another seq with the corresponding correct labels.
+        self.latest_result = {'train': train_tally,
+                              'val'  : val_tally
+                              }
         
         # If we are to write preds and labels to
         # .csv for later additional processing:
 
         if self.csv_writers is not None:
-            self.csv_writers['preds'].writerow(val_preds)
-            self.csv_writers['labels'].writerow(val_labels)
+            self.csv_writers['preds'].writerow(
+                [epoch, train_tally.preds, val_tally.preds]
+                )
+            self.csv_writers['labels'].writerow(
+                [epoch, train_tally.labels, val_tally.labels]
+                )
             
-        
-        # Save these lates results in case
-        # this is the final epoch, and we'll
-        # want results only on it. We'll overwrite
-        # if there is another epoch after this one:
-        
-        self.latest_results = {'train_preds' : train_preds,
-                               'train_labels': train_labels,
-                               'val_preds'   : val_preds,
-                               'val_labels'  : val_labels
-                               }
-
-        # Mean loss over all batches
-        train_mean_loss = torch.mean(train_loss)
-        val_mean_loss   = torch.mean(val_loss)
         self.writer.add_scalar('loss/train', 
-                               train_mean_loss, 
+                               train_tally.mean_loss, 
                                global_step=epoch
                                )
         self.writer.add_scalar('loss/val', 
-                               val_mean_loss, 
+                               val_tally.mean_loss, 
                                global_step=epoch
                                )
         
-        # Compute accuracy, adjust for chance, given 
-        # number of classes, and shift to [-1,1] with
-        # zero being chance:
-         
-        train_balanced_acc = balanced_accuracy_score(train_labels, 
-                                                     train_preds,
-                                                     adjusted=True)
         self.writer.add_scalar('balanced_accuracy_score/train', 
-                               train_balanced_acc, 
-                               epoch
+                               train_tally.balanced_acc, 
+                               global_step=epoch
                                )
 
-        val_balanced_acc = balanced_accuracy_score(val_labels, 
-                                                   val_preds,
-                                                   adjusted=True)
         self.writer.add_scalar('balanced_accuracy_score/val', 
-                               val_balanced_acc, 
-                               epoch
+                               val_tally.balanced_acc, 
+                               global_step=epoch
                                )
 
-        
-        train_acc = accuracy_score(train_labels, train_preds, normalize=True)
         self.writer.add_scalar('accuracy_score/train', 
-                               train_acc, 
-                               epoch
+                               train_tally.accuracy, 
+                               global_step=epoch
                                )
-        val_acc = accuracy_score(val_labels, val_preds, normalize=True)
         self.writer.add_scalar('accuracy_score/val', 
-                               val_acc, 
-                               epoch
+                               val_tally.accuracy, 
+                               global_step=epoch
                                )
 
-        # The following metrics are only 
-        # reported for validation set:
-        
-        f1_macro    = f1_score(val_labels, val_preds, average='macro',
-                               zero_division=0
-                               )
-        f1_micro   = precision_score(val_labels, val_preds, average='micro',
-                                     zero_division=0
-                                     )
-        f1_weighted  = f1_score(val_labels, val_preds, average='weighted',
-                                zero_division=0
-                                )
-        
-        prec_macro   = precision_score(val_labels, val_preds, average='macro',
-                                       zero_division=0
-                                       )
-        prec_micro   = precision_score(val_labels, val_preds, average='micro',
-                                       zero_division=0
-                                       )
-        prec_weighted= precision_score(val_labels, val_preds, average='weighted',
-                                       zero_division=0
-                                       )
 
-        recall_macro   = recall_score(val_labels, val_preds, average='macro',
-                                      zero_division=0
-                                      )
-        recall_micro   = recall_score(val_labels, val_preds, average='micro',
-                                      zero_division=0
-                                      )
-        recall_weighted= recall_score(val_labels, val_preds, average='weighted',
-                                      zero_division=0
-                                      )
-
-        # A confusion matrix whose entries
-        # are normalized to show percentage
-        # of all samples in a row the classifier
-        # got rigth:
-        
-        conf_matrix_val = self.tensorboard_plotter\
-            .compute_confusion_matrix(val_labels,
-                                      val_preds,
-                                      len(self.classes),
-                                      normalize=True) 
         # Submit the confusion matrix image
         # to the tensorboard. In the following:
         # do not provide a separate title, such as
@@ -518,9 +420,9 @@ class BirdsTrainBasic:
         # That will put each matrix into its own slot
         # on tensorboard, rather than having a time slider
         
-        self.tensorboard_plotter.conf_matrix_to_tensorboard(
+        TensorBoardPlotter.conf_matrix_to_tensorboard(
             self.writer,
-            conf_matrix_val,
+            val_tally.conf_matrix_val,
             self.class_names,
             epoch=epoch,
             title=f"Confusion Matrix Series"
@@ -529,38 +431,39 @@ class BirdsTrainBasic:
         # Versions of the f1 score:
         
         self.writer.add_scalar('val_f1/macro', 
-                               f1_macro, 
+                               val_tally.f1_macro, 
                                global_step=epoch)
         self.writer.add_scalar('val_f1/micro', 
-                               f1_micro,
+                               val_tally.f1_micro,
                                global_step=epoch)
         self.writer.add_scalar('val_f1/weighted', 
-                               f1_weighted,
+                               val_tally.f1_weighted,
                                global_step=epoch)
 
 
         # Versions of precision/recall:
         
         self.writer.add_scalar('val_prec/macro', 
-                               prec_macro, 
+                               val_tally.prec_macro, 
                                global_step=epoch)
         self.writer.add_scalar('val_prec/micro', 
-                               prec_micro,
+                               val_tally.prec_micro,
                                global_step=epoch)
         self.writer.add_scalar('val_prec/weighted', 
-                               prec_weighted,
+                               val_tally.prec_weighted,
                                global_step=epoch)
 
         self.writer.add_scalar('val_recall/macro', 
-                               recall_macro, 
+                               val_tally.recall_macro, 
                                global_step=epoch)
         self.writer.add_scalar('val_recall/micro', 
-                               recall_micro,
+                               val_tally.recall_micro,
                                global_step=epoch)
         self.writer.add_scalar('val_recall/weighted', 
-                               recall_weighted,
+                               val_tally.recall_weighted,
                                global_step=epoch)
 
+        return val_tally
 
     #------------------------------------
     # visualize_final_epoch_results 
@@ -570,23 +473,18 @@ class BirdsTrainBasic:
         '''
         Reports to tensorboard just for the
         final epoch.
-            self.latest_results is {'train_preds' : sequence of class predictions
-                                    'train_labels : corresponding labels
-                                    'val_preds'   : sequence of class predictions
-                                    'val_labels   : corresponding labels
-                                    }
-                                    
-        where train_preds and val_preds are the processed,
-        final class IDs, not the raw logits or probabilities
+ 
+        Expect self.latest_results to be the latest
+        ResultTally.
         '''
         train_preds  = self.latest_results['train_preds']
         train_labels = self.latest_results['train_labels']
-        
+         
         val_preds    = self.latest_results['val_preds']
         val_labels   = self.latest_results['val_labels']
-        
+         
         # First: the table of f1 scores:
-        
+         
         train_f1_macro = f1_score(train_labels,
                                         train_preds,
                                         average='macro'
@@ -595,7 +493,7 @@ class BirdsTrainBasic:
                                         val_preds,
                                         average='macro'
                                         ).round(1)
-        
+         
         train_f1_per_class = f1_score(train_labels,
                                             train_preds,
                                             average=None # get f1 separately for each class
@@ -604,132 +502,115 @@ class BirdsTrainBasic:
                                           train_preds,
                                           average=None # get f1 separately for each class
                                           ).round(1)
-        
+         
         # Doesn't matter whether the class name
         # to int id comes from the train_loader, 
         # or the val_loader:
         classes_to_ids = self.train_loader.dataset.class_to_idx
-        
+         
         # Get reverse lookup: class_id --> class_name:
         ids_to_classes = {class_id : class_name
                           for class_name, class_id
                            in list(classes_to_ids.items()) 
                           }
-        
+         
         # Build table: class ID => class name:
         class_key = (f"Class ID|Class Name  \n"
                       "--------|------      \n"
                       )
         for cname, cidx in classes_to_ids.items():
             class_key += f"{cidx}|{cname}  \n"
-            
+             
         self.writer.add_text('class_key', 
                              class_key,
                              global_step=epoch)
-        
-        
+         
+         
         # Build:
         # |phase |f1_macro        |
         # |------|----------------|
         # |Train |{train_f1_macro}|
         # |Val   |{val_f1_macro}  |
-
+ 
         tbl =  (f"|phase|f1_macro|  \n"
                 f"|------|-------| \n"
                 f"|Train|{train_f1_macro}|  \n"
                 f"|Val  |{val_f1_macro}  |  \n"
                 )
-        
+         
         self.writer.add_text('f1/macro', tbl, epoch)
-               
+                
         # Build f1 for each class separately:
-        
+         
         per_class_tbl = (f"|Class|F1 train|F1 validation|  \n"
                          f"|-----|--------|-------------|  \n"
                          )
-        
+         
         for class_id, (train_f1, val_f1) in enumerate(zip(train_f1_per_class, 
                                                           val_f1_per_class
                                                           )):
             class_nm = ids_to_classes[class_id] 
             per_class_tbl += f"|{class_nm}|{train_f1}|{val_f1}|  \n"
-            
+             
         self.writer.add_text('f1/macro', per_class_tbl, epoch)
 
     #------------------------------------
     # report_hparams_summary 
     #-------------------
     
-    def report_hparams_summary(self, 
-                               tally_coll, 
-                               epoch,
-                               network_name,
-                               num_pretrained_layers
-                               ):
+    def report_hparams_summary(self, latest_results, epoch):
         '''
         Called at the end of training. Constructs
         a summary to report for the hyperparameters
         used in this process. Reports to the tensorboard.
-        
+         
         Hyperparameters reported:
-        
+         
            o lr
            o optimizer
            o batch_size
            o kernel_size
-        
+         
         Included in the measures are:
-        
-           o balanced_adj_accuracy_score_train
-           o balanced_adj_accuracy_score_val
-           o mean_accuracy_train
-           o mean_accuracy_val
-           o epoch_mean_weighted_precision
-           o epoch_mean_weighted_recall
-           o epoch_loss_train
-           o epoch_loss_val
-        
-        @param tally_coll: the collection of results for
-            each epoch
-        @type tally_coll: TrainResultCollection
+         
+           o balanced_accuracy      (train and val)
+           o mean_accuracy_train    (train and val)
+           o epoch_prec_weighted
+           o epoch_recall_weighted
+           o epoch_mean_loss        (train and val)
+           
+         
+        @param latest_results: dict with keys 'train' and
+            'val', holding the respective most recent
+            (i.e. last-epoch) ResultTally
+        @type latest_results: {'train' : ResultTally,
+                               'val'   : ResultTally
+                               }
         '''
-        
-        summary = EpochSummary(tally_coll, epoch, logger=self.log)
+         
+        # Get the latest validation tally:
+        train_tally = latest_results['train']
+        val_tally   = latest_results['val']
+         
         hparms_vals = {
-            'pretrained_layers' : f"{network_name}_{num_pretrained_layers}",
+            'pretrained_layers' : f"{self.net_name}_{self.pretrained}",
             'lr_initial': self.config.Training.lr,
             'optimizer' : self.config.Training.optimizer,
             'batch_size': self.config.Training.batch_size,
             'kernel_size' : self.config.Training.kernel_size
             }
-        
-        # Epoch loss summaries may be 
-        # unavailable, because not even enough
-        # data for a single batch was available.
-        # Put in -1 as a warning; it's unlikely
-        # we could send nan to tensorboard:
-        try:
-            loss_train = summary.epoch_loss_train
-        except AttributeError:
-            loss_train = -1.0
-            
-        try:
-            loss_val = summary.epoch_loss_val
-        except AttributeError:
-            loss_val = -1.0
-        
-        
+
         metric_results = {
-                'zz_balanced_adj_accuracy_score_train' : summary.balanced_adj_accuracy_score_train,
-                'zz_balanced_adj_accuracy_score_val':summary.balanced_adj_accuracy_score_val,
-                'zz_mean_accuracy_train' : summary.mean_accuracy_train,
-                'zz_mean_accuracy_val': summary.mean_accuracy_val,
-                'zz_epoch_mean_weighted_precision': summary.epoch_mean_weighted_precision,
-                'zz_epoch_mean_weighted_recall' : summary.epoch_mean_weighted_recall,
-                'zz_epoch_loss_train' : loss_train,
-                'zz_epoch_loss_val' : loss_val
+                'zz_balanced_adj_accuracy_score_train' : train_tally.balanced_accuracy,
+                'zz_balanced_adj_accuracy_score_val':val_tally.balanced_accuracy,
+                'zz_mean_accuracy_train' : train_tally.accuracy,
+                'zz_mean_accuracy_val': val_tally.mean_accuracy,
+                'zz_epoch_mean_weighted_precision': val_tally.prec_weighted,
+                'zz_epoch_mean_weighted_recall' : val_tally.recall_weighted,
+                'zz_epoch_loss_train' : train_tally.mean_loss,
+                'zz_epoch_loss_val' : val_tally.mean_loss
                 }
-        
+         
         self.writer.add_hparams(hparms_vals, metric_results)
 
     #------------------------------------
@@ -856,19 +737,9 @@ class BirdsTrainBasic:
         
         self.writer = SummaryWriterPlus(log_dir=logdir)
         
-        # Tensorboard image writing:
-        self.tensorboard_plotter = TensorBoardPlotter()
-    
         # Intermediate storage for train and val results:
-        self.results = {'train' : [],
-                        'val'   : []
-                        }
-        # For just the most recent result:
-        self.latest_results = {'train': None,
-                               'val'  : None
-                               }
-        
-        
+        self.results = ResultCollection()
+
         self.log.info(f"To view tensorboard charts: in shell: tensorboard --logdir {logdir}; then browser: localhost:6006")
 
     #------------------------------------
@@ -979,6 +850,10 @@ class BirdsTrainBasic:
             'preds'  : CSVWriterCloseable(csv_preds_fn, mode=mode, delimiter=','),
             'labels' : CSVWriterCloseable(csv_labels_fn, mode=mode, delimiter=',')
             }
+        header = ['epoch', 'train_preds', 'val_preds']
+        self.csv_writers['preds'].writerow(header)
+        header = ['epoch', 'train_labels', 'val_labels']
+        self.csv_writers['labels'].writerow(header)
         
         # Place to save models. Have
         # the archive log to the same
@@ -1266,20 +1141,6 @@ class BirdsTrainBasic:
             dur_str = '< 1sec>'
         return dur_str
         
-        
-
-
-# ------------------------- Class PredictionResult -----------
-
-class PredictionResult:
-    
-    def __init__(self, epoch, outputs, labels, loss):
-        self.epoch = epoch
-        self.outputs = outputs
-        self.labels = labels
-        self.loss = loss
-
-
 # ------------------------ Main ------------
 if __name__ == '__main__':
         parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),

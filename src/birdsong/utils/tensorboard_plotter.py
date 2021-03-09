@@ -64,37 +64,30 @@ class TensorBoardPlotter:
     No SummaryWriter is created. A writer is always
     passed in
     '''
-    
-    conf_matrices = []
-
-    #------------------------------------
-    # Constructor
-    #-------------------
-    
-    def __init__(self):
-        pass
 
     #------------------------------------
     # conf_matrix_to_tensorboard 
     #-------------------
     
-    def conf_matrix_to_tensorboard(self,
+    @classmethod
+    def conf_matrix_to_tensorboard(cls,
                                    writer,
                                    conf_matrix,
                                    class_names,
                                    epoch=0,
                                    title='Confusion Matrix'
                                    ):
-        conf_matrix_fig = self.fig_from_conf_matrix(conf_matrix, 
-                                                    class_names, 
-                                                    title)
+        conf_matrix_fig = cls.fig_from_conf_matrix(conf_matrix, 
+                                                   class_names, 
+                                                   title)
         writer.add_figure(title, conf_matrix_fig, global_step=epoch)
 
     #------------------------------------
     # class_support_to_tensorboard
     #-------------------
 
-    def class_support_to_tensorboard(self,
+    @classmethod
+    def class_support_to_tensorboard(cls,
                                      data_src, 
                                      writer,
                                      epoch=0,
@@ -197,7 +190,8 @@ class TensorBoardPlotter:
     # add_image 
     #-------------------
     
-    def add_image(self, 
+    @classmethod
+    def add_image(cls, 
                   writer, 
                   tag, 
                   img_path,
@@ -251,7 +245,8 @@ class TensorBoardPlotter:
     # write_img_grid 
     #-------------------
     
-    def write_img_grid(self, 
+    @classmethod
+    def write_img_grid(cls, 
                        writer, 
                        img_root_dir, 
                        num_imgs=4, 
@@ -314,10 +309,10 @@ class TensorBoardPlotter:
                                   )
 
         # Get list of full paths to samples:
-        sample_idxs = self.get_sample_indices(img_folder,
-                                              num_imgs=num_imgs,
-                                              class_sample_file_pairs=class_sample_file_pairs
-                                              )
+        sample_idxs = cls.get_sample_indices(img_folder,
+                                             num_imgs=num_imgs,
+                                             class_sample_file_pairs=class_sample_file_pairs
+                                             )
         # Get list of img tensor/class_idx pairs:
         img_tns_list = [img_folder[idx]
                         for idx
@@ -332,9 +327,9 @@ class TensorBoardPlotter:
             # img_folder.samples is [ (full_path, class_idx), (..., ...) ]:
             img_file_basename = os.path.basename(img_folder.samples[i][0])
             marked_img_tns_list.append(
-                self.print_onto_image(img_tns,
-                                      f"{class_name}/{img_file_basename}" 
-                                      ))
+                cls.print_onto_image(img_tns,
+                                     f"{class_name}/{img_file_basename}" 
+                                     ))
         # Turn list of img tensors into
         # a single tensor with first dim 
         # being len of list:
@@ -352,7 +347,8 @@ class TensorBoardPlotter:
     # fig_from_conf_matrix 
     #-------------------
     
-    def fig_from_conf_matrix(self, 
+    @classmethod
+    def fig_from_conf_matrix(cls, 
                              conf_matrix,
                              class_names,
                              title='Confusion Matrix'):
@@ -399,7 +395,7 @@ class TensorBoardPlotter:
         ax.yaxis.set_major_locator(mticker.FixedLocator(ticks_loc))
         ax.set_yticklabels([class_name for class_name in ticks_loc])
 
-        cm_normed = self.calc_conf_matrix_norm(conf_matrix)
+        cm_normed = cls.calc_conf_matrix_norm(conf_matrix)
         
         heatmap_ax = sns.heatmap(
             cm_normed,
@@ -424,7 +420,8 @@ class TensorBoardPlotter:
     # compute_confusion_matrix
     #-------------------
     
-    def compute_confusion_matrix(self, 
+    @classmethod
+    def compute_confusion_matrix(cls, 
                                  truth_labels, 
                                  predicted_class_ids,
                                  num_classes,
@@ -449,7 +446,7 @@ class TensorBoardPlotter:
             ))
 
         if normalize:
-            conf_matrix = self.calc_conf_matrix_norm(conf_matrix)
+            conf_matrix = cls.calc_conf_matrix_norm(conf_matrix)
              
         return conf_matrix
 
@@ -457,7 +454,8 @@ class TensorBoardPlotter:
     # calc_conf_matrix_norm
     #-------------------
 
-    def calc_conf_matrix_norm(self, conf_matrix):
+    @classmethod
+    def calc_conf_matrix_norm(cls, conf_matrix):
         '''
         Calculates a normalized confusion matrix.
         Normalizes by the number of samples that each 
@@ -511,22 +509,11 @@ class TensorBoardPlotter:
         return norm_cm 
 
     #------------------------------------
-    # clear 
-    #-------------------
-    
-    def clear(self):
-        '''
-        Clear confusion matrices from the 
-        plotter
-        '''
-        
-        self.conf_matrices = []
-
-    #------------------------------------
     # print_onto_image 
     #-------------------
     
-    def print_onto_image(self, img_src, txt, point=(10,10)):
+    @classmethod
+    def print_onto_image(cls, img_src, txt, point=(10,10)):
         '''
         Given an image, writes given text onto the image.
         Returns a tensor of the new image. Acceptable as image
@@ -594,11 +581,12 @@ class TensorBoardPlotter:
     # get_sample_indices 
     #-------------------
     
-    def get_sample_indices(self,
-                         img_folder,
-                         class_sample_file_pairs,
-                         num_imgs=None
-                         ):
+    @classmethod
+    def get_sample_indices(cls,
+                           img_folder,
+                           class_sample_file_pairs,
+                           num_imgs=None
+                           ):
         '''
         If class_sample_file_pairs is provided,
         then num_imgs is ignored.
