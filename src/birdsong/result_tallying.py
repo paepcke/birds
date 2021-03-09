@@ -8,7 +8,6 @@ import copy
 import datetime
 import os, sys
 
-from sklearn import metrics
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import balanced_accuracy_score
 from sklearn.metrics import confusion_matrix
@@ -360,10 +359,6 @@ class ResultTally:
         @type preds:
         '''
 
-        self.conf_matrix = self.compute_confusion_matrix(labels,
-                                                         preds
-                                                         )
-
         # Compute accuracy, adjust for chance, given 
         # number of classes, and shift to [-1,1] with
         # zero being chance:
@@ -388,6 +383,11 @@ class ResultTally:
         self.f1_weighted  = f1_score(labels, preds, average='weighted',
                                      zero_division=0
                                      )
+
+        self.f1_all_classes  = f1_score(labels, preds, average=None,
+                                     zero_division=0
+                                     )
+
         
         self.prec_macro   = precision_score(labels, preds, average='macro',
                                             zero_division=0
@@ -398,6 +398,10 @@ class ResultTally:
         self.prec_weighted= precision_score(labels, preds, average='weighted',
                                             zero_division=0
                                            )
+        self.prec_all_classes = precision_score(labels, preds, average=None,
+                                            zero_division=0
+                                           )
+
 
         self.recall_macro   = recall_score(labels, preds, average='macro',
                                            zero_division=0
@@ -408,70 +412,16 @@ class ResultTally:
         self.recall_weighted= recall_score(labels, preds, average='weighted',
                                            zero_division=0
                                            )
-
-        # Find classes that are present in the
-        # truth labels; all others will be excluded
-        # from metrics in this result.
-        # Use set subtraction to get the non-represented:
-
-        # Precision
-
-        self.precision_macro = metrics.precision_score(labels,
-                                                       preds,
-                                                       average='macro',
-                                                       zero_division=0
-                                                       )
-
-        self.precision_micro = metrics.precision_score(labels,
-                                                       preds,
-                                                       average='micro',
-                                                       zero_division=0
-                                                       )
-            
-        # Calculate metrics for each label, and find their 
-        # average weighted by support (the number of true 
-        # instances for each label). This alters ‘macro’ to 
-        # account for label imbalance; it can result in 
-        # an F-score that is not between precision and recall.
-        
-        self.precision_weighted = metrics.precision_score(labels,
-                                                          preds,
-                                                          average='weighted',
-                                                          zero_division=0
-                                                          )
-        
-        # Recall
-        
-        self.recall_macro = metrics.recall_score(labels,
-                                                 preds,
-                                                 average='macro',
-                                                 zero_division=0
-                                                 )
-
-        self.recall_micro = metrics.recall_score(labels,
-                                                 preds,
-                                                 average='micro',
-                                                 zero_division=0
-                                                 )
-
-        self.recall_weighted = metrics.recall_score(labels,
-                                                    preds,
-                                                    average='weighted',
-                                                    zero_division=0
-                                                    )
-                
-        self.f1_score_weighted = metrics.precision_score(labels,
-                                                         preds,
-                                                         average='weighted',
-                                                         zero_division=0
-                                                         )
+        self.recall_all_classes = recall_score(labels, preds, average=None,
+                                           zero_division=0
+                                           )
 
         # A confusion matrix whose entries
         # are normalized to show percentage
         # of all samples in a row the classifier
         # got rigth:
         
-        self.conf_matrix_val = TensorBoardPlotter\
+        self.conf_matrix = TensorBoardPlotter\
             .compute_confusion_matrix(labels,
                                       preds,
                                       self.num_classes,

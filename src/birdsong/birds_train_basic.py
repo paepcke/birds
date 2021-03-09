@@ -293,10 +293,7 @@ class BirdsTrainBasic:
         # overall result of the final epoch for the 
         # hparms config used in this process:
         
-        self.report_hparams_summary(self.latest_result,
-                                    epoch,
-                                    self.net_name,
-                                    self.num_pretrained_layers)
+        self.report_hparams_summary(self.latest_result)
 
         # The final epoch number:
         return epoch
@@ -422,7 +419,7 @@ class BirdsTrainBasic:
         
         TensorBoardPlotter.conf_matrix_to_tensorboard(
             self.writer,
-            val_tally.conf_matrix_val,
+            val_tally.conf_matrix,
             self.class_names,
             epoch=epoch,
             title=f"Confusion Matrix Series"
@@ -474,34 +471,19 @@ class BirdsTrainBasic:
         Reports to tensorboard just for the
         final epoch.
  
-        Expect self.latest_results to be the latest
+        Expect self.latest_result to be the latest
         ResultTally.
         '''
-        train_preds  = self.latest_results['train_preds']
-        train_labels = self.latest_results['train_labels']
-         
-        val_preds    = self.latest_results['val_preds']
-        val_labels   = self.latest_results['val_labels']
-         
+        t_tally = self.latest_result['train']
+        v_tally = self.latest_result['val']
+        
         # First: the table of f1 scores:
          
-        train_f1_macro = f1_score(train_labels,
-                                        train_preds,
-                                        average='macro'
-                                        ).round(1)
-        val_f1_macro   = f1_score(val_labels,
-                                        val_preds,
-                                        average='macro'
-                                        ).round(1)
+        train_f1_macro = t_tally.f1_macro.round(1)
+        val_f1_macro   = v_tally.f1_macro.round(1)
          
-        train_f1_per_class = f1_score(train_labels,
-                                            train_preds,
-                                            average=None # get f1 separately for each class
-                                            ).round(1) 
-        val_f1_per_class = f1_score(train_labels,
-                                          train_preds,
-                                          average=None # get f1 separately for each class
-                                          ).round(1)
+        train_f1_per_class = t_tally.f1_all_classes.round(1)
+        val_f1_per_class   = v_tally.f1_all_classes.round(1)
          
         # Doesn't matter whether the class name
         # to int id comes from the train_loader, 
@@ -558,7 +540,7 @@ class BirdsTrainBasic:
     # report_hparams_summary 
     #-------------------
     
-    def report_hparams_summary(self, latest_results, epoch):
+    def report_hparams_summary(self, latest_result):
         '''
         Called at the end of training. Constructs
         a summary to report for the hyperparameters
@@ -580,20 +562,20 @@ class BirdsTrainBasic:
            o epoch_mean_loss        (train and val)
            
          
-        @param latest_results: dict with keys 'train' and
+        @param latest_result: dict with keys 'train' and
             'val', holding the respective most recent
             (i.e. last-epoch) ResultTally
-        @type latest_results: {'train' : ResultTally,
+        @type latest_result: {'train' : ResultTally,
                                'val'   : ResultTally
                                }
         '''
          
         # Get the latest validation tally:
-        train_tally = latest_results['train']
-        val_tally   = latest_results['val']
+        train_tally = latest_result['train']
+        val_tally   = latest_result['val']
          
         hparms_vals = {
-            'pretrained_layers' : f"{self.net_name}_{self.pretrained}",
+            'pretrained_layers' : f"{self.net_name}_{self.pretrain}",
             'lr_initial': self.config.Training.lr,
             'optimizer' : self.config.Training.optimizer,
             'batch_size': self.config.Training.batch_size,
@@ -601,10 +583,10 @@ class BirdsTrainBasic:
             }
 
         metric_results = {
-                'zz_balanced_adj_accuracy_score_train' : train_tally.balanced_accuracy,
-                'zz_balanced_adj_accuracy_score_val':val_tally.balanced_accuracy,
+                'zz_balanced_adj_accuracy_score_train' : train_tally.balanced_acc,
+                'zz_balanced_adj_accuracy_score_val':val_tally.balanced_acc,
                 'zz_mean_accuracy_train' : train_tally.accuracy,
-                'zz_mean_accuracy_val': val_tally.mean_accuracy,
+                'zz_mean_accuracy_val': val_tally.accuracy,
                 'zz_epoch_mean_weighted_precision': val_tally.prec_weighted,
                 'zz_epoch_mean_weighted_recall' : val_tally.recall_weighted,
                 'zz_epoch_loss_train' : train_tally.mean_loss,
