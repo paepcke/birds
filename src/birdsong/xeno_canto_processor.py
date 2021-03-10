@@ -796,9 +796,9 @@ class XenoCantoRecording:
             #raise ValueError(msg)
         else:
             self.log.info(f"File encoding: {self.encoding}")
-            
-        ext = 'mp3' if self.encoding == 'mpeg' else 'wav' 
-        filename = f"{self.type.upper()}_{self.full_name}.{ext}" 
+
+        ext = 'mp3' if self.encoding == 'mpeg' else 'wav'
+        filename = f"{self.type.upper()}-{self.full_name}.{ext}"
         self.filepath = os.path.join(dest_dir,filename)
         
         self.log.info(f"Saving sound file to {self.filepath}...")
