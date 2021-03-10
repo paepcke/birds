@@ -31,8 +31,6 @@ from birdsong.utils.neural_net_config import NeuralNetConfig, ConfigError
 from birdsong.utils.tensorboard_plotter import SummaryWriterPlus, TensorBoardPlotter
 import numpy as np
 
-
-#from birdsong.result_tallying import TrainResult, TrainResultCollection, EpochSummary
 #*****************
 #
 # import socket
@@ -61,6 +59,12 @@ class BirdsTrainBasic:
     # during training:
      
     MODEL_ARCHIVE_SIZE = 20
+    
+    # For some tensorboard displays:
+    # for how many epochs in the past
+    # to display data:
+     
+    DISPLAY_HISTORY_LEN = 10
     
     #------------------------------------
     # Constructor 
@@ -150,6 +154,7 @@ class BirdsTrainBasic:
         
         log_dir      = os.path.join(self.curr_dir, 'runs')
         raw_data_dir = os.path.join(self.curr_dir, 'runs_raw_results')
+        
         self.setup_tensorboard(log_dir, raw_data_dir=raw_data_dir)
 
         # Log a few example spectrograms to tensorboard;
@@ -159,6 +164,13 @@ class BirdsTrainBasic:
                                           len(self.class_names), # Num of train examples
                                           )
 
+        # All ResultTally instances are
+        # collected here (two per epoch, for
+        # for all training loop runs, and one
+        # for all val loop runs:
+        
+        self.epoch_results = ResultCollection()
+        
         self.log.debug(f"Just before train: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
         try:
             final_epoch = self.train()
@@ -332,9 +344,15 @@ class BirdsTrainBasic:
                             loss,
                             self.num_classes,
                             self.batch_size)
-        # Add result to results collection of
+        # Add result to intermediate results collection of
         # tallies:
         self.results[epoch] = tally
+        
+        # Same with the session-wide
+        # collection:
+        
+        self.epoch_results.add(tally)
+        
 
     #------------------------------------
     # visualize_epoch 
@@ -408,7 +426,11 @@ class BirdsTrainBasic:
                                val_tally.accuracy, 
                                global_step=epoch
                                )
-
+        # History of learning rate adjustments:
+        lr_this_epoch = self.optimizer.param_groups[0]['lr']
+        self.writer.add_scalar('learning_rate', lr_this_epoch,
+                               global_step=epoch
+                               )
 
         # Submit the confusion matrix image
         # to the tensorboard. In the following:
@@ -474,67 +496,45 @@ class BirdsTrainBasic:
         Expect self.latest_result to be the latest
         ResultTally.
         '''
-        t_tally = self.latest_result['train']
-        v_tally = self.latest_result['val']
+        # DISPLAY_HISTORY_LEN holds the number
+        # of historic epochs we will show. Two
+        # results per epochs --> need
+        # 2*DISPLAY_HISTORY_LEN results. But check
+        # that there are that many, and show fewer
+        # if needed:
         
-        # First: the table of f1 scores:
-         
-        train_f1_macro = t_tally.f1_macro.round(1)
-        val_f1_macro   = v_tally.f1_macro.round(1)
-         
-        train_f1_per_class = t_tally.f1_all_classes.round(1)
-        val_f1_per_class   = v_tally.f1_all_classes.round(1)
-         
-        # Doesn't matter whether the class name
-        # to int id comes from the train_loader, 
-        # or the val_loader:
-        classes_to_ids = self.train_loader.dataset.class_to_idx
-         
-        # Get reverse lookup: class_id --> class_name:
-        ids_to_classes = {class_id : class_name
-                          for class_name, class_id
-                           in list(classes_to_ids.items()) 
-                          }
-         
-        # Build table: class ID => class name:
-        class_key = (f"Class ID|Class Name  \n"
-                      "--------|------      \n"
-                      )
-        for cname, cidx in classes_to_ids.items():
-            class_key += f"{cidx}|{cname}  \n"
-             
-        self.writer.add_text('class_key', 
-                             class_key,
-                             global_step=epoch)
-         
-         
-        # Build:
-        # |phase |f1_macro        |
-        # |------|----------------|
-        # |Train |{train_f1_macro}|
-        # |Val   |{val_f1_macro}  |
- 
-        tbl =  (f"|phase|f1_macro|  \n"
-                f"|------|-------| \n"
-                f"|Train|{train_f1_macro}|  \n"
-                f"|Val  |{val_f1_macro}  |  \n"
-                )
-         
-        self.writer.add_text('f1/macro', tbl, epoch)
-                
-        # Build f1 for each class separately:
-         
-        per_class_tbl = (f"|Class|F1 train|F1 validation|  \n"
-                         f"|-----|--------|-------------|  \n"
-                         )
-         
-        for class_id, (train_f1, val_f1) in enumerate(zip(train_f1_per_class, 
-                                                          val_f1_per_class
-                                                          )):
-            class_nm = ids_to_classes[class_id] 
-            per_class_tbl += f"|{class_nm}|{train_f1}|{val_f1}|  \n"
-             
-        self.writer.add_text('f1/macro', per_class_tbl, epoch)
+        num_res_to_show = min(len(self.epoch_results),
+                              2*self.DISPLAY_HISTORY_LEN)
+        
+        f1_hist = self.epoch_results[- num_res_to_show:]
+        
+        # First: the table of train and val f1-macro
+        # scores for the past few epochs:
+        #
+        #      |phase|ep0  |ep1 |ep2 |
+        #      |-----|-----|----|----|
+        #      |train| f1_0|f1_1|f1_2|
+        #      |  val| f1_0|f1_1|f1_2|
+        
+        f1_macro_tbl = TensorBoardPlotter.make_f1_train_val_table(f1_hist)
+        self.writer.add_text('f1/history', f1_macro_tbl)
+        
+        # Now, in the same tensorboard row: the
+        # per_class train/val f1 scores for each
+        # class separately:
+        #
+        # |class|weighted mean f1 train|weighted mean f1 val| 
+        # |-----|----------------------|--------------------| 							
+        # |  c1 |0.1                   |0.6                 | 									
+        # |  c2 |0.1                   |0.6                 | 									
+        # |  c3 |0.1                   |0.6                 | 									        
+        # ------|----------------------|--------------------|                                             
+        
+        f1_all_classes = TensorBoardPlotter.make_all_classes_f1_table(
+            self.latest_result,
+            self.class_names
+            )
+        self.writer.add_text('f1/per-class', f1_all_classes)
 
     #------------------------------------
     # report_hparams_summary 
@@ -578,19 +578,19 @@ class BirdsTrainBasic:
             'pretrained_layers' : f"{self.net_name}_{self.pretrain}",
             'lr_initial': self.config.Training.lr,
             'optimizer' : self.config.Training.optimizer,
-            'batch_size': self.config.Training.batch_size,
-            'kernel_size' : self.config.Training.kernel_size
+            'batch_size': self.config.getint('Training', 'batch_size'),
+            'kernel_size' : self.config.getint('Training', 'kernel_size')
             }
 
         metric_results = {
-                'zz_balanced_adj_accuracy_score_train' : train_tally.balanced_acc,
-                'zz_balanced_adj_accuracy_score_val':val_tally.balanced_acc,
-                'zz_mean_accuracy_train' : train_tally.accuracy,
-                'zz_mean_accuracy_val': val_tally.accuracy,
-                'zz_epoch_mean_weighted_precision': val_tally.prec_weighted,
-                'zz_epoch_mean_weighted_recall' : val_tally.recall_weighted,
-                'zz_epoch_loss_train' : train_tally.mean_loss,
-                'zz_epoch_loss_val' : val_tally.mean_loss
+                'zz_balanced_adj_acc_train' : train_tally.balanced_acc,
+                'zz_balanced_adj_acc_val'   : val_tally.balanced_acc,
+                'zz_acc_train' : train_tally.accuracy,
+                'zz_acc_val'   : val_tally.accuracy,
+                'zz_epoch_weighted_prec': val_tally.prec_weighted,
+                'zz_epoch_weighted_recall' : val_tally.recall_weighted,
+                'zz_epoch_mean_loss_train' : train_tally.mean_loss,
+                'zz_epoch_mean_loss_val' : val_tally.mean_loss
                 }
          
         self.writer.add_hparams(hparms_vals, metric_results)

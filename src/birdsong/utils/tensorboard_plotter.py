@@ -9,6 +9,7 @@ import random
 from PIL import Image, ImageDraw, ImageFont
 from matplotlib import cm as col_map
 from matplotlib import pyplot as plt
+from sklearn.metrics import confusion_matrix
 import torch
 from torch.utils.tensorboard.summary import hparams
 from torch.utils.tensorboard.writer import SummaryWriter
@@ -16,13 +17,11 @@ from torchvision import transforms
 from torchvision.datasets.folder import ImageFolder, default_loader
 from torchvision.utils import make_grid
 
-from sklearn.metrics import confusion_matrix
-
+from birdsong.rooted_image_dataset import SingleRootImageDataset
+from birdsong.utils.learning_phase import LearningPhase
 import matplotlib.ticker as mticker
 import numpy as np
 import seaborn as sns
-
-from birdsong.rooted_image_dataset import SingleRootImageDataset
 
 
 #*****************
@@ -64,7 +63,8 @@ class TensorBoardPlotter:
     No SummaryWriter is created. A writer is always
     passed in
     '''
-
+    DISPLAY_HISTORY_LEN = 8
+    
     #------------------------------------
     # conf_matrix_to_tensorboard 
     #-------------------
@@ -507,6 +507,141 @@ class TensorBoardPlotter:
                 # Replace any nan's with 0:
                 norm_cm[torch.isnan(norm_cm)] = 0
         return norm_cm 
+
+    #------------------------------------
+    # make_f1_train_val_table 
+    #-------------------
+    
+    @classmethod
+    def make_f1_train_val_table(cls, res_list):
+        '''
+        Return a github flavored table:
+           |phase|ep0  |ep1 |ep2 |
+           |-----|-----|----|----|
+           |train| f1_0|f1_1|f1_2|
+           |  val| f1_0|f1_1|f1_2|
+           
+        for half as many epochs back as there are
+        tallies available in the list of ResultTally
+        instances in epoch_results.
+        
+        Assumption: exactly two ResultTallies are provided
+        in res_list. One each for train and validation 
+        results.
+           
+        @param res_list: list of ResultTally
+            instances in oldest-epoch-first order
+        @type res_list: [ResultTally]
+        @return: a table
+        @rtype: str
+        '''
+        res_len    = len(res_list)
+        # Should be an even number of result
+        # objs:
+        if res_len % 2 != 0:
+            raise ValueError("Must provide two ResultTally instances per epoch")
+        
+        
+        num_epochs = res_len // 2
+        
+        # First the header:
+        tbl = ''
+        header = '|phase|'
+        for i in range(num_epochs):
+            header += f"f1-macro ep{i}|"
+            
+        tbl += f"{header}\n"
+        
+        # The line under the header,
+        # with the proper number of pipes.
+        # The part covering the row label
+        # col:
+        head_sep = f"{'|'}{'-'*len('phase')}|"
+        for _ep_num in range(num_epochs):
+            # As many dashes as needed for 
+            # an 'ep1' str:
+            head_sep += f"{'-'*len('f1-macro epn')}|"
+            
+        tbl += f"{head_sep}\n"
+        
+        # The f1 value results for both
+        # train and val:
+        train_f1s = filter(lambda res_tally: res_tally.phase == LearningPhase.TRAINING,
+                           res_list)
+        val_f1s   = filter(lambda res_tally: res_tally.phase == LearningPhase.VALIDATING,
+                           res_list)
+
+        f1_line = '|train|'
+        
+        for res in train_f1s:
+            f1_line += f"{str(round(res.f1_macro, 1))} |"
+            
+        tbl += f"{f1_line}\n"
+
+        # Second row: f1's for validation results:
+        f1_line = '| Val |'
+        for res in val_f1s:
+            f1_line += f"{str(round(res.f1_macro, 1))} |"
+            
+        tbl += f"{f1_line}\n"
+
+        #print(tbl)
+        return tbl
+
+    #------------------------------------
+    # make_all_classes_f1_table
+    #-------------------
+    
+    @classmethod
+    def make_all_classes_f1_table(cls, latest_result, class_names):
+        '''
+        Return a github flavored table with
+        with train and val f1 values for every
+        class:
+			|class|weighted mean f1 train|weighted mean f1 val|
+			|-----|--------|------|
+			|  c1 |0.1|0.6|
+			|  c2 |0.1|0.6|
+			|  c3 |0.1|0.6|
+			---------------                                     
+
+			
+			         
+        @param cls:
+        @type cls:
+        '''
+
+        # Get the 'all-classes' version of f1 from
+        # the last ResultTally for both train and val:
+        t_f1s = latest_result['train'].f1_all_classes
+        v_f1s = latest_result['val'].f1_all_classes
+        
+        # Get [[c1_train, c1_val],
+        #      [c2_train, c2_val],
+        #             ...
+        #      ]
+        res = torch.tensor([t_f1s, v_f1s]).T
+        
+        tbl = ''
+        
+        header = '|class|weighted mean f1 train|weighted mean f1 val|'
+        tbl += f"{header}\n"
+        
+        # The line under the header,
+        # with the proper number of pipes:
+        head_sep =  f"{'|'}{'-'*len('class')}|"
+        head_sep += f"{'-'*len('f1 train')}|"
+        head_sep += f"{'-'*len('f1 val')}|"
+        
+        tbl += f"{head_sep}\n"
+        
+        # And the f1 train/val numbers, one
+        # class in each row:
+        for class_name, (f1_train, f1_val) in zip(class_names, res):
+            f1_train = round(float(f1_train),1)
+            f1_val   = round(float(f1_val),1)
+            tbl += f"|{class_name}|{f1_train}|{f1_val}|\n"
+        return tbl
 
     #------------------------------------
     # print_onto_image 
