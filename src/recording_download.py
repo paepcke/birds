@@ -14,6 +14,7 @@ import librosa.display
 import noisereduce as nr
 import os
 import sys
+import logging as log
 
 # A list of the scientific names for the bird species in this study
 
@@ -182,7 +183,7 @@ def define_bandpass(lowcut, highcut, sr, order = 2):
     return b, a
 
 
-def create_spectrogram(birdname, instance, audio, sr, out_dir, in_dir, n_mels=128):
+def create_spectrogram(birdname, in_dir, out_dir, n_mels=128):
     """
     Filters audio and converts it to a spectrogram which is saved.
 
@@ -200,8 +201,10 @@ def create_spectrogram(birdname, instance, audio, sr, out_dir, in_dir, n_mels=12
     :type n_mels: int
     """
     # create a mel spectrogram
-    spectrogramfile = os.path.join(out_dir, birdname[:len(birdname) - 4]) + '.png'
+    spectrogramfile = os.path.join(out_dir, birdname[:-len(".wav")]) + '.png'
+    log.info(f"Creating spectrogram: {spectrogramfile}")
     audio, sr = librosa.load(os.path.join(in_dir, birdname))
+    log.info(f"Audio len: {len(audio)/sr}")
     mel = librosa.feature.melspectrogram(audio, sr=sr, n_mels=n_mels)
     # create a logarithmic mel spectrogram
     log_mel = librosa.power_to_db(mel, ref=np.max)
