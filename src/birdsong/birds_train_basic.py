@@ -391,13 +391,14 @@ class BirdsTrainBasic:
         # If we are to write preds and labels to
         # .csv for later additional processing:
 
-        if self.csv_writers is not None:
-            self.csv_writers['preds'].writerow(
-                [epoch, train_tally.preds, val_tally.preds]
-                )
-            self.csv_writers['labels'].writerow(
-                [epoch, train_tally.labels, val_tally.labels]
-                )
+        if self.csv_writer is not None:
+            self.csv_writer.writerow(
+                [epoch, 
+                 train_tally.preds,
+                 train_tally.labels,
+                 val_tally.preds,
+                 val_tally.labels
+                 ])
             
         self.writer.add_scalar('loss/train', 
                                train_tally.mean_loss, 
@@ -702,7 +703,7 @@ class BirdsTrainBasic:
         
         Additionally, sets self.csv_pred_writer and self.csv_label_writer
         to None, or open CSV writers, depending on the value of raw_data_dir,
-        see set_csv_writers()
+        see create_csv_writer()
         
         @param logdir: root for tensorboard events
         @type logdir: str
@@ -710,8 +711,16 @@ class BirdsTrainBasic:
         
         if not os.path.isdir(logdir):
             os.makedirs(logdir)
-            
-        self.set_csv_writers(raw_data_dir)
+
+        # For storing train/val preds/labels
+        # for every epoch. Used to create charts
+        # after run is finished:
+        self.csv_writer = self.create_csv_writer(raw_data_dir)
+        
+        # Place to store intermediate models:
+        self.model_archive = self.create_model_archive(self.config, 
+                                                       self.num_classes
+                                                       )
 
         # Use SummaryWriterPlus to avoid confusing
         # directory creations when calling add_hparams()
@@ -725,13 +734,24 @@ class BirdsTrainBasic:
         self.log.info(f"To view tensorboard charts: in shell: tensorboard --logdir {logdir}; then browser: localhost:6006")
 
     #------------------------------------
-    # set_csv_writers 
+    # create_csv_writer 
     #-------------------
     
-    def set_csv_writers(self, raw_data_dir):
+    def create_csv_writer(self, raw_data_dir):
         '''
+        Create a csv_writer that will fill a csv
+        file during training/validation as follows:
+        
+            epoch  train_preds   train_labels  val_preds  val_labels
+            
+        Cols after the integer 'epoch' col will each be
+        an array of ints:
+        
+                  train_preds    train_lbls   val_preds  val_lbls
+                2,"[2,5,1,2,3]","[2,6,1,2,1]","[1,2]",    "[1,3]" 
+        
         If raw_data_dir is provided as a str, it is
-        taken as the directory where csv files with predictions
+        taken as the directory where csv file with predictions
         and labels are to be written. The dir is created if necessary.
          
         If the arg is instead set to True, a dir 'runs_raw_results' is
@@ -743,21 +763,16 @@ class BirdsTrainBasic:
               <script_dir>
                    runs_raw_results
                        Run_lr_0.001_br_32
-                           pred_2021_05_ ... _lr_0.001_br_32.csv
-                           labels_2021_05_ ... _lr_0.001_br_32.csv
-                           
+                           run_2021_05_ ... _lr_0.001_br_32.csv
         
-                         
         
-        Then two .csv file names created, again from the run
-        hparam settings. If one of those files exists, user is asked whether
-        to remove or append. The inst var dict self.csv_writers is
-        initialized to
-           {'pred_writer'   : <csv predictions writer>,
-            'labels_writer' : <csv labels writer>,
+        Then file name is created, again from the run
+        hparam settings. If this file exists, user is asked whether
+        to remove or append. The inst var self.csv_writer is
+        initialized to:
         
-           o With None if csv file exists, but is not to 
-             be overwritten or appended-to
+           o None if csv file exists, but is not to 
+             be overwritten nor appended-to
            o A filed descriptor for a file open for either
              'write' or 'append.
         
@@ -766,6 +781,10 @@ class BirdsTrainBasic:
             assumed to be the directory where a .csv file is to be
             created. If None, self.csv_writer is set to None.
         @type raw_data_dir: {None | True | str|
+        @return: CSV writer ready for action. Set either to
+            write a fresh file, or append to an existing file.
+            Unless file exists, and user decided not to overwrite
+        @rtype: {None | csv.writer}
         '''
 
         # Ensure the csv file root dir exists if
@@ -782,8 +801,7 @@ class BirdsTrainBasic:
         # Can rely on raw_data_root being defined and existing:
         
         if raw_data_dir is None:
-            self.csv_writers = None
-            return
+            return None
 
         # Create both a raw dir sub-directory and a .csv file
         # for this run:
@@ -803,62 +821,68 @@ class BirdsTrainBasic:
         os.makedirs(csv_subdir_name)
         
         # Create a csv file name:
-        csv_preds_file_nm = FileUtils.construct_filename(fname_elements, 
-                                                         prefix='pred',
-                                                         suffix='.csv',
-                                                         incl_date=True)
-        csv_labels_file_nm = FileUtils.construct_filename(fname_elements, 
-                                                          prefix='labels',
-                                                          suffix='.csv',
-                                                          incl_date=True)
+        csv_file_nm = FileUtils.construct_filename(fname_elements, 
+                                                   prefix='run',
+                                                   suffix='.csv',
+                                                   incl_date=True)
         
-        csv_preds_fn = os.path.join(raw_data_root, csv_preds_file_nm)
-        csv_labels_fn = os.path.join(raw_data_root, csv_labels_file_nm)
+        csv_path = os.path.join(raw_data_root, csv_file_nm)
         
         # Get csv_raw_fd appropriately:
         
-        if os.path.exists(csv_preds_file_nm):
-            do_overwrite = FileUtils.user_confirm(f"File {self.csv_pred_file_nm} exists; overwrite?", default='N')
+        if os.path.exists(csv_path):
+            do_overwrite = FileUtils.user_confirm(f"File {csv_path} exists; overwrite?", default='N')
             if not do_overwrite:
                 do_append = FileUtils.user_confirm(f"Append instead?", default='N')
                 if not do_append:
-                    self.csv_writers = None
+                    return None
                 else:
                     mode = 'a'
         else:
             mode = 'w'
             
-        self.csv_writers = {
-            'preds'  : CSVWriterCloseable(csv_preds_fn, mode=mode, delimiter=','),
-            'labels' : CSVWriterCloseable(csv_labels_fn, mode=mode, delimiter=',')
-            }
-        header = ['epoch', 'train_preds', 'val_preds']
-        self.csv_writers['preds'].writerow(header)
-        header = ['epoch', 'train_labels', 'val_labels']
-        self.csv_writers['labels'].writerow(header)
+        csv_writer = CSVWriterCloseable(csv_path, 
+                                        mode=mode, 
+                                        delimiter=',')
+
+        header = ['epoch', 'train_preds', 'train_labels', 'val_preds', 'val_labels']
+        csv_writer.writerow(header)
+
         
-        # Place to save models. Have
-        # the archive log to the same
-        # place as this trainer:
-         
-        self.model_archive = ModelArchive(self.config,
-                                          self.num_classes,
-                                          history_len=self.MODEL_ARCHIVE_SIZE,
-                                          log=self.log
-                                          )
+        return csv_writer
+
+    #------------------------------------
+    # create_model_archive 
+    #-------------------
+    
+    def create_model_archive(self, config, num_classes):
+        '''
+        Creates facility for saving partially trained
+        models along the way.
+        
+        @param config:
+        @type config:
+        @param num_classes:
+        @type num_classes:
+        @return: ModelArchive instance ready
+            for calls to save_model()
+        @rtype: ModelArchive
+        '''
+        model_archive = ModelArchive(config,
+                                     num_classes,
+                                     history_len=self.MODEL_ARCHIVE_SIZE,
+                                     log=self.log
+                                     )
+        return model_archive
 
     #------------------------------------
     # close_tensorboard 
     #-------------------
     
     def close_tensorboard(self):
-        if self.csv_writers is not None:
+        if self.csv_writer is not None:
             try:
-                self.csv_writers['preds'].close()
-            except Exception as e:
-                self.log.warn(f"Could not close csv file: {repr(e)}")
-            try:
-                self.csv_writers['labels'].close()
+                self.csv_writer.close()
             except Exception as e:
                 self.log.warn(f"Could not close csv file: {repr(e)}")
         try:
