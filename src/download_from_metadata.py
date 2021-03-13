@@ -9,27 +9,27 @@ sys.path.append('birdsong')
 from xeno_canto_processor import XenoCantoCollection
 import os
 
-# BIRD_LIST = [('Amazilia+decora', True), ('Arremon+aurantiirostris', True),
-#              ('Corapipo+altera', True),
-#              ('Dysithamnus+mentalis', True),
-#              ('Empidonax+flaviventris', False), ('Euphonia+imitans', False),
-#              ('Henicorhina+leucosticta', True), ('Hylophilus+decurtatus', False),
-#              ('Lophotriccus+pileatus', True),
-#              ('Parula+pitiayumi', True),
-#              ('Tangara+gyrola', False), ('Tangara+icterocephala', False)
-#             ]
-# Below used for testing
-BIRD_LIST = [#('Amazilia+decora', True),
-             # ('Arremon+aurantiirostris', True),
+BIRD_LIST = [('Amazilia+decora', True), ('Arremon+aurantiirostris', True),
              ('Corapipo+altera', True),
-             # ('Dysithamnus+mentalis', True),
-             # ('Empidonax+flaviventris', False), ('Euphonia+imitans', False),
-             # ('Henicorhina+leucosticta', True), ('Hylophilus+decurtatus', False),
-             # ('Lophotriccus+pileatus', True),
-             # ('Parula+pitiayumi', True),
-             ('Tangara+gyrola', False)
-             # ,('Tangara+icterocephala', False)
+             ('Dysithamnus+mentalis', True),
+             ('Empidonax+flaviventris', False), ('Euphonia+imitans', False),
+             ('Henicorhina+leucosticta', True), ('Hylophilus+decurtatus', False),
+             ('Lophotriccus+pileatus', True),
+             ('Parula+pitiayumi', True),
+             ('Tangara+gyrola', False), ('Tangara+icterocephala', False)
             ]
+# Below used for testing
+# BIRD_LIST = [#('Amazilia+decora', True),
+#              # ('Arremon+aurantiirostris', True),
+#              ('Corapipo+altera', True),
+#              # ('Dysithamnus+mentalis', True),
+#              # ('Empidonax+flaviventris', False), ('Euphonia+imitans', False),
+#              # ('Henicorhina+leucosticta', True), ('Hylophilus+decurtatus', False),
+#              # ('Lophotriccus+pileatus', True),
+#              # ('Parula+pitiayumi', True),
+#              ('Tangara+gyrola', False)
+#              # ,('Tangara+icterocephala', False)
+#             ]
 
 
 def folder_prefix(birdname):
