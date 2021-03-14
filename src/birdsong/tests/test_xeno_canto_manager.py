@@ -10,7 +10,7 @@ import tempfile
 
 from logging_service.logging_service import LoggingService
 
-from birdsong.xeno_canto_processor import XenoCantoCollection, XenoCantoRecording
+from birdsong.xeno_canto_manager import XenoCantoCollection, XenoCantoRecording
 
 
 TEST_ALL = True
