@@ -47,8 +47,8 @@ def sliding_window(in_dir, species, sample_name, out_dir, window_len = 5):
     for start_time in range(length - window_len):
         window, sr = librosa.load(os.path.join(in_dir, species, sample_name),
                                   offset=start_time, duration=window_len)
-        window_name = sample_name[:-len(".wav")] + 'sw-start' + str(start_time)
-        create_spectrogram(window_name, window, sr, os.path.join(out_dir + 'spectrograms/', species))
+        window_name = sample_name[:-len(".wav")] + '_sw-start' + str(start_time)
+        create_spectrogram(window_name, window, sr, os.path.join(out_dir, 'spectrograms/', species))
         librosa.output.write_wav(os.path.join(out_dir, 'wav-files', species, window_name + '.wav'), window, sr)
 
 def create_folder(dir_path):
@@ -62,8 +62,8 @@ def create_folder(dir_path):
 def main(in_dir, out_dir, specific_species=None):
     species_list = os.listdir(in_dir)
     create_folder(out_dir)
-    spectrogram_dir_path = out_dir + 'spectrograms/'
-    wav_dir_path = out_dir + 'wav-files/'
+    spectrogram_dir_path = os.path.join(out_dir,'spectrograms/')
+    wav_dir_path = os.path.join(out_dir,'wav-files/')
     create_folder(spectrogram_dir_path)
     create_folder(wav_dir_path)
     if specific_species == None:
