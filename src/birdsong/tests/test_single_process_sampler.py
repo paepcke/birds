@@ -5,11 +5,13 @@ Created on Dec 17, 2020
 '''
 
 import os, sys
+import random
 import unittest
 
 from birdsong.rooted_image_dataset import SingleRootImageDataset
 from birdsong.samplers import SKFSampler
 import numpy as np
+
 
 packet_root = os.path.abspath(__file__.split('/')[0])
 sys.path.insert(0,packet_root)
@@ -109,7 +111,7 @@ class TestSingleProcessSampler(unittest.TestCase):
     # test_stratified_kfold_xval_with_shuffle
     #-------------------
 
-    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_stratified_kfold_xval_with_shuffle(self):
         
         # First without shuffle:
@@ -158,7 +160,8 @@ class TestSingleProcessSampler(unittest.TestCase):
         # BUT: sampler4 with shuffle and another with same seed
         #      should create xxx_4_1 equal to xxx_3_1
         
-        # Shuffle, but same seed:
+        # Shuffle, but same seed (after reset)
+        random.seed(42)
         sampler4 = SKFSampler(
             self.dataset,
             num_folds=3,

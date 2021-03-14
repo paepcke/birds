@@ -390,13 +390,41 @@ class FileUtils(object):
         
         with open(csv_path, 'r') as fd:
             reader = csv.reader(fd)
+            # Eat the header line:
+            next(reader)
             for (epoch, train_preds, train_labels, val_preds, val_labels) in reader:
+                
+                # All elements are strings. 
+                # Turn them into natives. The 
+                # additional parms to eval() make
+                # the eval safe by withholding
+                # built-ins and any libs:
+                
+                train_preds_arr = eval(train_preds,
+                                       {"__builtins__":None},    # No built-ins at all
+                                       {}                        # No additional func
+                                       )
+                train_labels_arr = eval(train_labels,
+                                       {"__builtins__":None},    # No built-ins at all
+                                       {}                        # No additional func
+                                       )
+                val_preds_arr = eval(val_preds,
+                                       {"__builtins__":None},    # No built-ins at all
+                                       {}                        # No additional func
+                                       )
+                
+                val_labels_arr = eval(val_labels,
+                                       {"__builtins__":None},    # No built-ins at all
+                                       {}                        # No additional func
+                                       )
 
+                epoch = int(epoch)
+                
                 train_tally = ResultTally(
                     epoch,
                     LearningPhase.TRAINING,
-                    train_preds,
-                    train_labels,
+                    torch.tensor(train_preds_arr),
+                    torch.tensor(train_labels_arr),
                     0.0,  # Placeholder for loss
                     num_classes,
                     batch_size,
@@ -406,8 +434,8 @@ class FileUtils(object):
                 val_tally = ResultTally(
                     epoch,
                     LearningPhase.VALIDATING,
-                    val_preds,
-                    val_labels,
+                    torch.tensor(val_preds_arr),
+                    torch.tensor(val_labels_arr),
                     0.0,  # Placeholder for loss
                     num_classes,
                     batch_size,

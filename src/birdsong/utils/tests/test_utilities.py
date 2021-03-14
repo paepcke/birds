@@ -9,8 +9,8 @@ import unittest
 from birdsong.utils.utilities import FileUtils
 
 
-#*****TEST_ALL = True
-TEST_ALL = False
+TEST_ALL = True
+#TEST_ALL = False
 
 class TestUtilities(unittest.TestCase):
 
@@ -58,18 +58,19 @@ class TestUtilities(unittest.TestCase):
     # test_load_preds_and_labels 
     #-------------------
     
-    #*******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_load_preds_and_labels(self):
         
         tally_coll = FileUtils.load_preds_and_labels(self.csv_data_path)
         
-        self.assertEqual(len(tally_coll), 1)
-        tally = tally_coll[0]
-        print(tally)
+        # Expect four tallies from the two
+        # rows in the csv file: each row has
+        # a train and a val:
         
-    
-    
-    
+        self.assertEqual(len(tally_coll), 4)
+        tally = tally_coll[0]
+        self.assertEqual(tally.batch_size, 64)
+        self.assertEqual(str(tally.phase), 'LearningPhase.TRAINING')
 
 # ---------------- Main ---------------
 if __name__ == "__main__":

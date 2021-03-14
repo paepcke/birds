@@ -46,7 +46,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 
 from birdsong.class_weight_discovery import ClassWeightDiscovery
 from birdsong.cross_validation_dataloader import MultiprocessingDataLoader, CrossValidatingDataLoader
-from birdsong.result_tallying import TrainResult, TrainResultCollection, EpochSummary
+from birdsong.result_tallying import ResultTally, ResultCollection
 from birdsong.rooted_image_dataset import MultiRootImageDataset
 from birdsong.utils import learning_phase
 from birdsong.utils.dottable_config import DottableConfigParser
@@ -1043,7 +1043,7 @@ class BirdTrainer(object):
         # Find labels that were incorrectly predicted:
         badly_predicted_labels = truth_labels[truth_labels != predicted_class_ids]
 
-        tally = TrainResult(
+        tally = ResultTally(
                             self.epoch, 
                             learning_phase, 
                             loss, 
@@ -2251,7 +2251,7 @@ class BirdTrainer(object):
         torch.backends.cudnn.benchmark = False
         np.random.seed(seed)
         os.environ['PYTHONHASHSEED'] = str(seed)
-        random.seed = seed
+        random.seed(seed)
 
     #------------------------------------
     # save_model_checkpoint 
@@ -2277,7 +2277,7 @@ class BirdTrainer(object):
         # Remove results from the current
         # epoch from tally_collection:
         
-        clean_tally_collection = TrainResultCollection.create_from(self.tally_collection)
+        clean_tally_collection = ResultCollection.create_from(self.tally_collection)
         for epoch, learning_phase in self.tally_collection.keys():
             if epoch == self.epoch:
                 clean_tally_collection.pop((epoch, learning_phase))
@@ -2474,7 +2474,7 @@ class BirdTrainer(object):
         self.one_sample_ones   = torch.ones(num_classes)
         self.one_sample_zeros  = torch.zeros(num_classes)
         
-        self.tally_collection = TrainResultCollection() if self.tally_collection is None \
+        self.tally_collection = ResultCollection() if self.tally_collection is None \
             else self.tally_collection 
 
     #------------------------------------

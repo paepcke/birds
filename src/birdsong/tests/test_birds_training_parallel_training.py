@@ -17,8 +17,11 @@ import torch
 from birdsong.birds_train_parallel import BirdTrainer 
 from birdsong.utils.neural_net_config import NeuralNetConfig
 
-TEST_ALL = True
-#TEST_ALL = False
+# This file is out of date: Uses EpochSummary
+# class. 
+
+#*****TEST_ALL = True
+TEST_ALL = False
 
 #*****************
 #

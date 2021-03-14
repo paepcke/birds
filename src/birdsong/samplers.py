@@ -177,7 +177,7 @@ class SKFSampler(StratifiedKFold):
         try:
             train_sample_ids, validate_sample_ids = next(self.fold_generator)
             if self.shuffle:
-                random.seed = self.seed + self.epoch
+                random.seed(self.seed + self.epoch)
                 random.shuffle(train_sample_ids)
                 random.shuffle(validate_sample_ids)
             return (train_sample_ids, validate_sample_ids)
