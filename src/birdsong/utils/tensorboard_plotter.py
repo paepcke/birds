@@ -23,6 +23,8 @@ import matplotlib.ticker as mticker
 import numpy as np
 import seaborn as sns
 
+from birdsong.utils.github_table_maker import GithubTableMaker
+
 
 #*****************
 #
@@ -536,34 +538,26 @@ class TensorBoardPlotter:
         @rtype: str
         '''
         res_len    = len(res_list)
+
+        # Could catch the following error.
+        # But it's just a special case of 
+        # num train tallies unequal to num 
+        # of val tallies. Wait till we catch
+        # that root problem later:
+        
         # Should be an even number of result
         # objs:
-        if res_len % 2 != 0:
-            raise ValueError("Must provide two ResultTally instances per epoch")
+        #if res_len % 2 != 0:
+        #    raise ValueError("Must provide two ResultTally instances per epoch")
         
         
         num_epochs = res_len // 2
         
         # First the header:
-        tbl = ''
-        header = '|phase|'
+        header = []
         for i in range(num_epochs):
-            header += f"f1-macro ep{i}|"
+            header.append(f"f1-macro ep{i}")
             
-        tbl += f"{header}\n"
-        
-        # The line under the header,
-        # with the proper number of pipes.
-        # The part covering the row label
-        # col:
-        head_sep = f"{'|'}{'-'*len('phase')}|"
-        for _ep_num in range(num_epochs):
-            # As many dashes as needed for 
-            # an 'ep1' str:
-            head_sep += f"{'-'*len('f1-macro epn')}|"
-            
-        tbl += f"{head_sep}\n"
-        
         # The f1 value results for both
         # train and val:
         train_f1s = filter(lambda res_tally: res_tally.phase == LearningPhase.TRAINING,
@@ -571,21 +565,24 @@ class TensorBoardPlotter:
         val_f1s   = filter(lambda res_tally: res_tally.phase == LearningPhase.VALIDATING,
                            res_list)
 
-        f1_line = '|train|'
-        
+        train_row = []
         for res in train_f1s:
-            f1_line += f"{str(round(res.f1_macro, 1))} |"
+            train_row.append(str(round(res.f1_macro, 1)))
             
-        tbl += f"{f1_line}\n"
-
+        val_row = []
         # Second row: f1's for validation results:
-        f1_line = '| Val |'
         for res in val_f1s:
-            f1_line += f"{str(round(res.f1_macro, 1))} |"
+            val_row.append(str(round(res.f1_macro, 1)))
             
-        tbl += f"{f1_line}\n"
+        if len(val_row) != len(train_row):
+            raise ValueError(f"Must have equal num of train/val tallies; have {len(val_row)} vals and {len(train_row)} trains")
+            
+        tbl_content = {'col_header' : header,
+                       'row_labels' : ['training', 'validation'],
+                       'rows'       : [train_row, val_row] 
+                       }
+        tbl = GithubTableMaker.make_table(tbl_content)
 
-        #print(tbl)
         return tbl
 
     #------------------------------------
@@ -598,17 +595,14 @@ class TensorBoardPlotter:
         Return a github flavored table with
         with train and val f1 values for every
         class:
-			|class|weighted mean f1 train|weighted mean f1 val|
-			|-----|--------|------|
-			|  c1 |0.1|0.6|
-			|  c2 |0.1|0.6|
-			|  c3 |0.1|0.6|
-			---------------                                     
-
-			
-			         
-        @param cls:
-        @type cls:
+        
+            |class|weighted mean f1 train|weighted mean f1 val|
+            |-----|----------------------|--------------------|
+            |  c1 |     0.1              |   0.6              |
+            |  c2 |     0.1              |   0.6              |
+            |  c3 |     0.1              |   0.6              |
+            ---------------------------------------------------
+        
         '''
 
         # Get the 'all-classes' version of f1 from
@@ -616,31 +610,36 @@ class TensorBoardPlotter:
         t_f1s = latest_result['train'].f1_all_classes
         v_f1s = latest_result['val'].f1_all_classes
         
+        if t_f1s is None or \
+           v_f1s is None or \
+           len(t_f1s) == 0 or\
+           len(t_f1s) == 0:
+            raise ValueError("Both, train and val values of f1_all_classes must be non-empty lists")
+        
         # Get [[c1_train, c1_val],
         #      [c2_train, c2_val],
         #             ...
         #      ]
         res = torch.tensor([t_f1s, v_f1s]).T
         
-        tbl = ''
-        
-        header = '|class|weighted mean f1 train|weighted mean f1 val|'
-        tbl += f"{header}\n"
-        
-        # The line under the header,
-        # with the proper number of pipes:
-        head_sep =  f"{'|'}{'-'*len('class')}|"
-        head_sep += f"{'-'*len('f1 train')}|"
-        head_sep += f"{'-'*len('f1 val')}|"
-        
-        tbl += f"{head_sep}\n"
+        header = ['weighted mean f1 train','weighted mean f1 val']
         
         # And the f1 train/val numbers, one
         # class in each row:
+        row_labels = []
+        rows       = []
         for class_name, (f1_train, f1_val) in zip(class_names, res):
             f1_train = round(float(f1_train),1)
             f1_val   = round(float(f1_val),1)
-            tbl += f"|{class_name}|{f1_train}|{f1_val}|\n"
+            row_labels.append(class_name)
+            rows.append([f1_train, f1_val])
+
+        tbl_content = {
+            'col_header' : header,
+            'row_labels' : row_labels,
+            'rows'       : rows
+            }
+        tbl = GithubTableMaker.make_table(tbl_content) 
         return tbl
 
     #------------------------------------
@@ -831,4 +830,3 @@ class SummaryWriterPlus(SummaryWriter):
             w_hp.file_writer.add_summary(sei)
             for k, v in metric_dict.items():
                 w_hp.add_scalar(k, v)
-

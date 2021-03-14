@@ -18,13 +18,12 @@ from torch import nn
 from torch import optim
 import torch
 from torch.utils.data.dataloader import DataLoader
-from torchvision import transforms
 from torchvision.datasets.folder import ImageFolder
 
 from birdsong.nets import NetUtils
 from birdsong.result_tallying import ResultTally, ResultCollection
 from birdsong.utils.dottable_config import DottableConfigParser
-from birdsong.utils.file_utils import FileUtils, CSVWriterCloseable
+from birdsong.utils.utilities import FileUtils, CSVWriterCloseable, Differentiator
 from birdsong.utils.learning_phase import LearningPhase
 from birdsong.utils.model_archive import ModelArchive
 from birdsong.utils.neural_net_config import NeuralNetConfig, ConfigError
@@ -127,7 +126,7 @@ class BirdsTrainBasic:
                                          )
         self.log.debug(f"Before any gpu push: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
         
-        self.to_device(self.model, 'gpu')
+        FileUtils.to_device(self.model, 'gpu')
         
         self.log.debug(f"Before after model push: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
         
@@ -198,8 +197,8 @@ class BirdsTrainBasic:
 
                 self.log.debug(f"Top of training loop: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
                 
-                images = self.to_device(batch, 'gpu')
-                labels = self.to_device(targets, 'gpu')
+                images = FileUtils.to_device(batch, 'gpu')
+                labels = FileUtils.to_device(targets, 'gpu')
                 
                 outputs = self.model(images)
                 loss = self.loss_fn(outputs, labels)
@@ -209,10 +208,10 @@ class BirdsTrainBasic:
 
                 self.log.debug(f"Just before clearing gpu: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
                 
-                images  = self.to_device(images, 'cpu')
-                outputs = self.to_device(outputs, 'cpu')
-                labels  = self.to_device(labels, 'cpu')
-                loss    = self.to_device(loss, 'cpu')
+                images  = FileUtils.to_device(images, 'cpu')
+                outputs = FileUtils.to_device(outputs, 'cpu')
+                labels  = FileUtils.to_device(labels, 'cpu')
+                loss    = FileUtils.to_device(loss, 'cpu')
 
                 self.remember_results(LearningPhase.TRAINING,
                                       epoch,
@@ -246,16 +245,16 @@ class BirdsTrainBasic:
             self.model.eval()
             with torch.no_grad():
                 for batch, targets in self.val_loader:
-                    images = self.to_device(batch, 'gpu')
-                    labels = self.to_device(targets, 'gpu')
+                    images = FileUtils.to_device(batch, 'gpu')
+                    labels = FileUtils.to_device(targets, 'gpu')
                     
                     outputs = self.model(images)
                     loss = self.loss_fn(outputs, labels)
                     
-                    images  = self.to_device(images, 'cpu')
-                    outputs = self.to_device(outputs, 'cpu')
-                    labels  = self.to_device(labels, 'cpu')
-                    loss    = self.to_device(loss, 'cpu')
+                    images  = FileUtils.to_device(images, 'cpu')
+                    outputs = FileUtils.to_device(outputs, 'cpu')
+                    labels  = FileUtils.to_device(labels, 'cpu')
+                    loss    = FileUtils.to_device(loss, 'cpu')
                     
                     self.remember_results(LearningPhase.VALIDATING,
                                           epoch,
@@ -607,15 +606,9 @@ class BirdsTrainBasic:
         IMG_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif', '.tiff', '.webp')
         data_root = self.root_train_test_data
         
-        img_transforms = [transforms.Resize((sample_width, sample_height)),  # should actually be 1:3 but broke the system
-                          transforms.ToTensor(),
-                          transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                               std=[0.229, 0.224, 0.225])
-                          ]
-        # if to_grayscale:
-        #    img_transforms.append(transforms.Grayscale())
-                          
-        transformation = transforms.Compose(img_transforms)
+        transformation = FileUtils.get_image_transforms(sample_width, 
+                                                        sample_height, 
+                                                        to_grayscale=False)
 
         train_dataset = ImageFolder(os.path.join(data_root, 'train'),
                                     transformation,
@@ -665,30 +658,6 @@ class BirdsTrainBasic:
         '''
         self.classes = FileUtils.find_class_names(data_root)
         return len(self.classes)
-
-    #------------------------------------
-    # to_device 
-    #-------------------
-    
-    def to_device(self, item, device):
-        '''
-        Moves item to the specified device.
-        device may be 'cpu', or 'gpu'
-        
-        @param item: tensor to move to device
-        @type item: pytorch.Tensor
-        @param device: one of 'cpu', or 'gpu'
-        @type device: str
-        @return: the moved item
-        @rtype: pytorch.Tensor
-        '''
-        if device == 'cpu':
-            return item.to('cpu')
-        elif device == 'gpu':
-            # May still be CPU if no gpu available:
-            return item.to(self.fastest_device)
-        else:
-            raise ValueError(f"Device must be 'cpu' or 'gpu'")
 
     #------------------------------------
     # setup_tensorboard 

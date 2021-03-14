@@ -68,7 +68,7 @@ import torch
 from torchvision import transforms
 from torchvision.datasets import folder
 
-from birdsong.utils.file_utils import FileUtils
+from birdsong.utils.utilities import FileUtils
 import numpy as np
 
 

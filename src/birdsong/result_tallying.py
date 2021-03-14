@@ -268,22 +268,38 @@ class ResultTally:
                  labels, 
                  loss,
                  num_classes,
-                 batch_size
+                 batch_size,
+                 testing=False,
+                 **kwargs
                  ):
         '''
+        Create a new ResultTally. Any 
+        name/val pairs in kwargs will be
+        available in instances:
         
-        @param epoch:
-        @type epoch:
-        @param phase:
-        @type phase:
-        @param outputs:
-        @type outputs:
-        @param labels:
-        @type labels:
-        @param loss:
-        @type loss:
-        @param num_classes:
-        @type num_classes:
+          tally = ResultTally(3,...,32, my_info1='tulip', my_info2='daffodil')
+          
+        tally.my_info1 ==> tulip
+        tally.my_info2 ==> daffodil
+        
+        Note: the number of target classes cannot be
+              gleaned from outputs or labels, b/c some
+              classes might not have been involved in this
+              epoch
+        
+        @param epoch: epoch from which produced the results 
+        @type epoch: int
+        @param phase: the LearningPhase (e.g. LearningPhase.TRAINING)
+        @type phase: LearningPhase
+        @param outputs: predictions that model produced.
+            These are the raw logits from the model.
+        @type outputs: [float]
+        @param labels: truth values
+        @type labels: [int]
+        @param loss: loss computed by the loss function
+        @type loss: float
+        @param num_classes: number of target classes
+        @type num_classes: int
         '''
 
         # Some of the following assignments to instance
@@ -307,7 +323,11 @@ class ResultTally:
         
         self.mean_loss      = None
         self.losses         = None
-        
+
+        if testing:
+            self.metrics_stale  = False
+            return
+
         # Lazy computation of metrics:
         self.metrics_stale  = True
         
@@ -317,6 +337,9 @@ class ResultTally:
         # loss to 
         
         self.set_initial_preds_and_loss(outputs, loss)
+        
+        if len(kwargs) > 0:
+            self.__dict__.update(kwargs)
 
     #------------------------------------
     # __getattribute__ 

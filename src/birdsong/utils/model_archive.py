@@ -9,7 +9,7 @@ import os
 from logging_service.logging_service import LoggingService
 import torch
 
-from birdsong.utils.file_utils import FileUtils
+from birdsong.utils.utilities import FileUtils
 
 
 class ModelArchive:

@@ -13,6 +13,9 @@ import re
 
 import natsort
 import torch
+from torchvision import transforms
+
+from birdsong.utils.learning_phase import LearningPhase
 
 
 class FileUtils(object):
@@ -152,6 +155,9 @@ class FileUtils(object):
                            suffix=None, 
                            incl_date=False):
         '''
+        NOTE: if changes are made to how filenames
+              are constructed, check method parse_filename()
+              for needed mods
         Given a dict of property names and
         associated values, create a filename
         that includes all the information held
@@ -204,6 +210,96 @@ class FileUtils(object):
             
         return fname
 
+    #------------------------------------
+    # parse_filename 
+    #-------------------
+    
+    @classmethod
+    def parse_filename(cls, fname):
+        '''
+        Given a file name produced by 
+        construct_filename(), return a dict
+        with the constituent elements and their
+        values. The keys are not the abbreviations
+        in the filename, but the expanded names
+        used in the rest of the code:
+        
+        Ex:
+        From
+          pred_2021-03-11T10_59_02_net_resnet18_pretrain_0_lr_0.01_opt_SGD_bs_64_ks_7_folds_0_classes_10.csv
+        return
+          {net_name   : 'resnet18',
+           batch_size : 64
+              ...
+           }
+           
+        @param fname: file name to parse
+        @type fname: str
+        @return: dict with the elements and their values
+        @rtype: {str : {int|float|str}}
+        '''
+
+        fname_elements = {'net' : 'net_name',
+                          'pretrain': 'pretrain',
+                          'lr' : 'lr',
+                          'opt' : 'opt_name',
+                          'bs'  : 'batch_size',
+                          'ks'  : 'kernel_size',
+                          'folds'   : 'num_folds',
+                          'classes' : 'num_classes'
+                          }
+
+        datatypes      = {'net' : str,
+                          'pretrain': int,
+                          'lr' : float,
+                          'opt' : str,
+                          'bs'  : int,
+                          'ks'  : int,
+                          'folds'   : int,
+                          'classes' : int
+                          }
+
+        prop_dict = {}
+        
+        # Remove the file extension:
+        fname = str(Path(fname).stem)
+
+        # Get ['lr',0.001,'bs',32,...]:
+        fname_els = fname.split('_')
+        
+        # Find each of the file name elements
+        # and their values in the element/val 
+        # sequence
+        for fname_el in fname_elements.keys():
+            # Name of element (e.g. 'bs') in the
+            # rest of the code (e.g. 'batch_size')
+            long_name = long_name = fname_elements[fname_el] 
+            try:
+                # Index into the list of fname elements:
+                nm_idx = fname_els.index(fname_el)
+            except ValueError as e:
+                raise ValueError(f"Filename element {fname_el} ({long_name}) missing from {fname}") \
+                    from e
+            # Value of element always follows
+            # the element name in filenames:
+            val_idx = nm_idx + 1
+            try:
+                str_val = fname_els[val_idx]
+                # Convert to proper datatype:
+                fname_el_val = datatypes[fname_el](str_val)
+            except IndexError as e:
+                raise IndexError(f"Element {fname_el} in fname {fname} has no value for {fname_el} ({long_name})")\
+                    from e
+                    
+            prop_dict[long_name] = fname_el_val
+            
+        # Finally: elements 1,2,3, and 4 
+        # comprise the date: 
+        #  ['2021-03-11T10',59','02']  ==> '2021-03-11T10_59_02'
+        
+        prop_dict['timestamp'] = '_'.join(fname_els[1:4]) 
+        
+        return prop_dict
 
     #------------------------------------
     # user_confirm
@@ -240,40 +336,152 @@ class FileUtils(object):
         return timestamp
 
     #------------------------------------
-    # save_model 
+    # load_preds_and_labels
     #-------------------
     
     @classmethod
-    def save_model(cls, model, epoch, history_len):
+    def load_preds_and_labels(cls, csv_path):
         '''
-        If necessary, creates a subdirectory 'models'
-        below this script's directory. Using the 
-        construct_filename() method, a run-specific
-        subdirectory under 'models' is then created.
+        Returns a ResultCollection. Each 
+        ResultTally in the collection holds
+        the outcomes of one epoch:
         
-        The subdirectory name contains a timestamp,
-        and the run information elements, that construct_filename()
-        includes.
+                created_at
+                phase
+                epoch
+                num_classes
+                batch_size
+                preds
+                labels
+                mean_loss
+                losses
+        
+        @param csv_path: path to CSV file with info
+            from a past run
+        @type csv_path: str
+        '''
 
-        Within this subdir the method maintains a circlular
-        set of files of cardinality history_len: 
+        # Deferred import to avoid import circularity
+        # with modules that use both the result_tallying 
+        # and utilities modules:
+
+        from birdsong.result_tallying import ResultCollection, ResultTally
         
-                 fname_1.pth
-                 fname_2.pth
-                 fname_<history_len>.pth
-                 
-        When history_len model files are already present, removes the oldest.
-                 
-        @param model: model to save
-        @type model: nn.module
-        @param epoch: the epoch that created the model
-        @type epoch: int
-        @param history_len: number of snapshot to retain
-        @type history_len: int
+        coll = ResultCollection()
+        csv_fname = os.path.basename(csv_path)
+        
+        if not os.path.exists(csv_path):
+            raise ValueError(f"Path to csv file {csv_path} does not exist")
+
+        # Get info encoded in the filename:
+        prop_dict   = cls.parse_filename(csv_fname)
+        
+        num_classes = prop_dict['num_classes']
+        batch_size  = prop_dict['batch_size']
+        
+        # Remove the above entries from
+        # prop_dict, so we can pass the
+        # rest into ResultTally as kwargs
+        # with info beyond what ResultTally
+        # requires as args:
+        
+        del prop_dict['num_classes']
+        del prop_dict['batch_size']
+        
+        with open(csv_path, 'r') as fd:
+            reader = csv.reader(fd)
+            for (epoch, train_preds, train_labels, val_preds, val_labels) in reader:
+
+                train_tally = ResultTally(
+                    epoch,
+                    LearningPhase.TRAINING,
+                    train_preds,
+                    train_labels,
+                    0.0,  # Placeholder for loss
+                    num_classes,
+                    batch_size,
+                    prop_dict    # Additional, option  info
+                    )            # from the file name
+                
+                val_tally = ResultTally(
+                    epoch,
+                    LearningPhase.VALIDATING,
+                    val_preds,
+                    val_labels,
+                    0.0,  # Placeholder for loss
+                    num_classes,
+                    batch_size,
+                    prop_dict    # Additional, option  info
+                    )            # from the file name
+                
+                coll.add(train_tally, epoch)
+                coll.add(val_tally, epoch)
+
+        return coll
+    
+    #------------------------------------
+    # get_image_transforms 
+    #-------------------
+    
+    @classmethod
+    def get_image_transforms(cls, 
+                             sample_width=400, # Pixels 
+                             sample_height=400,
+                             to_grayscale=False
+                             ):
+        '''
+        Returns a transformation that is applied
+        to all images in the application. Always
+        get the transforms from here.
+
+        @param sample_width: desired resize width
+        @type sample_width: int
+        @param sample_height: desired resize height
+        @type sample_height: int
+        @param to_grayscale: whether or not to convert
+            images to 1-channel grayscale during load
+        @type to_grayscale: bool
+        @return: transform composite
+        @rtype: whatever torchvision.transforms.Compose returns
         '''
         
+        img_transforms = [transforms.Resize((sample_width, sample_height)),
+                          transforms.ToTensor(),
+                          transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                               std=[0.229, 0.224, 0.225])
+                          ]
+        if to_grayscale:
+            img_transforms.append(transforms.Grayscale())
         
+        transformation = transforms.Compose(img_transforms)
         
+        return transformation
+
+    #------------------------------------
+    # to_device 
+    #-------------------
+
+    @classmethod
+    def to_device(cls, item, device):
+        '''
+        Moves item to the specified device.
+        device may be 'cpu', or 'gpu'
+        
+        @param item: tensor to move to device
+        @type item: pytorch.Tensor
+        @param device: one of 'cpu', or 'gpu'
+        @type device: str
+        @return: the moved item
+        @rtype: pytorch.Tensor
+        '''
+        fastest_device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        if device == 'cpu':
+            return item.to('cpu')
+        elif device == 'gpu':
+            # May still be CPU if no gpu available:
+            return item.to(fastest_device)
+        else:
+            raise ValueError(f"Device must be 'cpu' or 'gpu'")
 
 
     #------------------------------------
@@ -381,4 +589,65 @@ class CSVWriterCloseable:
     @property
     def fname(self):
         return self._fname
+
+# -------------------- Differentiator ---------
+
+class Differentiator:
+    
+    #------------------------------------
+    # back_differentiation 
+    #-------------------
+    
+    @classmethod
+    def back_differentiation(cls, points, h=3):
+    
+        # h: Points to include in each step
+    
+        if len(points) < h+1:
+            raise ValueError(f"Number of points must be at least {h+1}")
+        
+        point_it = iter(points)
+
+        # Processed points:
+        arc_pts  = []
+    
+        # Get the first h points,
+        # over which the first derivative
+        # will be computed:
+        
+        for _i in range(h):
+            arc_pts.append(next(point_it))
+    
+        # Result will be here:
+        deriv_pts = []
+        
+        # The (f(i) - f(i-h))/h formula
+        # computed point by point:
+        
+        for idx, pt_val in enumerate(point_it):
+            diff = pt_val - points[idx] 
+            deriv_pts.append(diff / h)
+    
+        return deriv_pts
+    
+    #------------------------------------
+    # test 
+    #-------------------
+    
+    @classmethod
+    def test(cls):
+
+        pts = [1,2,3,4,5,6]
+        deriv_pts = cls.back_differentiation(pts)
+        assert(deriv_pts == [1.0,1.0,1.0])
+        
+        pts = [0, 0.5, 1.0, 1.5, 2.0, 2.5]
+        deriv_pts = cls.back_differentiation(pts)
+        assert(deriv_pts == [0.5,0.5,0.5])
+        
+# ------------------------ Main ------------
+if __name__ == '__main__':
+    print("Testing Differentiator")
+    Differentiator.test()
+    print("All good")
     
