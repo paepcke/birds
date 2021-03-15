@@ -72,6 +72,43 @@ class TestUtilities(unittest.TestCase):
         self.assertEqual(tally.batch_size, 64)
         self.assertEqual(str(tally.phase), 'LearningPhase.TRAINING')
 
+    #------------------------------------
+    # test_ellipsed_file_path 
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_ellipsed_file_path(self):
+        
+        self.assertEqual(FileUtils.ellipsed_file_path('foobar'),
+                         'foobar'
+                         )
+        self.assertEqual(FileUtils.ellipsed_file_path('foobar/fum'),
+                         'foobar/fum'
+                         )
+        # Uneven num of dirs:
+        self.assertEqual(FileUtils.ellipsed_file_path('foobar/bluebell/grayhound/'),
+                         'foobar/.../grayhound'
+                         )
+        
+        # Even num of dirs
+        self.assertEqual(FileUtils.ellipsed_file_path('blue/foobar/bluebell/grayhound/'),
+                         'blue/.../bluebell/grayhound'
+                         )
+        # Length just acceptable
+        self.assertEqual(FileUtils.ellipsed_file_path('blue/foobar/grayhound/bar'),
+                         'blue/foobar/grayhound/bar'
+                         )
+        # Length one over acceptable
+        self.assertEqual(FileUtils.ellipsed_file_path('Bblue/foobar/grayhound/bar'),
+                         'Bblue/.../grayhound/bar'
+                         )
+        # Absolute path:
+        self.assertEqual(FileUtils.ellipsed_file_path('/Bblue/foobar/grayhound/bar'),
+                         '/Bblue/.../grayhound/bar'
+                         )
+
+
+
 # ---------------- Main ---------------
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

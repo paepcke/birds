@@ -550,7 +550,66 @@ class FileUtils(object):
             print('*****')
 
         return info_subset
+
+    #------------------------------------
+    # ellipsed_file_path
+    #-------------------
     
+    @classmethod
+    def ellipsed_file_path(cls, 
+                           path,
+                           acceptable_len=25):
+        '''
+        If a path is very long, return
+        a string with some of the intermediate
+        dirs replaced by ellipses. Used in 
+        messages and log entries when the entire
+        path is not needed. 
+        
+        @param path:
+        @type path:
+        @param acceptable_len: number of letters
+            acceptable to keep in the result
+        @type path: int
+        @return shortened path for printing in messages
+        @rtype: str
+        
+        '''
+        if len(path) <= acceptable_len:
+            return path
+        
+        # Get dirs and fname.
+        components = path.split('/')
+        # Remove any empty strings:
+        components = list(filter(lambda el: el.__ne__(''),
+                                 components
+                                 ))
+        
+        if len(components) == 1:
+            # Just a file name; we only
+            # split dirs:
+            return path
+        
+        # Remove intermediate dirs
+        # till acceptable len:
+        while True:
+            # Take out the second dir
+            # (We always keep the root):
+            components.remove(components[1])
+            p = '/'.join(components)
+            if len(p) <= acceptable_len:
+                break
+            
+        midpoint = len(components) // 2
+        components = components[:midpoint] + ['...'] + components[midpoint:]
+        res = '/'.join(components)
+        
+        #Add the leading '/' back if appropriate:
+        if os.path.isabs(path):
+            res = f"/{res}"
+
+        return res
+
 # ----------------------- CSVWriterFDAccessible -------
 
 class CSVWriterCloseable:

@@ -56,7 +56,7 @@ class XenoCantoProcessorTester(unittest.TestCase):
     # test_to_json_xc_recording 
     #-------------------
     
-    #****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_recording_to_json_xc_recording(self):
         coll = XenoCantoCollection.load(self.tst_file)
         rec  = coll['Tangaragyrola'][0]
@@ -164,6 +164,200 @@ class XenoCantoProcessorTester(unittest.TestCase):
         #new_coll.__eq__(coll)
         #**********
         self.assertTrue(new_coll == coll) 
+
+    #------------------------------------
+    # test_download_non_existing_destdir
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_download_non_existing_destdir(self):
+        
+        rec = self.make_fake_rec_instance(load_dir=self.curr_dir)
+
+        # Non-existing dest dir:
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp_dir_name:
+            os.rmdir(tmp_dir_name)
+            go_ahead = rec.download(dest_dir=tmp_dir_name, testing=True)
+            self.assertTrue(os.path.exists(tmp_dir_name) and \
+                            os.path.isdir(tmp_dir_name))
+            self.assertTrue(go_ahead)
+            
+    #------------------------------------
+    # test_download_explicit_overwrite_ok 
+    #-------------------
+
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_download_explicit_overwrite_ok(self):
+
+        rec = self.make_fake_rec_instance(load_dir=self.curr_dir)
+
+        # Provide explicit 'overwrite OK',
+        # no global default set yet:
+        
+        XenoCantoRecording.always_overwrite = None
+        self.download_call(rec, 
+                           overwrite_existing=True,
+                           expected_go_ahead=True,
+                           expected_global_default=True
+                           )
+
+    #------------------------------------
+    # test_download_global_overwrite_ok
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_download_global_overwrite_ok(self):
+        
+        rec = self.make_fake_rec_instance(load_dir=self.curr_dir)
+
+        XenoCantoRecording.always_overwrite = True
+        self.download_call(rec, 
+                           overwrite_existing=True,
+                           expected_go_ahead=True,
+                           expected_global_default=True
+                           )
+
+    #------------------------------------
+    # test_download_must_ask_for_input 
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_download_must_ask_for_input(self):
+
+        rec = self.make_fake_rec_instance(load_dir=self.curr_dir)
+
+        # Must ask user for overwrite permission,
+        # and user says Yes:
+        try:
+            saved_input_fn = __builtins__.input
+            __builtins__.input = lambda _: 'Yes'
+            
+            XenoCantoRecording.always_overwrite = None
+            self.download_call(rec, 
+                               overwrite_existing=None,
+                               expected_go_ahead=True,
+                               expected_global_default=True
+                               )
+        finally:
+            __builtins__.input = saved_input_fn
+
+        # Must ask user for overwrite permission,
+        # and user says No:
+        try:
+            saved_input_fn = __builtins__.input
+            __builtins__.input = lambda _: 'No'
+            
+            XenoCantoRecording.always_overwrite = None
+            self.download_call(rec, 
+                               overwrite_existing=None,
+                               expected_go_ahead=False,
+                               expected_global_default=False
+                               )
+        finally:
+            __builtins__.input = saved_input_fn
+
+    #------------------------------------
+    # test_download_no_permission 
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_download_no_permission(self):
+
+        # Forbidden dir creation:
+        rec = self.make_fake_rec_instance(load_dir='/usr/bin/foo')
+        XenoCantoRecording.always_overwrite = True                
+
+        try:
+            saved_input_fn = __builtins__.input
+            
+            # Replace input() with func that provides
+            # a dir for which permissions are OK:
+            with tempfile.TemporaryDirectory(dir='/tmp') as tmp_dir_name:
+                __builtins__.input = lambda _: tmp_dir_name
+
+                with tempfile.NamedTemporaryFile(suffix='.mp3', 
+                                                 prefix='xeno_canto_tst', 
+                                                 dir='/tmp',
+                                                 delete=True) as fd:
+                    fname = fd.name
+                    rec.full_name = fname
+                    rec._filename = os.path.basename(fname)
+                    go_ahead = rec.download(dest_dir='/usr/bin/foo',
+                                            testing=True)
+    
+                self.assertTrue(go_ahead)
+            
+        finally:
+            __builtins__.input = saved_input_fn
+
+# ----------------------- Utils ---------
+
+
+    #------------------------------------
+    # download_call 
+    #-------------------
+    
+    def download_call(self,
+                      rec,
+                      overwrite_existing, # for download call
+                      expected_go_ahead,
+                      expected_global_default,
+                      ):
+        '''
+        Creates a temporary file, and calls download 
+        with the provided args. Then asserts 
+        expected_go_ahead and expected_global_default
+        values.
+
+        @param rec: XenoCantoRecording on which to call download()
+        @type rec: XenoCantoRecording
+        @param overwrite_existing: whether or not to overwrite
+        @type overwrite_existing: bool
+        @param expected_go_ahead: whether resulting go_ahead should
+            be True or False
+        @type expected_go_ahead: bool
+        @param expected_global_default: whether after the call the
+            global default overwrite instruction should be True
+            or False
+        @type expected_global_default:bool
+        '''
+        
+        with tempfile.NamedTemporaryFile(suffix='.mp3', 
+                                         prefix='xeno_canto_tst', 
+                                         dir='/tmp',
+                                         delete=True) as fd:
+            fname = fd.name
+            rec.full_name = fname
+            rec._filename = os.path.basename(fname)
+            go_ahead = rec.download(dest_dir=os.path.dirname(fname),
+                                    overwrite_existing=overwrite_existing, 
+                                    testing=True)
+            self.assertEqual(go_ahead, expected_go_ahead)
+            self.assertEqual(XenoCantoRecording.always_overwrite,
+                             expected_global_default
+                             )
+
+    #------------------------------------
+    # make_fake_rec_instance 
+    #-------------------
+    
+    def make_fake_rec_instance(self, load_dir=None): 
+                               
+        
+        recording_metadata = {
+            'id'        :  1234,
+            'gen'       :  'my_genus',
+            'sp'        :  'my_species',
+            'cnt'       :  'chile',
+            'loc'       :  'botanical gardens',
+            'date'      :  '2021-02-03',
+            'length'    :  10,
+            'file-name' :  'bluebell.mp3',
+            'type'      :  'call',
+            'url'       :  'http://my_server/file_ingo'
+            }
+        rec = XenoCantoRecording(recording_metadata, load_dir)
+        return rec
 
 # -------------- Main ---------
 if __name__ == "__main__":

@@ -122,9 +122,11 @@ import json5
 import re
 import sys
 import time
+import requests
 
 from logging_service import LoggingService
-import requests
+from birdsong.utils.utilities import FileUtils
+
 
 # ---------------- Class XenoCantoCollection ----------
 
@@ -150,6 +152,25 @@ class XenoCantoCollection(UserDict):
                                ]
 
     '''
+    # By default, iterating through a list
+    # of XenoCantoRecording instances that
+    # are of the same bird, just different
+    # recordings, only return the first of
+    # each species' recordings, then move
+    # on to the next:
+    #
+    #     coll: species1: [rec_s1_1, rec_s1_2,...],
+    #           species2: [rec_s2_1, rec_s2_2,...],
+    #
+    # If one_per_bird_phylo is True, then 
+    # an iterator over the collection will return
+    #
+    #     rec_s1_1, rec_s2_1
+    #
+    # Else each recording of each species is 
+    # fed out:
+    
+    one_per_bird_phylo = True 
 
     #------------------------------------
     # Constructor 
@@ -158,11 +179,15 @@ class XenoCantoCollection(UserDict):
     def __init__(self, 
                  bird_names,
                  courtesy_delay=1.0,
-                 load_dir=None):
+                 load_dir=None,
+                 always_overwrite=False):
 
         super().__init__()
         
         self.log = LoggingService()
+        self.always_overwrite = always_overwrite
+        if always_overwrite:
+            self.log.info("Note: if dowloads requested, will overwrite any existing recordings.")
         
         # 'Secret' entry: used when creating
         # from json string (see from_json()):
@@ -642,12 +667,25 @@ class XenoCantoCollection(UserDict):
 # --------------------------- Class XenoCantoRecording
 
 class XenoCantoRecording:
+
+
+    # No decision made about whether
+    # to overwrite existing recording files
+    # when asked to download any of the
+    # instances. Will be updated or used
+    # during calls to download():
+
+    always_overwrite = None
     
     #------------------------------------
     # Constructor 
     #-------------------
     
-    def __init__(self, recording_metadata, load_dir=None, log=None):
+    def __init__(self, 
+                 recording_metadata, 
+                 load_dir=None, 
+                 log=None
+                 ):
         '''
         Recording must be a dict from the 
         'recordings' entry of a Xeno Canto download.
@@ -714,17 +752,81 @@ class XenoCantoRecording:
     # download 
     #-------------------
     
-    def download(self, dest_dir=None):
+    def download(self, 
+                 dest_dir=None, 
+                 overwrite_existing=None,
+                 testing=False):
+        
         if dest_dir is None:
             dest_dir = self.load_dir
         
+        while not os.path.exists(dest_dir):
+            try:
+                os.makedirs(dest_dir)
+            except PermissionError:
+                # Make a short dir with ellipses if
+                # dest_dir very long:
+                short_dir = FileUtils.ellipsed_file_path(dest_dir)
+                dest_dir = input(f"No permission for {short_dir}; enter dest folder: ")
+        else:
+            if not os.path.isdir(dest_dir):
+                raise ValueError(f"Destination {dest_dir} is not a directory")
+
+        # Update the full path to the recording
+        # file: if a saved recording is loaded
+        # by a different user or on a different
+        # machine: that path might not exist:
+        
+        self.full_name = os.path.join(dest_dir, self._filename)
+
+        # Global default for decision to overwrite
+        # a recording if it already exists:
+        
+        overwrite_default = self.__class__.always_overwrite
+        
+        # Dest directory exists, does the sound file
+        # already exist?
+        if os.path.exists(self.full_name):
+            # If overwrite_existing is provided in
+            # the args, we know what to do. We also 
+            # update the class level overwrite instruction 
+            # if it is not initialized yet:
+            if overwrite_existing is not None:
+                go_ahead = overwrite_existing
+                if overwrite_default is None:
+                    self.__class__.always_overwrite = overwrite_existing
+            else:
+                # No overwrite instruction given in this
+                # call. Are there class-level instructions?
+                if overwrite_default is not None:
+                    go_ahead = overwrite_default
+                else:
+                    # Need to ask permission to overwrite:
+                    answer = input(f"Recording {self._filename} exists; overwrite (y/N): ")
+                    go_ahead = answer in ('y','Y','yes','Yes')
+                    # Make answer the global default for recordings:
+                    self.__class__.always_overwrite = go_ahead
+        else:
+            go_ahead = True
+            
+        if not go_ahead and os.path.exists(self.full_name):
+            self.log.info(f"Not overwriting existing {self._filename}")
+            return go_ahead
+
+        if testing:
+            return go_ahead
+        
         self.log.info(f"Downloading sound file for {self.full_name}...")
-        response = requests.get(self._url)
+        try:
+            response = requests.get(self._url)
+        except Exception as e:
+            raise IOError(f"While downloading {self._url}: {repr(e)}") from e
+        
         self.log.info(f"Done downloading sound file for {self.full_name}")
         
         # Split "audio/mpeg" or "audio/vdn.wav"
         medium, self.encoding = response.headers['content-type'].split('/')
-        
+        1
         if medium != 'audio' or self.encoding not in ('mpeg', 'vdn.wav'):
             msg = f"Recording {self.full_name} is {medium}/{self.encoding}, not mpeg or vpn_wav"
             self.log.err(msg)
@@ -811,86 +913,86 @@ if __name__ == '__main__':
              'Catharus+ustulatus', 'Parula+pitiayumi', 'Henicorhina+leucosticta', 'Corapipo+altera', 
              'Empidonax+flaviventris']
 
-    parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
-                                     formatter_class=argparse.RawTextHelpFormatter,
-                                     description="Download and process Xeno Canto bird sounds"
-                                     )
-
-    parser.add_argument('-d', '--destdir',
-                        help='fully qualified directory for downloads. Default: /tmp',
-                        default='/tmp')
-    parser.add_argument('-t', '--timedelay',
-                        type=float,
-                        help='time between downloads for politeness to XenoCanto server. Ex: 1.0',
-                        default=1.0)
-    # Things user wants to do:
-    parser.add_argument('--collect_info',
-                        action='store_true',
-                        help="download metadata for the bird calls, but don't download sounds"
-                        )
-    parser.add_argument('--download',
-                        action='store_true',
-                        help="download the (birds_to_process) sound files (implies --collect_info"
-                        )
-    parser.add_argument('--all_recordings',
-                        action='store_true',
-                        help="download all recordings rather than one per species; default: one per.",
-                        default=False
-                        )
-    parser.add_argument('birds_to_process',
-                        type=str,
-                        nargs='*',
-                        help='Repeatable: <genus>+<species>. Ex: Tangara_gyrola',
-                        default=[bird.replace('+', '_') for bird in birds])
-
-
-    args = parser.parse_args()
-
-    # For reporting to user: list
-    # of actions to do by getting them
-    # as strings from the args instance:
-    todo = [action_name 
-            for action_name
-            in ['collect_info', 'download']
-            if args.__getattribute__(action_name)
-            ]
-    
-    if len(todo) == 0:
-        print("No action specified on command line; nothing done")
-        print(parser.print_help())
-        sys.exit(0)
-            
-    # Fix bird names to make HTTP happy later.
-    # B/c we allow -b and --bird in args, 
-    # argparse constructs a name:
-    
-    birds_to_process = args.birds_to_process
-    
-    if len(birds_to_process) == 0:
-        birds_to_process = birds
-    else:
-        # Replace the underscores needed for
-        # not confusing bash with the '+' signs
-        # required in URLs:
-        birds_to_process = [bird.replace('_', '+') for bird in birds_to_process]
-
-    #if len(birds_to_process) == 0:
-    #    print("No birds specified; nothing done")
-    #    sys.exit(0)
-        
-    if ('collect_info' in  todo) or ('download' in todo):
-        sound_collection = XenoCantoCollection(birds_to_process,
-                                               load_dir=args.destdir)
-        sound_collection.save()
-        
-    if 'download' in todo:
-        one_per_species = not args.all_recordings
-        sound_collection.download(birds_to_process,
-                                  one_per_species=one_per_species,
-                                  courtesy_delay=args.timedelay)
-        sound_collection.save()
-
-    sound_collection.log.info(f"Done with {todo}")
+#     parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
+#                                      formatter_class=argparse.RawTextHelpFormatter,
+#                                      description="Download and process Xeno Canto bird sounds"
+#                                      )
+# 
+#     parser.add_argument('-d', '--destdir',
+#                         help='fully qualified directory for downloads. Default: /tmp',
+#                         default='/tmp')
+#     parser.add_argument('-t', '--timedelay',
+#                         type=float,
+#                         help='time between downloads for politeness to XenoCanto server. Ex: 1.0',
+#                         default=1.0)
+#     # Things user wants to do:
+#     parser.add_argument('--collect_info',
+#                         action='store_true',
+#                         help="download metadata for the bird calls, but don't download sounds"
+#                         )
+#     parser.add_argument('--download',
+#                         action='store_true',
+#                         help="download the (birds_to_process) sound files (implies --collect_info"
+#                         )
+#     parser.add_argument('--all_recordings',
+#                         action='store_true',
+#                         help="download all recordings rather than one per species; default: one per.",
+#                         default=False
+#                         )
+#     parser.add_argument('birds_to_process',
+#                         type=str,
+#                         nargs='*',
+#                         help='Repeatable: <genus>+<species>. Ex: Tangara_gyrola',
+#                         default=[bird.replace('+', '_') for bird in birds])
+# 
+# 
+#     args = parser.parse_args()
+# 
+#     # For reporting to user: list
+#     # of actions to do by getting them
+#     # as strings from the args instance:
+#     todo = [action_name 
+#             for action_name
+#             in ['collect_info', 'download']
+#             if args.__getattribute__(action_name)
+#             ]
+#     
+#     if len(todo) == 0:
+#         print("No action specified on command line; nothing done")
+#         print(parser.print_help())
+#         sys.exit(0)
+#             
+#     # Fix bird names to make HTTP happy later.
+#     # B/c we allow -b and --bird in args, 
+#     # argparse constructs a name:
+#     
+#     birds_to_process = args.birds_to_process
+#     
+#     if len(birds_to_process) == 0:
+#         birds_to_process = birds
+#     else:
+#         # Replace the underscores needed for
+#         # not confusing bash with the '+' signs
+#         # required in URLs:
+#         birds_to_process = [bird.replace('_', '+') for bird in birds_to_process]
+# 
+#     #if len(birds_to_process) == 0:
+#     #    print("No birds specified; nothing done")
+#     #    sys.exit(0)
+#         
+#     if ('collect_info' in  todo) or ('download' in todo):
+#         sound_collection = XenoCantoCollection(birds_to_process,
+#                                                load_dir=args.destdir)
+#         sound_collection.save()
+#         
+#     if 'download' in todo:
+#         one_per_species = not args.all_recordings
+#         sound_collection.download(birds_to_process,
+#                                   one_per_species=one_per_species,
+#                                   courtesy_delay=args.timedelay)
+#         sound_collection.save()
+# 
+#     sound_collection.log.info(f"Done with {todo}")
 
 # ------------------------ Testing Only ----------------
     # Testing
@@ -907,3 +1009,7 @@ if __name__ == '__main__':
 #     rec.download()
 #     print(sound_collection)
 
+    coll = XenoCantoCollection.from_json(src='/Users/paepcke/EclipseWorkspacesNew/birds/test_metadata.json')
+    for rec in coll:
+        rec.download()
+        print(rec)
