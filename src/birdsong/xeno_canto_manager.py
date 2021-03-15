@@ -513,6 +513,30 @@ class XenoCantoCollection(UserDict):
     #-------------------
     
     def save(self, dest=None):
+        '''
+        Saves collection to given file. Only the
+        metadata for the collection itself, and
+        the enclosed XenoCantoRecording instances
+        are saved, not the soundfiles themselves.
+        They are normally in their own dir, with 
+        the XenoCantoRecording instances holding
+        the file paths.
+        
+        If the dest file ends with '.json' the output
+        format is JSON else it is pickle. 
+        
+        Note: Pickle is fast to load, but very finicky 
+              about file names and directory structures
+              being exactly what they were at saving
+              time. So JSON is recommended.
+        
+        @param dest: destination directory for the 
+            saved collection. Default: 
+                <dir_of_this_script>/xeno_canto_collections
+        @type dest: str
+        @return the output file
+        @rtype str
+        '''
         
         if dest is None:
             curr_dir  = os.path.dirname(__file__)
@@ -532,10 +556,14 @@ class XenoCantoCollection(UserDict):
                 self.log.info("Collection pickle save aborted on request")
                 return None
 
-        # At this point dest is a non-existing file
-        with open(dest, 'wb') as fd:
-            pickle.dump(self, fd)
-            
+        # At this point dest is a non-existing file,
+        # which is what we need. Use pickle or json?
+        if dest.endswith('.json'):
+            self.to_json(dest, force=True)
+        else:
+            with open(dest, 'wb') as fd:
+                pickle.dump(self, fd)
+
         return dest
 
     #------------------------------------
@@ -544,9 +572,13 @@ class XenoCantoCollection(UserDict):
     
     @classmethod
     def load(cls, src):
-        
-        with open(src, 'rb') as fd:
-            return pickle.load(fd)
+
+        if src.endswith('.json'):
+            return cls.from_json(src=src)
+        else:
+            # Assume pickle file
+            with open(src, 'rb') as fd:
+                return pickle.load(fd)
 
     #------------------------------------
     # to_json 
@@ -558,11 +590,14 @@ class XenoCantoCollection(UserDict):
         collection. If dest is a string,
         it is assumed to be a destination
         file where the json will be saved.
-        If none, the string is returned.
+        If none, the JSON string stored in
+        the file is returned. It can be
+        passed to from_json() in the json_str
+        kwarg.
         
         If the file exists, the user is warned,
         unless force is True.
-        
+
         
         @param dest: optional destination file
         @type dest: {None | str}
@@ -613,6 +648,18 @@ class XenoCantoCollection(UserDict):
     
     @classmethod
     def from_json(cls, json_str=None, src=None):
+        '''
+        Load a collection either from a JSON string,
+        or from a file that contains JSON.
+        
+        @param json_str: string to parse for generating
+            the reconstituted collection
+        @type json_str: str
+        @param src: path to file containing a JSON str
+        @type src: str
+        @return: a collection
+        @rtype: XenoCantoCollection
+        '''
         
         if json_str is None and src is None:
             raise ValueError("One of json_str or src must be non-None")
