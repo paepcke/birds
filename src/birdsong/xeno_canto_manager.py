@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
 Functions involved in downloading birds from xeno-canto
+Can be used from the command line (see argparse entries
+at end of file). Or one can import XenoCantoCollection
+and XenoCantoRecording into an application.
 
 Two classes:
   
@@ -85,25 +88,12 @@ for recording in coll(one_per_bird_phylo=False):
     print(recording.full_name)
     print(recording.filepath)
 
-TODO:
-    o The filepath values in the XenoCantoRecording
-      instances will be stale as soon as downloaded
-      files are moved. Needed:
-      
-          In class XenoCantoCollection:
-          
-          def adjust_filepaths(self, to_replace, replacement, pattern=None):
-          
-              # runs through all XenoCantoRecording instances,
-              # and replaces the filepath value.
-              # Arguments would be flexible in that a regex
-              # pattern can be passed, or just a straight
-              # replacement
+# TODO:
+#   o Example for getting metadata
 
 """
 
 import argparse
-from collections import UserDict
 import datetime
 import os
 from pathlib import Path
@@ -127,7 +117,48 @@ import requests
 from logging_service import LoggingService
 from birdsong.utils.utilities import FileUtils
 
+# TODO:
+#   o Example for creating a .json collection
 
+'''
+Usage example assuming you have a 
+  .json file with a previously saved collection
+
+	cd ~/birds
+	conda activate birds
+	export PYTHONPATH=src:$PYTHONPATH# For the tests below, start with no# downloaded sound files:
+	rm /home/yatagait/birds/src/birdsong/recordings/*
+	
+	python3
+	# >>>
+	import birdsong.xeno_canto_manager as xcm
+	coll = xcm.XenoCantoCollection.load('~/test_metadata.json')
+	for rec in coll:
+	    print(rec)
+	
+	# Get messages about downloading and saving# as it rattles through:
+	for rec in coll:
+	    dest_file = rec.download()
+	
+	# Download again: get warning about file
+	# present. In this case, answer 'no' to the overwrite
+	# question to avoid re-downloading any
+	# of the already present files. 
+	
+	for rec in coll:
+	    dest_file = rec.download()
+	
+	# Download the collection all at once,
+	# rather than in a loop. This won't
+	# re-download, b/c it remembers your
+	# 'no' answer from above:
+	
+	coll.download()
+	
+	# Force re-downloading:
+	coll.download(overwrite_existing=True)
+
+'''
 # ---------------- Class XenoCantoCollection ----------
 
 #**************
@@ -1075,86 +1106,86 @@ if __name__ == '__main__':
              'Catharus+ustulatus', 'Parula+pitiayumi', 'Henicorhina+leucosticta', 'Corapipo+altera', 
              'Empidonax+flaviventris']
 
-#     parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
-#                                      formatter_class=argparse.RawTextHelpFormatter,
-#                                      description="Download and process Xeno Canto bird sounds"
-#                                      )
-# 
-#     parser.add_argument('-d', '--destdir',
-#                         help='fully qualified directory for downloads. Default: /tmp',
-#                         default='/tmp')
-#     parser.add_argument('-t', '--timedelay',
-#                         type=float,
-#                         help='time between downloads for politeness to XenoCanto server. Ex: 1.0',
-#                         default=1.0)
-#     # Things user wants to do:
-#     parser.add_argument('--collect_info',
-#                         action='store_true',
-#                         help="download metadata for the bird calls, but don't download sounds"
-#                         )
-#     parser.add_argument('--download',
-#                         action='store_true',
-#                         help="download the (birds_to_process) sound files (implies --collect_info"
-#                         )
-#     parser.add_argument('--all_recordings',
-#                         action='store_true',
-#                         help="download all recordings rather than one per species; default: one per.",
-#                         default=False
-#                         )
-#     parser.add_argument('birds_to_process',
-#                         type=str,
-#                         nargs='*',
-#                         help='Repeatable: <genus>+<species>. Ex: Tangara_gyrola',
-#                         default=[bird.replace('+', '_') for bird in birds])
-# 
-# 
-#     args = parser.parse_args()
-# 
-#     # For reporting to user: list
-#     # of actions to do by getting them
-#     # as strings from the args instance:
-#     todo = [action_name 
-#             for action_name
-#             in ['collect_info', 'download']
-#             if args.__getattribute__(action_name)
-#             ]
-#     
-#     if len(todo) == 0:
-#         print("No action specified on command line; nothing done")
-#         print(parser.print_help())
-#         sys.exit(0)
-#             
-#     # Fix bird names to make HTTP happy later.
-#     # B/c we allow -b and --bird in args, 
-#     # argparse constructs a name:
-#     
-#     birds_to_process = args.birds_to_process
-#     
-#     if len(birds_to_process) == 0:
-#         birds_to_process = birds
-#     else:
-#         # Replace the underscores needed for
-#         # not confusing bash with the '+' signs
-#         # required in URLs:
-#         birds_to_process = [bird.replace('_', '+') for bird in birds_to_process]
-# 
-#     #if len(birds_to_process) == 0:
-#     #    print("No birds specified; nothing done")
-#     #    sys.exit(0)
-#         
-#     if ('collect_info' in  todo) or ('download' in todo):
-#         sound_collection = XenoCantoCollection(birds_to_process,
-#                                                load_dir=args.destdir)
-#         sound_collection.save()
-#         
-#     if 'download' in todo:
-#         one_per_species = not args.all_recordings
-#         sound_collection.download(birds_to_process,
-#                                   one_per_species=one_per_species,
-#                                   courtesy_delay=args.timedelay)
-#         sound_collection.save()
-# 
-#     sound_collection.log.info(f"Done with {todo}")
+    parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
+                                     formatter_class=argparse.RawTextHelpFormatter,
+                                     description="Download and process Xeno Canto bird sounds"
+                                     )
+ 
+    parser.add_argument('-d', '--destdir',
+                        help='fully qualified directory for downloads. Default: /tmp',
+                        default='/tmp')
+    parser.add_argument('-t', '--timedelay',
+                        type=float,
+                        help='time between downloads for politeness to XenoCanto server. Ex: 1.0',
+                        default=1.0)
+    # Things user wants to do:
+    parser.add_argument('--collect_info',
+                        action='store_true',
+                        help="download metadata for the bird calls, but don't download sounds"
+                        )
+    parser.add_argument('--download',
+                        action='store_true',
+                        help="download the (birds_to_process) sound files (implies --collect_info"
+                        )
+    parser.add_argument('--all_recordings',
+                        action='store_true',
+                        help="download all recordings rather than one per species; default: one per.",
+                        default=False
+                        )
+    parser.add_argument('birds_to_process',
+                        type=str,
+                        nargs='*',
+                        help='Repeatable: <genus>+<species>. Ex: Tangara_gyrola',
+                        default=[bird.replace('+', '_') for bird in birds])
+ 
+ 
+    args = parser.parse_args()
+ 
+    # For reporting to user: list
+    # of actions to do by getting them
+    # as strings from the args instance:
+    todo = [action_name 
+            for action_name
+            in ['collect_info', 'download']
+            if args.__getattribute__(action_name)
+            ]
+     
+    if len(todo) == 0:
+        print("No action specified on command line; nothing done")
+        print(parser.print_help())
+        sys.exit(0)
+             
+    # Fix bird names to make HTTP happy later.
+    # B/c we allow -b and --bird in args, 
+    # argparse constructs a name:
+     
+    birds_to_process = args.birds_to_process
+     
+    if len(birds_to_process) == 0:
+        birds_to_process = birds
+    else:
+        # Replace the underscores needed for
+        # not confusing bash with the '+' signs
+        # required in URLs:
+        birds_to_process = [bird.replace('_', '+') for bird in birds_to_process]
+ 
+    #if len(birds_to_process) == 0:
+    #    print("No birds specified; nothing done")
+    #    sys.exit(0)
+         
+    if ('collect_info' in  todo) or ('download' in todo):
+        sound_collection = XenoCantoCollection(birds_to_process,
+                                               load_dir=args.destdir)
+        sound_collection.save()
+         
+    if 'download' in todo:
+        one_per_species = not args.all_recordings
+        sound_collection.download(birds_to_process,
+                                  one_per_species=one_per_species,
+                                  courtesy_delay=args.timedelay)
+        sound_collection.save()
+ 
+    sound_collection.log.info(f"Done with {todo}")
 
 # ------------------------ Testing Only ----------------
     # Testing
@@ -1177,11 +1208,12 @@ if __name__ == '__main__':
 #         print(rec)
 
     #new = XenoCantoCollection.load('/Users/paepcke/tmp/test_metadata1.pkl')
-    coll = XenoCantoCollection.load('/Users/paepcke/tmp/test_metadata1.json')
-    for rec in coll:
-        print(rec)
-
-    for rec in coll:
-        rec.download()
-
-    print(coll)
+#     coll = XenoCantoCollection.load('/Users/paepcke/tmp/test_metadata1.json')
+#     for rec in coll:
+#         print(rec)
+# 
+#     for rec in coll:
+#         rec.download()
+# 
+#     print(coll)
+    
