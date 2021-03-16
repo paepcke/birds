@@ -590,6 +590,22 @@ class FileUtils(object):
             # split dirs:
             return path
         
+        # Is the filename all by itself,
+        # without dirs, larger than acceptable?
+        fname = components[-1]
+        if len(fname) >= acceptable_len:
+            # Just add the first dir, and
+            # the ellipses; the string will
+            # be longer than acceptable, but
+            # it's the best we can do:
+            
+            #Add the leading '/' back if appropriate:
+            res = f"/{components[0]}/...{fname}" \
+                    if os.path.isabs(path) \
+                    else f"{components[0]}/...{fname}" 
+            
+            return res 
+        
         # Remove intermediate dirs
         # till acceptable len:
         while True:

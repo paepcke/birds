@@ -79,6 +79,15 @@ class TestUtilities(unittest.TestCase):
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_ellipsed_file_path(self):
         
+        # File name too long even without
+        # leading dirs:
+        self.assertEqual(FileUtils.ellipsed_file_path('/home/yatagait/birds/src/birdsong/recordings/CALL_XC482431-R024 white ruffed manakin.mp3'),
+                         '/home/...CALL_XC482431-R024 white ruffed manakin.mp3'
+                         )
+        # Same without leading slash
+        self.assertEqual(FileUtils.ellipsed_file_path('home/yatagait/birds/src/birdsong/recordings/CALL_XC482431-R024 white ruffed manakin.mp3'),
+                         'home/...CALL_XC482431-R024 white ruffed manakin.mp3'
+                         )
         self.assertEqual(FileUtils.ellipsed_file_path('foobar'),
                          'foobar'
                          )
