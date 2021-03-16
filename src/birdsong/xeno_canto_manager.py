@@ -408,7 +408,9 @@ class XenoCantoCollection:
     def download(self, 
                  birds_to_process=None,
                  one_per_species=True, 
-                 courtesy_delay=1.0):
+                 courtesy_delay=1.0,
+                 overwrite_existing=None,
+                 ):
         '''
         Download a given list of species, or
         all the species in the collection. 
@@ -428,7 +430,18 @@ class XenoCantoCollection:
         @type one_per_species: bool
         @param courtesy_delay: time between requests to XC server
         @type courtesy_delay: {int | float}
+        @param overwrite_existing: if True, already existing 
+            sound files will be overwritten without asking.
+            If False, always ask once, then use answer as 
+            default going forward. If None: same as False.
+        @type overwrite_existing: bool
         '''
+        
+        # If file overwrite behavior is specified,
+        # make it the default for all the XenoCantoRecording
+        # instances:
+        if overwrite_existing is not None:
+            XenoCantoRecording.always_overwrite = overwrite_existing
         
         if birds_to_process is None:
             birds_to_process = list(self.keys())
