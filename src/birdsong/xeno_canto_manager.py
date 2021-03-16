@@ -875,7 +875,7 @@ class XenoCantoRecording:
         # machine: that path might not exist:
         
         if not self._has_vocalization_prefix(self._filename):
-            self._filename = self._add_call_or_song_prefix(self._filename, 
+            self._filename = self._ensure_call_or_song_prefix(self._filename, 
                                                            self.type)
         self.full_name = os.path.join(dest_dir, self._filename)
 
@@ -942,7 +942,7 @@ class XenoCantoRecording:
             self.log.info(f"File encoding: {self.encoding}")
         
         # Add 'CALL' or 'SONG' in front of filename
-        self._filename = self._add_call_or_song_prefix(self._filename, self.type)
+        self._filename = self._ensure_call_or_song_prefix(self._filename, self.type)
         self.file_name = os.path.join(dest_dir, self._filename)
         
         self.log.info(f"Saving sound file to {self.full_name}...")
@@ -952,10 +952,10 @@ class XenoCantoRecording:
         return self.full_name
 
     #------------------------------------
-    # _add_call_or_song_prefix
+    # _ensure_call_or_song_prefix
     #-------------------
     
-    def _add_call_or_song_prefix(self, path, vocalization_type):
+    def _ensure_call_or_song_prefix(self, path, vocalization_type):
         '''
         Given a path (just a file name or a 
         path in a subdir), prefix the file name
@@ -971,6 +971,9 @@ class XenoCantoRecording:
         @rtype: str
         '''
         
+        # Already has the prefix?
+        if self._has_vocalization_prefix(path):
+            return path
         p = Path(path)
         fname = f"{vocalization_type.upper()}_{p.name}"
         new_path = str(p.parent.joinpath(fname))
