@@ -104,8 +104,9 @@ class BirdsTrainBasic:
         self.min_epochs = self.config.Training.getint('min_epochs')
         self.max_epochs = self.config.Training.getint('max_epochs')
         self.lr         = self.config.Training.getfloat('lr')
-        self.net_name = self.config.Training.net_name
-        self.pretrain = self.config.Training.getint('num_pretrained_layers')
+        self.net_name   = self.config.Training.net_name
+        self.pretrain   = self.config.Training.getint('num_pretrained_layers')
+        self.grayscale  = self.config.get_boolean('Training', 'to_grayscale')
 
         self.set_seed(42)
         
@@ -782,6 +783,7 @@ class BirdsTrainBasic:
                           'bs'  : self.batch_size,
                           'ks'  : self.kernel_size,
                           'folds'   : 0,
+                          'gray': self.to_grayscale,
                           'classes' : self.num_classes
                           }
         csv_subdir_name = FileUtils.construct_filename(fname_elements, 

@@ -24,7 +24,8 @@ class ModelArchive:
         'optimizer' : ('Training', str, 'opt'),
         'batch_size' : ('Training', int, 'bs'),
         'kernel_size' : ('Training', int, 'ks'),
-        'num_folds' : ('Training', int, 'folds')
+        'num_folds' : ('Training', int, 'folds'),
+        'gray'      : ('Training', bool, 'gray')
         # a num_classes entry will be added by 
         # construct_run_subdir()
         }
@@ -223,6 +224,9 @@ class ModelArchive:
                 fname_els_dict[el_abbr] = section_dict.get(el_name)
             elif el_type == float:
                 fname_els_dict[el_abbr] = section_dict.getfloat(el_name)
+            elif el_type == bool:
+                fname_els_dict[el_abbr] = section_dict.getboolean(el_name)
+                
 
         fname_els_dict['classes'] = num_classes
 
