@@ -322,8 +322,9 @@ class XenoCantoProcessorTester(unittest.TestCase):
         @type expected_global_default:bool
         '''
         
+        vocalization_type = rec.type.upper()
         with tempfile.NamedTemporaryFile(suffix='.mp3', 
-                                         prefix='xeno_canto_tst', 
+                                         prefix=f"{vocalization_type}_xeno_canto_tst", 
                                          dir='/tmp',
                                          delete=True) as fd:
             fname = fd.name

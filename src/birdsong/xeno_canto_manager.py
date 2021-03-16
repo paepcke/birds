@@ -599,6 +599,8 @@ class XenoCantoCollection:
     @classmethod
     def load(cls, src):
 
+        # Allow use of tilde in fnames:
+        src = os.path.expanduser(src)
         if src.endswith('.json'):
             return cls.from_json(src=src)
         else:
@@ -859,7 +861,7 @@ class XenoCantoRecording:
                 # Make a short dir with ellipses if
                 # dest_dir very long:
                 short_dir = FileUtils.ellipsed_file_path(dest_dir)
-                dest_dir = input(f"No permission for {short_dir}; enter dest folder: ")
+                dest_dir = input(f"No permission for {short_dir}; enter new dest folder(tilde OK): ")
                 # Resolve '~' notation:
                 dest_dir = os.path.expanduser(dest_dir)
                 XenoCantoRecording.default_dest_dir = dest_dir
@@ -879,7 +881,7 @@ class XenoCantoRecording:
 
         # Global default for decision to overwrite
         # a recording if it already exists:
-        
+
         overwrite_default = self.__class__.always_overwrite
         
         # Dest directory exists, does the sound file
@@ -909,14 +911,17 @@ class XenoCantoRecording:
             
         if not go_ahead and os.path.exists(self.full_name):
             self.log.info(f"Not overwriting existing {self._filename}")
-            return go_ahead
+            if testing:
+                return go_ahead
+            else:
+                return self.full_name
 
         if testing:
             return go_ahead
         
         if not go_ahead:
             self.log.info(f"Skipping {self._filename}: already downloaded.")
-            return self._filename
+            return self.full_name
         
         self.log.info(f"Downloading sound file for {self.full_name}...")
         try:
@@ -938,13 +943,13 @@ class XenoCantoRecording:
         
         # Add 'CALL' or 'SONG' in front of filename
         self._filename = self._add_call_or_song_prefix(self._filename, self.type)
-        self.filepath = os.path.join(dest_dir, self._filename)
+        self.file_name = os.path.join(dest_dir, self._filename)
         
-        self.log.info(f"Saving sound file to {self.filepath}...")
-        with open(self.filepath, 'wb') as f:
+        self.log.info(f"Saving sound file to {self.full_name}...")
+        with open(self.full_name, 'wb') as f:
             f.write(response.content)
-            self.log.info(f"Done saving sound file to {self.filepath}")
-        return self.filepath
+            self.log.info(f"Done saving sound file to {self.full_name}")
+        return self.full_name
 
     #------------------------------------
     # _add_call_or_song_prefix
