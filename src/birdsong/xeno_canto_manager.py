@@ -2,8 +2,8 @@
 """
 Functions involved in downloading birds from xeno-canto
 
-Three classes:
-  o XenoCantoProcessor for creating spectrograms
+Two classes:
+  
   o XenoCantoRecording to hold metadata about available XC
         sound files
   o XenoCantoCollection to hold XenoCantoRecording instances
@@ -67,7 +67,7 @@ After the sound files are downloaded, the following
 is a template for use without re-contacting the Xeno Canto
 server:
 
-from birdsong.xeno_canto_processor import XenoCantoCollection, XenoCantoRecording
+from birdsong.xeno_canto_manager import XenoCantoCollection, XenoCantoRecording
 coll = XenoCantoCollection.load('<path to pickled collection')
 
 # The following iterates through
@@ -130,7 +130,10 @@ from birdsong.utils.utilities import FileUtils
 
 # ---------------- Class XenoCantoCollection ----------
 
-class XenoCantoCollection(UserDict):
+#**************
+#class XenoCantoCollection(UserDict):
+class XenoCantoCollection:
+#**************
     '''
     Holds information about multiple Xeno Canto
     recordings. Each holding is a XenoCantoRecordingO
@@ -182,7 +185,7 @@ class XenoCantoCollection(UserDict):
                  load_dir=None,
                  always_overwrite=False):
 
-        super().__init__()
+        self.data = {}
         
         self.log = LoggingService()
         self.always_overwrite = always_overwrite
@@ -232,7 +235,7 @@ class XenoCantoCollection(UserDict):
                 except KeyError:
                     # First time seen this species:
                     self[phylo_name] = [rec_obj]
-
+                    
     #------------------------------------
     # xeno_canto_get_bird_metadata 
     #-------------------
@@ -270,7 +273,7 @@ class XenoCantoCollection(UserDict):
     #-------------------
     
     def __iter__(self):
-
+        
         # Index into the list of this collection
         # instance's keys. Each key's value is a list
         # of recording instances:
@@ -281,9 +284,8 @@ class XenoCantoCollection(UserDict):
         # is False.
         self.curr_recording_indx = -1
         
-        # For convenienct:
         self.phylo_name_list = list(self.keys())
-         
+
         return self
     
     #------------------------------------
@@ -301,7 +303,7 @@ class XenoCantoCollection(UserDict):
             }
         
         If iterator is to feed only one recording for each
-        phylo_name, track phylo_names with curr_bird_phylo_indx
+        phylo_name, track phylo_names with self.curr_bird_phylo_indx
         into the list of phylo_name_n. The 'next' recording is
         the first recording in the next phylo_name.
         
@@ -314,7 +316,6 @@ class XenoCantoCollection(UserDict):
         @return: Xeno Canto recording instance
         @rtype: XenoCantoRecording
         '''
-        
         if not self.one_per_bird_phylo:
             curr_phylo_name = self.phylo_name_list[self.curr_bird_phylo_indx]
             curr_recording_list = self[curr_phylo_name]
@@ -329,6 +330,9 @@ class XenoCantoCollection(UserDict):
                 # the pointer into the list:
                 self.curr_recording_indx = 0
                 self.curr_bird_phylo_indx +=1
+            except Exception as e:
+                # Unexpected error
+                raise RuntimeError(f"During next in collection: {repr(e)}") from e
                  
         # On to the next phylo entry:
         
@@ -354,6 +358,28 @@ class XenoCantoCollection(UserDict):
         # Return first recording of list:
         return nxt_rec_list[0] 
 
+
+    #------------------------------------
+    # __setitem__ 
+    #-------------------
+    
+    def __setitem__(self, key, val):
+        self.data[key] = val
+
+    #------------------------------------
+    # __getitem__ 
+    #-------------------
+    
+    def __getitem__(self, key):
+        return self.data[key]
+
+    #------------------------------------
+    # __delitem__ 
+    #-------------------
+    
+    def __delitem__(self, key):
+        del self.data[key]
+    
     #------------------------------------
     # keys 
     #-------------------
@@ -724,6 +750,15 @@ class XenoCantoRecording:
 
     always_overwrite = None
     
+    # Directory to use for download destination dir
+    # if a dir specified in the call to download()
+    # is protected (i.e. permissions). Once the user
+    # was asked for a replacement dir, the following
+    # class var will be set, and used throughout the 
+    # lifetime of this instance:
+    
+    default_dest_dir = None 
+    
     #------------------------------------
     # Constructor 
     #-------------------
@@ -810,11 +845,24 @@ class XenoCantoRecording:
         while not os.path.exists(dest_dir):
             try:
                 os.makedirs(dest_dir)
-            except PermissionError:
+            except (PermissionError, OSError):
+                
+                # Maybe we asked user for a replacement
+                # dir for an earlier recording. If so,
+                # don't ask again, use their prior answer:
+                
+                if XenoCantoRecording.default_dest_dir is not None and \
+                    os.path.exists(XenoCantoRecording.default_dest_dir):
+                    dest_dir = XenoCantoRecording.default_dest_dir
+                    continue
+                
                 # Make a short dir with ellipses if
                 # dest_dir very long:
                 short_dir = FileUtils.ellipsed_file_path(dest_dir)
                 dest_dir = input(f"No permission for {short_dir}; enter dest folder: ")
+                # Resolve '~' notation:
+                dest_dir = os.path.expanduser(dest_dir)
+                XenoCantoRecording.default_dest_dir = dest_dir
         else:
             if not os.path.isdir(dest_dir):
                 raise ValueError(f"Destination {dest_dir} is not a directory")
@@ -824,6 +872,9 @@ class XenoCantoRecording:
         # by a different user or on a different
         # machine: that path might not exist:
         
+        if not self._has_vocalization_prefix(self._filename):
+            self._filename = self._add_call_or_song_prefix(self._filename, 
+                                                           self.type)
         self.full_name = os.path.join(dest_dir, self._filename)
 
         # Global default for decision to overwrite
@@ -863,6 +914,10 @@ class XenoCantoRecording:
         if testing:
             return go_ahead
         
+        if not go_ahead:
+            self.log.info(f"Skipping {self._filename}: already downloaded.")
+            return self._filename
+        
         self.log.info(f"Downloading sound file for {self.full_name}...")
         try:
             response = requests.get(self._url)
@@ -873,23 +928,57 @@ class XenoCantoRecording:
         
         # Split "audio/mpeg" or "audio/vdn.wav"
         medium, self.encoding = response.headers['content-type'].split('/')
-        1
+        
         if medium != 'audio' or self.encoding not in ('mpeg', 'vdn.wav'):
             msg = f"Recording {self.full_name} is {medium}/{self.encoding}, not mpeg or vpn_wav"
             self.log.err(msg)
             #raise ValueError(msg)
         else:
             self.log.info(f"File encoding: {self.encoding}")
-            
-        ext = 'mp3' if self.encoding == 'mpeg' else 'wav' 
-        filename = f"{self.type.upper()}_{self.full_name}.{ext}" 
-        self.filepath = os.path.join(dest_dir,filename)
+        
+        # Add 'CALL' or 'SONG' in front of filename
+        self._filename = self._add_call_or_song_prefix(self._filename, self.type)
+        self.filepath = os.path.join(dest_dir, self._filename)
         
         self.log.info(f"Saving sound file to {self.filepath}...")
         with open(self.filepath, 'wb') as f:
             f.write(response.content)
             self.log.info(f"Done saving sound file to {self.filepath}")
-        return 
+        return self.filepath
+
+    #------------------------------------
+    # _add_call_or_song_prefix
+    #-------------------
+    
+    def _add_call_or_song_prefix(self, path, vocalization_type):
+        '''
+        Given a path (just a file name or a 
+        path in a subdir), prefix the file name
+        with CALL_ or SONG_, depending on the 
+        vocalization_type. The vocalization_type can
+        actually be anything else to use as prefix.
+        
+        @param path: current path without the CALL or SONG
+        @type path: str
+        @param vocalization_type: usually 'CALL' or 'SONG'
+        @type vocalization_type: str
+        @return: new path with the prefix in place
+        @rtype: str
+        '''
+        
+        p = Path(path)
+        fname = f"{vocalization_type.upper()}_{p.name}"
+        new_path = str(p.parent.joinpath(fname))
+        return new_path
+
+    #------------------------------------
+    # _has_vocalization_prefix 
+    #-------------------
+    
+    def _has_vocalization_prefix(self, path):
+        
+        fname = os.path.basename(path)
+        return fname.startswith('CALL') or fname.startswith('SONG') 
 
     #------------------------------------
     # __repr__ 
@@ -1056,7 +1145,17 @@ if __name__ == '__main__':
 #     rec.download()
 #     print(sound_collection)
 
-    coll = XenoCantoCollection.from_json(src='/Users/paepcke/EclipseWorkspacesNew/birds/test_metadata.json')
+#     coll = XenoCantoCollection.from_json(src='/Users/paepcke/EclipseWorkspacesNew/birds/test_metadata.json')
+#     for rec in coll:
+#         rec.download()
+#         print(rec)
+
+    #new = XenoCantoCollection.load('/Users/paepcke/tmp/test_metadata1.pkl')
+    coll = XenoCantoCollection.load('/Users/paepcke/tmp/test_metadata1.json')
+    for rec in coll:
+        print(rec)
+
     for rec in coll:
         rec.download()
-        print(rec)
+
+    print(coll)
