@@ -941,13 +941,13 @@ class XenoCantoRecording:
             self.log.info(f"Skipping {self._filename}: already downloaded.")
             return self.full_name
         
-        self.log.info(f"Downloading sound file for {fname_descr}...")
+        self.log.info(f"Downloading {fname_descr}...")
         try:
             response = requests.get(self._url)
         except Exception as e:
             raise IOError(f"While downloading {self._url}: {repr(e)}") from e
         
-        self.log.info(f"Done downloading sound file for {fname_descr}")
+        self.log.info(f"Done downloading {fname_descr}")
         
         # Split "audio/mpeg" or "audio/vdn.wav"
         medium, self.encoding = response.headers['content-type'].split('/')
@@ -963,10 +963,10 @@ class XenoCantoRecording:
         self._filename = self._ensure_call_or_song_prefix(self._filename, self.type)
         self.file_name = os.path.join(dest_dir, self._filename)
         
-        self.log.info(f"Saving sound file to {fname_descr}...")
+        self.log.info(f"Saving {fname_descr}...")
         with open(self.full_name, 'wb') as f:
             f.write(response.content)
-            self.log.info(f"Done saving sound file to {fname_descr}")
+            self.log.info(f"Done saving {fname_descr}")
         return self.full_name
 
     #------------------------------------
