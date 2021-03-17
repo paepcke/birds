@@ -22,8 +22,53 @@ class FileUtils(object):
     '''
     classdocs
     '''
+    
+    # Elements that make up a filename
+    fname_el_types = {'net'     : str,
+                      'pre'     : bool,
+                      'frz'     : int,
+                      'lr'      : float,
+                      'opt'     : str,
+                      'bs'      : int,
+                      'ks'      : int,
+                      'folds'   : int,
+                      'gray'    : bool,
+                      'classes' : int
+                      }
+
+    # Translation of file element names
+    # to long names used in config files,
+    # and as object attributes: 
+    fname_short_2_long = {'net'     : 'net_name',
+                          'pre'     : 'pretrained',
+                          'frz'     : 'freeze',
+                          'lr'      : 'lr',
+                          'opt'     : 'opt_name',
+                          'bs'      : 'batch_size',
+                          'ks'      : 'kernel_size',
+                          'folds'   : 'num_folds',
+                          'gray'    : 'to_grayscale',
+                          'classes' : 'num_classes'
+                       }
+
+    fname_long_2_short = {long : short 
+                          for short, long 
+                          in fname_short_2_long.items()}
 
     IMG_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif', '.tiff', '.webp')
+
+    # Pattern to identify an iso
+    # date near the start of a string.
+    # Reconizes:
+    #    o 'run_2021-03-11T10_59_02_net_resnet18...
+    #    o 'model_2021-03-11T10_59_02_net_resnet18...
+    #    o '2021-03-11T10_59_02_net_resnet18...
+    #
+    # Group 0 will be the prefix ('run', 'model',...),
+    # Group 1 will be the timestamp.
+    
+    date_at_start_pat = \
+        re.compile(r'([^_]*)[_]{0,1}([\d]{4}-[\d]{2}-[\d]{2}T[\d]{2}_[\d]{2}_[\d]{2})')
 
     #------------------------------------
     # find_class_paths
@@ -150,7 +195,7 @@ class FileUtils(object):
     
     @classmethod
     def construct_filename(cls, 
-                           property_dict,
+                           props_info,
                            prefix=None,
                            suffix=None, 
                            incl_date=False):
@@ -158,11 +203,19 @@ class FileUtils(object):
         NOTE: if changes are made to how filenames
               are constructed, check method parse_filename()
               for needed mods
-        Given a dict of property names and
-        associated values, create a filename
-        that includes all the information held
-        in the keys and values of the dict.
-        Ex:
+        Given either:
+        
+            o a dict of property names and
+              associated values, or
+            o an object with instance vars 
+              named all the long names in
+              fname_short_2_long
+              
+        create a filename that includes all 
+        the information held in the keys and 
+        values of the dict/obj:
+
+        Ex props_info is a dict:
              {
                'lr' : 0.001,
                'bs' : 32,
@@ -173,6 +226,16 @@ class FileUtils(object):
             
             'lr_0.001_bs_32_optimizer_Adam'
             
+        Ex props_info is an object:
+        
+             'net_resnet18_pre_False_lr_0.01_opt_SGD_bs_2_ks_7_folds_3_gray_True_classes_None
+        
+        I.e. all file elements in fname_short_2_long
+        are included in the returned file name.
+        
+        If obj.num_classes is unavailable, the
+        'classes' part of the fname will be 'None'
+        
         If a prefix is provided, it will lead the
         string. Example: "Exp" would yield:
         
@@ -187,8 +250,10 @@ class FileUtils(object):
         at the start of the returned name, or right after
         the prefix
         
-        @param property_dict: names and values to include
-        @type property_dict: {str : Any}
+        @param props_info: names and values to include,
+            or an object that provides all needed values
+            as attributes (instance vars)
+        @type props_info: {str : Any}
         @param prefix: leading part of file name
         @type prefix: str
         @param suffix: trailing part of file name
@@ -202,9 +267,17 @@ class FileUtils(object):
         fname = prefix if prefix is not None else ''
         if incl_date:
             fname += f"_{cls.file_timestamp()}"
+
+        if type(props_info) != dict:
+            # An obj that promises attrs for each
+            # needed value:
+            property_dict = cls.make_run_props_dict(props_info)
+        else:
+            property_dict = props_info
+            
         for prop_name, prop_val in property_dict.items():
             fname += f"_{prop_name}_{str(prop_val)}"
-            
+
         if suffix is not None:
             fname += suffix
             
@@ -238,29 +311,6 @@ class FileUtils(object):
         @return: dict with the elements and their values
         @rtype: {str : {int|float|str}}
         '''
-
-        fname_elements = {'net'     : 'net_name',
-                          'pretrain': 'pretrain',
-                          'lr'      : 'lr',
-                          'opt' 	: 'opt_name',
-                          'bs'  	: 'batch_size',
-                          'ks'      : 'kernel_size',
-                          'folds'   : 'num_folds',
-                          'gray'    : 'to_grayscale',
-                          'classes' : 'num_classes'
-                          }
-
-        datatypes      = {'net'     : str,
-                          'pretrain': int,
-                          'lr'      : float,
-                          'opt' 	: str,
-                          'bs'  	: int,
-                          'ks'  	: int,
-                          'folds'   : int,
-                          'gray'    : bool,
-                          'classes' : int
-                          }
-
         prop_dict = {}
         
         # Remove the file extension:
@@ -272,34 +322,35 @@ class FileUtils(object):
         # Find each of the file name elements
         # and their values in the element/val 
         # sequence
-        for fname_el in fname_elements.keys():
-            # Name of element (e.g. 'bs') in the
-            # rest of the code (e.g. 'batch_size')
-            long_name = long_name = fname_elements[fname_el] 
+        for short_name, long_name in cls.fname_short_2_long.items():
             try:
                 # Index into the list of fname elements:
-                nm_idx = fname_els.index(fname_el)
+                nm_idx = fname_els.index(short_name)
             except ValueError as e:
-                raise ValueError(f"Filename element {fname_el} ({long_name}) missing from {fname}") \
-                    from e
-            # Value of element always follows
-            # the element name in filenames:
-            val_idx = nm_idx + 1
-            try:
-                str_val = fname_els[val_idx]
-                # Convert to proper datatype:
-                fname_el_val = datatypes[fname_el](str_val)
-            except IndexError as e:
-                raise IndexError(f"Element {fname_el} in fname {fname} has no value for {fname_el} ({long_name})")\
-                    from e
+                fname_el_val = 'na'
+            else:
+                # Value of element always follows
+                # the element name in filenames:
+                val_idx = nm_idx + 1
+                try:
+                    str_val = fname_els[val_idx]
+                    # Convert to proper datatype:
+                    fname_el_val = cls.fname_el_types[short_name](str_val)
+                except IndexError as e:
+                    raise IndexError(f"Element {short_name} in {fname} has no value for {short_name} ({long_name})")\
+                        from e
                     
             prop_dict[long_name] = fname_el_val
             
-        # Finally: elements 1,2,3, and 4 
+        # Finally: if file name starts with a
+        # timestamp, then elements 1,2,3, and 4 
         # comprise the date: 
-        #  ['2021-03-11T10',59','02']  ==> '2021-03-11T10_59_02'
+        #  ['2021-03-11T10','59','02']  ==> '2021-03-11T10_59_02'
         
-        prop_dict['timestamp'] = '_'.join(fname_els[1:4]) 
+        match = cls.date_at_start_pat.search(fname)
+        if match is not None:
+            prop_dict['prefix'] = match[1]
+            prop_dict['timestamp'] = match[2]
         
         return prop_dict
 
@@ -553,6 +604,53 @@ class FileUtils(object):
 
         return info_subset
 
+
+    #------------------------------------
+    # make_run_props_dict 
+    #-------------------
+    
+    @classmethod
+    def make_run_props_dict(cls, inst):
+        '''
+        Given an instance of any class that
+        guarantees the presence of instance
+        variables named as specified in 
+        the fname_short_2_long dict. 
+        
+        Return a dict mapping\
+         
+            file_element ---> value
+            
+        where value is the value of the instance
+        var named file_element.
+        
+        Ex return:
+            {'net'  : obj.net_name,
+             'pre'  : obj.pretrained,
+                ...
+            }
+         
+        @param inst: instance from which to 
+            draw values for each file element
+        @type inst: Any
+        @return: Dict mapping file elements 
+            to values.
+        @rtype: {str : Any}
+        '''
+        
+        res = {}
+        for el_name, attr_name in cls.fname_short_2_long.items():
+            try:
+                res[el_name] = inst.__getattr__(attr_name)
+                if res[el_name] is None:
+                    res[el_name] = 'na'
+            except AttributeError:
+                # Object does not have an instance
+                # var named el_name:
+                res[el_name] = 'na'
+            
+        return res
+    
     #------------------------------------
     # ellipsed_file_path
     #-------------------

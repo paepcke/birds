@@ -92,7 +92,7 @@ class Inferencer:
             num_classes=self.num_classes,
             num_layers_to_retain=self.model_props['pretrain'],
             #*****to_grayscale=False
-            to_grayscale=True
+            to_grayscale=self.model_props['to_grayscale']
             )        
         
     #------------------------------------

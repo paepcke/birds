@@ -23,7 +23,7 @@ class XenoCantoProcessorTester(unittest.TestCase):
     def setUpClass(cls):
         cls.curr_dir = os.path.dirname(__file__)
         cls.tst_dir = os.path.join(cls.curr_dir,
-                                   'data/xeno_canto_tst_data'
+                                   'data_other/xeno_canto_tst_data'
                                    )
         cls.tst_file = os.path.join(cls.tst_dir, 'xeno_canto_coll_small.pickle')
 

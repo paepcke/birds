@@ -4,6 +4,7 @@ Created on Mar 2, 2021
 
 @author: paepcke
 '''
+from _collections import OrderedDict
 import argparse
 import datetime
 from logging import DEBUG
@@ -23,12 +24,13 @@ from torchvision.datasets.folder import ImageFolder
 from birdsong.nets import NetUtils
 from birdsong.result_tallying import ResultTally, ResultCollection
 from birdsong.utils.dottable_config import DottableConfigParser
-from birdsong.utils.utilities import FileUtils, CSVWriterCloseable, Differentiator
 from birdsong.utils.learning_phase import LearningPhase
 from birdsong.utils.model_archive import ModelArchive
 from birdsong.utils.neural_net_config import NeuralNetConfig, ConfigError
 from birdsong.utils.tensorboard_plotter import SummaryWriterPlus, TensorBoardPlotter
+from birdsong.utils.utilities import FileUtils, CSVWriterCloseable, Differentiator
 import numpy as np
+
 
 #*****************
 #
@@ -105,14 +107,18 @@ class BirdsTrainBasic:
         self.max_epochs = self.config.Training.getint('max_epochs')
         self.lr         = self.config.Training.getfloat('lr')
         self.net_name   = self.config.Training.net_name
-        self.pretrain   = self.config.Training.getint('num_pretrained_layers')
-        self.grayscale  = self.config.getboolean('Training', 'to_grayscale')
+        self.pretrained = self.config.Training.getboolean('pretrained',
+                                                            False)
+        self.freeze     = self.config.Training.getint('freeze', 0)
+        self.to_grayscale = self.config.Training.getboolean('to_grayscale', True)
 
         self.set_seed(42)
         
         self.log.info("Parameter summary:")
         self.log.info(f"network     {self.net_name}")
-        self.log.info(f"pretrain    {self.pretrain}")
+        self.log.info(f"pretrained  {self.pretrained}")
+        if self.pretrained:
+            self.log.info(f"freeze      {self.freeze}")
         self.log.info(f"min epochs  {self.min_epochs}")
         self.log.info(f"max epochs  {self.max_epochs}")
         self.log.info(f"batch_size  {self.batch_size}")
@@ -122,8 +128,9 @@ class BirdsTrainBasic:
 
         self.model    = NetUtils.get_net(self.net_name,
                                          num_classes=self.num_classes,
-                                         num_layers_to_retain=self.pretrain,
-                                         to_grayscale=False
+                                         pretrained=self.pretrained,
+                                         freeze=self.freeze,
+                                         to_grayscale=self.to_grayscale
                                          )
         self.log.debug(f"Before any gpu push: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
         
@@ -575,13 +582,15 @@ class BirdsTrainBasic:
         train_tally = latest_result['train']
         val_tally   = latest_result['val']
          
-        hparms_vals = {
-            'pretrained_layers' : f"{self.net_name}_{self.pretrain}",
+        hparms_vals = OrderedDict({
+            'net'       : self.net_name,
+            'pretrained': f"{self.pretrained}",
             'lr_initial': self.config.Training.lr,
             'optimizer' : self.config.Training.optimizer,
-            'batch_size': self.config.getint('Training', 'batch_size'),
-            'kernel_size' : self.config.getint('Training', 'kernel_size')
-            }
+            'batch_size':  self.config.getint('Training', 'batch_size'),
+            'kernel_size'  : self.config.getint('Training', 'kernel_size'),
+            'to_grayscale' : self.to_grayscale
+            })
 
         metric_results = {
                 'zz_balanced_adj_acc_train' : train_tally.balanced_acc,
@@ -775,24 +784,13 @@ class BirdsTrainBasic:
 
         # Create both a raw dir sub-directory and a .csv file
         # for this run:
-
-        fname_elements = {'net' : self.net_name,
-                          'pretrain': self.pretrain,
-                          'lr' : self.lr,
-                          'opt' : self.opt_name,
-                          'bs'  : self.batch_size,
-                          'ks'  : self.kernel_size,
-                          'folds'   : 0,
-                          'gray': self.grayscale,
-                          'classes' : self.num_classes
-                          }
-        csv_subdir_name = FileUtils.construct_filename(fname_elements, 
+        csv_subdir_name = FileUtils.construct_filename(self, 
                                                        prefix='Run', 
                                                        incl_date=True)
         os.makedirs(csv_subdir_name)
         
         # Create a csv file name:
-        csv_file_nm = FileUtils.construct_filename(fname_elements, 
+        csv_file_nm = FileUtils.construct_filename(self, 
                                                    prefix='run',
                                                    suffix='.csv',
                                                    incl_date=True)

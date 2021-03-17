@@ -7,6 +7,7 @@ import os
 import unittest
 
 from birdsong.utils.utilities import FileUtils
+from birdsong.utils.neural_net_config import NeuralNetConfig
 
 
 TEST_ALL = True
@@ -16,10 +17,14 @@ class TestUtilities(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.fname = 'run_2021-03-11T10_59_02_net_resnet18_pretrain_0_lr_0.01_opt_SGD_bs_64_ks_7_folds_0_classes_10.csv'
+        cls.curr_dir = os.path.dirname(__file__)
+        cls.fname = 'run_2021-03-11T10_59_02_net_resnet18_pre_True_lr_0.01_opt_SGD_bs_64_ks_7_folds_0_classes_10.csv'
         cls.csv_data_path = os.path.join(os.path.dirname(__file__),
                                          f"data/sample_csv_file/{cls.fname}"
                                      )
+        cls.config_path = os.path.join(cls.curr_dir,
+                                       'utils_test_config.cfg'
+                                       )
         
     def setUp(self):
         pass
@@ -36,6 +41,51 @@ class TestUtilities(unittest.TestCase):
 # --------------- Tests ---------------
 
     #------------------------------------
+    # test_construct_filename 
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_construct_filename(self):
+        
+        conf = NeuralNetConfig(self.config_path)
+        training_section = conf.Training
+        prop_dict = FileUtils.make_run_props_dict(training_section)
+        
+        fname = FileUtils.construct_filename(prop_dict, 
+                                             prefix='model', 
+                                             suffix='.pth', 
+                                             incl_date=False
+                                             )
+        expected = 'model_net_resnet18_pre_na_frz_na_lr_0.01_opt_na_bs_2_ks_7_folds_3_gray_False_classes_na.pth' 
+
+        self.assertEqual(fname, expected)
+
+    #------------------------------------
+    # test_make_run_props_dict 
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_make_run_props_dict(self):
+        
+        conf = NeuralNetConfig(self.config_path)
+        training_section = conf.Training
+        
+        # Create the expected result for ground truth:
+        expected_dict = {}
+        for short_name, long_name in FileUtils.fname_short_2_long.items():
+            try:
+                val = training_section[long_name]
+                expected_dict[short_name] = val
+            except KeyError:
+                # Config file happens not to 
+                # have an entry for the long_name:
+                expected_dict[short_name] = 'na'
+                continue
+        
+        prop_dict = FileUtils.make_run_props_dict(training_section)
+        self.assertDictEqual(prop_dict, expected_dict)
+
+    #------------------------------------
     # test_parse_filename
     #-------------------
 
@@ -46,7 +96,7 @@ class TestUtilities(unittest.TestCase):
         
         self.assertEqual(prop_dict['timestamp'], '2021-03-11T10_59_02')
         self.assertEqual(prop_dict['net_name'], 'resnet18')
-        self.assertEqual(prop_dict['pretrain'], 0)
+        self.assertEqual(prop_dict['pretrained'], True)
         self.assertEqual(prop_dict['lr'], 0.01)
         self.assertEqual(prop_dict['opt_name'], 'SGD')
         self.assertEqual(prop_dict['batch_size'], 64)
