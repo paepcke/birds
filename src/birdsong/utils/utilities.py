@@ -226,7 +226,7 @@ class FileUtils(object):
         
         Ex:
         From
-          pred_2021-03-11T10_59_02_net_resnet18_pretrain_0_lr_0.01_opt_SGD_bs_64_ks_7_folds_0_classes_10.csv
+          pred_2021-03-11T10_59_02_net_resnet18_pretrain_0_lr_0.01_opt_SGD_bs_64_ks_7_folds_0_gray_True_classes_10.csv
         return
           {net_name   : 'resnet18',
            batch_size : 64
@@ -239,23 +239,25 @@ class FileUtils(object):
         @rtype: {str : {int|float|str}}
         '''
 
-        fname_elements = {'net' : 'net_name',
+        fname_elements = {'net'     : 'net_name',
                           'pretrain': 'pretrain',
-                          'lr' : 'lr',
-                          'opt' : 'opt_name',
-                          'bs'  : 'batch_size',
-                          'ks'  : 'kernel_size',
+                          'lr'      : 'lr',
+                          'opt' 	: 'opt_name',
+                          'bs'  	: 'batch_size',
+                          'ks'      : 'kernel_size',
                           'folds'   : 'num_folds',
+                          'gray'    : 'to_grayscale',
                           'classes' : 'num_classes'
                           }
 
-        datatypes      = {'net' : str,
+        datatypes      = {'net'     : str,
                           'pretrain': int,
-                          'lr' : float,
-                          'opt' : str,
-                          'bs'  : int,
-                          'ks'  : int,
+                          'lr'      : float,
+                          'opt' 	: str,
+                          'bs'  	: int,
+                          'ks'  	: int,
                           'folds'   : int,
+                          'gray'    : bool,
                           'classes' : int
                           }
 

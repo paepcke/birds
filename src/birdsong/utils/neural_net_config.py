@@ -45,17 +45,18 @@ class NeuralNetConfig(DottableConfigParser):
     NEURAL_NET_ATTRS = {
             'net_name'   : 'Training',
             'num_pretrained_layers' : 'Training',
-            'min_epochs' : 'Training',
-            'max_epochs' : 'Training',
-            'batch_size' : 'Training',
-            'num_folds'  : 'Training',
-            'optimizer'  : 'Training',
-            'loss_fn'    : 'Training',
-            'weighted'   : 'Training',
-            'kernel_size': 'Training',
-            'lr'         : 'Training',
-            'momentum'   : 'Training',
-            'seed'       : 'Parallelism',
+            'min_epochs'  : 'Training',
+            'max_epochs'  : 'Training',
+            'batch_size'  : 'Training',
+            'num_folds'   : 'Training',
+            'optimizer'   : 'Training',
+            'loss_fn'     : 'Training',
+            'weighted'    : 'Training',
+            'kernel_size' : 'Training',
+            'lr'          : 'Training',
+            'momentum'    : 'Training',
+            'to_grayscale': 'Training',
+            'seed'        : 'Parallelism',
             'all_procs_log' : 'Parallelism'
             }
 
@@ -478,6 +479,16 @@ class NeuralNetConfig(DottableConfigParser):
         
         conf_dict = self.Training
         conf_dict['momentum'] = new_val
+    
+    def set_to_grayscale(self, new_val):
+        
+        assert type(new_val) == bool, \
+                'Grayscale conversion instruction must be bool'
+               
+        
+        conf_dict = self.Training
+        conf_dict['to_grayscale'] = new_val
+    
     
 # --------- Parallelism Section Setters ----------
 

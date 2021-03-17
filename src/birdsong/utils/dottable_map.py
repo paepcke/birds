@@ -66,5 +66,12 @@ class DottableMap(dict):
         except ValueError as e:
             raise TypeError(f"Value {self[key]} cannot be converted to a float") from e
 
-    
+    def getboolean(self, key, default=None):
+        try:
+            return bool(self[key])
+        except KeyError:
+            return default
+        except ValueError as e:
+            raise TypeError(f"Value {self[key]} cannot be converted to a bool") from e
+
     

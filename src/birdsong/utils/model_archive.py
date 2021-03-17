@@ -9,6 +9,7 @@ import os
 from logging_service.logging_service import LoggingService
 import torch
 
+from birdsong.nets import NetUtils
 from birdsong.utils.utilities import FileUtils
 
 
@@ -25,7 +26,7 @@ class ModelArchive:
         'batch_size' : ('Training', int, 'bs'),
         'kernel_size' : ('Training', int, 'ks'),
         'num_folds' : ('Training', int, 'folds'),
-        'gray'      : ('Training', bool, 'gray')
+        'to_grayscale' : ('Training', bool, 'gray')
         # a num_classes entry will be added by 
         # construct_run_subdir()
         }
@@ -42,8 +43,23 @@ class ModelArchive:
                  model_root=None,
                  log=None):
         '''
-        Constructor
+        Constructor:
+        
+        @param config: configuration structure
+        @type config: NeuralNetConfig
+        @param num_classes: number of target classes
+        @type num_classes: int
+        @param history_len: number of model snapshots to 
+            maintain
+        @type history_len: int
+        @param model_root: path to where models
+            will be deposited
+        @type model_root: str
+        @param log: logging service to use. If
+            None, create new one for display output
+        @type log: LoggingService
         '''
+
         self.curr_dir = os.path.dirname(os.path.abspath(__file__))
         
         # Model root directory:
@@ -93,15 +109,21 @@ class ModelArchive:
     
     def save_model(self, model, epoch):
         '''
-        Within this subdir the method maintains a queue
+        Saves and retains trained models
+        on disk. 
+        
+        Within a subdir the method maintains a queue
         of files of len history_len: 
         
-                 fname_1.pth
-                 fname_2.pth
+                 fname_1_ep_0.pth
+                 fname_2_ep_1.pth
+                      ...
                  fname_<history_len>.pth
         
-        where <n> is an epoch/step number:
-                 
+        where ep_<n> is the epoch during training
+        where the model of that moment is being 
+        saved.
+        
         When history_len model files are already present, 
         removes the oldest.
         
@@ -143,6 +165,8 @@ class ModelArchive:
         
         model_path = os.path.join(self.run_subdir, model_fname)
         
+        # As recommended by pytorch, save the
+        # state_dict for portability:
         torch.save(model.state_dict(), model_path)
 
         self.model_fnames.appendleft(model_path)
@@ -158,19 +182,78 @@ class ModelArchive:
     # restore_model 
     #-------------------
     
-    def restore_model(self, model_path):
+    def restore_model(self, model_path, config=None):
         '''
         Given the path to a saved model, 
-        load and return it.
+        load and return it. The saved file
+        is the saved model's state_dict. 
+        So, the method must first create a
+        model instance of the correct type.
+        Then the state is loaded into that
+        instance.
         
         @param model_path:
         @type model_path:
+        @param config: a config structure that will be
+            use to decide which model class to instantiate.
+            If None, attempts to reconstruct the 
+            information from the model_path.
+        @type config: NeuralNetConfig
         @return: loaded model
         @rtype: torch.nn.module
         '''
-        model = torch.load(model_path)
+        
+        if config is None:
+            model = self._instantiate_model(config=config)
+        else:
+            model = self._instantiate_model(run_path_str=model_path)
+         
+        model.load_state_dict(torch.load(model_path))
         return model
 
+    #------------------------------------
+    # _instantiate_model 
+    #-------------------
+    
+    def _instantiate_model(self, run_path_str=None, config=None):
+        '''
+        Returns a model based on information in 
+        the config structure, or the info encoded
+        in the run_path_str file name. 
+        
+        One of run_path_str or config must be non-None.
+        If both are non-None, uses config.
+        
+        File paths that encode run parameters look like
+        this horror:
+        
+        model_2021-03-11T10_59_02_net_resnet18_pretrain_0_lr_0.01_opt_SGD_bs_64_ks_7_folds_0_gray_True_classes_10.pth 
+        
+        @param run_path_str: a path name associated with
+            a model. 
+        @type run_path_str:
+        @param config: run configuration structure 
+        @type config: NeuralNetConfig
+        @return: a model 
+        @rtype: torch.nn.module
+        '''
+        if config is None:
+            # Get a dict with info 
+            # in a standard (horrible) file name:
+            fname_props = FileUtils.parse_filename(run_path_str)
+        else:
+            fname_props = config.Training
+            data_root   = config.Paths.root_train_test_data
+            class_names = FileUtils.find_class_names(data_root)
+            fname_props['classes'] = len(class_names)
+            fname_props['pretrain'] = config.Training.getint('num_pretrained_layers', 0)
+        
+        model = NetUtils.get_net(net_name=fname_props['net_name'],
+                                 num_classes=fname_props['classes'],
+                                 num_layers_to_retain=fname_props['pretrain'],
+                                 to_grayscale=fname_props['to_grayscale']
+                                 )
+        return model
 
 # ---------------- Utils -------------
 
@@ -193,6 +276,9 @@ class ModelArchive:
         
             model_lr_0.001_bs_32_optimizer_Adam
             
+        Details will depend on the passed in 
+        configuration.
+
         Instance var fname_els_dict will contain 
         all run attr/values needed for callse to 
         FileUtils.construct_filename() 
