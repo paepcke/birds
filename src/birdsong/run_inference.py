@@ -81,17 +81,22 @@ class Inferencer:
                               )
         self.loader = DataLoader(dataset,
                                  batch_size=self.batch_size, 
-                                 shuffle=False, 
+                                 shuffle=True, 
                                  drop_last=True 
                                  )
         self.num_classes = len(dataset.classes)
         self.class_names = dataset.classes
         
+        # Get the right type of model,
+        # Don't bother getting it pretrained,
+        # of freezing it, b/c we will overwrite 
+        # the weights:
+        
         self.model = NetUtils.get_net(
             self.model_props['net_name'],
             num_classes=self.num_classes,
-            num_layers_to_retain=self.model_props['pretrain'],
-            #*****to_grayscale=False
+            pretrained=False,
+            freeze=0,
             to_grayscale=self.model_props['to_grayscale']
             )        
         
@@ -115,9 +120,14 @@ class Inferencer:
                 
         self.model.eval()
         with torch.no_grad():
-            for batch, targets in self.loader:
-                images = FileUtils.to_device(batch, 'gpu')
-                labels = FileUtils.to_device(targets, 'gpu')
+            #***** Loader has 0 samples
+            for batch_num, (batch, targets) in enumerate(self.loader):
+                if torch.cuda.is_available():
+                    images = FileUtils.to_device(batch, 'gpu')
+                    labels = FileUtils.to_device(targets, 'gpu')
+                else:
+                    images = batch
+                    labels = targets
                 
                 outputs = self.model(images)
                 loss    = loss_fn(outputs, labels)
@@ -127,7 +137,7 @@ class Inferencer:
                 labels  = FileUtils.to_device(labels, 'cpu')
                 loss    = FileUtils.to_device(loss, 'cpu')
                 
-                tally = ResultTally(None,
+                tally = ResultTally(batch_num,
                                     LearningPhase.TESTING,
                                     outputs, 
                                     labels, 

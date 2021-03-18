@@ -57,7 +57,8 @@ class NetUtils:
     @classmethod
     def _get_resnet_partially_trained(cls, 
                                      num_classes=None, 
-                                     num_layers_to_retain=6,
+                                     pretrained=True,
+                                     freeze=6,
                                      net_version=18,
                                      to_grayscale=False
                                      ): 
@@ -65,7 +66,7 @@ class NetUtils:
         '''
         Obtains the pretrained resnet18 model from the Web
         if not cached. Then:
-           o Freezes the leftmost num_layers_to_retain layers
+           o Freezes the leftmost freeze layers
              so that they are unaffected by subsequent training.
              
            o Modifies the number of output classes from resnet's
@@ -75,8 +76,8 @@ class NetUtils:
              i.e. only one channel, instead of three. The
              weights are retained from the pretrained model.
               
-        If num_layers_to_retain is zero, the untrained version 
-        is used.
+        If freeze is zero, all layers of the pretrained model
+        are allowed to change during training.
         
         If running under Distributed Data Processing (DDP) 
         protocol, only the master node will download, and
@@ -84,9 +85,12 @@ class NetUtils:
         
         @param num_classes: number of target classes
         @type num_classes: int
-        @param num_layers_to_retain: how many layers to
+        @param pretrained: if true, the pre-trained version
+            is obtained. Else initial weights are undefined
+        @type pretrained: bool
+        @param freeze: how many layers to
             freeze, protecting them from training.
-        @type num_layers_to_retain: int
+        @type freeze: int
         @param net_version: which Resnet to return: 18 or 50
         @type net_version: int
         @return: a fresh model
@@ -105,13 +109,13 @@ class NetUtils:
         
         model = hub.load('pytorch/vision:v0.6.0', 
                          f'{net_name}{net_version}',
-                         pretrained=True if num_layers_to_retain > 0 else False
+                         pretrained=pretrained
                          )
 
         if to_grayscale:
             model = cls._first_layer_to_in_channel1(model, net_name)
 
-        cls.freeze_model_layers(model, num_layers_to_retain)
+        cls.freeze_model_layers(model, freeze)
 
         num_in_features = model.fc.in_features
         
@@ -128,8 +132,9 @@ class NetUtils:
 
     @classmethod
     def _get_densenet_partially_trained(cls,
-                                        num_classes=None, 
-                                        num_layers_to_retain=6,
+                                        num_classes=None,
+                                        pretrained=True,
+                                        freeze=6,
                                         net_version=161,
                                         to_grayscale=False
                                         ):
@@ -145,13 +150,13 @@ class NetUtils:
         
         model = hub.load('pytorch/vision:v0.6.0', 
                          f'{net_name}{net_version}',
-                         pretrained=True if num_layers_to_retain > 0 else False
+                         pretrained=pretrained
                          )
 
         if to_grayscale:
             model = cls._first_layer_to_in_channel1(model, net_name)
 
-        cls.freeze_model_layers(model, num_layers_to_retain)
+        cls.freeze_model_layers(model, freeze)
 
         # Reduce from 1000 to num_classes targets:
         model = cls._mod_classifier_num_classes(model, 
@@ -356,7 +361,8 @@ class NetUtils:
                       local_leader_rank, 
                       log,
                       net_version,
-                      num_layers_to_retain
+                      pretrained,
+                      freeze,
                       ):  # @DontTrace
         '''
         Determine whether this process is the
@@ -371,6 +377,14 @@ class NetUtils:
         @type local_leader_rank: int
         @param log: logging service to log to
         @type log: LoggingService
+        @param net_version: which resnet version to obtain
+        @type net_version: int
+        @param pretrained: if true, the pre-trained version
+            is obtained. Else initial weights are undefined
+        @type pretrained: bool
+        @param freeze: how many layers to
+            freeze, protecting them from training.
+        @type freeze: int
         '''
 
         if net_version not in (18,50):
@@ -387,7 +401,7 @@ class NetUtils:
         if device == device('cpu'):
             model = hub.load('pytorch/vision:v0.6.0', 
                              'resnet18' if net_version == 18 else 'resnet50', 
-                             pretrained=True if num_layers_to_retain > 0 else False
+                             pretrained=pretrained
                              )
             
         # Case2a: GPU machine, and this is this machine's 
@@ -397,7 +411,7 @@ class NetUtils:
             log.info(f"Procss with rank {rank} on {hostname} loading model")
             model = hub.load('pytorch/vision:v0.6.0', 
                              'resnet18' if net_version == 18 else 'resnet50', 
-                             pretrained=True if num_layers_to_retain > 0 else False
+                             pretrained=pretrained
                              )
 
             # Allow the others on this machine
@@ -416,10 +430,10 @@ class NetUtils:
             log.info(f"Procss with rank {rank} on {hostname} laoding model")
             model = hub.load('pytorch/vision:v0.6.0', 
                              'resnet18' if net_version == 18 else 'resnet50', 
-                             pretrained=True if num_layers_to_retain > 0 else False
+                             pretrained=pretrained
                              )
 
-        model = cls.freeze_model_layers(model, num_layers_to_retain)
+        model = cls.freeze_model_layers(model, freeze)
 
         return model
     
@@ -428,28 +442,26 @@ class NetUtils:
     #-------------------
     
     @classmethod
-    def freeze_model_layers(cls, model, num_layers_to_retain):
+    def freeze_model_layers(cls, model, num_to_freeze):
         '''
-        Given a model, freeze as num_layers_to_retain layers,
+        Given a model, freeze as num_to_freeze layers,
         and return the model. Freezing a layer sets the required_grad
         attribute of the layer's weight tensors to False
         
-        @param cls:
-        @type cls:
         @param model: model to partially freeze
         @type model: pytorch.nn
-        @param num_layers_to_retain: how many layers to freeze
-        @type num_layers_to_retain: int
-        @requires: modified model
+        @param num_to_freeze: how many layers to freeze
+        @type num_to_freeze: int
+        @returns: modified model
         @rtype: pytorch.nn
         '''
 
-        if num_layers_to_retain == 0:
+        if num_to_freeze == 0:
             return model
         
         layers_frozen = 0
-        while layers_frozen < num_layers_to_retain:
-            # Freeze the bottom num_layers_to_retain layers:
+        while layers_frozen < num_to_freeze:
+            # Freeze the bottom num_to_freeze layers:
             for child in model.children():
                 for param in child.parameters():
                     param.requires_grad = False

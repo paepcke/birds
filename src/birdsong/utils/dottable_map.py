@@ -68,7 +68,8 @@ class DottableMap(dict):
 
     def getboolean(self, key, default=None):
         try:
-            return bool(self[key])
+            the_str = self[key]
+            return the_str in ('1', 'y', 'Y', 'yes', 'Yes', 'True')
         except KeyError:
             return default
         except ValueError as e:

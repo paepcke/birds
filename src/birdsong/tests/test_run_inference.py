@@ -36,7 +36,7 @@ class InferenceTester(unittest.TestCase):
             )
         cls.saved_model = os.path.join(
             cls.saved_model_path,
-            'mod_2021-03-16T18_45_47_net_resnet18_ini_0_lr_0.01_opt_SGD_bs_64_ks_7_folds_0_gray_True_classes_10_ep10.pth'
+            'mod_2021-03-16T18_45_47_net_resnet18_ini_0_lr_0.01_opt_SGD_bs_64_ks_7_folds_0_gray_False_classes_10_ep10.pth'
             )
 
         cls.samples_path = os.path.join(
@@ -65,13 +65,19 @@ class InferenceTester(unittest.TestCase):
     
     #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_inference(self):
+        # We have 60 test images. So, 
+        # with drop_last True, a batch size
+        # of 64 returns nothing. Use 16
+        # to get several batches:
+        
         inferencer = Inferencer(
             self.saved_model,
             self.samples_path,
-            batch_size=None,
+            batch_size=16,
             labels_path=self.labels_path
             )
-        inferencer.run_inference()
+        coll = inferencer.run_inference()
+        print(coll)
         
 # ---------------------- Main -------------
 

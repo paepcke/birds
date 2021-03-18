@@ -68,6 +68,27 @@ class TensorBoardPlotter:
     DISPLAY_HISTORY_LEN = 8
     
     #------------------------------------
+    # collection_to_tensorboard 
+    #-------------------
+    
+    @classmethod
+    def collection_to_tensorboard(cls, tally_coll):
+        '''
+        Reports standard results from all tallies
+        in the given collection to a tensorboard.
+        Included are:
+        
+            o Various charts
+            o Result text tables
+            o hparams
+        
+        @param tally_coll:
+        @type tally_coll:
+        '''
+        
+
+    
+    #------------------------------------
     # conf_matrix_to_tensorboard 
     #-------------------
     

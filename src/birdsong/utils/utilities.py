@@ -18,21 +18,23 @@ from torchvision import transforms
 from birdsong.utils.learning_phase import LearningPhase
 
 
-class FileUtils(object):
+class FileUtils:
     '''
     classdocs
     '''
     
+    str2bool = lambda the_str: the_str in ('1', 'y', 'Y', 'yes', 'Yes', 'True')
+    
     # Elements that make up a filename
     fname_el_types = {'net'     : str,
-                      'pre'     : bool,
+                      'pre'     : str2bool,
                       'frz'     : int,
                       'lr'      : float,
                       'opt'     : str,
                       'bs'      : int,
                       'ks'      : int,
                       'folds'   : int,
-                      'gray'    : bool,
+                      'gray'    : str2bool,
                       'classes' : int
                       }
 
@@ -725,6 +727,14 @@ class FileUtils(object):
             res = f"/{res}"
 
         return res
+
+    #------------------------------------
+    # str2bool 
+    #-------------------
+    
+    @classmethod
+    def str2bool(cls, the_str):
+        return the_str in ('1', 'y', 'Y', 'yes', 'Yes', 'True')
 
 # ----------------------- CSVWriterFDAccessible -------
 
