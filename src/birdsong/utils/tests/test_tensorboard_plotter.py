@@ -9,6 +9,7 @@ import os
 import random
 import shutil
 import unittest
+import time
 
 from sklearn.metrics import confusion_matrix 
 from torch import Size
@@ -18,6 +19,7 @@ from torch.utils.tensorboard import SummaryWriter
 from birdsong.result_tallying import ResultTally
 from birdsong.rooted_image_dataset import SingleRootImageDataset
 from birdsong.utils.learning_phase import LearningPhase
+from birdsong.utils.tensorboard_manager import TensorBoardManager
 from birdsong.utils.tensorboard_plotter import TensorBoardPlotter
 
 
@@ -26,8 +28,12 @@ TEST_ALL = True
 
 class TestTensorBoardPlotter(unittest.TestCase):
 
+
+    test_tensorboard_port = 6009
+
     @classmethod
     def setUpClass(cls):
+        
         cls.curr_dir = os.path.dirname(__file__)
         cls.tb_summary_dir = os.path.join(cls.curr_dir, 
                                           'tensorboard_summaries')
@@ -41,23 +47,30 @@ class TestTensorBoardPlotter(unittest.TestCase):
         # Create dir for tensorboard summaries
         os.makedirs(cls.tb_summary_dir)
         
-        print(f"For most thorough testing, start tensorboard,")
-        print(f"if not already running. This can be done when ")
-        print(f"being prompted to check tensorboard:")
-        print(f"   tensorboard --logdir {cls.tb_summary_dir}")
-        
         cls.sample_spectrogram_path = os.path.join(
             cls.curr_dir,
             '../../tests/data/birds/DYSMEN_S/SONG_Dysithamnusmentalis5114773.png'
             )
 
         cls.data_root = os.path.join(cls.curr_dir, '../../tests/data/cars')
+        
+        cls.tb_manager = TensorBoardManager(
+            cls.tb_summary_dir,
+            port=cls.test_tensorboard_port, 
+            new_tensorboard_server=True)
 
     def setUp(self):
         self.writer = SummaryWriter(self.tb_summary_dir)
 
     def tearDown(self):
         pass
+    
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.tb_manager.close()
+        except Exception as e:
+            print(f"Could not close tensorboard manager: {repr(e)}")
 
 #*****************
 #     @classmethod
@@ -94,9 +107,12 @@ class TestTensorBoardPlotter(unittest.TestCase):
                                                class_names,
                                                epoch=epoch
                                                )
-        self.await_user_ack(f"Wrote conf matrix for tensorboard to\n" +\
-                            f"{self.tb_summary_dir}.\n" +\
+        self.await_user_ack(f"Reload in browser, then should see confusion matrix\n" +\
                             "Hit key when inspected:")
+
+#         self.await_user_ack(f"Wrote conf matrix for tensorboard to\n" +\
+#                             f"{self.tb_summary_dir}.\n" +\
+#                             "Hit key when inspected:")
         
     #------------------------------------
     # test_write_img_grid 
@@ -130,8 +146,7 @@ class TestTensorBoardPlotter(unittest.TestCase):
 
         self.assertEqual(grid.shape, torch.Size([3, 220, 1650]))
 
-        self.await_user_ack(f"Wrote tensorboard sample imgs to\n" +\
-                            f"{self.tb_summary_dir}.\n" +\
+        self.await_user_ack(f"Reload in browser, then: 12 images of items in Train Input Examples\n" +\
                             "Hit key when inspected:"
                             )
 
@@ -205,10 +220,13 @@ class TestTensorBoardPlotter(unittest.TestCase):
                               'bmw'  : 6
                               })
                              
-        self.await_user_ack("Wrote class support histogram to \n"+\
-                            f"{self.tb_summary_dir}.\n" +\
-                            f"Should see both bmw/audo bars to 6.\n" +\
+        self.await_user_ack(f"Should see both bmw/audo bars to 6.\n" +\
                             "Hit key when inspected:")
+
+#         self.await_user_ack("Wrote class support histogram to \n"+\
+#                             f"{self.tb_summary_dir}.\n" +\
+#                             f"Should see both bmw/audo bars to 6.\n" +\
+#                             "Hit key when inspected:")
 
 
     #------------------------------------

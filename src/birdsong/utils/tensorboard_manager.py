@@ -65,7 +65,12 @@ class TensorBoardManager(object):
         
         self.tensorboard_server = subprocess.Popen([tb_exec, 
                                                     '--logdir', logdir, 
-                                                    '--port', str(port)])
+                                                    '--port', str(port),
+                                                    '--reload_interval', '1' # update every sec
+                                                    ],
+                                                    stdout=subprocess.PIPE,
+                                                    stderr= subprocess.PIPE
+                                                    )
         return
 
     #------------------------------------
@@ -90,7 +95,9 @@ class TensorBoardManager(object):
 
         browser_exec_file = self.find_browser()
         
-        self.web_browser = subprocess.Popen([browser_exec_file, f"http://localhost:{port}"])
+        self.web_browser = subprocess.Popen([browser_exec_file, 
+                                             f"http://localhost:{port}"],
+                                             )
 
     #------------------------------------
     # stop_webbrowser 
