@@ -28,7 +28,7 @@ from birdsong.utils.learning_phase import LearningPhase
 from birdsong.utils.model_archive import ModelArchive
 from birdsong.utils.neural_net_config import NeuralNetConfig, ConfigError
 from birdsong.utils.tensorboard_plotter import SummaryWriterPlus, TensorBoardPlotter
-from birdsong.utils.utilities import FileUtils, CSVWriterCloseable, Differentiator
+from birdsong.utils.utilities import FileUtils, CSVWriterCloseable #, Differentiator
 import numpy as np
 
 
@@ -382,19 +382,20 @@ class BirdsTrainBasic:
         
         The the preds and labels as rows to csv 
         files.
-        
-        @return: a ResultTally instance with all
-            metrics computed for display
-        @rtype: ResultTally
+
         '''
 
         val_tally   = self.results[(epoch, str(LearningPhase.VALIDATING))]
         train_tally = self.results[(epoch, str(LearningPhase.TRAINING))]
+        
+        result_coll = ResultCollection()
+        result_coll.add(epoch, val_tally)
+        result_coll.add(epoch, train_tally)
 
         self.latest_result = {'train': train_tally,
                               'val'  : val_tally
                               }
-        
+
         # If we are to write preds and labels to
         # .csv for later additional processing:
 
@@ -406,91 +407,19 @@ class BirdsTrainBasic:
                  val_tally.preds,
                  val_tally.labels
                  ])
-            
-        self.writer.add_scalar('loss/train', 
-                               train_tally.mean_loss, 
-                               global_step=epoch
-                               )
-        self.writer.add_scalar('loss/val', 
-                               val_tally.mean_loss, 
-                               global_step=epoch
-                               )
-        
-        self.writer.add_scalar('balanced_accuracy_score/train', 
-                               train_tally.balanced_acc, 
-                               global_step=epoch
-                               )
 
-        self.writer.add_scalar('balanced_accuracy_score/val', 
-                               val_tally.balanced_acc, 
-                               global_step=epoch
-                               )
-
-        self.writer.add_scalar('accuracy_score/train', 
-                               train_tally.accuracy, 
-                               global_step=epoch
-                               )
-        self.writer.add_scalar('accuracy_score/val', 
-                               val_tally.accuracy, 
-                               global_step=epoch
-                               )
+        TensorBoardPlotter.visualize_epoch(result_coll,
+                                           self.writer, 
+                                           [LearningPhase.TRAINING,
+                                            LearningPhase.VALIDATING
+                                            ],
+                                           epoch, 
+                                           self.class_names)
         # History of learning rate adjustments:
         lr_this_epoch = self.optimizer.param_groups[0]['lr']
         self.writer.add_scalar('learning_rate', lr_this_epoch,
                                global_step=epoch
                                )
-
-        # Submit the confusion matrix image
-        # to the tensorboard. In the following:
-        # do not provide a separate title, such as
-        #  title=f"Confusion Matrix (Validation): Epoch{epoch}"
-        # That will put each matrix into its own slot
-        # on tensorboard, rather than having a time slider
-        
-        TensorBoardPlotter.conf_matrix_to_tensorboard(
-            self.writer,
-            val_tally.conf_matrix,
-            self.class_names,
-            epoch=epoch,
-            title=f"Confusion Matrix Series"
-            )
-
-        # Versions of the f1 score:
-        
-        self.writer.add_scalar('val_f1/macro', 
-                               val_tally.f1_macro, 
-                               global_step=epoch)
-        self.writer.add_scalar('val_f1/micro', 
-                               val_tally.f1_micro,
-                               global_step=epoch)
-        self.writer.add_scalar('val_f1/weighted', 
-                               val_tally.f1_weighted,
-                               global_step=epoch)
-
-
-        # Versions of precision/recall:
-        
-        self.writer.add_scalar('val_prec/macro', 
-                               val_tally.prec_macro, 
-                               global_step=epoch)
-        self.writer.add_scalar('val_prec/micro', 
-                               val_tally.prec_micro,
-                               global_step=epoch)
-        self.writer.add_scalar('val_prec/weighted', 
-                               val_tally.prec_weighted,
-                               global_step=epoch)
-
-        self.writer.add_scalar('val_recall/macro', 
-                               val_tally.recall_macro, 
-                               global_step=epoch)
-        self.writer.add_scalar('val_recall/micro', 
-                               val_tally.recall_micro,
-                               global_step=epoch)
-        self.writer.add_scalar('val_recall/weighted', 
-                               val_tally.recall_weighted,
-                               global_step=epoch)
-
-        return val_tally
 
     #------------------------------------
     # visualize_final_epoch_results 

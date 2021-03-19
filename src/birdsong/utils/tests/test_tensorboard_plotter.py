@@ -9,22 +9,21 @@ import os
 import random
 import shutil
 import unittest
-import time
 
 from sklearn.metrics import confusion_matrix 
 from torch import Size
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
-from birdsong.result_tallying import ResultTally
+from birdsong.result_tallying import ResultTally, ResultCollection
 from birdsong.rooted_image_dataset import SingleRootImageDataset
 from birdsong.utils.learning_phase import LearningPhase
 from birdsong.utils.tensorboard_manager import TensorBoardManager
 from birdsong.utils.tensorboard_plotter import TensorBoardPlotter
 
 
-TEST_ALL = True
-#TEST_ALL = False
+#***888TEST_ALL = True
+TEST_ALL = False
 
 class TestTensorBoardPlotter(unittest.TestCase):
 
@@ -340,13 +339,121 @@ class TestTensorBoardPlotter(unittest.TestCase):
         except ValueError:
             pass
 
+    #------------------------------------
+    # test_visualize_epoch 
+    #-------------------
+
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_visualize_epoch_train_plus_val(self):
+        
+        tally0, _tally_val = self.make_tallies(testing=False)
+
+        tally_coll = ResultCollection()
+
+        f1_macro = tally0.f1_macro
+        f1_micro = tally0.f1_micro
+        f1_weighted = tally0.f1_weighted
+        preds   = tally0.preds  # 2 predictions
+        labels  = tally0.labels # 2 labels
+        
+        # For testing, prepare 
+        # a train and a val tally
+        # each for epochs 0 and 1.
+        # visualize_epoch will need
+        # to only show results for
+        # one of the epochs:
+
+        
+        for epoch,phase in zip([0,0,1,1], 
+                               [LearningPhase.TRAINING,
+                                LearningPhase.VALIDATING,
+                                LearningPhase.TRAINING,
+                                LearningPhase.VALIDATING
+                                ]):
+
+            f1_macro += 0.1
+            f1_micro += 0.1
+            f1_weighted += 0.1
+            
+            new_tally = self.clone_tally(tally0, 
+                                         f1_macro=f1_macro,
+                                         f1_micro=f1_micro,
+                                         f1_weighted=f1_weighted,
+                                         phase=phase,
+                                         preds=preds,
+                                         labels=labels,
+                                         epoch=epoch
+                                         )
+            new_tally.accuracy += \
+                new_tally.accuracy * 10**(-1/(epoch+1))
+            new_tally.balanced_acc += \
+                0.1 + 10**(-1/(epoch+1))
+            
+            tally_coll.add(new_tally, epoch=epoch)
+
+        class_names = ['c1', 'c2']
+        TensorBoardPlotter.visualize_epoch(
+            tally_coll,
+            self.writer,
+            [LearningPhase.TRAINING, LearningPhase.VALIDATING],
+            0,
+            class_names
+            )
+        TensorBoardPlotter.visualize_epoch(
+            tally_coll,
+            self.writer,
+            [LearningPhase.TRAINING, LearningPhase.VALIDATING],
+            1,
+            class_names
+            )
+
+        self.await_user_ack(f"Should see 21 charts & a 2x2 conf matrix.\n" +\
+                            "Hit key when inspected:")
+
+    #------------------------------------
+    # test_visualize_epoch_testing_phase_only
+    #-------------------
+    
+    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_visualize_epoch_testing_phase_only(self):
+        
+        tally0, _tally_val = self.make_tallies(testing=False)
+
+        class_names = ['c1', 'c2']
+        epoch = 0
+
+        tally_coll = ResultCollection()
+        tally0.phase = LearningPhase.TESTING
+        tally_coll.add(tally0, epoch)
+        
+
+        TensorBoardPlotter.visualize_epoch(
+            tally_coll,
+            self.writer,
+            [LearningPhase.TESTING],
+            epoch,
+            class_names
+            )
+        # o Should show only viz relevant
+        #   to TESTING
+        # o visualize_final_epoch_results should move
+        #   to tensorboard_plotter
+        # o report_hparams_summary should move
+        #   to tensorboard_plotter
+        
+        self.await_user_ack(f"Should see 21 charts & a 2x2 conf matrix.\n" +\
+                            "Hit key when inspected:")
+        
+
+
+
 # ------------------ Utils ---------------
 
     #------------------------------------
     # make_tallies
     #-------------------
     
-    def make_tallies(self):
+    def make_tallies(self, testing=True):
         '''
         Return two tallies, one 
         train, one val. Client can 
@@ -360,11 +467,11 @@ class TestTensorBoardPlotter(unittest.TestCase):
             0,  # epoch
             LearningPhase.TRAINING,
             preds,                     # outputs
-            torch.tensor([1,2,3,4]),   # labels,
+            torch.tensor([1,2]),       # labels,
             torch.tensor(0.5),         # loss,
             3,                         # num_classes
             64,                        # batch_size
-            testing=True
+            testing=testing
             )                
 
         # Set f1 values, then use 
@@ -399,13 +506,17 @@ class TestTensorBoardPlotter(unittest.TestCase):
                     f1_macro, 
                     f1_micro, 
                     f1_weighted,
-                    phase=None):
+                    phase=None,
+                    **kwargs):
 
         tally_clone = copy(tally)
         
         tally_clone.f1_macro = f1_macro
         tally_clone.f1_micro = f1_micro
         tally_clone.f1_weighted = f1_weighted
+        
+        for tally_attr_nm, attr_val in kwargs.items():
+            tally_clone.__setattr__(tally_attr_nm, attr_val)
         
         if phase is not None:
             tally_clone.phase = phase

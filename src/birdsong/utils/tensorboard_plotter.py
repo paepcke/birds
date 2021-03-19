@@ -72,7 +72,12 @@ class TensorBoardPlotter:
     #-------------------
     
     @classmethod
-    def collection_to_tensorboard(cls, tally_coll):
+    def collection_to_tensorboard(cls, 
+                                  tally_coll,
+                                  writer,
+                                  phases,
+                                  epoch
+                                  ):
         '''
         Reports standard results from all tallies
         in the given collection to a tensorboard.
@@ -85,9 +90,132 @@ class TensorBoardPlotter:
         @param tally_coll:
         @type tally_coll:
         '''
+        cls.visualize_epoch(tally_coll,
+                            writer,
+                            phases,
+                            epoch)
+    #------------------------------------
+    # visualize_epoch 
+    #-------------------
+    
+    @classmethod
+    def visualize_epoch(cls,
+                        tally_coll,
+                        writer,
+                        phases,
+                        epoch,
+                        class_names
+                        ):
+        '''
+        Take the ResultTally instances from
+        the same epoch from the tally_coll, 
+        and report appropriate aggregates to 
+        tensorboard. 
+        
+        Computes f1 scores, accuracies, etc. for 
+        given epoch.
+
+        Separately for train and validation
+        results: build one long array 
+        of predictions, and a corresponding
+        array of labels. Also, average the
+        loss across all instances.
+        
+        The the preds and labels as rows to csv 
+        files.
+        
+        @return: a ResultTally instance with all
+            metrics computed for display
+        @rtype: ResultTally
+        '''
+        
+        try:
+            tallies = {str(phase) : tally_coll[(epoch, phase)]
+                       for phase in phases
+                       }
+        except KeyError as e:
+            print(f"Epoch: {epoch}, phase: foo")
         
 
+        for phase in phases:
+            
+            # Need learning phase in string forms
+            # below:
+            phase_str = str(phase)
+            
+            tally = tallies[phase_str]
+            writer.add_scalar(f"loss/{phase_str}", 
+                                   tally.mean_loss, 
+                                   global_step=epoch
+                                   )
+            
+            writer.add_scalar(f"balanced_accuracy_score/{phase_str}", 
+                                   tally.balanced_acc, 
+                                   global_step=epoch
+                                   )
     
+            writer.add_scalar(f"accuracy_score/{phase_str}", 
+                                   tally.accuracy, 
+                                   global_step=epoch
+                                   )
+
+            # The following are only sent to the
+            # tensorboard for validation and test
+            # phases.
+
+            if phase in (LearningPhase.VALIDATING, LearningPhase.TESTING):
+
+                # Submit the confusion matrix image
+                # to the tensorboard. In the following:
+                # do not provide a separate title, such as
+                #  title=f"Confusion Matrix (Validation): Epoch{epoch}"
+                # That would put each matrix into its own slot
+                # on tensorboard, rather than having a time slider
+
+                TensorBoardPlotter.conf_matrix_to_tensorboard(
+                    writer,
+                    tally.conf_matrix,
+                    class_names,
+                    epoch=epoch,
+                    title=f"Confusion Matrix Series"
+                    )
+
+                # Versions of the f1 score:
+                
+                writer.add_scalar(f"{phase_str}_f1/macro", 
+                                       tally.f1_macro, 
+                                       global_step=epoch)
+                writer.add_scalar(f"{phase_str}_f1/micro", 
+                                       tally.f1_micro,
+                                       global_step=epoch)
+                writer.add_scalar(f"{phase_str}_f1/weighted", 
+                                       tally.f1_weighted,
+                                       global_step=epoch)
+
+                # Versions of precision/recall:
+                
+                writer.add_scalar(f"{phase_str}_prec/macro", 
+                                       tally.prec_macro, 
+                                       global_step=epoch)
+                writer.add_scalar(f"{phase_str}_prec/micro", 
+                                       tally.prec_micro,
+                                       global_step=epoch)
+                writer.add_scalar(f"{phase_str}_prec/weighted", 
+                                       tally.prec_weighted,
+                                       global_step=epoch)
+        
+                writer.add_scalar(f"{phase_str}_recall/macro", 
+                                       tally.recall_macro, 
+                                       global_step=epoch)
+                writer.add_scalar(f"{phase_str}_recall/micro", 
+                                       tally.recall_micro,
+                                       global_step=epoch)
+                writer.add_scalar(f"{phase_str}_recall/weighted", 
+                                       tally.recall_weighted,
+                                       global_step=epoch)
+        
+        return tally
+
     #------------------------------------
     # conf_matrix_to_tensorboard 
     #-------------------

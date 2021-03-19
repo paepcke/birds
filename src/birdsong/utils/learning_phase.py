@@ -22,3 +22,21 @@ class LearningPhase(Enum):
         if type(other) != LearningPhase:
             raise TypeError("Equality of a LearningPhase can only be tested with another LearningPhase")
         return self.value == other.value
+
+    #------------------------------------
+    # __hash__ 
+    #-------------------
+    
+    def __hash__(self):
+        return self.value
+
+    #------------------------------------
+    # __str__ 
+    #-------------------
+    
+    def __str__(self):
+        '''
+        Unfortunately, enum instances
+        are not 
+        '''
+        return self.name

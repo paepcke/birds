@@ -106,7 +106,11 @@ class ResultCollection(dict):
         @rtype: ResultTally
         '''
         if type(item) == tuple:
-            return super().__getitem__(item)
+            # A tuple (epoch, LearningPhase).
+            # Treat as a dict after
+            # making the LearningPhase hashable
+            #return super().__getitem__(item)
+            return super().__getitem__((item[0], str(item[1])))
         
         return self._sorted_tallies.__getitem__(item)
 
@@ -651,16 +655,7 @@ class ResultTally:
     def __repr__(self):
         (cm_num_rows, cm_num_cols) = self.conf_matrix.size()
         cm_dim = f"{cm_num_rows} x {cm_num_cols}"
-        lp = self.phase
-        if lp == LearningPhase.TRAINING:
-            learning_phase = 'Train'
-        elif lp == LearningPhase.VALIDATING:
-            learning_phase = 'Validate'
-        elif lp == LearningPhase.TESTING:
-            learning_phase = 'Test'
-        else:
-            raise TypeError(f"Wrong type for {self.learning_phase}")
-            
+        learning_phase = str(self.phase)
         human_readable = (f"<ResultTally epoch {self.epoch} " +
                           f"phase {learning_phase} " +
                           f"conf_matrix {cm_dim}>")
@@ -674,7 +669,7 @@ class ResultTally:
         '''
         String representation guaranteed to be unique within a session
         '''
-        return f"<TrainResult object at {self.id()}>"
+        return f"<TrainResult object at {hex(id(self))}>"
 
     #------------------------------------
     # __eq__ 
