@@ -53,10 +53,12 @@ class TestTensorBoardPlotter(unittest.TestCase):
 
         cls.data_root = os.path.join(cls.curr_dir, '../../tests/data/cars')
         
-        cls.tb_manager = TensorBoardManager(
-            cls.tb_summary_dir,
-            port=cls.test_tensorboard_port, 
-            new_tensorboard_server=True)
+        #********* Comment to not have browser pop up
+#         cls.tb_manager = TensorBoardManager(
+#             cls.tb_summary_dir,
+#             port=cls.test_tensorboard_port, 
+#             new_tensorboard_server=True)
+        #********* END comment to not have browser pop up
 
     def setUp(self):
         self.writer = SummaryWriter(self.tb_summary_dir)
@@ -414,7 +416,7 @@ class TestTensorBoardPlotter(unittest.TestCase):
     # test_visualize_epoch_testing_phase_only
     #-------------------
     
-    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_visualize_epoch_testing_phase_only(self):
         
         tally0, _tally_val = self.make_tallies(testing=False)
@@ -443,7 +445,48 @@ class TestTensorBoardPlotter(unittest.TestCase):
         
         self.await_user_ack(f"Should see 21 charts & a 2x2 conf matrix.\n" +\
                             "Hit key when inspected:")
+
+    #------------------------------------
+    # test_compute_pr_curve
+    #-------------------
+    
+    #********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_compute_pr_curve(self):
+        labels      = [1,0,0,1,1,1,0,1,0,1,1,1,1,0,0,0]
+        preds       = [0.7, 0.3, 0.5, 0.6, 0.55, 0.9, 0.4, 0.2, 0.4, 0.3, 0.7, 0.5, 0.8, 0.2, 0.3, 0.35]
+        thresholds  = [0.1, 0.5, 0.7]
         
+        precs, recalls = TensorBoardPlotter.compute_pr_curve(labels, preds, thresholds)
+        
+        self.assertEqual(len(precs), len(thresholds))
+        self.assertEqual(len(recalls), len(thresholds))
+
+        expected_precs = [0.5625, 0.875, 1.0]
+        expected_recs  = [1.0, 0.7777777777777778, 0.4444444444444444]
+        
+        self.assertEqual(precs, expected_precs)
+        self.assertEqual(recalls, expected_recs)
+        
+    #------------------------------------
+    # test_visualize_testing_result 
+    #-------------------
+    
+    #********** NOT DONE
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_visualize_testing_result(self):
+        
+        #**********
+        #labels = [0, 1, 3, 3, 2, 1, 0, 4, 3, 2, 0, 1, 2, 0, 3, 1, 4, 2, 3, 3]
+        #preds  = [2, 1, 3, 1, 2, 2, 0, 4, 1, 3, 4, 1, 0, 0, 0, 1, 1, 2, 2, 3]
+        #**********        
+        labels = [0, 1, 3, 3, 2, 1, 0, 4, 3, 2, 0, 1, 2, 0, 3, 1, 4, 2, 3, 3]
+        preds  = [0.7, 0.3, 0.5, 0.6, 0.55, 0.9, 0.4, 0.2, 0.4, 0.3, 0.7, 0.5, 0.8, 0.2, 0.3, 0.35]
+        
+        TensorBoardPlotter.visualize_testing_result(labels, 
+                                                    preds)
+        print('foo')
+
+
 
 
 

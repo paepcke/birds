@@ -10,6 +10,11 @@ from PIL import Image, ImageDraw, ImageFont
 from matplotlib import cm as col_map
 from matplotlib import pyplot as plt
 from sklearn.metrics import confusion_matrix
+import sklearn.metrics
+from sklearn.metrics._classification import precision_score, recall_score
+from sklearn.metrics._ranking import precision_recall_curve, \
+    average_precision_score
+from sklearn.preprocessing._label import label_binarize
 import torch
 from torch.utils.tensorboard.summary import hparams
 from torch.utils.tensorboard.writer import SummaryWriter
@@ -18,12 +23,11 @@ from torchvision.datasets.folder import ImageFolder, default_loader
 from torchvision.utils import make_grid
 
 from birdsong.rooted_image_dataset import SingleRootImageDataset
+from birdsong.utils.github_table_maker import GithubTableMaker
 from birdsong.utils.learning_phase import LearningPhase
 import matplotlib.ticker as mticker
 import numpy as np
 import seaborn as sns
-
-from birdsong.utils.github_table_maker import GithubTableMaker
 
 
 #*****************
@@ -215,6 +219,114 @@ class TensorBoardPlotter:
                                        global_step=epoch)
         
         return tally
+
+    #------------------------------------
+    # visualize_testing_result 
+    #-------------------
+    
+    @classmethod
+    def visualize_testing_result(cls,
+                                 truth_labels, 
+                                 pred_class_ids
+                                 ):
+        '''
+        Use to visualize results from using a 
+        saved model on a set of test-set samples. 
+        '''
+        # Find number of classes involved:
+        all_class_ids = set(truth_labels).union(set(pred_class_ids))
+        num_classes   = len(all_class_ids)
+        
+        # Will alternately treat each class 
+        # prediction as a one-vs-all binary
+        # classification. For each class ID (cid<n>), 
+        # get 0/1 guess separately for each sample:
+        # 
+        #                 cid0      cid1 
+        #   pred_sample0   1          0 
+        #   pred_sample1   0          0
+        #   pred_sample2   0          1
+        #             ...
+        # Same with labels:
+        #                 cid0      cid1 
+        #   labl_sample0   1          0 
+        #   labl_sample1   0          0
+        #   labl_sample2   0          1
+        #             ...
+        
+
+        bin_labels = label_binarize(truth_labels,
+                                    classes=list(range(num_classes)))
+        
+        bin_preds  = label_binarize(pred_class_ids,
+                                    classes=list(range(num_classes)))
+
+        # Make tensors just for manipulation
+        # convenience:
+        
+        bin_labels_tn = torch.tensor(bin_labels)
+        bin_preds_tn  = torch.tensor(bin_preds)
+        
+        precisions = dict()
+        recalls = dict()
+        thresholds = dict()
+        average_precisions = dict()
+
+        # Go through each column, i.e. the
+        # 1/0 labels/preds for one class at
+        # a time, and get the prec/rec numbers.
+        # The [1] in prec & rec is b/c precision_recall_curve
+        # returns a triplet for binary classification:
+        # prec/rec at thresholds 0, 1, putting 1 as the 
+        # last element. The prec/rec we want is the 
+        # where 1 is the thresholds:
+        
+        for i in range(num_classes):
+            
+            bin_labels_arr = bin_labels_tn[:,i].tolist()
+            bin_preds_arr  = bin_preds_tn[:,i].tolist()
+            
+            prec_triplet, rec_triplet, thresh = \
+                precision_recall_curve(bin_labels_arr,
+                                       bin_preds_arr
+                                       )
+            precisions[i] = prec_triplet[1]
+            recalls[i]    = rec_triplet[1]
+            thresholds[i] = thresh
+            
+            # Avg prec is:
+            #
+            #      AP = SUM_ovr_n((R_n - R_n-1)*P_n
+            #
+            # I.e. the increase in recalls times current
+            # precisions as each pred/sample pair is 
+            # processed:
+            
+            average_precisions[i] = \
+                average_precision_score(bin_labels_arr,
+                                        bin_preds_arr,
+                                        average='macro',
+                                        )
+                
+        mAP = np.mean(list(average_precisions.values()))
+        
+        return (mAP, 
+                precisions, 
+                recalls, 
+                thresholds, 
+                average_precisions
+                )
+        #*************
+        print('foo')
+        # A "micro-average": quantifying score on all classes jointly
+#         precisions["micro"], recalls["micro"], _ = precision_recall_curve(Y_test.ravel(),
+#                                                                         y_score.ravel())
+#         average_precisions["micro"] = average_precision_score(Y_test, y_score,
+#                                                              average="micro")
+#         print('Average precisions score, micro-averaged over all classes: {0:0.2f}'
+#               .format(average_precisions["micro"]))
+        #*************
+        
 
     #------------------------------------
     # conf_matrix_to_tensorboard 
@@ -460,7 +572,7 @@ class TensorBoardPlotter:
                                   )
 
         # Get list of full paths to samples:
-        sample_idxs = cls.get_sample_indices(img_folder,
+        sample_idxs = cls._get_sample_indices(img_folder,
                                              num_imgs=num_imgs,
                                              class_sample_file_pairs=class_sample_file_pairs
                                              )
@@ -658,6 +770,87 @@ class TensorBoardPlotter:
                 # Replace any nan's with 0:
                 norm_cm[torch.isnan(norm_cm)] = 0
         return norm_cm 
+
+    #------------------------------------
+    # compute_pr_curve 
+    #-------------------
+
+    @classmethod
+    def compute_pr_curve(cls, labels, preds, thresholds):
+        '''
+        Return the recall (x-axis) and precision (y-axis)
+        values of a PR curve. A prec/rec point is computed
+        for each threshold point. Works for binary classification.
+        But can use sklearn's label_binaries to compute 
+        separate curves for each class.
+        
+        Differs from sklearn.precision_recall_curve() in
+        that the sklearn method does not take a list
+        of thresholds.  
+        
+        Ex:   labels  = [1,1,0,1]
+               preds  = [0.2, 0.6, 0.1, 0.2]
+          thresholds  = [0.3, 0.7]
+          
+          The predictions are turned into decisions like this:
+               preds_decided_0.3 = [0, 1, 0, 0]
+               preds_decided_0.5 = [0, 0, 0, 0]
+          
+          Two prec and rec computations are done:
+          
+            pr0:  prec and rec from [0, 1, 0, 0] 
+                                    [0, 1, 0, 0]
+        
+            pr1:  prec and rec from [1, 1, 0, 1]
+                                    [0, 0, 0, 0]
+                                    
+        Return: {prec   : [prec0, prec1, 1],
+                 rec    : [rec0,  rec1,  0]
+                 }
+                  
+        @param labels: integer binary class labels.
+            Exs.: [1,1,0,0], ['yes', 'yes', 'no', 'yes']
+        @type labels: [int | str]
+        @param preds: predictions output from a classifier.
+            May be floats or integers
+        @type preds: [float | int]
+        @param thresholds: list of decision thresholds to
+            decide whether preds are one class or the other.
+        @type thresholds: [float | int]
+        @return: lists with prec and recall ready for drawing
+            a PR curve
+        @rtype: [float], [float]
+        @raises ValueError if labels hold more than 
+            two distinct values
+        '''
+        uniq_classes = set(labels)
+        if len(uniq_classes) > 2:
+            raise ValueError(f"Labels limited to up to two distinct values; got {uniq_classes}")
+        
+        precisions = []
+        recalls = []
+        class_list = list(uniq_classes)
+        
+        for threshold in thresholds:
+            y_pred = []
+            for pred in preds:
+                if pred >= threshold:
+                    y_pred.append(class_list[1])
+                else:
+                    y_pred.append(class_list[0])
+    
+            precision = precision_score(y_true=labels, 
+                                        y_pred=y_pred, 
+                                        pos_label=class_list[1])
+            
+            recall    = recall_score(y_true=labels, 
+                                     y_pred=y_pred, 
+                                     pos_label=class_list[1])
+            
+            precisions.append(precision)
+            recalls.append(recall)
+    
+        return precisions, recalls
 
     #------------------------------------
     # make_f1_train_val_table 
@@ -861,11 +1054,11 @@ class TensorBoardPlotter:
         return out_tns
             
     #------------------------------------
-    # get_sample_indices 
+    # _get_sample_indices 
     #-------------------
     
     @classmethod
-    def get_sample_indices(cls,
+    def _get_sample_indices(cls,
                            img_folder,
                            class_sample_file_pairs,
                            num_imgs=None
