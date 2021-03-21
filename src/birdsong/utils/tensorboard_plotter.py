@@ -5,15 +5,14 @@ Created on Jan 25, 2021
 '''
 import os
 import random
+import warnings
 
 from PIL import Image, ImageDraw, ImageFont
 from matplotlib import cm as col_map
 from matplotlib import pyplot as plt
 from sklearn.metrics import confusion_matrix
-import sklearn.metrics
 from sklearn.metrics._classification import precision_score, recall_score
-from sklearn.metrics._ranking import precision_recall_curve, \
-    average_precision_score
+from sklearn.metrics._ranking import average_precision_score
 from sklearn.preprocessing._label import label_binarize
 import torch
 from torch.utils.tensorboard.summary import hparams
@@ -231,10 +230,13 @@ class TensorBoardPlotter:
                                  ):
         '''
         Use to visualize results from using a 
-        saved model on a set of test-set samples. 
+        saved model on a set of test-set samples.
+        
+        Draws a PR curve, and adds a table with 
+        the average precison (AP) of each class.
         '''
         # Find number of classes involved:
-        all_class_ids = set(truth_labels).union(set(pred_class_ids))
+        all_class_ids = set(truth_labels)
         num_classes   = len(all_class_ids)
         
         # Will alternately treat each class 
@@ -253,7 +255,6 @@ class TensorBoardPlotter:
         #   labl_sample1   0          0
         #   labl_sample2   0          1
         #             ...
-        
 
         bin_labels = label_binarize(truth_labels,
                                     classes=list(range(num_classes)))
@@ -269,7 +270,6 @@ class TensorBoardPlotter:
         
         precisions = dict()
         recalls = dict()
-        thresholds = dict()
         average_precisions = dict()
 
         # Go through each column, i.e. the
@@ -286,13 +286,14 @@ class TensorBoardPlotter:
             bin_labels_arr = bin_labels_tn[:,i].tolist()
             bin_preds_arr  = bin_preds_tn[:,i].tolist()
             
-            prec_triplet, rec_triplet, thresh = \
-                precision_recall_curve(bin_labels_arr,
-                                       bin_preds_arr
-                                       )
-            precisions[i] = prec_triplet[1]
-            recalls[i]    = rec_triplet[1]
-            thresholds[i] = thresh
+            # Get precision and recall at each
+            # of threshold = [0.2, 0.4, 0.6, 0.8, 1.0]
+            precs, recs = \
+                cls.compute_binary_pr_curve(bin_labels_arr,
+                                     bin_preds_arr
+                                     )
+            precisions[i] = precs
+            recalls[i]    = recs
             
             # Avg prec is:
             #
@@ -313,20 +314,9 @@ class TensorBoardPlotter:
         return (mAP, 
                 precisions, 
                 recalls, 
-                thresholds, 
                 average_precisions
                 )
-        #*************
-        print('foo')
-        # A "micro-average": quantifying score on all classes jointly
-#         precisions["micro"], recalls["micro"], _ = precision_recall_curve(Y_test.ravel(),
-#                                                                         y_score.ravel())
-#         average_precisions["micro"] = average_precision_score(Y_test, y_score,
-#                                                              average="micro")
-#         print('Average precisions score, micro-averaged over all classes: {0:0.2f}'
-#               .format(average_precisions["micro"]))
-        #*************
-        
+
 
     #------------------------------------
     # conf_matrix_to_tensorboard 
@@ -772,23 +762,222 @@ class TensorBoardPlotter:
         return norm_cm 
 
     #------------------------------------
-    # compute_pr_curve 
+    # compute_multiclass_pr_curve 
+    #-------------------
+    
+    @classmethod
+    def compute_multiclass_pr_curve(cls,
+                                    truth_labels, 
+                                    raw_preds,
+                                    thresholds=[0.2, 0.4, 0.6, 0.8, 1.0]
+                                    ):
+        '''
+        Computes the data needed to draw
+        a family of PR curves for the results
+        of multiclass classifier output.
+        
+        Returns a dict of the constituent 
+        single-class curve specs, and a
+        mean average precision (mAP) score
+        for all curves combined.
+        
+        Each result dict maps a class ID
+        to all info needed for one of the
+        curves:
+
+          1:
+              {'best_op_pt' : best_operating_pt,
+               'precisions' : precisions,
+               'recalls'    : recalls,
+               'thresholds' : thresholds,
+               'avg_prec'   : avg_precision
+               }
+          2:
+              {'best_op_pt' : best_operating_pt,
+               'precisions' : precisions,
+               'recalls'    : recalls,
+               'thresholds' : thresholds,
+               'avg_prec'   : avg_precision
+               }
+
+        where best_op_pt is:
+
+               {'threshold' : <optimal decision probability value>
+                'f1'        : <f1 at the optimal threshold>
+                'prec'      : <precision at the optimal threshold>
+                'thresholds' : thresholds,
+                'rec'       : <recall at the optimal threshold>
+                }
+
+        Each of the avg_prec is the 
+        the average of precisions across the 
+        samples of one class (AP). I.e. there will
+        be as many elements in average_precisions
+        as there are classes. 
+        
+        The Mean Average Precision (mAP) is 
+        the mean of the average_precision values.
+        This measure summarizes the family of PR curves.
+        It is comparable to AUC ROC.
+        
+        The precisions and recalls returns are dicts.
+        The keys are class IDs, and the values are the
+        precisions for that class. They are the quantities
+        from which the average_precision values are 
+        computed.
+        
+        Summary: 
+            o precisions/recalls are the lowest granularity
+              of information: the per class precs and recs
+              at different thresholds.
+              
+              There are as many entries in these dicts as
+              there are classes. And prec/rec value pair
+              from the precisions and recalls dict are results
+              of one threshold. 
+
+               TODO: o finish this sentence by running and
+                       seeing what's what
+                     o A unit test for this method
+                     o Finally: the actual drawing of the 
+                         curves with pyplot
+                         
+            o average_precision aggregates the precisions
+              of one class across multiple thresholds. There 
+              will be as many entries in this dict as there 
+              are classes.
+              
+            o mAP aggregates the average_precision values
+              across all classes. This is one number.
+
+        @param truth_labels:
+        @type truth_labels:
+        @param raw_preds:
+        @type raw_preds:
+        @return: (precisions, recalls, average_precisions, mAP)
+        @rtype: ({int : [floats]}, {int : [floats]}, [floats], float)
+        '''
+        # Find number of classes involved:
+        all_class_ids = set(truth_labels)
+        num_classes   = len(all_class_ids)
+        
+        # Will alternately treat each class 
+        # prediction as a one-vs-all binary
+        # classification.
+        #
+        # Ex. let labels = [1,0,0,1,2]
+        #      and preds = [0.3,0.6,0.1,0.7,0.9]
+        #
+        # Convert the labels to a one-hot vector:
+        #
+        #       L A B E L S               P R E D S
+        #       ------------              ----------
+        #     [1,         [[0, 1, 0],       [0.3,
+        #      0,          [1, 0, 0],        0.6,
+        #      0,   ==>    [1, 0, 0],        0.1,
+        #      1,          [0, 1, 0],        0.7,
+        #      2]          [0, 0, 1]]        0.9]
+        #
+        # Then evaluate each label column vector 
+        # separately.
+
+        bin_labels = label_binarize(truth_labels,
+                                    classes=list(range(num_classes)))
+
+        # Make tensors just for manipulation
+        # convenience:
+        
+        bin_labels_tn = torch.tensor(bin_labels)
+        
+        # Place to hold the result dicts 
+        # from compute_binary_pr_curve()
+        # for each of the classes. This
+        # will be class-name : binary-result-dict
+        
+        all_curves_info = {}
+        
+        # Go through each column, class_id i.e. the
+        # 1/0-vector label columns and raw_preds 
+        # columns for one class at
+        # a time, and get the prec/rec numbers.
+        
+        for class_id in range(num_classes):
+            
+            # Get the raw predictions (logits or probs)
+            # for just the current class_id. Those preds
+            # correspond to the class_id'th column:
+            
+            bin_labels_arr = bin_labels_tn[:,class_id].tolist()
+
+            # Get all info for this single, binary
+            # classification: list of 1/0 labels, and
+            # list of floats, which are the preds for
+            # the current class:
+            
+            one_class_curve = cls.compute_binary_pr_curve(bin_labels_arr,
+                                                          raw_preds,
+                                                          thresholds)
+            
+            # Series of precs/recs at the 
+            # different thresholds for the 
+            # class in this loop
+            all_curves_info[class_id] = one_class_curve
+
+        avg_precs = [binary_curve_info['avg_prec']
+                     for binary_curve_info
+                     in all_curves_info.values()
+                     ]
+        mAP = np.mean(np.array(avg_precs)).tolist()
+        
+        return (all_curves_info, mAP) 
+
+    #------------------------------------
+    # compute_binary_pr_curve 
     #-------------------
 
     @classmethod
-    def compute_pr_curve(cls, labels, preds, thresholds):
+    def compute_binary_pr_curve(cls, 
+                                labels, 
+                                preds, 
+                                thresholds=None):
         '''
         Return the recall (x-axis) and precision (y-axis)
-        values of a PR curve. A prec/rec point is computed
-        for each threshold point. Works for binary classification.
+        values of a PR curve, its average precision (AP),
+        and a dict specifying the optimal threshold, 
+        with corresponding f1, precision, and recall values:
+        
+        best_op_pt: 
+            {'threshold' : <optimal decision probability value>
+             'f1'        : <f1 at the optimal threshold>
+             'prec'      : <precision at the optimal threshold>
+             'rec'       : <recall at the optimal threshold>
+            }
+
+        The result is packaged as a dict:
+        
+        res = {'best_op_pt' : best_operating_pt,
+               'precisions' : precisions,
+               'recalls'    : recalls,
+               'thresholds' : thresholds,
+               'avg_prec'   : avg_precision
+               }
+
+        Procedure:
+        
+        A prec/rec point is computed for each 
+        threshold point. 
+        
+        Works for binary classification.
         But can use sklearn's label_binaries to compute 
-        separate curves for each class.
+        separate curves for each class 
+        (see compute_multiclass_pr_curve)
         
         Differs from sklearn.precision_recall_curve() in
         that the sklearn method does not take a list
         of thresholds.  
         
-        Ex:   labels  = [1,1,0,1]
+        Example:   
+               labels  = [1,1,0,1]
                preds  = [0.2, 0.6, 0.1, 0.2]
           thresholds  = [0.3, 0.7]
           
@@ -796,17 +985,47 @@ class TensorBoardPlotter:
                preds_decided_0.3 = [0, 1, 0, 0]
                preds_decided_0.5 = [0, 0, 0, 0]
           
-          Two prec and rec computations are done:
+          Two prec and rec computations are executed:
           
             pr0:  prec and rec from [0, 1, 0, 0] 
                                     [0, 1, 0, 0]
         
             pr1:  prec and rec from [1, 1, 0, 1]
                                     [0, 0, 0, 0]
-                                    
-        Return: {prec   : [prec0, prec1, 1],
-                 rec    : [rec0,  rec1,  0]
-                 }
+
+           resulting in:
+              precs = [p0, p1]
+              recs  = [r0, r1]
+
+          F1 values fs = [f0, f1] are computed for p0/r0,
+          and p1/r1. The position idx (argmax) of 
+          the highest f1 is determined. 
+          
+          best_op_pt = {
+             'threshold' : thresholds[idx], 
+             'f1'        : fs[idx], 
+             'prec'      : precs[idx] 
+             'rec'       : recs[idx]
+            }
+
+          Finally the average precision (AP) is
+          computed. It derives from precs and recs:
+          
+          for k=0 to k=n-1
+          AP = sum_ovr_k((recs_k - recs_[k-1]) * preds_k)
+          
+          where n is number of thresholds, 
+          recs_k and precs_k are precision and 
+          recall at the kth threshold. By definition,
+          preds_n = 1, recs_n = 0.
+
+          Returned:
+              {'best_op_pt' : best_operating_pt,
+               'precisions' : precs,
+               'recalls'    : recs
+               'avg_prec'   : AP
+               }
+
                   
         @param labels: integer binary class labels.
             Exs.: [1,1,0,0], ['yes', 'yes', 'no', 'yes']
@@ -816,17 +1035,21 @@ class TensorBoardPlotter:
         @type preds: [float | int]
         @param thresholds: list of decision thresholds to
             decide whether preds are one class or the other.
+            If None, uses [0.2, 0.4, 0.6, 0.8, 1]
         @type thresholds: [float | int]
-        @return: lists with prec and recall ready for drawing
-            a PR curve
-        @rtype: [float], [float]
+        @return: dict with optimal operating point,
+            and lists with prec and recall ready 
+            for drawing a PR curve
+        @rtype: ({str : float}, [float], [float])
         @raises ValueError if labels hold more than 
             two distinct values
         '''
         uniq_classes = set(labels)
         if len(uniq_classes) > 2:
             raise ValueError(f"Labels limited to up to two distinct values; got {uniq_classes}")
-        
+
+        if thresholds is None:
+            thresholds = [0.2, 0.4, 0.6, 0.8, 1]
         precisions = []
         recalls = []
         class_list = list(uniq_classes)
@@ -849,8 +1072,43 @@ class TensorBoardPlotter:
             
             precisions.append(precision)
             recalls.append(recall)
-    
-        return precisions, recalls
+
+        precs_np = np.array(precisions)
+        recs_np  = np.array(recalls)
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore",
+                                    category=RuntimeWarning,
+                                    message='invalid value encountered in true_divide'
+                                    )
+            f1_scores = 2 * (precs_np * recs_np) / (precs_np + recs_np)
+            # When both prec and recall are 0,
+            # set f1 to zero:
+            np.nan_to_num(f1_scores, copy=False)
+            
+        best_op_idx = np.argmax(f1_scores)
+        
+        best_operating_pt = {'threshold' : thresholds[best_op_idx],
+                             'f1'        : f1_scores[best_op_idx],
+                             'prec'      : precisions[best_op_idx],
+                             'rec'       : recalls[best_op_idx]
+                             }
+
+        # To make average_precision computation
+        # work:
+        recs_np_padded = np.append(recs_np, [0])
+        precs_np_padded = np.append(precs_np, [1])
+        
+        avg_precision = \
+            np.sum((recs_np_padded[:-1] - recs_np_padded[1:]) * precs_np_padded[:-1])
+        
+        res = {'best_op_pt' : best_operating_pt,
+               'precisions' : precisions,
+               'recalls'    : recalls,
+               'thresholds' : thresholds,
+               'avg_prec'   : avg_precision
+               }
+        return res
 
     #------------------------------------
     # make_f1_train_val_table 

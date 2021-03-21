@@ -447,26 +447,132 @@ class TestTensorBoardPlotter(unittest.TestCase):
                             "Hit key when inspected:")
 
     #------------------------------------
-    # test_compute_pr_curve
+    # test_degenerate_multiclass_pr_curve 
     #-------------------
     
-    #********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    def test_compute_pr_curve(self):
+    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_degenerate_multiclass_pr_curve(self):
+        # Use the multiclass_pr_curve() method
+        # on a binary classification, and test
+        # against result of using compute_binary_pr_curve()
+
+        # Same test case as in test_compute_binary_pr_curve():
+        # Binary: 'member of class' (1) vs. 'other' (0)
         labels      = [1,0,0,1,1,1,0,1,0,1,1,1,1,0,0,0]
         preds       = [0.7, 0.3, 0.5, 0.6, 0.55, 0.9, 0.4, 0.2, 0.4, 0.3, 0.7, 0.5, 0.8, 0.2, 0.3, 0.35]
-        thresholds  = [0.1, 0.5, 0.7]
         
-        precs, recalls = TensorBoardPlotter.compute_pr_curve(labels, preds, thresholds)
+        # Evaluate prec/rec at ten thresholds:
+        thresholds  = [0.2,  0.25,  0.3,  0.35,  0.4,  0.45,  0.5,  0.55,  0.6,  0.65]        
+        
+        # Get optimal operating point, and
+        # the individual precs and recs:
+        res_dict = TensorBoardPlotter.compute_multiclass_pr_curve(labels, 
+                                                                  preds, 
+                                                                  thresholds)
+        print(res_dict)
+        
+    #------------------------------------
+    # test_compute_multiclass_pr_curve 
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_compute_multiclass_pr_curve(self):
+        '''
+        Extend the [0,1] classes used in
+        test_compute_binary_pr_curve() to   
+        classes [0,1,2]. Goal is to get the
+        same result for class 2 as for class 1
+        since class 1 outcomes are tested in 
+        test_compute_binary_pr_curve() and were
+        manually verified there.
+        
+        So we copy the labels and append them
+        to the labels used in test_compute_binary_pr_curve().
+        We then change all the 1-class in the copy
+        to 2.
+        
+        For predictions we also copy and append the
+        preds from test_compute_binary_pr_curve(). But
+        we make no changes. So when the multiclass pr
+        curve method treats each class as one-against-all,
+        we should get the identical results we can then 
+        use for testing.
+        '''
+        
+        
+        labels = [1,0,0,1,1,1,0,1,0,1,1,1,1,0,0,0,
+                  2,0,0,2,2,2,0,2,0,2,2,2,2,0,0,0]
+        preds  = [0.7, 0.3, 0.5, 0.6, 0.55, 0.9, 0.4, 0.2, 0.4, 0.3, 0.7, 0.5, 0.8, 0.2, 0.3, 0.35,
+                  0.7, 0.3, 0.5, 0.6, 0.55, 0.9, 0.4, 0.2, 0.4, 0.3, 0.7, 0.5, 0.8, 0.2, 0.3, 0.35]
+
+
+        # Compute at the default number
+        # of ten thresholds
+        res = TensorBoardPlotter.compute_multiclass_pr_curve(labels, preds)
+        print(res)
+        
+    #------------------------------------
+    # test_compute_binary_pr_curve
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_compute_binary_pr_curve(self):
+        
+        # Binary: 'member of class' (1) vs. 'other' (0)
+        labels      = [1,0,0,1,1,1,0,1,0,1,1,1,1,0,0,0]
+        preds       = [0.7, 0.3, 0.5, 0.6, 0.55, 0.9, 0.4, 0.2, 0.4, 0.3, 0.7, 0.5, 0.8, 0.2, 0.3, 0.35]
+        
+        # Evaluate prec/rec at ten thresholds:
+        thresholds  = [0.2,  0.25,  0.3,  0.35,  0.4,  0.45,  0.5,  0.55,  0.6,  0.65]        
+        
+        # Get optimal operating point, and
+        # the individual precs and recs:
+        res_dict = TensorBoardPlotter.compute_binary_pr_curve(labels, preds, thresholds)
+        
+        precs = res_dict['precisions']
+        recs  = res_dict['recalls']
+        best_op_pt = res_dict['best_op_pt']
+        avg_prec = res_dict['avg_prec']
         
         self.assertEqual(len(precs), len(thresholds))
-        self.assertEqual(len(recalls), len(thresholds))
+        self.assertEqual(len(recs), len(thresholds))
 
-        expected_precs = [0.5625, 0.875, 1.0]
-        expected_recs  = [1.0, 0.7777777777777778, 0.4444444444444444]
+        expected_precs = [0.5625, 0.5714285714285714, 0.5714285714285714, 0.6363636363636364, 0.7, 0.875, 0.875, 1.0, 1.0, 1.0]
+        expected_recs  = [1.0, 0.8888888888888888, 0.8888888888888888, 0.7777777777777778, 0.7777777777777778, 0.7777777777777778, 0.7777777777777778, 0.6666666666666666, 0.5555555555555556, 0.4444444444444444]
         
         self.assertEqual(precs, expected_precs)
-        self.assertEqual(recalls, expected_recs)
+        self.assertEqual(recs, expected_recs)
         
+        # precs_np  = np.array(precs)
+        # recs_np   = np.array(recs)
+        
+        # f1_scores = 2 * (precs_np * recs_np) / (precs_np + recs_np)
+        # 
+        # expected_f1s = np.array([0.72,  0.69565217,  0.69565217,  0.7, 0.73684211, 0.82352941,  0.82352941,  0.8,  0.71428571, 0.61538462]) 
+        # self.assertTrue((f1_scores.round(4) == expected_f1s.round(4)).all())
+
+        # When comparing floats, 
+        # rounding arrows get in the way
+        # at full num of digs:
+        
+        op_pt_rounded = {res_name : round(val, 3)
+                         for res_name, val
+                         in best_op_pt.items()
+                         }
+
+        expected_op_pt = {'threshold' : 0.45,
+                          'f1'        : 0.824,
+                          'prec'      : 0.875,
+                          'rec'       : 0.778,
+                          }
+        
+        self.assertDictEqual(op_pt_rounded, expected_op_pt)
+        
+        rounded_AP  = round(avg_prec, 5)
+        expected_AP = 0.88988
+        
+        self.assertEqual(rounded_AP, expected_AP)
+
     #------------------------------------
     # test_visualize_testing_result 
     #-------------------
