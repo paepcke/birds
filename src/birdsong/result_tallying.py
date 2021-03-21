@@ -286,6 +286,15 @@ class ResultTally:
         tally.my_info1 ==> tulip
         tally.my_info2 ==> daffodil
         
+        Outputs is either a list of class IDs, or, 
+        for the example of a batch size of 2:
+        
+            tensor([[0.0162, 0.0096, 0.0925, 0.0157],
+                    [0.0208, 0.0087, 0.0922, 0.0141]], grad_fn=<AddmmBackward>)
+        
+        That is, outputs may be raw logits, one per
+        class in each row.
+        
         Note: the number of target classes cannot be
               gleaned from outputs or labels, b/c some
               classes might not have been involved in this
@@ -335,12 +344,22 @@ class ResultTally:
         # Lazy computation of metrics:
         self.metrics_stale  = True
         
-        # Turn the logits in outputs into
-        # class predictions, filling in 
-        # self.preds, as well as adding this
-        # loss to 
+        self._initialize_loss(loss)
         
-        self.set_initial_preds_and_loss(outputs, loss)
+        
+        # See whether the passed-in output
+        # are integers, meaning class IDs,
+        # or one logit for each class per
+        # sample: 
+        if type(outputs) == list and type(outputs[0]) == int:
+            # Nothing to do, outputs are
+            # already class IDs:
+            self.preds = outputs
+        else:
+            # Turn the logits in outputs into
+            # class predictions, filling in 
+            # self.preds
+            self._set_initial_preds(outputs)
         
         if len(kwargs) > 0:
             self.__dict__.update(kwargs)
@@ -459,29 +478,47 @@ class ResultTally:
         self.metrics_stale = False
 
     #------------------------------------
-    # set_initial_preds_and_loss 
+    # _initialize_loss 
     #-------------------
     
-    def set_initial_preds_and_loss(self, outputs, loss):
+    def _initialize_loss(self, loss):
         '''
-        Convert outputs logits first into probabilities
-        via softmax, then into class IDs via argmax. 
-        The result is return as part of the result tuple
+        Called by ResultTally constructor to
+        initialize self.losses and self.mean_loss.
         
         The loss is as encountered during one batch.
         Turn that into loss/sample, and 
         to this ResultTally's loss instance var, and
-        return it as the other part of the inst var. 
+        return it as the other part of the return
+        tuple. 
+
+        @param loss: initial loss from training
+        @type loss: torch.Tensor
+        '''
+
+        # Loss is per batch. Convert the number
+        # to loss per sample (within each batch):
+        new_loss = loss.detach() / self.batch_size
+        # Add a dimension so we can later
+        # add more loss tensors:
+        self.losses = new_loss.unsqueeze(dim=0)
+        self.mean_loss = torch.mean(self.losses)
         
+    #------------------------------------
+    # _set_initial_preds 
+    #-------------------
+    
+    def _set_initial_preds(self, outputs):
+        '''
+        Convert outputs logits first into probabilities
+        via softmax, then into class IDs via argmax. 
+        The result is assigned to self.preds.
+       
         @param outputs: raw outputs from model
         @type outputs: torch.Tensor
-        @param loss: loss during one batch
-        @type loss: torch.Tensor
-        @return predictions and loss
-        @rtype ([int], torch.Tensor())
         '''
         
-        # For a batch_size of 2 we output logits like:
+        # Ex.: For a batch_size of 2 we output logits like:
         #
         #     tensor([[0.0162, 0.0096, 0.0925, 0.0157],
         #             [0.0208, 0.0087, 0.0922, 0.0141]], grad_fn=<AddmmBackward>)
@@ -503,14 +540,6 @@ class ResultTally:
         
         pred_tensor = torch.argmax(pred_probs, dim=1)
         self.preds = pred_tensor.tolist()
-
-        # Loss is per batch. Convert the number
-        # to loss per sample (within each batch):
-        new_loss = loss.detach() / self.batch_size
-        # Add a dimension so we can later
-        # add more loss tensors:
-        self.losses = new_loss.unsqueeze(dim=0)
-        self.mean_loss = torch.mean(self.losses)
 
     #------------------------------------
     # compute_confusion_matrix
