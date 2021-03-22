@@ -38,6 +38,7 @@ setup(
                         'nose2>=0.9.2',     # For testing
                         'tensorflow-plot>=0.3.2',
                         'psutil>=5.8.0',
+                        'adjustText>=0.7.3',
                         ],
 
     tests_require    =[

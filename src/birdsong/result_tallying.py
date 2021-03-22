@@ -67,8 +67,15 @@ class ResultCollection(dict):
                 all_tallies = self._sorted_train_tallies.copy()
             elif phase == LearningPhase.VALIDATING:
                 all_tallies = self._sorted_val_tallies.copy()
+            elif phase == LearningPhase.TESTING:
+                # We are not maintaining a separate
+                # tally instance list:
+                all_tallies = self._sorted_tallies.copy()
+                all_tallies = filter(lambda t: t.phase == LearningPhase.TESTING,
+                                     all_tallies
+                                     )
             else:
-                raise ValueError(f"Only TRAINING and VALIDATING learning phases supported, not {str(phase)}")
+                raise ValueError(f"Only TRAINING, VALIDATING, and TESTING learning phases supported, not {str(phase)}")
         else:
             all_tallies = self._sorted_tallies.copy()
             

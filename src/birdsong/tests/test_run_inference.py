@@ -63,7 +63,7 @@ class InferenceTester(unittest.TestCase):
     # test_inference
     #-------------------
     
-    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_inference(self):
         # We have 60 test images. So, 
         # with drop_last True, a batch size
@@ -76,9 +76,37 @@ class InferenceTester(unittest.TestCase):
             batch_size=16,
             labels_path=self.labels_path
             )
-        coll = inferencer.run_inference()
-        print(coll)
-        
+        print('Running inference...')
+        tally_coll = inferencer.run_inference()
+        print('Done running inference.')
+
+        # Should have 60 // 16 == 3 tallies:
+        self.assertEqual(len(tally_coll), 3)
+        self.assertEqual(list(tally_coll.keys()),
+                         [(0, 'TESTING'), (1, 'TESTING'), (2, 'TESTING')]
+                         )
+        tally0 = tally_coll[(0, 'TESTING')]
+        self.assertEqual(tally0.batch_size, 16)
+
+    #------------------------------------
+    # test__report_charted_results
+    #-------------------
+    
+    #****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test__report_charted_results(self):
+        inferencer = Inferencer(
+            self.saved_model,
+            self.samples_path,
+            batch_size=16,
+            labels_path=self.labels_path
+            )
+        print('Running inference...')
+        tally_coll = inferencer.run_inference()
+        print('Done running inference.')
+
+        inferencer._report_charted_results(tally_coll)
+        print('done')
+
 # ---------------------- Main -------------
 
 if __name__ == "__main__":

@@ -17,11 +17,13 @@ import torch
 from torch.utils.data.dataloader import DataLoader
 from torchvision.datasets.folder import ImageFolder
 
+from birdsong.ml_plotting.classification_charts import ClassificationPlotter
 from birdsong.nets import NetUtils
 from birdsong.result_tallying import ResultTally, ResultCollection
 from birdsong.utils.github_table_maker import GithubTableMaker
 from birdsong.utils.learning_phase import LearningPhase
-from birdsong.utils.tensorboard_plotter import SummaryWriterPlus
+from birdsong.utils.tensorboard_plotter import SummaryWriterPlus, \
+    TensorBoardPlotter
 from birdsong.utils.utilities import FileUtils, CSVWriterCloseable
 
 
@@ -106,58 +108,111 @@ class Inferencer:
     
     def run_inference(self):
         
-        if torch.cuda.is_available():
-            self.model.load_state_dict(torch.load(self.model_path))
-        else:
-            self.model.load_state_dict(torch.load(
-                self.model_path,
-                map_location=torch.device('cpu')
-                ))
-
-        loss_fn = nn.CrossEntropyLoss()
-
-        result_coll = ResultCollection()
+        try:
+            if torch.cuda.is_available():
+                self.model.load_state_dict(torch.load(self.model_path))
+            else:
+                self.model.load_state_dict(torch.load(
+                    self.model_path,
+                    map_location=torch.device('cpu')
+                    ))
+    
+            loss_fn = nn.CrossEntropyLoss()
+    
+            result_coll = ResultCollection()
+                    
+            self.model.eval()
+            with torch.no_grad():
                 
-        self.model.eval()
-        with torch.no_grad():
-            #***** Loader has 0 samples
-            for batch_num, (batch, targets) in enumerate(self.loader):
-                if torch.cuda.is_available():
-                    images = FileUtils.to_device(batch, 'gpu')
-                    labels = FileUtils.to_device(targets, 'gpu')
-                else:
-                    images = batch
-                    labels = targets
-                
-                outputs = self.model(images)
-                loss    = loss_fn(outputs, labels)
-                
-                images  = FileUtils.to_device(images, 'cpu')
-                outputs = FileUtils.to_device(outputs, 'cpu')
-                labels  = FileUtils.to_device(labels, 'cpu')
-                loss    = FileUtils.to_device(loss, 'cpu')
-                
-                tally = ResultTally(batch_num,
-                                    LearningPhase.TESTING,
-                                    outputs, 
-                                    labels, 
-                                    loss,
-                                    self.num_classes,
-                                    self.batch_size)
-                result_coll.add(tally)
-                del images
-                del outputs
-                del labels
-                del loss
-                torch.cuda.empty_cache()
-        
+                for batch_num, (batch, targets) in enumerate(self.loader):
+                    if torch.cuda.is_available():
+                        images = FileUtils.to_device(batch, 'gpu')
+                        labels = FileUtils.to_device(targets, 'gpu')
+                    else:
+                        images = batch
+                        labels = targets
+                    
+                    outputs = self.model(images)
+                    loss    = loss_fn(outputs, labels)
+                    
+                    images  = FileUtils.to_device(images, 'cpu')
+                    outputs = FileUtils.to_device(outputs, 'cpu')
+                    labels  = FileUtils.to_device(labels, 'cpu')
+                    loss    = FileUtils.to_device(loss, 'cpu')
+                    
+                    # Specify the batch_num in place
+                    # of an epoch, which is not applicatble
+                    # during testing:
+                    tally = ResultTally(batch_num,
+                                        LearningPhase.TESTING,
+                                        outputs, 
+                                        labels, 
+                                        loss,
+                                        self.num_classes,
+                                        self.batch_size)
+                    result_coll.add(tally, epoch=None)
+                    del images
+                    del outputs
+                    del labels
+                    del loss
+                    torch.cuda.empty_cache()
+        finally:
+            self.close()
+            
         return result_coll
-        
+    
     #------------------------------------
-    # report_result 
+    # report_results 
     #-------------------
     
-    def report_result(self, tally_col):
+    def report_results(self, tally_coll):
+        self._report_textual_results(tally_coll)
+        self._report_charted_results(tally_coll)
+        
+    #------------------------------------
+    # _report_charted_results 
+    #-------------------
+    
+    def _report_charted_results(self, tally_coll):
+
+        # Concatenate all the labels and preds 
+        # respectively, of all the batches:
+        
+        all_labels = []
+        all_preds  = []
+        for tally in tally_coll.tallies(phase=LearningPhase.TESTING) :
+            all_labels.extend(tally.labels)
+
+            all_preds.extend(tally.preds)
+        
+        (all_curves_info, mAP) = \
+          TensorBoardPlotter.compute_multiclass_pr_curve(all_labels,
+                                                         all_preds
+                                                         )
+        (_num_classes, fig) = \
+          ClassificationPlotter.chart_pr_curves(all_curves_info)
+          
+        fig.show()
+
+    #------------------------------------
+    # close 
+    #-------------------
+    
+    def close(self):
+        try:
+            self.writer.close()
+        except Exception as e:
+            print(f"Could not close tensorboard writer: {repr(e)}")
+        try:
+            self.csv_writer.close()
+        except Exception as e:
+            print(f"Could not close CSV writer: {repr(e)}")
+
+    #------------------------------------
+    # _report_textual_results 
+    #-------------------
+    
+    def _report_textual_results(self, tally_coll):
         '''
         Give a sequence of tallies with results
         from a series of batches, create long
@@ -167,8 +222,8 @@ class Inferencer:
         to tensorboard if possible, and return the
         table text.
         
-        @param tally_col: collect of tallies from batches
-        @type tally_col: ResultCollection
+        @param tally_coll: collect of tallies from batches
+        @type tally_coll: ResultCollection
         @return table of results
         @rtype: str
         '''
@@ -176,7 +231,7 @@ class Inferencer:
         all_preds   = []
         all_labels  = []
         
-        for tally in tally_col:
+        for tally in tally_coll:
             all_preds.extend(tally.outputs)
             all_labels.extend(tally.labels)
         
