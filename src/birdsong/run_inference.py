@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import sys
 
+from logging_service.logging_service import LoggingService
 from sklearn.metrics import accuracy_score, balanced_accuracy_score
 from sklearn.metrics import f1_score
 from sklearn.metrics import precision_score, recall_score 
@@ -40,7 +41,8 @@ class Inferencer:
                  model_path, 
                  samples_path,
                  batch_size=None, 
-                 labels_path=None):
+                 labels_path=None
+                 ):
         '''
         Constructor
         '''
@@ -49,6 +51,8 @@ class Inferencer:
         self.labels_path = labels_path
         
         self.IMG_EXTENSIONS = FileUtils.IMG_EXTENSIONS
+        
+        self.log = LoggingService()
         
         curr_dir          = os.path.dirname(__file__)
         model_fname       = os.path.basename(model_path)
@@ -76,7 +80,7 @@ class Inferencer:
         self.writer = SummaryWriterPlus(log_dir=tensorboard_dest)
         
         transformations = FileUtils.get_image_transforms()
-        dataset = ImageFolder(samples_path,
+        dataset = ImageFolder(self.samples_path,
                               transformations,
                               is_valid_file=lambda file: Path(file).suffix \
                                                in self.IMG_EXTENSIONS
@@ -107,20 +111,56 @@ class Inferencer:
     #-------------------
     
     def run_inference(self):
+        '''
+        Runs model over dataloader. Along
+        the way: creates ResultTally for each
+        batch, and maintains dict instance variabel
+        self.raw_results for later conversion of
+        logits to class IDs under different threshold
+        assumptions. 
         
+        self.raw_results: 
+                {'all_outputs' : <arr>,
+                 'all_labels'  : <arr>
+                 }
+        
+        Returns a ResultCollection with the
+        ResultTally instances of each batch.
+        
+        @return: collection of tallies, one for each batch,
+            or None if something went wrong.
+        @rtype: {None | ResultCollection}
+        '''
+        # Just in case the loop never runs:
+        batch_num   = -1
+
         try:
-            if torch.cuda.is_available():
-                self.model.load_state_dict(torch.load(self.model_path))
-            else:
-                self.model.load_state_dict(torch.load(
-                    self.model_path,
-                    map_location=torch.device('cpu')
-                    ))
-    
+            try:
+                if torch.cuda.is_available():
+                    self.model.load_state_dict(torch.load(self.model_path))
+                else:
+                    self.model.load_state_dict(torch.load(
+                        self.model_path,
+                        map_location=torch.device('cpu')
+                        ))
+            except RuntimeError as e:
+                emsg = repr(e)
+                if emsg.find("size mismatch for conv1") > -1:
+                    emsg += " Maybe model was trained with to_grayscale=False, but local net created for grayscale?"
+                    raise RuntimeError(emsg) from e
+
             loss_fn = nn.CrossEntropyLoss()
     
             result_coll = ResultCollection()
-                    
+            
+            # Save all per-class logits for ability
+            # later to use different thresholds for
+            # conversion to class IDs:
+            
+            all_outputs = []
+            all_labels  = []
+
+            self.log.info("Begin inference...")
             self.model.eval()
             with torch.no_grad():
                 
@@ -151,12 +191,60 @@ class Inferencer:
                                         self.num_classes,
                                         self.batch_size)
                     result_coll.add(tally, epoch=None)
+                    
+                    all_outputs.append(outputs)
+                    all_labels.append(labels)
+                    
                     del images
                     del outputs
                     del labels
                     del loss
                     torch.cuda.empty_cache()
         finally:
+            
+            self.log.info("Done with inference.")
+            # Total number of batches we ran:
+            num_batches = 1 + batch_num # b/c of zero-base
+            
+            # If loader delivered nothing, the loop
+            # never ran; warn, and get out:
+            if num_batches == 0:
+                self.log.warn(f"Dataloader delivered no data from {self.samples_path}")
+                self.close()
+                return None
+            
+            # Var all_outputs is now:
+            #  [tensor([pred_cl0, pred_cl1, pred_cl<num_classes - 1>], # For sample0
+            #   tensor([pred_cl0, pred_cl1, pred_cl<num_classes - 1>], # For sample1
+            #                     ...
+            #   ]
+            # Make into one tensor: (num_batches, batch_size, num_classes):
+            
+            self.all_outputs_tn = torch.stack(all_outputs)
+            # Be afraid...be very afraid:
+            assert(self.all_outputs_tn.shape == \
+                   torch.Size([num_batches, 
+                               self.batch_size, 
+                               self.num_classes])
+                   )
+            
+            # Var all_labels is now num-batches tensors,
+            # each containing batch_size labels:
+            assert(len(all_labels) == num_batches)
+            
+            # list of single-number tensors. Make
+            # into one tensor:
+            self.all_labels_tn = torch.stack(all_labels)
+            assert(self.all_labels_tn.shape == \
+                   torch.Size([num_batches, self.batch_size])
+                   )
+            # And equivalently:
+            assert(self.all_labels_tn.shape == \
+                   (self.all_outputs_tn.shape[0], 
+                    self.all_outputs_tn.shape[1]
+                    )
+                   )
+            
             self.close()
             
         return result_coll
@@ -173,24 +261,26 @@ class Inferencer:
     # _report_charted_results 
     #-------------------
     
-    def _report_charted_results(self, tally_coll):
-
-        # Concatenate all the labels and preds 
-        # respectively, of all the batches:
+    def _report_charted_results(self, thresholds=None):
+        '''
+        Computes and (pyplot-)shows a precision-recall
+        curve. 
         
-        all_labels = []
-        all_preds  = []
-        for tally in tally_coll.tallies(phase=LearningPhase.TESTING) :
-            all_labels.extend(tally.labels)
+        @param thresholds: list of cutoff thresholds
+            for turning logits into class ID predictions.
+            If None, the default at TensorBoardPlotter.compute_multiclass_pr_curve()
+            is used.
+        @type thresholds: [float]
+        '''
 
-            all_preds.extend(tally.preds)
-        
         (all_curves_info, mAP) = \
-          TensorBoardPlotter.compute_multiclass_pr_curve(all_labels,
-                                                         all_preds
+          TensorBoardPlotter.compute_multiclass_pr_curve(self.all_labels_tn,
+                                                         self.all_outputs_tn,
+                                                         thresholds
                                                          )
         (_num_classes, fig) = \
           ClassificationPlotter.chart_pr_curves(all_curves_info)
+
           
         fig.show()
 
@@ -202,11 +292,11 @@ class Inferencer:
         try:
             self.writer.close()
         except Exception as e:
-            print(f"Could not close tensorboard writer: {repr(e)}")
+            self.log.err(f"Could not close tensorboard writer: {repr(e)}")
         try:
             self.csv_writer.close()
         except Exception as e:
-            print(f"Could not close CSV writer: {repr(e)}")
+            self.log.err(f"Could not close CSV writer: {repr(e)}")
 
     #------------------------------------
     # _report_textual_results 
@@ -235,21 +325,56 @@ class Inferencer:
             all_preds.extend(tally.outputs)
             all_labels.extend(tally.labels)
         
-        prec_macro       = precision_score(all_labels, all_preds, average='macro')
-        prec_micro       = precision_score(all_labels, all_preds, average='micro')
-        prec_weighted    = precision_score(all_labels, all_preds, average='weighted')
-        prec_by_class    = precision_score(all_labels, all_preds, average=None)
+        prec_macro       = precision_score(all_labels, 
+                                           all_preds, 
+                                           average='macro',
+                                           zero_division=0)
+        prec_micro       = precision_score(all_labels, 
+                                           all_preds, 
+                                           average='micro',
+                                           zero_division=0)
+        prec_weighted    = precision_score(all_labels, 
+                                           all_preds, 
+                                           average='weighted',
+                                           zero_division=0)
+        prec_by_class    = precision_score(all_labels, 
+                                           all_preds, 
+                                           average=None,
+                                           zero_division=0)
         
-        recall_macro     = recall_score(all_labels, all_preds, average='macro')
-        recall_micro     = recall_score(all_labels, all_preds, average='micro')
-        recall_weighted = recall_score(all_labels, all_preds, average='weighted')
-        recall_by_class  = recall_score(all_labels, all_preds, average=None)
-        
-        
-        f1_macro         = f1_score(all_labels, all_preds, average='macro')
-        f1_micro         = f1_score(all_labels, all_preds, average='micro')
-        f1_weighted      = f1_score(all_labels, all_preds, average='weighted')
-        f1_by_class      = f1_score(all_labels, all_preds, average=None)
+        recall_macro     = recall_score(all_labels, 
+                                        all_preds, 
+                                        average='macro',
+                                        zero_division=0)
+        recall_micro     = recall_score(all_labels, 
+                                        all_preds, 
+                                        average='micro',
+                                        zero_division=0)
+        recall_weighted = recall_score(all_labels, 
+                                       all_preds, 
+                                       average='weighted',
+                                       zero_division=0)
+        recall_by_class  = recall_score(all_labels, 
+                                        all_preds, 
+                                        average=None,
+                                        zero_division=0)
+
+        f1_macro         = f1_score(all_labels, 
+                                    all_preds, 
+                                    average='macro',
+                                    zero_division=0)
+        f1_micro         = f1_score(all_labels, 
+                                    all_preds, 
+                                    average='micro',
+                                    zero_division=0)
+        f1_weighted      = f1_score(all_labels, 
+                                    all_preds, 
+                                    average='weighted',
+                                    zero_division=0)
+        f1_by_class      = f1_score(all_labels, 
+                                    all_preds, 
+                                    average=None,
+                                    zero_division=0)
 
         accuracy          = accuracy_score(all_labels, all_preds)
         balanced_accuracy = balanced_accuracy_score(all_labels, all_preds)
@@ -305,25 +430,29 @@ if __name__ == '__main__':
                                      description="Run inference on given model"
                                      )
 
-    parser.add_argument('labels',
+    parser.add_argument('-l', '--labels_path',
                         help='optional path to labels for use in measures calcs; default: no measures',
                         default=None)
-    parser.add_argument('b', '--batch_size',
+    parser.add_argument('-b', '--batch_size',
                         help='batch size to use; default: parse from model path'
                         )
-    parser.add_argument('model',
+    parser.add_argument('model_path',
                         help='path to the saved Pytorch model',
                         default=None)
-    parser.add_argument('samples',
+    parser.add_argument('samples_path',
                         help='path to samples to run through model',
                         default=None)
 
     args = parser.parse_args();
 
-    infer = Inferencer(
-                 args.model_path, 
-                 args.samples_path,
-                 batch_size=args.batch_size, 
-                 labels_path=args.labels_path
-                 )
- 
+    inferencer = Inferencer(
+                    args.model_path, 
+                    args.samples_path,
+                    batch_size=args.batch_size, 
+                    labels_path=args.labels_path,
+                    )
+    res_coll = inferencer.run_inference()
+    if res_coll is None:
+        # Something went wrong (and was reported earlier)
+        sys.exit(1)
+    FileUtils.user_confirm("Hit any key to close images and end...")

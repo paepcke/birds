@@ -104,7 +104,8 @@ class InferenceTester(unittest.TestCase):
         tally_coll = inferencer.run_inference()
         print('Done running inference.')
 
-        inferencer._report_charted_results(tally_coll)
+        inferencer._report_charted_results(
+            thresholds=[0.2, 0.4, 0.6, 0.8, 1.0])
         print('done')
 
 # ---------------------- Main -------------

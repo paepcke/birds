@@ -39,6 +39,7 @@ setup(
                         'tensorflow-plot>=0.3.2',
                         'psutil>=5.8.0',
                         'adjustText>=0.7.3',
+                        'discrete-differentiator>=0.1',
                         ],
 
     tests_require    =[

@@ -850,16 +850,27 @@ class TensorBoardPlotter:
             o mAP aggregates the average_precision values
               across all classes. This is one number.
 
-        @param truth_labels:
-        @type truth_labels:
-        @param raw_preds:
-        @type raw_preds:
+        @param truth_labels: all truth labels shaped
+            torch.Size([num-batches, batch-size])
+        @type truth_labels: Tensor
+        @param raw_preds: the logits for each class for
+            each sample as 
+            torch.Shape([num-batches, batch-size, num-classes])
+        @type raw_preds: Tensor
         @return: (precisions, recalls, average_precisions, mAP)
         @rtype: ({int : [floats]}, {int : [floats]}, [floats], float)
         '''
-        # Find number of classes involved:
-        all_class_ids = set(truth_labels)
-        num_classes   = len(all_class_ids)
+        # REMOVE
+#         # Find number of classes involved:
+#         all_class_ids = set([tn.item() 
+#                              for tn 
+#                              in torch.flatten(truth_labels)])
+
+        (num_batches, 
+         batch_size, 
+         num_classes) = raw_preds.shape
+        
+        num_samples = num_batches * batch_size
         
         # Will alternately treat each class 
         # prediction as a one-vs-all binary
@@ -868,7 +879,9 @@ class TensorBoardPlotter:
         # Ex. let labels = [1,0,0,1,2]
         #      and preds = [0.3,0.6,0.1,0.7,0.9]
         #
-        # Convert the labels to a one-hot vector:
+        # Convert the labels to a one-hot vector;
+        # the width of the binarized labels is 
+        # num_classes:
         #
         #       L A B E L S               P R E D S
         #       ------------              ----------
@@ -880,15 +893,25 @@ class TensorBoardPlotter:
         #
         # Then evaluate each label column vector 
         # separately.
-
-        bin_labels = label_binarize(truth_labels,
+        
+        bin_labels = label_binarize(truth_labels.flatten(),
                                     classes=list(range(num_classes)))
 
-        # Make tensors just for manipulation
-        # convenience:
+        assert(bin_labels.shape == torch.Size([num_samples, num_classes])) 
+        assert(raw_preds.shape == \
+               torch.Size([num_batches, batch_size, num_classes])
+               )
         
-        bin_labels_tn = torch.tensor(bin_labels)
+        # Want straight down: logits for each class, for
+        # each sample ('lst' for 'list'):
         
+        raw_preds_lst = raw_preds.reshape([num_samples, num_classes])
+
+        assert(raw_preds_lst.shape == bin_labels.shape)
+        
+        # Turn logits into probs, rowise:
+        preds = torch.softmax(raw_preds_lst, dim=1) 
+
         # Place to hold the result dicts 
         # from compute_binary_pr_curve()
         # for each of the classes. This
@@ -897,31 +920,27 @@ class TensorBoardPlotter:
         all_curves_info = {}
         
         # Go through each column, class_id i.e. the
-        # 1/0-vector label columns and raw_preds 
+        # 1/0-vector label columns and preds 
         # columns for one class at
         # a time, and get the prec/rec numbers.
-        
-        for class_id in range(num_classes):
-            
-            # Get the raw predictions (logits or probs)
-            # for just the current class_id. Those preds
-            # correspond to the class_id'th column:
-            
-            bin_labels_arr = bin_labels_tn[:,class_id].tolist()
+
+        for col_idx in range(num_classes):
+            bin_label_col = torch.tensor(bin_labels[:,col_idx])
+            preds_col     = preds[:,col_idx]
 
             # Get all info for this single, binary
             # classification: list of 1/0 labels, and
             # list of floats, which are the preds for
             # the current class:
             
-            one_class_curve = cls.compute_binary_pr_curve(bin_labels_arr,
-                                                          raw_preds,
+            one_class_curve = cls.compute_binary_pr_curve(bin_label_col,
+                                                          preds_col,
                                                           thresholds)
             
             # Series of precs/recs at the 
             # different thresholds for the 
             # class in this loop
-            all_curves_info[class_id] = one_class_curve
+            all_curves_info[col_idx] = one_class_curve
 
         avg_precs = [binary_curve_info['avg_prec']
                      for binary_curve_info
@@ -939,7 +958,8 @@ class TensorBoardPlotter:
     def compute_binary_pr_curve(cls, 
                                 labels, 
                                 preds, 
-                                thresholds=None):
+                                thresholds=None,
+                                ):
         '''
         Return the recall (x-axis) and precision (y-axis)
         values of a PR curve, its average precision (AP),
@@ -970,15 +990,19 @@ class TensorBoardPlotter:
         Works for binary classification.
         But can use sklearn's label_binaries to compute 
         separate curves for each class 
-        (see compute_multiclass_pr_curve)
+        (see compute_multiclass_pr_curve())
         
         Differs from sklearn.precision_recall_curve() in
         that the sklearn method does not take a list
         of thresholds.  
         
-        Example:   
+        Example:
+        (preds are probabilities, but they
+         are from one class, different samples.
+         So dont' add to 1):
+        
                labels  = [1,1,0,1]
-               preds  = [0.2, 0.6, 0.1, 0.2]
+               preds  = [0.2, 0.4, 0.1, 0.2] 
           thresholds  = [0.3, 0.7]
           
           The predictions are turned into decisions like this:
@@ -987,7 +1011,7 @@ class TensorBoardPlotter:
           
           Two prec and rec computations are executed:
           
-            pr0:  prec and rec from [0, 1, 0, 0] 
+            pr0:  prec and rec from [1, 1, 0, 1] 
                                     [0, 1, 0, 0]
         
             pr1:  prec and rec from [1, 1, 0, 1]
@@ -1044,7 +1068,7 @@ class TensorBoardPlotter:
         @raises ValueError if labels hold more than 
             two distinct values
         '''
-        uniq_classes = set(labels)
+        uniq_classes = set(labels.tolist())
         if len(uniq_classes) > 2:
             raise ValueError(f"Labels limited to up to two distinct values; got {uniq_classes}")
 
@@ -1062,12 +1086,13 @@ class TensorBoardPlotter:
                 else:
                     y_pred.append(class_list[0])
     
+            y_pred_tn = torch.tensor(y_pred)
             precision = precision_score(y_true=labels, 
-                                        y_pred=y_pred, 
+                                        y_pred=y_pred_tn, 
                                         pos_label=class_list[1])
             
             recall    = recall_score(y_true=labels, 
-                                     y_pred=y_pred, 
+                                     y_pred=y_pred_tn, 
                                      pos_label=class_list[1])
             
             precisions.append(precision)
