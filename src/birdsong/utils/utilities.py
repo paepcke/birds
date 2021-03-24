@@ -809,61 +809,6 @@ class CSVWriterCloseable:
     def fname(self):
         return self._fname
 
-# -------------------- Differentiator ---------
-
-class Differentiator:
-    
-    #------------------------------------
-    # back_differentiation 
-    #-------------------
-    
-    @classmethod
-    def back_differentiation(cls, points, h=3):
-    
-        # h: Points to include in each step
-    
-        if len(points) < h+1:
-            raise ValueError(f"Number of points must be at least {h+1}")
-        
-        point_it = iter(points)
-
-        # Processed points:
-        arc_pts  = []
-    
-        # Get the first h points,
-        # over which the first derivative
-        # will be computed:
-        
-        for _i in range(h):
-            arc_pts.append(next(point_it))
-    
-        # Result will be here:
-        deriv_pts = []
-        
-        # The (f(i) - f(i-h))/h formula
-        # computed point by point:
-        
-        for idx, pt_val in enumerate(point_it):
-            diff = pt_val - points[idx] 
-            deriv_pts.append(diff / h)
-    
-        return deriv_pts
-    
-    #------------------------------------
-    # test 
-    #-------------------
-    
-    @classmethod
-    def test(cls):
-
-        pts = [1,2,3,4,5,6]
-        deriv_pts = cls.back_differentiation(pts)
-        assert(deriv_pts == [1.0,1.0,1.0])
-        
-        pts = [0, 0.5, 1.0, 1.5, 2.0, 2.5]
-        deriv_pts = cls.back_differentiation(pts)
-        assert(deriv_pts == [0.5,0.5,0.5])
-        
 # ------------------------ Main ------------
 if __name__ == '__main__':
     print("Testing Differentiator")
