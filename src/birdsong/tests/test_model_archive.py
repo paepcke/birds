@@ -60,7 +60,7 @@ class Test(unittest.TestCase):
     def test_construct_run_subdir(self):
 
         try:
-            subdir = self.archive.construct_run_subdir(
+            subdir = self.archive._construct_run_subdir(
                 self.config, 
                 4,               # Number of classes
                 self.model_dir)
@@ -87,7 +87,7 @@ class Test(unittest.TestCase):
             # the 'r'
             disambig_num = int(suffix[1:])
             
-            subdir1 = self.archive.construct_run_subdir(
+            subdir1 = self.archive._construct_run_subdir(
                 self.config, 
                 4,               # Number of classes
                 self.model_dir)

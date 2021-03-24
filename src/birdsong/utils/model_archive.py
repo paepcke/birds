@@ -18,20 +18,6 @@ class ModelArchive:
     classdocs
     '''
 
-    fname_elements = {
-        'net_name' : ('Training', str, 'net'),
-        'num_pretrained_layers' : ('Training', int, 'ini'),
-        'lr' : ('Training', float, 'lr'),
-        'optimizer' : ('Training', str, 'opt'),
-        'batch_size' : ('Training', int, 'bs'),
-        'kernel_size' : ('Training', int, 'ks'),
-        'num_folds' : ('Training', int, 'folds'),
-        'to_grayscale' : ('Training', bool, 'gray')
-        # a num_classes entry will be added by 
-        # construct_run_subdir()
-        }
-
-
     #------------------------------------
     # Constructor 
     #-------------------
@@ -94,7 +80,7 @@ class ModelArchive:
         # among model_root's siblings, and it will
         # be created:
         
-        self.run_subdir = self.construct_run_subdir(config, 
+        self.run_subdir = self._construct_run_subdir(config, 
                                                     num_classes,
                                                     self.model_root)
 
@@ -258,29 +244,31 @@ class ModelArchive:
 # ---------------- Utils -------------
 
     #------------------------------------
-    # construct_run_subdir 
+    # _construct_run_subdir 
     #-------------------
     
-    def construct_run_subdir(self, 
+    def _construct_run_subdir(self, 
                              config, 
                              num_classes, 
                              model_root):
         '''
         Constructs a directory name composed of
-        elements specified in cls.fname_elements.
+        elements specified in utility.py's 
+        FileUtils file/config info dicts.
+        
         Ensures that <model_root>/subdir_name does
         not exist. If it does, keeps adding '_r<n>'
         to the end of the dir name.
         
         Final str will look like this:
         
-            model_lr_0.001_bs_32_optimizer_Adam
+        model_2021-03-23T15_38_39_net_resnet18_pre_True_frz_6_bs_2_folds_5_opt_SGD_ks_7_lr_0.01_gray_False
             
         Details will depend on the passed in 
         configuration.
 
         Instance var fname_els_dict will contain 
-        all run attr/values needed for callse to 
+        all run attr/values needed for calls to 
         FileUtils.construct_filename() 
         
         @param config: run configuration
@@ -299,22 +287,26 @@ class ModelArchive:
         # pairs to include in the dir name:
          
         fname_els_dict = {}
-
-        for el_name, (config_sec, el_type, el_abbr) \
-                in self.fname_elements.items():
-            # Get sub-config dict:
-            section_dict = config[config_sec]
+        
+        section_dict   = config.Training 
+        
+        for el_name, el_abbr in FileUtils.fname_long_2_short.items():
+            
+            el_type = FileUtils.fname_el_types[el_abbr]
+            
             if el_type == int:
-                fname_els_dict[el_abbr] = section_dict.getint(el_name)
+                fname_els_dict[el_name] = section_dict.getint(el_name)
             elif el_type == str:
-                fname_els_dict[el_abbr] = section_dict.get(el_name)
+                fname_els_dict[el_name] = section_dict.get(el_name)
             elif el_type == float:
-                fname_els_dict[el_abbr] = section_dict.getfloat(el_name)
+                fname_els_dict[el_name] = section_dict.getfloat(el_name)
             elif el_type == bool:
-                fname_els_dict[el_abbr] = section_dict.getboolean(el_name)
-                
+                fname_els_dict[el_name] = section_dict.getboolean(el_name)
+            elif callable(el_type):
+                # A lambda or func. Apply it:
+                fname_els_dict[el_name] = el_type(el_name)
 
-        fname_els_dict['classes'] = num_classes
+        fname_els_dict['num_classes'] = num_classes
 
         # Save this root name:
         self.fname_els_dict = fname_els_dict

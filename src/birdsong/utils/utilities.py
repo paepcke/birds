@@ -270,7 +270,7 @@ class FileUtils:
         if incl_date:
             fname += f"_{cls.file_timestamp()}"
 
-        if type(props_info) != dict:
+        if not isinstance(props_info, dict):
             # An obj that promises attrs for each
             # needed value:
             property_dict = cls.make_run_props_dict(props_info)
@@ -278,7 +278,13 @@ class FileUtils:
             property_dict = props_info
             
         for prop_name, prop_val in property_dict.items():
-            fname += f"_{prop_name}_{str(prop_val)}"
+            try:
+                short_name = cls.fname_long_2_short[prop_name]
+            except KeyError:
+                # If property is not in the long2short dict,
+                # we don't want it as part of the file name:
+                continue
+            fname += f"_{short_name}_{str(prop_val)}"
 
         if suffix is not None:
             fname += suffix

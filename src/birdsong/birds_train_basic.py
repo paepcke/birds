@@ -389,8 +389,8 @@ class BirdsTrainBasic:
         train_tally = self.results[(epoch, str(LearningPhase.TRAINING))]
         
         result_coll = ResultCollection()
-        result_coll.add(epoch, val_tally)
-        result_coll.add(epoch, train_tally)
+        result_coll.add(val_tally, epoch)
+        result_coll.add(train_tally, epoch)
 
         self.latest_result = {'train': train_tally,
                               'val'  : val_tally
@@ -515,7 +515,7 @@ class BirdsTrainBasic:
             'net'       : self.net_name,
             'pretrained': f"{self.pretrained}",
             'lr_initial': self.config.Training.lr,
-            'optimizer' : self.config.Training.optimizer,
+            'optimizer' : self.config.Training.opt_name,
             'batch_size':  self.config.getint('Training', 'batch_size'),
             'kernel_size'  : self.config.getint('Training', 'kernel_size'),
             'to_grayscale' : self.to_grayscale
@@ -626,9 +626,10 @@ class BirdsTrainBasic:
         self.csv_writer = self.create_csv_writer(raw_data_dir)
         
         # Place to store intermediate models:
-        self.model_archive = self.create_model_archive(self.config, 
-                                                       self.num_classes
-                                                       )
+        self.model_archive = \
+            self.create_model_archive(self.config, 
+                                      self.num_classes
+                                      )
 
         # Use SummaryWriterPlus to avoid confusing
         # directory creations when calling add_hparams()
@@ -713,13 +714,13 @@ class BirdsTrainBasic:
 
         # Create both a raw dir sub-directory and a .csv file
         # for this run:
-        csv_subdir_name = FileUtils.construct_filename(self, 
+        csv_subdir_name = FileUtils.construct_filename(self.config.Training, 
                                                        prefix='Run', 
                                                        incl_date=True)
         os.makedirs(csv_subdir_name)
         
         # Create a csv file name:
-        csv_file_nm = FileUtils.construct_filename(self, 
+        csv_file_nm = FileUtils.construct_filename(self.config.Training, 
                                                    prefix='run',
                                                    suffix='.csv',
                                                    incl_date=True)

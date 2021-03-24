@@ -49,7 +49,7 @@ class NeuralNetConfig(DottableConfigParser):
             'max_epochs'  : 'Training',
             'batch_size'  : 'Training',
             'num_folds'   : 'Training',
-            'optimizer'   : 'Training',
+            'opt_name'    : 'Training',
             'loss_fn'     : 'Training',
             'weighted'    : 'Training',
             'kernel_size' : 'Training',
