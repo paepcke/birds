@@ -8,6 +8,7 @@ import random
 import warnings
 
 from PIL import Image, ImageDraw, ImageFont
+from logging_service.logging_service import LoggingService
 from matplotlib import cm as col_map
 from matplotlib import pyplot as plt
 from sklearn.metrics import confusion_matrix
@@ -69,6 +70,8 @@ class TensorBoardPlotter:
     passed in
     '''
     DISPLAY_HISTORY_LEN = 8
+
+    log = LoggingService()
     
     #------------------------------------
     # collection_to_tensorboard 
@@ -137,8 +140,8 @@ class TensorBoardPlotter:
                        for phase in phases
                        }
         except KeyError as e:
-            print(f"Epoch: {epoch}, phase: foo")
-        
+            cls.log.err(f"Epoch: {epoch}, phases: {phases}: {repr(e)}")
+            return
 
         for phase in phases:
             
