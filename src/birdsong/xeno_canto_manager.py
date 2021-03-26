@@ -863,6 +863,8 @@ class XenoCantoRecording:
         self.loc = recording_metadata['loc']
         self.recording_date = recording_metadata['date']
         self.length = recording_metadata['length']
+        # One of A-E, or 'no score'
+        self.rating = recording_metadata['q']
 
         # '.mp', '.wav':
         self.encoding = Path(recording_metadata['file-name']).suffix
@@ -1121,11 +1123,14 @@ if __name__ == '__main__':
     # Things user wants to do:
     parser.add_argument('--collect_info',
                         action='store_true',
-                        help="download metadata for the bird calls, but don't download sounds"
+                        help="download metadata for the bird calls, but don't download sounds",
+                        default=True
                         )
     parser.add_argument('--download',
                         action='store_true',
-                        help="download the (birds_to_process) sound files (implies --collect_info"
+                        help="download the (birds_to_process) sound files (implies --collect_info",
+                        default=False
+                        
                         )
     parser.add_argument('--all_recordings',
                         action='store_true',
