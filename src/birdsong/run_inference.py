@@ -40,12 +40,38 @@ class Inferencer:
     def __init__(self, 
                  model_path, 
                  samples_path,
-                 batch_size=None, 
+                 batch_size=1, 
                  labels_path=None
                  ):
         '''
-        Constructor
+        Given the path to a trained model,
+        and the path to the root of a set
+        of data, compute predictions.
+        
+        If labels_path is None, the subdirectory
+        names between the samples_path root,
+        and the samples themselves are used as
+        the ground truth labels.
+        
+        By default: run batches of size 1,
+        because we always have drop_last set
+        to True. For small test sets leaving
+        out any data at all isn't good. Caller
+        can still set batch_size higher to gain
+        speed if the testset is very large, so that
+        not inferencing on up to batch_size - 1 
+        samples is OK
+        
+        @param model_path:
+        @type model_path:
+        @param samples_path:
+        @type samples_path:
+        @param batch_size:
+        @type batch_size:
+        @param labels_path:
+        @type labels_path:
         '''
+
         self.model_path = model_path
         self.samples_path = samples_path
         self.labels_path = labels_path
@@ -114,7 +140,7 @@ class Inferencer:
         '''
         Runs model over dataloader. Along
         the way: creates ResultTally for each
-        batch, and maintains dict instance variabel
+        batch, and maintains dict instance variable
         self.raw_results for later conversion of
         logits to class IDs under different threshold
         assumptions. 
@@ -245,6 +271,7 @@ class Inferencer:
                     )
                    )
             
+            self.report_results(result_coll)
             self.close()
             
         return result_coll
@@ -255,33 +282,59 @@ class Inferencer:
     
     def report_results(self, tally_coll):
         self._report_textual_results(tally_coll)
-        self._report_charted_results(tally_coll)
-        
+        self._report_charted_results()
+
     #------------------------------------
     # _report_charted_results 
     #-------------------
     
     def _report_charted_results(self, thresholds=None):
         '''
-        Computes and (pyplot-)shows a precision-recall
-        curve. 
+        Computes and (pyplot-)shows a set of precision-recall
+        curves in one plot:
         
         @param thresholds: list of cutoff thresholds
             for turning logits into class ID predictions.
-            If None, the default at TensorBoardPlotter.compute_multiclass_pr_curve()
+            If None, the default at TensorBoardPlotter.compute_multiclass_pr_curves()
             is used.
         @type thresholds: [float]
         '''
 
-        (all_curves_info, mAP) = \
-          TensorBoardPlotter.compute_multiclass_pr_curve(self.all_labels_tn,
-                                                         self.all_outputs_tn,
-                                                         thresholds
-                                                         )
-        (_num_classes, fig) = \
-          ClassificationPlotter.chart_pr_curves(all_curves_info)
+        # Obtain a dict of CurveSpecification instances,
+        # one for each class, plus the mean Average Precision
+        # across all curves. The dict will be keyed
+        # by class ID:
 
+        (all_curves_info, mAP) = \
+          TensorBoardPlotter.compute_multiclass_pr_curves(
+              self.all_labels_tn,
+              self.all_outputs_tn,
+              thresholds
+              )
           
+        # Separate out the curves without 
+        # ill defined prec, rec, or f1:
+        well_defined_curves = filter(
+            lambda crv_obj: not(crv_obj['undef_prec'] or\
+                                crv_obj['undef_rec'] or\
+                                crv_obj['undef_f1']
+                                ),
+            all_curves_info.values()
+            )
+        
+        # Too many curves are clutter. Only
+        # show the best and worst by optimal f1:
+        f1_sorted = sorted(well_defined_curves,
+                           key=lambda obj: obj['best_op_pt']['f1']
+                           )
+        curves_to_show = {crv_obj['class_id'] : crv_obj
+                          for crv_obj in (f1_sorted[0], f1_sorted[-1])
+                          }
+        #********** Mixup with objs blurring together
+        
+        (_num_classes, fig) = \
+          ClassificationPlotter.chart_pr_curves(curves_to_show)
+
         fig.show()
 
     #------------------------------------
@@ -321,8 +374,8 @@ class Inferencer:
         all_preds   = []
         all_labels  = []
         
-        for tally in tally_coll:
-            all_preds.extend(tally.outputs)
+        for tally in tally_coll.tallies(phase=LearningPhase.TESTING):
+            all_preds.extend(tally.preds)
             all_labels.extend(tally.labels)
         
         prec_macro       = precision_score(all_labels, 
@@ -379,13 +432,13 @@ class Inferencer:
         accuracy          = accuracy_score(all_labels, all_preds)
         balanced_accuracy = balanced_accuracy_score(all_labels, all_preds)
         
-        conf_matrix = FileUtils.compute_confusion_matrix(
+        conf_matrix = TensorBoardPlotter.compute_confusion_matrix(
             all_labels,
             all_preds,
             self.num_classes,
             normalize=True
             )
-        FileUtils.conf_matrix_to_tensorboard(
+        TensorBoardPlotter.conf_matrix_to_tensorboard(
             self.writer,
             conf_matrix,
             self.class_names
@@ -434,7 +487,8 @@ if __name__ == '__main__':
                         help='optional path to labels for use in measures calcs; default: no measures',
                         default=None)
     parser.add_argument('-b', '--batch_size',
-                        help='batch size to use; default: parse from model path'
+                        help='batch size to use; default: 1',
+                        default=1
                         )
     parser.add_argument('model_path',
                         help='path to the saved Pytorch model',

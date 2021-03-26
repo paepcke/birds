@@ -344,9 +344,12 @@ class FileUtils:
                     str_val = fname_els[val_idx]
                     # Convert to proper datatype:
                     fname_el_val = cls.fname_el_types[short_name](str_val)
-                except IndexError as e:
-                    raise IndexError(f"Element {short_name} in {fname} has no value for {short_name} ({long_name})")\
-                        from e
+                except IndexError as _e:
+                    #raise IndexError(f"Element {short_name} in {fname} has no value for {short_name} ({long_name})")\
+                    #    from e
+                    fname_el_val = 'na'
+                except ValueError:
+                    fname_el_val = 'na'
                     
             prop_dict[long_name] = fname_el_val
             

@@ -11,6 +11,7 @@ from PIL import Image, ImageDraw, ImageFont
 from logging_service.logging_service import LoggingService
 from matplotlib import cm as col_map
 from matplotlib import pyplot as plt
+#from sklearn.exceptions import UndefinedMetricWarning
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics._classification import precision_score, recall_score
 from sklearn.metrics._ranking import average_precision_score
@@ -69,7 +70,10 @@ class TensorBoardPlotter:
     No SummaryWriter is created. A writer is always
     passed in
     '''
-    DISPLAY_HISTORY_LEN = 8
+    DISPLAY_HISTORY_LEN  = 8
+    # Value to assign to precision,
+    # recall, or f1 when divide by 0
+    DIV_BY_ZERO = 0
 
     log = LoggingService()
     
@@ -261,15 +265,12 @@ class TensorBoardPlotter:
 
         bin_labels = label_binarize(truth_labels,
                                     classes=list(range(num_classes)))
-        
-        bin_preds  = label_binarize(pred_class_ids,
-                                    classes=list(range(num_classes)))
 
         # Make tensors just for manipulation
         # convenience:
         
         bin_labels_tn = torch.tensor(bin_labels)
-        bin_preds_tn  = torch.tensor(bin_preds)
+        preds_tn      = torch.tensor(pred_class_ids)
         
         precisions = dict()
         recalls = dict()
@@ -287,13 +288,13 @@ class TensorBoardPlotter:
         for i in range(num_classes):
             
             bin_labels_arr = bin_labels_tn[:,i].tolist()
-            bin_preds_arr  = bin_preds_tn[:,i].tolist()
+            preds_arr  = preds_tn.tolist()
             
             # Get precision and recall at each
-            # of threshold = [0.2, 0.4, 0.6, 0.8, 1.0]
+            # of the default thresholds:
             precs, recs = \
                 cls.compute_binary_pr_curve(bin_labels_arr,
-                                     bin_preds_arr
+                                     preds_arr
                                      )
             precisions[i] = precs
             recalls[i]    = recs
@@ -308,7 +309,7 @@ class TensorBoardPlotter:
             
             average_precisions[i] = \
                 average_precision_score(bin_labels_arr,
-                                        bin_preds_arr,
+                                        preds_arr,
                                         average='macro',
                                         )
                 
@@ -765,14 +766,14 @@ class TensorBoardPlotter:
         return norm_cm 
 
     #------------------------------------
-    # compute_multiclass_pr_curve 
+    # compute_multiclass_pr_curves 
     #-------------------
     
     @classmethod
-    def compute_multiclass_pr_curve(cls,
+    def compute_multiclass_pr_curves(cls,
                                     truth_labels, 
                                     raw_preds,
-                                    thresholds=[0.2, 0.4, 0.6, 0.8, 1.0]
+                                    thresholds=[0.2, 0.4, 0.6, 0.8]
                                     ):
         '''
         Computes the data needed to draw
@@ -863,11 +864,6 @@ class TensorBoardPlotter:
         @return: (precisions, recalls, average_precisions, mAP)
         @rtype: ({int : [floats]}, {int : [floats]}, [floats], float)
         '''
-        # REMOVE
-#         # Find number of classes involved:
-#         all_class_ids = set([tn.item() 
-#                              for tn 
-#                              in torch.flatten(truth_labels)])
 
         (num_batches, 
          batch_size, 
@@ -936,13 +932,29 @@ class TensorBoardPlotter:
             # list of floats, which are the preds for
             # the current class:
             
+            #**************
+            # # Using sklearn's precision_recall_curve,
+            # # which determines thresholds by its own
+            # # algorithm:
+            #
+            # from sklearn.metrics import precision_recall_curve 
+            # sklearn_precs,\
+            # sklearn_recs,\
+            # sklearn_thresholds = \
+            #     precision_recall_curve(bin_label_col, preds_col)
+            #**************
+
+            # Obtain the information needed to 
+            # draw one PR curve: a CurveSpecification
+            # instance:
             one_class_curve = cls.compute_binary_pr_curve(bin_label_col,
                                                           preds_col,
-                                                          thresholds)
-            
-            # Series of precs/recs at the 
-            # different thresholds for the 
-            # class in this loop
+                                                          col_idx,   # class_id
+                                                          thresholds
+                                                          )
+
+            # Accumulate the curve indices 
+            # in a dict, keyed by class ID:
             all_curves_info[col_idx] = one_class_curve
 
         avg_precs = [binary_curve_info['avg_prec']
@@ -960,30 +972,34 @@ class TensorBoardPlotter:
     @classmethod
     def compute_binary_pr_curve(cls, 
                                 labels, 
-                                preds, 
+                                preds,
+                                class_id,
                                 thresholds=None,
                                 ):
         '''
         Return the recall (x-axis) and precision (y-axis)
         values of a PR curve, its average precision (AP),
-        and a dict specifying the optimal threshold, 
-        with corresponding f1, precision, and recall values:
+        and optimal threshold with corresponding f1, precision, 
+        and recall values
         
-        best_op_pt: 
-            {'threshold' : <optimal decision probability value>
-             'f1'        : <f1 at the optimal threshold>
-             'prec'      : <precision at the optimal threshold>
-             'rec'       : <recall at the optimal threshold>
-            }
+        The optimal threshold's prec and rec yield the
+        maximum f1 score. Information provided in the 
+        BestOperatingPoint instance that is part of this
+        method's return:
+        
+            threshold
+            f1
+            prec
+            rec
 
-        The result is packaged as a dict:
+        The result is packaged as a CurveSpecification
+        that contains:
         
-        res = {'best_op_pt' : best_operating_pt,
-               'precisions' : precisions,
-               'recalls'    : recalls,
-               'thresholds' : thresholds,
-               'avg_prec'   : avg_precision
-               }
+        	best_op_pt
+        	precisions
+        	recalls
+        	thresholds
+        	avg_prec'
 
         Procedure:
         
@@ -993,7 +1009,7 @@ class TensorBoardPlotter:
         Works for binary classification.
         But can use sklearn's label_binaries to compute 
         separate curves for each class 
-        (see compute_multiclass_pr_curve())
+        (see compute_multiclass_pr_curves())
         
         Differs from sklearn.precision_recall_curve() in
         that the sklearn method does not take a list
@@ -1046,58 +1062,119 @@ class TensorBoardPlotter:
           recall at the kth threshold. By definition,
           preds_n = 1, recs_n = 0.
 
-          Returned:
-              {'best_op_pt' : best_operating_pt,
-               'precisions' : precs,
-               'recalls'    : recs
-               'avg_prec'   : AP
-               }
+          Returned: a CurveSpecification instance
+              containing:
+                  best_op_pt
+                  precisions
+                  recalls
+                  avg_prec
 
-                  
         @param labels: integer binary class labels.
             Exs.: [1,1,0,0], ['yes', 'yes', 'no', 'yes']
         @type labels: [int | str]
         @param preds: predictions output from a classifier.
             May be floats or integers
         @type preds: [float | int]
+        @param class_id: ID of target class for which this
+            curve is being constructed
+        @type class_id: {int | str}
         @param thresholds: list of decision thresholds to
             decide whether preds are one class or the other.
             If None, uses [0.2, 0.4, 0.6, 0.8, 1]
         @type thresholds: [float | int]
-        @return: dict with optimal operating point,
-            and lists with prec and recall ready 
-            for drawing a PR curve
-        @rtype: ({str : float}, [float], [float])
+        @return: CurveSpecification instances with optimal 
+            operating point, and lists with prec and recall 
+            ready for drawing a PR curve
+        @rtype: CurveSpecification
         @raises ValueError if labels hold more than 
             two distinct values
         '''
-        uniq_classes = set(labels.tolist())
+        if type(labels) != list:
+            labels = labels.tolist()
+            
+        uniq_classes = set(labels)
+        
         if len(uniq_classes) > 2:
             raise ValueError(f"Labels limited to up to two distinct values; got {uniq_classes}")
 
         if thresholds is None:
-            thresholds = [0.2, 0.4, 0.6, 0.8, 1]
+            thresholds = [0.2, 0.4, 0.6, 0.8]
         precisions = []
         recalls = []
         class_list = list(uniq_classes)
+        # Degenerate case: Only a single
+        # class ever occurs in the labels.
+        # To make the code below work, we
+        # add a copy of that only class to
+        # the class list of known classes,
+        # and log a warning:
+        if len(class_list) == 1:
+            cls.log.warn(f"Only label {class_list[0]} occurs; always guessing that value.")
+        class_list.append(class_list[0])
+        
+        # So far, no undefined recall or precision
+        # i.e. no 0-denominator found:
+        undef_prec = False
+        undef_rec  = False
+        undef_f1   = False
         
         for threshold in thresholds:
             y_pred = []
             for pred in preds:
+                # Instead of just class_list[1],
+                # must guard against only one
+                # class (ID=0) in the labels.
+                # In that special case, we always
+                # predict 0:
                 if pred >= threshold:
                     y_pred.append(class_list[1])
                 else:
                     y_pred.append(class_list[0])
     
             y_pred_tn = torch.tensor(y_pred)
-            precision = precision_score(y_true=labels, 
-                                        y_pred=y_pred_tn, 
-                                        pos_label=class_list[1])
             
-            recall    = recall_score(y_true=labels, 
-                                     y_pred=y_pred_tn, 
-                                     pos_label=class_list[1])
+            # For 'No positive exist and classifier
+            # properly doesn't predict a positive,
+            # use:
+            #      precision=1
+            #      recall   =1
+            # In this case prec and rec are undefined,
+            # causing division by 0:
             
+            try:
+                
+                with warnings.catch_warnings():
+                    # Action to take: Ignore 
+                    warnings.filterwarnings("error",
+                                            #category=UndefinedMetricWarning,
+                                            category=UserWarning,
+                                            )
+                    precision = precision_score(y_true=labels, 
+                                                y_pred=y_pred_tn, 
+                                                pos_label=class_list[1],
+                                                    zero_division='warn')
+            except Exception as _e:
+                # Was it a div by zero from the prec calc?
+                undef_prec = True
+                precision  = cls.DIV_BY_ZERO
+                
+            try:
+                
+                with warnings.catch_warnings():
+                    # Action to take: Ignore 
+                    warnings.filterwarnings("error",
+                                            #category=UndefinedMetricWarning
+                                            category=UserWarning
+                                            )
+                    recall    = recall_score(y_true=labels, 
+                                             y_pred=y_pred_tn, 
+                                             pos_label=class_list[1],
+                                             zero_division=cls.DIV_BY_ZERO)
+            except Exception as _e:
+                # Was it a div by zero from the prec calc?
+                undef_rec = True
+                recall  = cls.DIV_BY_ZERO
+
             precisions.append(precision)
             recalls.append(recall)
 
@@ -1105,22 +1182,28 @@ class TensorBoardPlotter:
         recs_np  = np.array(recalls)
 
         with warnings.catch_warnings():
-            warnings.filterwarnings("ignore",
-                                    category=RuntimeWarning,
-                                    message='invalid value encountered in true_divide'
-                                    )
-            f1_scores = 2 * (precs_np * recs_np) / (precs_np + recs_np)
-            # When both prec and recall are 0,
-            # set f1 to zero:
-            np.nan_to_num(f1_scores, copy=False)
-            
+            try:
+                warnings.filterwarnings("error",
+                                        #category=UndefinedMetricWarning
+                                        category=UserWarning
+                                        )
+                f1_scores = 2 * (precs_np * recs_np) / (precs_np + recs_np)
+            except Exception as _e:
+                # Was it a div by zero from the prec calc?
+                undef_f1= True
+                # When both prec and recall are 0,
+                # set f1 to zero:
+                f1_scores = torch.tensor(
+                    [cls.DIV_BY_ZERO]*len(precs_np))
+
         best_op_idx = np.argmax(f1_scores)
         
-        best_operating_pt = {'threshold' : thresholds[best_op_idx],
-                             'f1'        : f1_scores[best_op_idx],
-                             'prec'      : precisions[best_op_idx],
-                             'rec'       : recalls[best_op_idx]
-                             }
+        best_operating_pt = BestOperatingPoint(
+            thresholds[best_op_idx],
+            f1_scores[best_op_idx],
+            precisions[best_op_idx],
+            recalls[best_op_idx]
+            )            
 
         # To make average_precision computation
         # work:
@@ -1130,12 +1213,17 @@ class TensorBoardPlotter:
         avg_precision = \
             np.sum((recs_np_padded[:-1] - recs_np_padded[1:]) * precs_np_padded[:-1])
         
-        res = {'best_op_pt' : best_operating_pt,
-               'precisions' : precisions,
-               'recalls'    : recalls,
-               'thresholds' : thresholds,
-               'avg_prec'   : avg_precision
-               }
+        res = CurveSpecification(best_operating_pt,
+                                 recs_np_padded,
+                                 precs_np_padded,
+                                 thresholds,
+                                 avg_precision,
+                                 class_id,
+                                 undef_prec=undef_prec,
+                                 undef_rec=undef_rec,
+                                 undef_f1=undef_f1
+                                 )
+        
         return res
 
     #------------------------------------
@@ -1435,6 +1523,157 @@ class TensorBoardPlotter:
                 to_get_idxs.extend(sample_idxs)
 
         return to_get_idxs
+
+# --------------------- Class CurveSpecification ----------------
+
+class CurveSpecification(dict):
+    '''
+    Instances hold information about one 
+    classifier evaluation curve. Enough
+    information is included to draw 
+    a precision-recall curve.
+    
+         best_operating_pt: {'threshold' : thresholds[best_op_idx],
+                             'f1'        : f1_scores[best_op_idx],
+                             'prec'      : precisions[best_op_idx],
+                             'rec'       : recalls[best_op_idx]
+                             }
+         recalls          : list of recall values
+         precisions       : list of precision values
+         thresholds       : list of probability decision thresholds
+                            at which precions/recall pairs were computed
+         avg_precision    : the Average Precision (AP) of all the points
+         class_id         : ID (int or str) for which instances is a curve
+         
+    The precisions and recalls array-likes form
+    the x/y pairs when zipped. 
+    '''
+    
+    #------------------------------------
+    # Constructor 
+    #-------------------
+    
+    def __init__(self,
+                 best_operating_pt,
+                 recalls,
+                 precisions,
+                 thresholds,
+                 avg_precision,
+                 class_id,
+                 **kwargs
+                 ):
+        '''
+        
+        @param best_operating_pt: information where on the 
+            curve the optimal F1 score is achieved
+        @type best_operating_pt: BestOperatingPoint
+        @param recalls: all recall values that with corresponding
+            precisions define the curve
+        @type recalls: [float]
+        @param precisions: all recall values that with corresponding
+            recall define the curve
+        @type precisions: [float]
+        @param thresholds: the decision thresholds at which the
+            (recall/precision) points on the curve were computed. 
+        @type thresholds: [float]
+        @param avg_precision: the average of all precisions (AP)
+        @type avg_precision: [float]
+        @param class_id: class for which this obj
+            is the pr-curve
+        @type class_id: {int | str}
+        
+        '''
+        
+        super().__init__()
+        self.__setitem__('best_op_pt', best_operating_pt)
+        self.__setitem__('recalls', recalls)
+        self.__setitem__('precisions', precisions)
+        self.__setitem__('thresholds', thresholds)
+        self.__setitem__('avg_prec', avg_precision)
+        self.__setitem__('class_id', class_id)
+        self.update(**kwargs)
+
+    #------------------------------------
+    # __repr__ 
+    #-------------------
+    
+    def __repr__(self):
+        uniq_id = hex(id(self))
+        rep = f"<CurveSpecification AP={self.__getitem__('avg_prec')} {uniq_id}>"
+        return(rep)
+
+    #------------------------------------
+    # __str__ 
+    #-------------------
+    
+    def __str__(self):
+        return repr(self)
+
+# ------------------ Class Best Operating Point -----------
+
+class BestOperatingPoint(dict):
+    '''
+    Instances hold information about the 
+    optimal point on a PR curve. That is
+    the decision threshold where the corresponding
+    recall/precision yields the maximum F1 score
+    '''
+    
+    #------------------------------------
+    # Constructor
+    #-------------------
+    
+    def __init__(self,
+                 threshold,
+                 f1_score,
+                 precision,
+                 recall
+                 ):
+        '''
+        
+        @param threshold: probability value that is the best
+            decision threshold between two classes
+        @type threshold: float
+        @param f1_score: the F1 score achieved at the 
+            given threshold's recall and precision
+        @type f1_score: float
+        @param precision: the precision value of the 
+            best operating point on the PR curve
+        @type precision: float
+        @param recall: the recall value of the 
+            best operating point on the PR curve
+        @type recall: float
+        '''
+        super().__init__()
+
+        if type(f1_score) == torch.Tensor:
+            f1_score = float(f1_score)
+        if type(precision) == torch.Tensor:
+            precision = float(precision)
+        if type(recall) == torch.Tensor:
+            recall = float(recall)
+
+        self.__setitem__('threshold', threshold)
+        self.__setitem__('f1', f1_score)
+        self.__setitem__('precision', precision)
+        self.__setitem__('recall', recall)
+
+    #------------------------------------
+    # __repr__ 
+    #-------------------
+    
+    def __repr__(self):
+        uniq_id = hex(id(self))
+        f1 = round(self.__getitem__('f1'), 2)
+        rep = f"<BestOpPoint f1={f1} {uniq_id}>"
+        return(rep)
+
+    #------------------------------------
+    # __str__ 
+    #-------------------
+    
+    def __str__(self):
+        return repr(self)
 
 # -------------------- Class SummaryWriterPlus ----------
 

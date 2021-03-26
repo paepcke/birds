@@ -43,7 +43,12 @@ class GithubTableMaker:
         flat_dict_vals.extend(content_dict['row_labels'])
         # The following obscurity flattens
         # nested lists:
-        flat_dict_vals.extend(list(itertools.chain(*content_dict['rows'])))
+        try:
+            flat_dict_vals.extend(list(itertools.chain(*content_dict['rows'])))
+        except TypeError:
+            # content_dict['rows'] is not a nested
+            # list; it's just a plain list:
+            flat_dict_vals.extend(content_dict['rows'])
         flat_vals_lengths = [len(str(el)) for el in flat_dict_vals]
         max_width = max(flat_vals_lengths)
 
@@ -82,6 +87,13 @@ class GithubTableMaker:
         
         # Add the rows:
         for row_num, row_arr in enumerate(content_dict['rows']):
+            
+            # For single-col tables, row_arr
+            # will be a single number, causing
+            # a type error in the padded_row 
+            # list comprehension. So:
+            if type(row_arr) != list:
+                row_arr = [row_arr]
             
             if not have_row_labels:
                 row_str = f"|"

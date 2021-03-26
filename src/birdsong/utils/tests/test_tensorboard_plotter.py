@@ -3,6 +3,7 @@ Created on Jan 25, 2021
 
 @author: paepcke
 '''
+#************* NEEDS WORK
 
 from copy import copy
 import os
@@ -10,11 +11,14 @@ import random
 import shutil
 import unittest
 
+import numpy as np
+
 from sklearn.metrics import confusion_matrix 
 from torch import Size
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
+from birdsong.ml_plotting.classification_charts import ClassificationPlotter
 from birdsong.result_tallying import ResultTally, ResultCollection
 from birdsong.rooted_image_dataset import SingleRootImageDataset
 from birdsong.utils.learning_phase import LearningPhase
@@ -22,7 +26,7 @@ from birdsong.utils.tensorboard_manager import TensorBoardManager
 from birdsong.utils.tensorboard_plotter import TensorBoardPlotter
 
 
-#***888TEST_ALL = True
+#****TEST_ALL = True
 TEST_ALL = False
 
 class TestTensorBoardPlotter(unittest.TestCase):
@@ -345,7 +349,7 @@ class TestTensorBoardPlotter(unittest.TestCase):
     # test_visualize_epoch 
     #-------------------
 
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_visualize_epoch_train_plus_val(self):
         
         tally0, _tally_val = self.make_tallies(testing=False)
@@ -450,7 +454,7 @@ class TestTensorBoardPlotter(unittest.TestCase):
     # test_degenerate_multiclass_pr_curve 
     #-------------------
     
-    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_degenerate_multiclass_pr_curve(self):
         # Use the multiclass_pr_curve() method
         # on a binary classification, and test
@@ -458,24 +462,54 @@ class TestTensorBoardPlotter(unittest.TestCase):
 
         # Same test case as in test_compute_binary_pr_curve():
         # Binary: 'member of class' (1) vs. 'other' (0)
-        labels      = [1,0,0,1,1,1,0,1,0,1,1,1,1,0,0,0]
-        preds       = [0.7, 0.3, 0.5, 0.6, 0.55, 0.9, 0.4, 0.2, 0.4, 0.3, 0.7, 0.5, 0.8, 0.2, 0.3, 0.35]
+        labels      = torch.tensor([1,0,0,1,1,1,0,1,0,1,1,1,1,0,0,0])
+        preds       = torch.tensor([0.7, 0.3, 0.5, 0.6, 0.55, 0.9, 0.4, 0.2, 0.4, 0.3, 0.7, 0.5, 0.8, 0.2, 0.3, 0.35])
         
         # Evaluate prec/rec at ten thresholds:
         thresholds  = [0.2,  0.25,  0.3,  0.35,  0.4,  0.45,  0.5,  0.55,  0.6,  0.65]        
         
         # Get optimal operating point, and
         # the individual precs and recs:
-        res_dict = TensorBoardPlotter.compute_multiclass_pr_curve(labels, 
-                                                                  preds, 
-                                                                  thresholds)
-        print(res_dict)
+        shaped_preds = preds.reshape(1,16,1)
+        curve_obj_list = TensorBoardPlotter.compute_multiclass_pr_curves(
+            labels, 
+            shaped_preds, 
+            thresholds)
+        
+        expected = ({0: {'best_op_pt': {'threshold': 0.2, 
+                                        'f1': 1.0, 
+                                        'precision': 1.0, 
+                                        'recall': 1.0}, 
+                         'recalls': np.array([1., 1., 1., 
+                                              1., 1., 1., 
+                                              1., 1., 1., 
+                                              1., 0.]), 
+                         'precisions': np.array([1., 1., 1., 
+                                                 1., 1., 1., 
+                                                 1., 1., 1., 
+                                                 1., 1.]), 
+                         'thresholds': [0.2, 0.25, 0.3, 
+                                        0.35, 0.4, 0.45, 
+                                        0.5, 0.55, 0.6, 0.65], 
+                         'avg_prec': 1.0}
+                    }, 
+                    1.0
+                   )
+        self.assertDictEqual(curve_obj_list[0]['best_op_pt'],
+                             expected[0]['best_op_pt'])
+        self.assertTrue((curve_obj_list[0]['recalls'] == expected[0]['recalls']).all())
+        self.assertTrue((curve_obj_list[0]['precisons'] == expected[0]['precisions']).all())
+        self.assertTrue((curve_obj_list[0]['thresholds'] == expected[0]['thresholds']).all())
+                
+        self.assertEqual(curve_obj_list[1], expected[1])
+
+        #print(curve_obj_list)
         
     #------------------------------------
     # test_compute_multiclass_pr_curve 
     #-------------------
     
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_compute_multiclass_pr_curve(self):
         '''
         Extend the [0,1] classes used in
@@ -500,16 +534,46 @@ class TestTensorBoardPlotter(unittest.TestCase):
         '''
         
         
-        labels = [1,0,0,1,1,1,0,1,0,1,1,1,1,0,0,0,
-                  2,0,0,2,2,2,0,2,0,2,2,2,2,0,0,0]
-        preds  = [0.7, 0.3, 0.5, 0.6, 0.55, 0.9, 0.4, 0.2, 0.4, 0.3, 0.7, 0.5, 0.8, 0.2, 0.3, 0.35,
-                  0.7, 0.3, 0.5, 0.6, 0.55, 0.9, 0.4, 0.2, 0.4, 0.3, 0.7, 0.5, 0.8, 0.2, 0.3, 0.35]
+        labels = torch.tensor([1,0,0,1,1,1,0,1,0,1,1,1,1,0,0,0,
+                  2,0,0,2,2,2,0,2,0,2,2,2,2,0,0,0])
+        preds  = torch.tensor([0.7, 0.3, 0.5, 0.6, 0.55, 0.9, 0.4, 0.2, 0.4, 0.3, 0.7, 0.5, 0.8, 0.2, 0.3, 0.35,
+                  0.7, 0.3, 0.5, 0.6, 0.55, 0.9, 0.4, 0.2, 0.4, 0.3, 0.7, 0.5, 0.8, 0.2, 0.3, 0.35])
 
 
         # Compute at the default number
         # of ten thresholds
-        res = TensorBoardPlotter.compute_multiclass_pr_curve(labels, preds)
-        print(res)
+        shaped_preds = preds.reshape(1,32,1)
+
+        res = TensorBoardPlotter.compute_multiclass_pr_curves(
+            labels, shaped_preds)
+        
+        expected = ({0: {'best_op_pt': {'threshold': 0.2, 
+                                        'f1': 1.0, 
+                                        'precision': 1.0, 
+                                        'recall': 1.0}, 
+                         'recalls': np.array([1., 1., 1., 
+                                              1., 1., 1., 
+                                              1., 1., 1., 
+                                              1., 0.]), 
+                         'precisions': np.array([1., 1., 1., 
+                                                 1., 1., 1.,
+                                                  1., 1., 1., 
+                                                  1., 1.]), 
+                         'thresholds': [0.2, 0.25, 0.3, 
+                                        0.35, 0.4, 0.45, 
+                                        0.5, 0.55, 0.6, 0.65], 
+                         'avg_prec': 1.0}
+                     }, 
+                     1.0
+                    )
+        
+        #************* NEEDS WORK
+        self.assertDictEqual(res[0][0]['best_op_pt'], 
+                             expected[0][0]['best_op_pt']
+                             )
+        
+        self.assertEqual(res, expected)
+        #print(res)
         
     #------------------------------------
     # test_compute_binary_pr_curve
@@ -521,27 +585,35 @@ class TestTensorBoardPlotter(unittest.TestCase):
         # Binary: 'member of class' (1) vs. 'other' (0)
         labels      = [1,0,0,1,1,1,0,1,0,1,1,1,1,0,0,0]
         preds       = [0.7, 0.3, 0.5, 0.6, 0.55, 0.9, 0.4, 0.2, 0.4, 0.3, 0.7, 0.5, 0.8, 0.2, 0.3, 0.35]
-        
+
         # Evaluate prec/rec at ten thresholds:
         thresholds  = [0.2,  0.25,  0.3,  0.35,  0.4,  0.45,  0.5,  0.55,  0.6,  0.65]        
         
         # Get optimal operating point, and
         # the individual precs and recs:
-        res_dict = TensorBoardPlotter.compute_binary_pr_curve(labels, preds, thresholds)
+        res_dict = TensorBoardPlotter.compute_binary_pr_curve(
+            labels, 
+            preds, 
+            thresholds)
         
         precs = res_dict['precisions']
         recs  = res_dict['recalls']
         best_op_pt = res_dict['best_op_pt']
         avg_prec = res_dict['avg_prec']
         
-        self.assertEqual(len(precs), len(thresholds))
-        self.assertEqual(len(recs), len(thresholds))
+        # The '+1' accounts for the 1 and
+        # 0 appended to the list of prec/rec
+        # points, respectively:
+        self.assertEqual(len(precs), len(thresholds)+1)
+        self.assertEqual(len(recs), len(thresholds)+1)
 
-        expected_precs = [0.5625, 0.5714285714285714, 0.5714285714285714, 0.6363636363636364, 0.7, 0.875, 0.875, 1.0, 1.0, 1.0]
-        expected_recs  = [1.0, 0.8888888888888888, 0.8888888888888888, 0.7777777777777778, 0.7777777777777778, 0.7777777777777778, 0.7777777777777778, 0.6666666666666666, 0.5555555555555556, 0.4444444444444444]
+        expected_precs = [0.5625, 0.5714, 0.5714, 0.6364, 0.7, 0.875, 
+                          0.875, 1., 1., 1., 1.]
+
+        expected_recs  = [1.0, 0.8889, 0.8889, 0.7778, 0.7778, 0.7778, 0.7778, 0.6667, 0.5556, 0.4444, 0]
         
-        self.assertEqual(precs, expected_precs)
-        self.assertEqual(recs, expected_recs)
+        self.assertTrue((precs.round(4) == expected_precs).all())
+        self.assertTrue((recs.round(4) == expected_recs).all())        
         
         # precs_np  = np.array(precs)
         # recs_np   = np.array(recs)
@@ -562,8 +634,8 @@ class TestTensorBoardPlotter(unittest.TestCase):
 
         expected_op_pt = {'threshold' : 0.45,
                           'f1'        : 0.824,
-                          'prec'      : 0.875,
-                          'rec'       : 0.778,
+                          'precision' : 0.875,
+                          'recall'    : 0.778,
                           }
         
         self.assertDictEqual(op_pt_rounded, expected_op_pt)
@@ -578,23 +650,19 @@ class TestTensorBoardPlotter(unittest.TestCase):
     #-------------------
     
     #********** NOT DONE
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    def test_visualize_testing_result(self):
-        
-        #**********
-        #labels = [0, 1, 3, 3, 2, 1, 0, 4, 3, 2, 0, 1, 2, 0, 3, 1, 4, 2, 3, 3]
-        #preds  = [2, 1, 3, 1, 2, 2, 0, 4, 1, 3, 4, 1, 0, 0, 0, 1, 1, 2, 2, 3]
-        #**********        
-        labels = [0, 1, 3, 3, 2, 1, 0, 4, 3, 2, 0, 1, 2, 0, 3, 1, 4, 2, 3, 3]
-        preds  = [0.7, 0.3, 0.5, 0.6, 0.55, 0.9, 0.4, 0.2, 0.4, 0.3, 0.7, 0.5, 0.8, 0.2, 0.3, 0.35]
-        
-        TensorBoardPlotter.visualize_testing_result(labels, 
-                                                    preds)
-        print('foo')
-
-
-
-
+#     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+#     def test_visualize_testing_result(self):
+#         
+#         #**********
+#         #labels = [0, 1, 3, 3, 2, 1, 0, 4, 3, 2, 0, 1, 2, 0, 3, 1, 4, 2, 3, 3]
+#         #preds  = [2, 1, 3, 1, 2, 2, 0, 4, 1, 3, 4, 1, 0, 0, 0, 1, 1, 2, 2, 3]
+#         #**********        
+#         labels = [0, 1, 3, 3, 2, 1, 0, 4, 3, 2, 0, 1, 2, 0, 3, 1, 4, 2, 3, 3]
+#         preds  = [0.7, 0.3, 0.5, 0.6, 0.55, 0.9, 0.4, 0.2, 0.4, 0.3, 0.7, 0.5, 0.8, 0.2, 0.3, 0.35]
+#         
+#         TensorBoardPlotter.visualize_testing_result(labels, 
+#                                                     preds)
+#         print('foo')
 
 # ------------------ Utils ---------------
 
@@ -768,6 +836,64 @@ class TestTensorBoardPlotter(unittest.TestCase):
                   "will then be deleted."
         print(msg)
         input("Waiting...")
+        
+    #------------------------------------
+    # test_large_pr_curve 
+    #-------------------
+    
+    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_large_pr_curve(self):
+        from sklearn.datasets import make_classification
+        from sklearn.linear_model import LogisticRegression
+        from sklearn.model_selection import train_test_split
+        from sklearn.metrics import precision_recall_curve
+
+        # generate dataset
+        X, y = make_classification(n_samples=10000, n_features=2, n_redundant=0,
+            n_clusters_per_class=1, weights=[0.99], flip_y=0, random_state=4)
+        # split into train/test sets
+        trainX, testX, trainy, testy = train_test_split(X, y, test_size=0.5, random_state=2, stratify=y)
+        # fit a model
+        model = LogisticRegression(solver='lbfgs')
+        model.fit(trainX, trainy)
+        # predict probabilities
+        yhat = model.predict_proba(testX)
+        # keep probabilities for the positive outcome only
+        yhat = yhat[:, 1]
+        # calculate pr-curve via sklearn:
+        precision, recall, thresholds = precision_recall_curve(testy, yhat)
+        
+        # calculate pr-curve via compute_binary_pr_curve:
+        curve_obj = TensorBoardPlotter.compute_binary_pr_curve(
+                testy,
+                yhat, 
+                thresholds=thresholds
+                )
+        self.assertTrue((precision == curve_obj['precisions']).all())
+        self.assertTrue((recall == curve_obj['recalls']).all())
+        
+        (_num_classes, fig) = ClassificationPlotter.chart_pr_curves(curve_obj)
+        fig.show()
+        self.await_user_ack('Press any key to continue...')
+        
+        #********
+        # print(f"lrec  : {len(testy)}")
+        # print(f"lprec : {len(yhat)}")
+        # print(f"prec  : {precision}")
+        # print(f"rec   : {recall}")
+        # print(f"thre  : {thresholds}")
+        # print(f"lt    : {len(thresholds)}")
+        #********
+        # plot the roc curve for the model
+        # no_skill = len(testy[testy==1]) / len(testy)
+        # pyplot.plot([0,1], [no_skill,no_skill], linestyle='--', label='No Skill')
+        # pyplot.plot(recall, precision, marker='.', label='Logistic')
+        # # axis labels
+        # pyplot.xlabel('Recall')
+        # pyplot.ylabel('Precision')
+        # pyplot.legend()
+        # # show the plot
+        # pyplot.show()
 
 # ------------------ Main ---------------
 if __name__ == "__main__":

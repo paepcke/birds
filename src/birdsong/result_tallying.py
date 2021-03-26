@@ -130,6 +130,16 @@ class ResultCollection(dict):
         self.add(tally, epoch=epoch)
 
     #------------------------------------
+    # __iter__ 
+    #-------------------
+    
+    def __iter__(self):
+        # As the iterator, return the 
+        # sorted list of ResultTally instances:
+        
+        return self._sorted_tallies
+
+    #------------------------------------
     # conf_matrix_aggregated 
     #-------------------
     
@@ -344,6 +354,7 @@ class ResultTally:
         self.mean_loss      = None
         self.losses         = None
 
+        # If unittesting:
         if testing:
             self.metrics_stale  = False
             return
@@ -427,46 +438,54 @@ class ResultTally:
         # The following metrics are only 
         # reported for validation set:
         
+        # For 'No positive exist and classifier
+        # properly doesn't predict a positive,
+        # use:
+        #      precision=1
+        #      recall   =1
+        # In this case prec and rec are undefined,
+        # causing division by 0:
+        
         self.f1_macro    = f1_score(labels, preds, average='macro',
-                                    zero_division=0
+                                    zero_division=1
                                     )
         self.f1_micro   = precision_score(labels, preds, average='micro',
-                                          zero_division=0
+                                          zero_division=1
                                           )
         self.f1_weighted  = f1_score(labels, preds, average='weighted',
-                                     zero_division=0
+                                     zero_division=1
                                      )
 
         self.f1_all_classes  = f1_score(labels, preds, average=None,
-                                     zero_division=0
+                                     zero_division=1
                                      )
 
         
         self.prec_macro   = precision_score(labels, preds, average='macro',
-                                            zero_division=0
+                                            zero_division=1
                                             )
         self.prec_micro   = precision_score(labels, preds, average='micro',
-                                            zero_division=0
+                                            zero_division=1
                                             )
         self.prec_weighted= precision_score(labels, preds, average='weighted',
-                                            zero_division=0
+                                            zero_division=1
                                            )
         self.prec_all_classes = precision_score(labels, preds, average=None,
-                                            zero_division=0
+                                            zero_division=1
                                            )
 
 
         self.recall_macro   = recall_score(labels, preds, average='macro',
-                                           zero_division=0
+                                           zero_division=1
                                            )
         self.recall_micro   = recall_score(labels, preds, average='micro',
-                                           zero_division=0
+                                           zero_division=1
                                            )
         self.recall_weighted= recall_score(labels, preds, average='weighted',
-                                           zero_division=0
+                                           zero_division=1
                                            )
         self.recall_all_classes = recall_score(labels, preds, average=None,
-                                           zero_division=0
+                                           zero_division=1
                                            )
 
         # A confusion matrix whose entries
