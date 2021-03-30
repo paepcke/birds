@@ -26,7 +26,7 @@ setup(
                         'torchaudio>=0.7.2',
                         'PyQt5>=5.15.2',
                         'matplotlib>=3.3.0',
-                        'librosa>=0.7.2',
+                        'librosa>=0.8.0',
                         'scipy>=1.5.2',
                         'SoundFile>=0.10.3.post1',
                         'logging-singleton>=1.0',
