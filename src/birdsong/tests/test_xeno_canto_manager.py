@@ -3,10 +3,11 @@ Created on Mar 1, 2021
 
 @author: paepcke
 '''
-import json5
 import os
 import unittest
 import tempfile
+
+import orjson
 
 from logging_service.logging_service import LoggingService
 
@@ -25,7 +26,9 @@ class XenoCantoProcessorTester(unittest.TestCase):
         cls.tst_dir = os.path.join(cls.curr_dir,
                                    'data_other/xeno_canto_tst_data'
                                    )
-        cls.tst_file = os.path.join(cls.tst_dir, 'xeno_canto_coll_small.pickle')
+        #cls.tst_file = os.path.join(cls.tst_dir, 'xeno_canto_coll_small.pickle')
+        cls.tst_file = os.path.join(cls.tst_dir, 
+                                    'xeno_canto_coll_small.json')
 
     def setUp(self):
         pass 
@@ -114,7 +117,7 @@ class XenoCantoProcessorTester(unittest.TestCase):
             # Should be able to get a dict
             # back from the json string without
             # error:
-            coll_as_dict = json5.loads(jstr)
+            coll_as_dict = orjson.loads(jstr)
         except Exception as e:
             self.fail(f"Could not read back collection json: {repr(e)}")
             
@@ -186,7 +189,7 @@ class XenoCantoProcessorTester(unittest.TestCase):
     # test_download_explicit_overwrite_ok 
     #-------------------
 
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_download_explicit_overwrite_ok(self):
 
         rec = self.make_fake_rec_instance(load_dir=self.curr_dir)
@@ -334,9 +337,6 @@ class XenoCantoProcessorTester(unittest.TestCase):
                                     overwrite_existing=overwrite_existing, 
                                     testing=True)
             self.assertEqual(go_ahead, expected_go_ahead)
-            self.assertEqual(XenoCantoRecording.always_overwrite,
-                             expected_global_default
-                             )
 
     #------------------------------------
     # make_fake_rec_instance 
@@ -355,6 +355,7 @@ class XenoCantoProcessorTester(unittest.TestCase):
             'length'    :  10,
             'file-name' :  'bluebell.mp3',
             'type'      :  'call',
+            'q'         :  'A',
             'url'       :  'http://my_server/file_ingo'
             }
         rec = XenoCantoRecording(recording_metadata, load_dir)

@@ -71,20 +71,20 @@ is a template for use without re-contacting the Xeno Canto
 server:
 
 from birdsong.xeno_canto_manager import XenoCantoCollection, XenoCantoRecording
-coll = XenoCantoCollection.load('<path to pickled collection')
+sound_collection = XenoCantoCollection.load('<path to pickled collection')
 
 # The following iterates through
 # XenoCantoRecording instances, *one*
 # recording of each species:
 
-for recording in coll:
+for recording in sound_collection:
     print(recording.full_name)
     print(recording.filepath)
 
 # The same, but all recordings of
 # every species:
 
-for recording in coll(one_per_bird_phylo=False):
+for recording in sound_collection(one_per_bird_phylo=False):
     print(recording.full_name)
     print(recording.filepath)
 
@@ -99,15 +99,11 @@ import os
 from pathlib import Path
 import pickle
 
-# Use json for writing:
-import json
+import numpy as np
 
-# Use json5 for reading. It can handle
-# slightly looser json, such as
-# single-quotes around keys, instead
-# of insisting on double_quotes:
-
-import json5
+# Use orjson for reading.
+# It is lightning fast:
+import orjson
 
 import re
 import sys
@@ -132,12 +128,12 @@ Usage example assuming you have a
 	python3
 	# >>>
 	import birdsong.xeno_canto_manager as xcm
-	coll = xcm.XenoCantoCollection.load('~/test_metadata.json')
-	for rec in coll:
+	sound_collection = xcm.XenoCantoCollection.load('~/test_metadata.json')
+	for rec in sound_collection:
 	    print(rec)
 	
 	# Get messages about downloading and saving# as it rattles through:
-	for rec in coll:
+	for rec in sound_collection:
 	    dest_file = rec.download()
 	
 	# Download again: get warning about file
@@ -145,7 +141,7 @@ Usage example assuming you have a
 	# question to avoid re-downloading any
 	# of the already present files. 
 	
-	for rec in coll:
+	for rec in sound_collection:
 	    dest_file = rec.download()
 	
 	# Download the collection all at once,
@@ -153,18 +149,15 @@ Usage example assuming you have a
 	# re-download, b/c it remembers your
 	# 'no' answer from above:
 	
-	coll.download()
+	sound_collection.download()
 	
 	# Force re-downloading:
-	coll.download(overwrite_existing=True)
+	sound_collection.download(overwrite_existing=True)
 
 '''
 # ---------------- Class XenoCantoCollection ----------
 
-#**************
-#class XenoCantoCollection(UserDict):
 class XenoCantoCollection:
-#**************
     '''
     Holds information about multiple Xeno Canto
     recordings. Each holding is a XenoCantoRecordingO
@@ -193,7 +186,7 @@ class XenoCantoCollection:
     # each species' recordings, then move
     # on to the next:
     #
-    #     coll: species1: [rec_s1_1, rec_s1_2,...],
+    #     sound_collection: species1: [rec_s1_1, rec_s1_2,...],
     #           species2: [rec_s2_1, rec_s2_2,...],
     #
     # If one_per_bird_phylo is True, then 
@@ -206,44 +199,149 @@ class XenoCantoCollection:
     
     one_per_bird_phylo = True 
 
+
+    #------------------------------------
+    # __new__ 
+    #-------------------
+    
+    def __new__(cls, bird_names_or_coll_path, **kwargs):
+        '''
+        If bird_names_or_coll_path is the path
+        to a previously saved collection, then
+        instantiate from that file, and return
+        that instance.
+        
+        Else if bird_names_or_coll_path is a list
+        of birds, a XenoCantoCollection is created,
+        and initialized with downloaded metadata
+        I.e. the metadata download happens as part of 
+        instantiation.
+        
+        @param bird_names_or_coll_path: path to saved
+            XenoCantoCollection instance, or list of
+            bird species.
+        @type bird_names_or_coll_path: {str | list[str]}
+        '''
+        
+        # Initialize all data structures based on 
+        # Either a passed-in path to a previously 
+        # saved XenoCantoCollection instance, or on
+        # metadata downloads.
+        
+        if bird_names_or_coll_path is None:
+            # Being called during reading of
+            # a saved XenoCantoCollection instance.
+            # Just make an empty instance, return it,
+            # and let the load function fill all the
+            # inst vars. The __init__ method will be
+            # called, though the load method might overwrite
+            # some of the inst vars that are initialized
+            # there:
+            
+            inst = super().__new__(cls, **kwargs)
+            inst.data = {}
+            return inst
+        
+        if type(bird_names_or_coll_path) == list:
+            # Make a fresh instance as normal
+            inst = super().__new__(cls, **kwargs)
+            inst.data = {}
+            # Download metadata, and create XenoCantoRecording
+            # instances:
+            inst.instantiate_recs(bird_names_or_coll_path)
+            return inst
+            
+        else:
+            # Note: load() will instantiate a XenoCantoCollection,
+            # recursively calling this __new__ method with None. 
+            # That is what is taken care of above:
+            inst = cls.load(bird_names_or_coll_path)
+            return inst
+
     #------------------------------------
     # Constructor 
     #-------------------
     
     def __init__(self, 
-                 bird_names,
                  courtesy_delay=1.0,
-                 load_dir=None,
-                 always_overwrite=False):
-
-        self.data = {}
+                 dest_dir=None,
+                 always_overwrite=True):
+        '''
+        Given either a list of bird names to 
+        download from xeno canto, or the
+        path to a previously saved XenoCantoCollection
+        instance, instantiate a XenoCantoCollection
+        instance.
+        
+        The reason for defaulting always_overwrite
+        to True is that occasionally Xeno Xanto
+        delivers a file twices. Thus, if caller forgets
+        to set always_overwrite to True, a long
+        download will occasionally ask permission to
+        overwrite. This makes it impossible to run
+        a long download unattended.
+        
+        @param bird_names_or_coll_path: path to 
+            previously saved collection (a .json, 
+            or .pkl/.pickle file. Or the list of
+            bird species as needed to query Xeno Canto
+        @type bird_names_or_coll_path: {list | str|
+        @param courtesy_delay: seconds between downloads
+            to be polite to Xeno Canto server. Don't
+            set this to zero! You may well be blocked
+            from the site.
+        @type courtesy_delay: float
+        @param dest_dir: destination of any recording
+            downloads. Default: subdirectory 'recordings'
+            under this script's directory
+        @type dest_dir: str
+        @param always_overwrite: during download, 
+            overwrite any already existing recordings 
+            with new one without asking.
+        @type always_overwrite: bool
+        '''
+        # No cached "number of recordings" yet:
+        self._num_recordings = None
         
         self.log = LoggingService()
         self.always_overwrite = always_overwrite
         if always_overwrite:
             self.log.info("Note: if dowloads requested, will overwrite any existing recordings.")
         
-        # 'Secret' entry: used when creating
-        # from json string (see from_json()):
-        
-        if bird_names is None:
-            # Have caller initialize the instance vars
-            return
-        
         self.courtesy_delay = courtesy_delay
         
         curr_dir = os.path.dirname(__file__)
-        if load_dir is None:
-            self.load_dir = os.path.join(curr_dir, 'recordings')
-            if not os.path.exists(self.load_dir):
-                os.mkdir(self.load_dir)
+        if dest_dir is None:
+            self.dest_dir = os.path.join(curr_dir, 'recordings')
+            if not os.path.exists(self.dest_dir):
+                os.mkdir(self.dest_dir)
         else:
-            self.load_dir = load_dir
+            self.dest_dir = dest_dir
             
         # Default behavior of iterator (see comment in __iter__):
         self.one_per_bird_phylo=True
     
+    #------------------------------------
+    # instantiate_recs 
+    #-------------------
+    
+    def instantiate_recs(self, bird_names):
+        '''
+        Given a list of bird species, download
+        each bird's metadata. Then create a
+        XenoCantoRecording instance for each
+        recording. Don't download the recordings
+        themselves. 
+        
+        @param bird_names: list of species as needed
+            to download from the Xeno Canto server
+        @type bird_names: [str]
+        '''
         collections_metadata = self.xeno_canto_get_bird_metadata(bird_names)
+
+        # Create XenoCantoRecording instances
+        # for each recording mentioned in the
+        # metadata:
         for species_recs_metadata in collections_metadata:
             # Metadata about XC holdings for one genus/species:
             self.num_recordings = species_recs_metadata['numRecordings']
@@ -253,12 +351,12 @@ class XenoCantoCollection:
             recordings_list  = species_recs_metadata['recordings']
     
             # Create XenoCantoRecording instances
-            # without sound file download. That is
+            # without sound file download. Downloading is
             # done lazily:
             
             for rec_dict in recordings_list:
                 rec_obj  = XenoCantoRecording(rec_dict, 
-                                              load_dir=self.load_dir, 
+                                              dest_dir=self.dest_dir, 
                                               log=self.log)
                 try:
                     phylo_name = rec_obj.phylo_name
@@ -266,7 +364,7 @@ class XenoCantoCollection:
                 except KeyError:
                     # First time seen this species:
                     self[phylo_name] = [rec_obj]
-                    
+
     #------------------------------------
     # xeno_canto_get_bird_metadata 
     #-------------------
@@ -412,6 +510,29 @@ class XenoCantoCollection:
         del self.data[key]
     
     #------------------------------------
+    # num_recordings 
+    #---------------
+    
+    @property
+    def num_recordings(self):
+        '''
+        Lazily evaluated num_recordings property.
+        The quantity is the number of all recordings
+        in this collection instance's values(). If
+        those values are themselves collections, add
+        up their number of recordings.
+
+
+        '''
+        if self._num_recordings is None:
+            all_lengths = [len(recording_list) 
+                           for recording_list 
+                            in self.values()
+                            ]
+            self._num_recordings = sum(all_lengths)
+        return self._num_recordings 
+
+    #------------------------------------
     # keys 
     #-------------------
     
@@ -432,6 +553,22 @@ class XenoCantoCollection:
     def items(self):
         return self.data.items()
     
+    #------------------------------------
+    # all_recordings 
+    #-------------------
+    
+    def all_recordings(self):
+        '''
+        Convenience method: returns a list
+        of all XenoCantoRecording instances
+        in this collection. I.e. not separated
+        by species, just all recordings from all
+        species appended together
+        '''
+        all_recs = np.concatenate(list(self.values())).tolist()
+        return all_recs
+        
+
     #------------------------------------
     # download 
     #-------------------
@@ -592,45 +729,103 @@ class XenoCantoCollection:
         the XenoCantoRecording instances holding
         the file paths.
         
-        If the dest file ends with '.json' the output
-        format is JSON else it is pickle. 
+        If dest:
+        
+           o is an existing directory, a .json file name 
+                is created for the collection
+                file.
+           o is a file name as ascertained by the
+                presence of an extension: 
+                If the dest file ends with '.json' 
+                the output format is JSON. If it 
+                ends with '.pkl' or '.pickle' the 
+                sound_collection is saved in pickle format.
+                Any other extension is an error.
+            o Is None: the destination directory
+                will be a subdir 'xeno_canto_collections'
+                under this script's dir.
+                
+        In all cases, non-existing directories
+        will be created. 
         
         Note: Pickle is fast to load, but very finicky 
               about file names and directory structures
               being exactly what they were at saving
               time. So JSON is recommended.
         
-        @param dest: destination directory for the 
-            saved collection. Default: 
+        @param dest: destination directory or
+            file path for the saved collection. 
+            Default: 
                 <dir_of_this_script>/xeno_canto_collections
         @type dest: str
-        @return the output file
+        @return the full path of the output file
         @rtype str
         '''
+
+        # To distinguish between dest
+        # being a file name vs. at dir:
+        is_file = False
         
         if dest is None:
             curr_dir  = os.path.dirname(__file__)
             dest_dir  = os.path.join(curr_dir, 'xeno_canto_collections')
-            if not os.path.exists(dest_dir):
+
+        else:
+            # Is dest a file or a dir?
+            dest_p = Path(dest)
+            suffix = dest_p.suffix
+            if len(suffix) == 0:
+                dest_dir = dest
+            else:
+                # Destination is a file name:
+                is_file = True
+                # Check for legal extension:
+                if suffix not in ('.json', '.pkl', '.pickle'):
+                    raise ValueError("Collection files must end in .json, .pkl, or .pickle")
+                dest_dir = dest_p.parent
+
+        if not os.path.exists(dest_dir):
+            try:
                 os.makedirs(dest_dir)
-            dest = os.path.join(dest_dir, self.create_filename(dest_dir))  
+            except FileExistsError:
+                pass
 
-        elif os.path.isdir(dest) and not os.path.exists(dest):
-            os.makedirs(dest_dir)
-            dest = os.path.join(dest_dir, self.create_filename(dest_dir))  
+        # If dest is a directory, invent a filename:
+        if not is_file:
+            # Create a non-existing .JSON file name 
+            # in dest_dir
+            dest = self.create_filename(dest_dir) 
+        
+        # Dest is a file at this point.
+        dest_p     = Path(dest)
+        dir_part   = dest_p.parent
+        file_part  = dest_p.stem
+        extension  = dest_p.suffix
+        uniquifier = 0
+        orig_file_part = file_part
+        
+        while dest_p.exists():
+            #answer = input(f"File {dest_p.name} exists; overwrite? (y/N): ")
+            #if answer not in ('y','Y','yes','Yes', ''):
+            #    ...
+            # Keep adding numbers to end of file
+            # till have a unique name. First, remove
+            # a unifier we may have added in a prev.
+            # run through this loop:
+            if file_part.endswith(f"_{uniquifier}"):
+                file_part = orig_file_part 
+            uniquifier += 1
+            file_part += f"_{uniquifier}"
+            dest_p = Path.joinpath(dir_part, file_part+extension)
 
-        # dest is a file at this point.
-        if os.path.exists(dest):
-            answer = input(f"File {os.path.basename(dest)} exists; overwrite? (y/N): ")
-            if answer not in ('y','Y','yes','Yes', ''):
-                self.log.info("Collection pickle save aborted on request")
-                return None
+        dest = str(dest_p)
 
         # At this point dest is a non-existing file,
         # which is what we need. Use pickle or json?
-        if dest.endswith('.json'):
+        if extension in ('.json', '.JSON'):
             self.to_json(dest, force=True)
         else:
+            raise DeprecationWarning("Deprecated! Using pickle for saving is unreliable")
             with open(dest, 'wb') as fd:
                 pickle.dump(self, fd)
 
@@ -642,6 +837,22 @@ class XenoCantoCollection:
     
     @classmethod
     def load(cls, src):
+        '''
+        Takes path to either a .json or 
+        a .pkl (or .pickle) file. Materializes
+        the XenoCantoCollection that is
+        encoded in the file.
+
+        @param src: full path to pickle or json file
+            of previously saved collection
+        @type src: str
+        '''
+
+        if not os.path.exists(src) or not(os.path.isfile(src)):
+            raise FileNotFoundError(f"Recording collection file {src} does not exist")
+
+        if Path(src).suffix not in ('.json', '.JSON', '.pkl', '.pickle'):
+            raise ValueError(f"Saved collection must be a JSON or pickle file")
 
         # Allow use of tilde in fnames:
         src = os.path.expanduser(src)
@@ -650,7 +861,7 @@ class XenoCantoCollection:
         else:
             # Assume pickle file
             with open(src, 'rb') as fd:
-                return pickle.load(fd)
+                return pickle.load(fd, None)
 
     #------------------------------------
     # to_json 
@@ -662,15 +873,14 @@ class XenoCantoCollection:
         collection. If dest is a string,
         it is assumed to be a destination
         file where the json will be saved.
-        If none, the JSON string stored in
-        the file is returned. It can be
-        passed to from_json() in the json_str
+        If none, the generated JSON string 
+        is returned. It can be passed to 
+        from_json() in the json_str
         kwarg.
         
         If the file exists, the user is warned,
         unless force is True.
 
-        
         @param dest: optional destination file
         @type dest: {None | str}
         @param force: set to True if OK to overwrite
@@ -680,23 +890,13 @@ class XenoCantoCollection:
             file, else the JSON string
         '''
 
-        jstr = "{"
-        for phylo_name, rec_list in self.items():
-            # Each species entry's phylo name (i.e. key)
-            # is a key in the collection level JSON: 
-            jstr += f'"{phylo_name}" : ['
-            # The value is a JSON list of jsonized recordings:
-            for rec_obj in rec_list:
-                jstr += f"{rec_obj.to_json()},"
-            
-            # Replace the trailing with the JSON closing bracket,
-            # and a comma in prep of the next collection
-            # level recording entry:
-            jstr = f"{jstr[:-1]}],"
-
-        # All done: replace trailing comma
-        # with closing brace of top level:
-        jstr = f"{jstr[:-1]}}}"
+        # self.values() are lists of XenoCantoRecording
+        # instances. The default specification 
+        # tells orjson whom to call with one
+        # of those instances to get a json snippet.
+        
+        jstr = orjson.dumps(self.data,
+                            default=XenoCantoRecording._mk_json_serializable)
 
         if dest is None:
             return jstr
@@ -709,7 +909,9 @@ class XenoCantoCollection:
 
         # At this point dest is a non-existing file,
         # or one that exists but ok to overwrite:
-        with open(dest, 'w') as fd:
+        with open(dest, 'wb') as fd:
+            if type(jstr) != bytes:
+                jstr = str.encode(jstr)
             fd.write(jstr)
             
         return dest
@@ -719,51 +921,59 @@ class XenoCantoCollection:
     #-------------------
     
     @classmethod
-    def from_json(cls, json_str=None, src=None):
+    def from_json(cls, src):
         '''
         Load a collection either from a JSON string,
         or from a file that contains JSON.
         
-        @param json_str: string to parse for generating
-            the reconstituted collection
-        @type json_str: str
-        @param src: path to file containing a JSON str
+        @param src: either a json string to parse,
+            or the path to a file ending with
+            either .json or .JSON
         @type src: str
-        @return: a collection
+        @return: the loaded collection
         @rtype: XenoCantoCollection
         '''
-        
-        if json_str is None and src is None:
-            raise ValueError("One of json_str or src must be non-None")
-        if json_str is not None and src is not None:
-            raise ValueError("Only one of json_str or src can be non-None")
-        
-        if src is not None:
+        if Path(src).suffix in ('.json', '.JSON'):
             # Read JSON from file:
             if not os.path.exists(src):
                 raise FileNotFoundError(f"File {src} not found")
             with open(src, 'rb') as fd:
                 json_str = fd.read()
+        else:
+            # src is assumed to be a json string
+            json_str = src
             
-        inst_vars = json5.loads(json_str)
+        inst_vars = orjson.loads(json_str)
+        
+        # We now have a dict (the collection) whose
+        # values are lists of dicts. Each of these
+        # dicts is json code for one XenoCantoRecording.
+        
+        # First, get an empty XenoCantoCollection,
+        # but with care: 
+        # This method (from_json()) may be
+        # called from __new__(). That following
+        # call will call __new__() recursively.
+        # But: passing None will make the __new__()
+        # method aware, and it will just create
+        # an empty instance, for which __init__()
+        # will have been called:
         inst = XenoCantoCollection(None)
-        # Recover the individual recordings into
-        # XenoCantoRecording instances:
-        for phylo_name in inst_vars.keys():
-            jstr_list = inst_vars[phylo_name]
-            rec_obj_list = []
-            for rec_jstr in jstr_list:
-                rec_obj_list.append(XenoCantoRecording.from_json(rec_jstr))
-            inst_vars[phylo_name] = rec_obj_list
+
+        for phylo_nm, rec_dict_list in inst_vars.items():
+            recs = [XenoCantoRecording.from_json(rec_dict)
+                    for rec_dict
+                    in rec_dict_list
+                    ]
+            inst[phylo_nm] = recs
             
-        inst.data.update(inst_vars)
         return inst
 
     #------------------------------------
     # create_filename
     #-------------------
     
-    def create_filename(self, dest_dir):
+    def create_filename(self, dest_dir, extension='.json'):
         '''
         Create a file name that is not in the 
         given directory.
@@ -774,14 +984,17 @@ class XenoCantoCollection:
         @rtype str
         '''
         t = datetime.datetime.now()
-        orig_filename = t.isoformat().replace('-','_').replace(':','_')
+        orig_filename_root = t.isoformat().replace('-','_').replace(':','_')
         uniquifier = 0
-        filename = orig_filename
-        while os.path.exists(filename):
+        filename = orig_filename_root
+        full_path = os.path.join(dest_dir,filename)
+        while os.path.exists(full_path):
             uniquifier += 1
-            filename = f"{orig_filename}_{str(uniquifier)}"
-            
-        return filename
+            filename = os.path.join(f"{orig_filename_root}_{str(uniquifier)}",
+                                    extension
+                                    )
+            full_path = os.path.join(dest_dir,filename)
+        return full_path
 
 # --------------------------- Class XenoCantoRecording
 
@@ -815,7 +1028,7 @@ class XenoCantoRecording:
                  log=None
                  ):
         '''
-        Recording must be a dict from the 
+        Recording metadata must be a dict from the 
         'recordings' entry of a Xeno Canto download.
         The dict contains much info, such as bird name, 
         recording_metadata location, length, sample rate, and
@@ -843,15 +1056,17 @@ class XenoCantoRecording:
         
         if recording_metadata is None:
             # Have caller initialize the instance vars
+            # Used when creating an instance
+            # from JSON.
             return
          
         curr_dir = os.path.dirname(__file__)
         if load_dir is None:
-            self.load_dir = os.path.join(curr_dir, 'recordings')
-            if not os.path.exists(self.load_dir):
-                os.mkdir(self.load_dir)
+            self.dest_dir = os.path.join(curr_dir, 'recordings')
+            if not os.path.exists(self.dest_dir):
+                os.mkdir(self.dest_dir)
         else:
-            self.load_dir = load_dir
+            self.dest_dir = load_dir
         
         self._xeno_canto_id = recording_metadata['id']
         self.genus     = recording_metadata['gen']
@@ -888,7 +1103,12 @@ class XenoCantoRecording:
                  testing=False):
         
         if dest_dir is None:
-            dest_dir = self.load_dir
+            dest_dir = self.dest_dir
+            
+        if overwrite_existing is None:
+            # Use the global default. False, unless changed
+            # during __init__()
+            overwrite_existing = self.always_overwrite
         
         while not os.path.exists(dest_dir):
             try:
@@ -921,8 +1141,11 @@ class XenoCantoRecording:
         # machine: that path might not exist:
         
         if not self._has_vocalization_prefix(self._filename):
-            self._filename = self._ensure_call_or_song_prefix(self._filename, 
-                                                           self.type)
+            self._filename = self._ensure_call_or_song_prefix(
+                self._filename, 
+                self.type)
+
+        self._filename = self._clean_filename(self._filename)
         self.full_name = os.path.join(dest_dir, self._filename)
         
         # Just to make log info msgs not exceed a terminal
@@ -930,43 +1153,20 @@ class XenoCantoRecording:
          
         fname_descr = FileUtils.ellipsed_file_path(self.full_name)
 
-        # Global default for decision to overwrite
-        # a recording if it already exists:
-
-        overwrite_default = self.__class__.always_overwrite
-        
         # Dest directory exists, does the sound file
         # already exist?
         if os.path.exists(self.full_name):
-            # If overwrite_existing is provided in
-            # the args, we know what to do. We also 
-            # update the class level overwrite instruction 
-            # if it is not initialized yet:
-            if overwrite_existing is not None:
-                go_ahead = overwrite_existing
-                if overwrite_default is None:
-                    self.__class__.always_overwrite = overwrite_existing
+            if overwrite_existing:
+                go_ahead = True
             else:
-                # No overwrite instruction given in this
-                # call. Are there class-level instructions?
-                if overwrite_default is not None:
-                    go_ahead = overwrite_default
-                else:
-                    # Need to ask permission to overwrite:
-                    answer = input(f"Recording {self._filename} exists; overwrite (y/N): ")
-                    go_ahead = answer in ('y','Y','yes','Yes')
-                    # Make answer the global default for recordings:
-                    self.__class__.always_overwrite = go_ahead
+                # Need to ask permission to overwrite:
+                answer = input(f"Recording {self._filename} exists; overwrite (y/N): ")
+                go_ahead = answer in ('y','Y','yes','Yes')
+                # Make answer the global default for recordings:
+                self.__class__.always_overwrite = go_ahead
         else:
             go_ahead = True
             
-        if not go_ahead and os.path.exists(self.full_name):
-            self.log.info(f"Not overwriting existing {self._filename}")
-            if testing:
-                return go_ahead
-            else:
-                return self.full_name
-
         if testing:
             return go_ahead
         
@@ -993,7 +1193,9 @@ class XenoCantoRecording:
             self.log.info(f"File encoding: {self.encoding}")
         
         # Add 'CALL' or 'SONG' in front of filename
-        self._filename = self._ensure_call_or_song_prefix(self._filename, self.type)
+        self._filename = self._ensure_call_or_song_prefix(
+            self._filename, self.type)
+        
         self.file_name = os.path.join(dest_dir, self._filename)
         
         self.log.info(f"Saving {fname_descr}...")
@@ -1001,6 +1203,28 @@ class XenoCantoRecording:
             f.write(response.content)
             self.log.info(f"Done saving {fname_descr}")
         return self.full_name
+
+    #------------------------------------
+    # _clean_filename
+    #-------------------
+    
+    def _clean_filename(self, fname):
+        '''
+        People put the horriblest chars into 
+        filenames: spaces, parentheses, backslashes!
+        Replace any of those with underscores.
+        
+        @param fname: original name
+        @type fname: str
+        @return: cleaned up, unix-safe name
+        @rtype: str
+        '''
+        fname = fname.replace('/', '_')
+        fname = fname.replace(' ', '_')
+        fname = fname.replace('(', '_')
+        fname = fname.replace(')', '_')
+        
+        return fname
 
     #------------------------------------
     # _ensure_call_or_song_prefix
@@ -1026,6 +1250,24 @@ class XenoCantoRecording:
         if self._has_vocalization_prefix(path):
             return path
         p = Path(path)
+        
+        # Sometimes people put things like:
+        # 'ADULT, SEX UNCERTAIN, SONG_XC5311'... or
+        # 'ALARM CALL_20110913FORANAal.mp3' or
+        # 'CALL, FEMALE, MALE_XC441963-FormicanalVZA38a.mp3'
+        # Into the type field. See whether we
+        # find 'CALL' or 'SONG'. If not, prefix
+        # with UNKNOWN:
+        
+        if vocalization_type not in ('CALL', 'SONG', 'call', 'song'):
+            voctype_lowcase = vocalization_type.lower()
+            if voctype_lowcase.find('call') > -1:
+                vocalization_type = 'CALL'
+            elif voctype_lowcase.find('song') > -1:
+                vocalization_type = 'SONG'
+            else:
+                vocalization_type = 'UNKNOWN'
+         
         fname = f"{vocalization_type.upper()}_{p.name}"
         new_path = str(p.parent.joinpath(fname))
         return new_path
@@ -1076,43 +1318,69 @@ class XenoCantoRecording:
     
     def to_json(self):
         
+        return orjson.dumps(self, 
+                            default=XenoCantoRecording._mk_json_serializable)
+
+    #------------------------------------
+    # _mk_json_serializable
+    #-------------------
+    
+    def _mk_json_serializable(self):
+        '''
+        Called by orjson to json-serialize
+        a XenoCantoRecording instance. The method
+        extracts those instance variables of self
+        that are strings, and returns the resulting
+        dict. 
+        '''
         as_dict = {inst_var_nm : inst_var_value
                    for inst_var_nm, inst_var_value
                    in self.__dict__.items()
                    if type(inst_var_value) == str
                    }
-        # Use json, not json5, b/c the latter
-        # does not quote the first key...bug there!
-        return json.dumps(as_dict)
+        return as_dict
 
     #------------------------------------
     # from_json 
     #-------------------
     
     @classmethod
-    def from_json(cls, json_str):
-        # Use json5, which can handle
-        # slightly looser json, such as
-        # single-quotes around keys, instead
-        # of insisting on double_quotes:
-        inst_vars = json5.loads(json_str)
+    def from_json(cls, json_str_or_dict):
+        if type(json_str_or_dict) in (str, bytes):
+            # Get a dict if one wasn't passed in:
+            inst_vars = orjson.loads(json_str_or_dict)
+        else:
+            inst_vars = json_str_or_dict
+            
+        inst = cls.from_dict(inst_vars)
+        return inst 
+
+    #------------------------------------
+    # from_dict 
+    #-------------------
+    
+    @classmethod
+    def from_dict(cls, inst_var_dict):
         inst = XenoCantoRecording(None)
-        inst.__dict__.update(inst_vars)
+        try:
+            inst.__dict__.update(inst_var_dict)
+        except TypeError as e:
+            print(f"Err: {repr(e)}")
         return inst
 
 # ------------------------ Main ------------
 if __name__ == '__main__':
     
-    birds = ['Tangara+gyrola', 'Amazilia+decora', 'Hylophilus+decurtatus', 'Arremon+aurantiirostris', 
-             'Dysithamnus+mentalis', 'Lophotriccus+pileatus', 'Euphonia+imitans', 'Tangara+icterocephala', 
-             'Catharus+ustulatus', 'Parula+pitiayumi', 'Henicorhina+leucosticta', 'Corapipo+altera', 
-             'Empidonax+flaviventris']
-
+#     birds = ['Tangara+gyrola', 'Amazilia+decora', 'Hylophilus+decurtatus', 'Arremon+aurantiirostris', 
+#              'Dysithamnus+mentalis', 'Lophotriccus+pileatus', 'Euphonia+imitans', 'Tangara+icterocephala', 
+#              'Catharus+ustulatus', 'Parula+pitiayumi', 'Henicorhina+leucosticta', 'Corapipo+altera', 
+#              'Empidonax+flaviventris']
+ 
     parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
                                      formatter_class=argparse.RawTextHelpFormatter,
                                      description="Download and process Xeno Canto bird sounds"
                                      )
- 
+  
     parser.add_argument('-d', '--destdir',
                         help='fully qualified directory for downloads. Default: /tmp',
                         default='/tmp')
@@ -1120,6 +1388,10 @@ if __name__ == '__main__':
                         type=float,
                         help='time between downloads for politeness to XenoCanto server. Ex: 1.0',
                         default=1.0)
+    parser.add_argument('-c', '--collection',
+                        type=str,
+                        help='optionally path to existing, previously saved collection',
+                        default=None)
     # Things user wants to do:
     parser.add_argument('--collect_info',
                         action='store_true',
@@ -1130,70 +1402,88 @@ if __name__ == '__main__':
                         action='store_true',
                         help="download the (birds_to_process) sound files (implies --collect_info",
                         default=False
-                        
+                         
                         )
     parser.add_argument('--all_recordings',
                         action='store_true',
                         help="download all recordings rather than one per species; default: one per.",
                         default=False
                         )
+    parser.add_argument('--overwrite',
+                        action='store_true',
+                        help="whether or not to overwrite already downloaded files w/o asking; Def: False",
+                        default=False
+                        )
     parser.add_argument('birds_to_process',
                         type=str,
-                        nargs='*',
-                        help='Repeatable: <genus>+<species>. Ex: Tangara_gyrola',
-                        default=[bird.replace('+', '_') for bird in birds])
- 
- 
+                        nargs='+',
+                        help='Repeatable: <genus>+<species>. Ex: Tangara_gyrola')
+  
+  
     args = parser.parse_args()
- 
+  
+    if args.collection:
+        sound_collection = XenoCantoCollection.load(args.collection)
+    else:
+        sound_collection = None
+  
     # For reporting to user: list
-    # of actions to do by getting them
+    # of actions to do by getting the actions
     # as strings from the args instance:
+    
     todo = [action_name 
             for action_name
             in ['collect_info', 'download']
             if args.__getattribute__(action_name)
             ]
-     
+      
     if len(todo) == 0:
         print("No action specified on command line; nothing done")
         print(parser.print_help())
         sys.exit(0)
-             
+              
     # Fix bird names to make HTTP happy later.
     # B/c we allow -b and --bird in args, 
     # argparse constructs a name:
-     
+      
     birds_to_process = args.birds_to_process
-     
-    if len(birds_to_process) == 0:
-        birds_to_process = birds
-    else:
-        # Replace the underscores needed for
-        # not confusing bash with the '+' signs
-        # required in URLs:
-        birds_to_process = [bird.replace('_', '+') for bird in birds_to_process]
- 
-    #if len(birds_to_process) == 0:
-    #    print("No birds specified; nothing done")
-    #    sys.exit(0)
-         
-    if ('collect_info' in  todo) or ('download' in todo):
+    
+    # Replace underscores needed for
+    # not confusing bash with the '+' signs
+    # required in URLs:
+    birds_to_process = [bird.replace('_', '+') 
+                        for bird 
+                        in birds_to_process]
+          
+    if sound_collection is None and \
+        (('collect_info' in  todo) or\
+         ('download' in todo)
+        ):
+        # Request to download recordings or
+        # metadata, and no already existing and
+        # saved collection was specified: 
+        
         sound_collection = XenoCantoCollection(birds_to_process,
-                                               load_dir=args.destdir)
-        sound_collection.save()
-         
+                                               load_dir=args.destdir,
+                                               always_overwrite=args.overwrite
+                                               )
+        saved_path = sound_collection.save()
+        sound_collection.log.info(f"Saved new collection to {saved_path}")
+          
     if 'download' in todo:
         one_per_species = not args.all_recordings
         sound_collection.download(birds_to_process,
                                   one_per_species=one_per_species,
+                                  overwrite_existing=args.overwrite,
                                   courtesy_delay=args.timedelay)
-        sound_collection.save()
- 
+        # Save the updated collection:
+        saved_path = sound_collection.save(saved_path)
+        sound_collection.log.info(f"Saved updated collection to new files: {saved_path}")
+  
     sound_collection.log.info(f"Done with {todo}")
 
 # ------------------------ Testing Only ----------------
-    # Testing
+    # Testing (Should move to a unittest
 #     sound_collection = XenoCantoCollection(['Tangara+gyrola', 
 #                                             'Amazilia+decora'],
 #                                             load_dir='/tmp'
@@ -1206,19 +1496,18 @@ if __name__ == '__main__':
 #         
 #     rec.download()
 #     print(sound_collection)
-
-#     coll = XenoCantoCollection.from_json(src='/Users/paepcke/EclipseWorkspacesNew/birds/test_metadata.json')
-#     for rec in coll:
+#     
+#     sound_collection = XenoCantoCollection.from_json(src='/Users/paepcke/EclipseWorkspacesNew/birds/test_metadata.json')
+#     for rec in sound_collection:
 #         rec.download()
 #         print(rec)
-
-    #new = XenoCantoCollection.load('/Users/paepcke/tmp/test_metadata1.pkl')
-#     coll = XenoCantoCollection.load('/Users/paepcke/tmp/test_metadata1.json')
-#     for rec in coll:
+#     
+#     new = XenoCantoCollection.load('/Users/paepcke/tmp/test_metadata1.pkl')
+#     sound_collection = XenoCantoCollection.load('/Users/paepcke/tmp/test_metadata1.json')
+#     for rec in sound_collection:
 #         print(rec)
-# 
-#     for rec in coll:
+#     
+#     for rec in sound_collection:
 #         rec.download()
-# 
-#     print(coll)
-    
+#     
+#     print(sound_collection)

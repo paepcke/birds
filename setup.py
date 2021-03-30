@@ -34,7 +34,7 @@ setup(
                         'tensorboard>=2.4.0',
                         'natsort>=7.1.0',
                         'Pillow>=8.0.1',
-                        'json5>=0.9.5',
+                        'orjson>=3.5.1',
                         'nose2>=0.9.2',     # For testing
                         'tensorflow-plot>=0.3.2',
                         'psutil>=5.8.0',
