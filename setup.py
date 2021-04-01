@@ -40,6 +40,7 @@ setup(
                         'psutil>=5.8.0',
                         'adjustText>=0.7.3',
                         'discrete-differentiator>=0.1',
+                        'noisereduce>=1.1.0'
                         ],
 
     tests_require    =[
