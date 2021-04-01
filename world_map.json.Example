@@ -1,0 +1,33 @@
+/*
+      Layout of machines and available GPUs
+
+ For each machine:
+
+   Required
+     o Number of GPUs (to use on the entry's machine.
+                       Need not be all that are available)
+     
+   Required of exactly one machine's entry:
+     o "master" = True
+
+   Optional:
+     o 'devices' : GPU device numbers: 0,1,2,...
+
+The master machine is the one 'orchestrating' all processes,
+whether on one machine, or on many.
+
+"devices" is needed only if particular GPUs are to
+be used. ID origin is 0; i.e. first GPU ID is 0
+
+*/
+
+{quintus.stanford.edu : {
+    "master" : 'Yes',
+    "gpus" : 2
+ },
+
+ quatro.stanford.edu  : {
+     "gpus" : 2,
+     "devices" : [1,2]
+ }
+}

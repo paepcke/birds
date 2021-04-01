@@ -1,0 +1,75 @@
+# Controlling how the classifier training
+# runs.
+
+# Boolean quantities may be indicated by
+# Yes/No, True/False, 1/0
+
+[Paths]
+
+# Root of the data/test files:
+root_train_test_data = /home/data/birds/recombined_data
+
+# Only relevant if running multi-process.
+# File showing the distribution of GPUs
+# across machines, or within one machine.
+# Allows specification of which GPU(s) to
+# use on each machine Expected in
+# <proj_root>/world_map.json.
+# See file world_map.json.Example for
+# how to write this configuration
+
+world_map     = ../../world_map.json
+
+# Needed if running multiple processes, and
+# therefore using one of the launch scripts.
+
+train_script = birds_train_parallel.py
+
+[Training]
+
+net_name      = resnet18
+# For networks available pretrained: how many
+# layers to retain of the retraining. Use
+# zero to train from scratch:
+num_pretrained_layers = 6
+min_epochs    = 15
+max_epochs    = 100
+batch_size    = 32
+# The 'k' in k=fold cross validation:
+num_folds     = 10
+opt_name      = SGD
+kernel_size   = 7
+lr            = 0.01
+momentum      = 0.9
+# Pseudo randomization must be the
+# same on all collaborating machines:
+seed          = 42
+
+# Training images should be scaled to (in pixels),
+# and maybe transformed to 1-channel grayscale:
+sample_width  = 400
+sample_height = 400
+to_grayscale  = False
+
+verbose       = yes
+# Number of seconds between printing status
+# to the console, if verbose is 'yes':
+show_alive    = 30
+
+[Parallelism]
+
+# If True, every training script runs with
+# its own settings, and possibly its own dataset.
+# When False, use Distributed Data Parallel (DDP)
+# where all processes cooperated in training,
+# each with their own slice of the data:
+
+independent_runs = True
+
+# Communication used for inter process/machine
+# communication during parallel training.
+# Any port is OK, one could use 29920, which
+# is registered as a Nintendo wifi port.
+# 5678 is the default pytorch port:
+
+master_port = 5678

@@ -1,0 +1,84 @@
+import typing
+
+def sum(input: Tensor, dtype=torch.dtype) -> Tensor:
+    return Tensor
+    
+def logical_and(input: Tensor, other: Tensor, out=None) -> Tensor:
+    return Tensor
+    
+def sub(input: Tensor, other: Tensor, alpha=int) -> Tensor:
+    return Tensor
+
+def where(condition: BoolTensor, x: Union[Tensor, Scalar], y: Union[Tensor, Scalar]) -> Tensor:
+    return Tensor
+
+def unsqueeze(input: Tensor, dim: int):
+    return Tensor
+
+def cat(tensors: Sequence[Tensor], dim: int):
+    return Tensor
+
+def tensor(data: array-like, dtype=torch.dtype, device_residence: torch.device_residence, requires_grad: bool, pin_memory: bool) -> Tensor:
+    return Tensor
+
+def max(input: Tensor, dim: int, keepdim: bool) -> Tensor:
+    return Tensor
+
+def save(obj: Object, f: file-like, pickle_module: Module, pickle_protocol: int) -> None:
+    return None
+
+def load(f: file-like, Union[function, torch.device, string, dict]) -> None:
+    return None
+
+def manual_seed(seed: int) -> torch._C.Generator:
+    return torch._C.Generator
+
+def device_residence(dev_name: string) -> torch.device_residence:
+    return torch.device_residence
+
+def randperm(n : int, dtype=torch.dtype, layout=torch.strided, device=torch.device, requires_grad=bool) -> Tensor:
+    return Tensor
+
+def ones(size: int, dtype: torch.dtype, layout: torch.layout, device: torch.device, requires_grad: bool) -> Tensor:
+    return Tensor
+
+def zeros(size: int, dtype: torch.dtype, layout: torch.layout, device: torch.device, requires_grad: bool) -> Tensor:
+    return Tensor
+
+def diagonal(input: Tensor, offset=int, dim1=int, dim2=int) -> Tensor:
+    return Tensor
+
+def stack(tensors: Sequence[Tensor], dim=int) -> Tensor:
+    return Tensor
+
+def eq(input: Tensor, other: Tensor) -> Tensor:
+    return Tensor
+
+def equal(input: Tensor, other: Tensor) -> Tensor:
+    return Tensor
+
+def mean(input: Tensor) -> Tensor:
+    return Tensor
+
+def float(input: Tensor) -> float:
+    return float
+
+def isnan(input: Tensor) -> Tensor:
+    return Tensor
+
+def argmax(input: Tensor) -> Tensor:
+    return Tensor
+
+def round(intput:Tensor) -> Tensor:
+    return Tensor
+
+def size(Tensor) -> torch.Size:
+    return Size
+
+typing.Generator[None, None, None]:
+
+
+Type[device]:
+Type[Generator]:
+Type[Tensor]:
+
