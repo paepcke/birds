@@ -244,7 +244,9 @@ class XenoCantoCollection:
         
         if type(bird_names_or_coll_path) == list:
             # Make a fresh instance as normal
-            inst = super().__new__(cls, **kwargs)
+            #*****inst = super().__new__(cls, **kwargs)
+            inst = super().__new__(cls)
+            inst.__init__(**kwargs)
             inst.data = {}
             # Download metadata, and create XenoCantoRecording
             # instances:
@@ -344,7 +346,6 @@ class XenoCantoCollection:
         # metadata:
         for species_recs_metadata in collections_metadata:
             # Metadata about XC holdings for one genus/species:
-            self.num_recordings = species_recs_metadata['numRecordings']
             self.num_species = species_recs_metadata['numSpecies']
             # List of dicts, each describing one 
             # recording:
@@ -994,6 +995,7 @@ class XenoCantoCollection:
                                     extension
                                     )
             full_path = os.path.join(dest_dir,filename)
+        full_path += extension
         return full_path
 
 # --------------------------- Class XenoCantoRecording
@@ -1024,7 +1026,7 @@ class XenoCantoRecording:
     
     def __init__(self, 
                  recording_metadata, 
-                 load_dir=None, 
+                 dest_dir=None, 
                  log=None
                  ):
         '''
@@ -1038,10 +1040,10 @@ class XenoCantoRecording:
         @param recording_metadata: a 'recordings' entry from a
             XenoCanto metadata download of available recordings
         @type recording_metadata: {str | {str : Any}|
-        @param load_dir: directory were to store downloaded
+        @param dest_dir: directory were to store downloaded
             sound files. If None, creates subdirectory of
             this script called: 'recordings'
-        @type load_dir: {None | str}
+        @type dest_dir: {None | str}
         @param log: logging service; if None, creates one
         @type log: {None | LoggingService}
         '''
@@ -1061,13 +1063,13 @@ class XenoCantoRecording:
             return
          
         curr_dir = os.path.dirname(__file__)
-        if load_dir is None:
+        if dest_dir is None:
             self.dest_dir = os.path.join(curr_dir, 'recordings')
             if not os.path.exists(self.dest_dir):
                 os.mkdir(self.dest_dir)
         else:
-            self.dest_dir = load_dir
-        
+            self.dest_dir = dest_dir
+
         self._xeno_canto_id = recording_metadata['id']
         self.genus     = recording_metadata['gen']
         self.species   = recording_metadata['sp']
@@ -1464,7 +1466,7 @@ if __name__ == '__main__':
         # saved collection was specified: 
         
         sound_collection = XenoCantoCollection(birds_to_process,
-                                               load_dir=args.destdir,
+                                               dest_dir=args.destdir,
                                                always_overwrite=args.overwrite
                                                )
         saved_path = sound_collection.save()
@@ -1486,7 +1488,7 @@ if __name__ == '__main__':
     # Testing (Should move to a unittest
 #     sound_collection = XenoCantoCollection(['Tangara+gyrola', 
 #                                             'Amazilia+decora'],
-#                                             load_dir='/tmp'
+#                                             dest_dir='/tmp'
 #                                             )
 #     #rec = next(iter(sound_collection, one_per_bird_phylo=False))
 #     for rec in sound_collection(one_per_bird_phylo=False):
