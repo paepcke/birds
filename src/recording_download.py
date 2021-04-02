@@ -26,7 +26,7 @@ BIRD_LIST = [('Amazilia+decora', True), ('Arremon+aurantiirostris', True),
              ('Empidonax+flaviventris', False), ('Euphonia+imitans', False),
              ('Henicorhina+leucosticta', True), ('Hylophilus+decurtatus', False),
              ('Lophotriccus+pileatus', True),
-             ('Parula+pitiayumi', True),
+             ('Setophaga+pitiayumi', True),
              ('Tangara+gyrola', False), ('Tangara+icterocephala', False)
             ]
 
