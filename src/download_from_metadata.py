@@ -4,32 +4,32 @@
     create a single folder for that key in the XenoCantoCollection.
 """
 import argparse
-import sys
-sys.path.append('birdsong')
-from xeno_canto_processor import XenoCantoCollection
+# import sys
+# sys.path.append('birdsong')
+from birdsong.xeno_canto_manager import XenoCantoCollection
 import os
 
-BIRD_LIST = [('Amazilia+decora', True), ('Arremon+aurantiirostris', True),
-             ('Corapipo+altera', True),
-             ('Dysithamnus+mentalis', True),
-             ('Empidonax+flaviventris', False), ('Euphonia+imitans', False),
-             ('Henicorhina+leucosticta', True), ('Hylophilus+decurtatus', False),
-             ('Lophotriccus+pileatus', True),
-             ('Setophaga+pitiayumi', True),
-             ('Tangara+gyrola', False), ('Tangara+icterocephala', False)
-            ]
-# Below used for testing
-# BIRD_LIST = [#('Amazilia+decora', True),
-#              # ('Arremon+aurantiirostris', True),
+# BIRD_LIST = [('Amazilia+decora', True), ('Arremon+aurantiirostris', True),
 #              ('Corapipo+altera', True),
-#              # ('Dysithamnus+mentalis', True),
-#              # ('Empidonax+flaviventris', False), ('Euphonia+imitans', False),
-#              # ('Henicorhina+leucosticta', True), ('Hylophilus+decurtatus', False),
-#              # ('Lophotriccus+pileatus', True),
-#              # ('Parula+pitiayumi', True),
-#              ('Tangara+gyrola', False)
-#              # ,('Tangara+icterocephala', False)
+#              ('Dysithamnus+mentalis', True),
+#              ('Empidonax+flaviventris', False), ('Euphonia+imitans', False),
+#              ('Henicorhina+leucosticta', True), ('Hylophilus+decurtatus', False),
+#              ('Lophotriccus+pileatus', True),
+#              ('Setophaga+pitiayumi', True),
+#              ('Tangara+gyrola', False), ('Tangara+icterocephala', False)
 #             ]
+# Below used for testing
+BIRD_LIST = [#('Amazilia+decora', True),
+             # ('Arremon+aurantiirostris', True),
+             ('Corapipo+altera', True),
+             # ('Dysithamnus+mentalis', True),
+             # ('Empidonax+flaviventris', False), ('Euphonia+imitans', False),
+             # ('Henicorhina+leucosticta', True), ('Hylophilus+decurtatus', False),
+             # ('Lophotriccus+pileatus', True),
+             # ('Setophaga+pitiayumi', True),
+             ('Tangara+gyrola', False)
+             # ,('Tangara+icterocephala', False)
+            ]
 
 
 def folder_prefix(birdname):
@@ -38,6 +38,12 @@ def folder_prefix(birdname):
     folder_prefix = name_list[0][:3] + name_list[1][:3]
     return folder_prefix.upper()
 
+def same_birds(collection, BIRD_LIST):
+    """
+    Function checks if birds in collection loaded from metadata are the same as the ones in BIRD_LIST.
+    """
+    birds = [name.replace('+','') for name, split_bool in BIRD_LIST]
+    return birds == list(collection.keys())
 
 def download_bird_samples(meta_data_path, out_dir, num_samples_per_species):
     """
@@ -46,8 +52,13 @@ def download_bird_samples(meta_data_path, out_dir, num_samples_per_species):
     """
     if not os.path.exists(out_dir):
         os.mkdir(out_dir)
-    birds = [pair[0] for pair in BIRD_LIST]
-    xc_collection = XenoCantoCollection(birds)
+    # birds = [pair[0] for pair in BIRD_LIST]
+    xc_collection = XenoCantoCollection.from_json(meta_data_path)
+    if not same_birds(xc_collection, BIRD_LIST):
+        print("ERROR: Please check that the birds in metadata are the same as those in BIRDLIST")
+        print(f"Birds in metadata: {list(xc_collection.keys())}.")
+        print(f"Birds in BIRDLIST: {[name.replace('+','') for name, split_bool in BIRD_LIST]}.")
+        return
     for birdname, split_call_song in BIRD_LIST:
         # download samples from zeno-canto
         num_records = download_bird(birdname, out_dir, folder_prefix(birdname), split_call_song,
