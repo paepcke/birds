@@ -12,6 +12,7 @@ import noisereduce as nr
 import os
 import sys
 import argparse
+import soundfile as sf
 sys.path.append('data_augmentation/src')
 import augmentations as aug
 
@@ -49,7 +50,7 @@ def sliding_window(in_dir, species, sample_name, out_dir, window_len = 5):
                                   offset=start_time, duration=window_len)
         window_name = sample_name[:-len(".wav")] + '_sw-start' + str(start_time)
         create_spectrogram(window_name, window, sr, os.path.join(out_dir, 'spectrograms/', species))
-        librosa.output.write_wav(os.path.join(out_dir, 'wav-files', species, window_name + '.wav'), window, sr)
+        sf.write(os.path.join(out_dir, 'wav-files', species, window_name + '.wav'), window, sr)
 
 def create_folder(dir_path):
     if os.path.exists(dir_path):
