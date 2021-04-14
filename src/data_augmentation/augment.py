@@ -11,6 +11,7 @@ import numpy as np
 from logging_service import LoggingService
 
 import data_augmentation.utils as utils
+from data_augmentation.augmentations import SoundProcessor
 
 #---------------- Class Augmenter ---------------
 
@@ -39,10 +40,11 @@ class Augmenter:
 
         '''
         
-        @param input_dir_path:
-        @type input_dir_path:
-        @param plot:
-        @type plot:
+        @param input_dir_path: directory holding .wav files
+        @type input_dir_path: str
+        @param plot: whether or not to plot informative chars 
+            along the way
+        @type plot: bool
         @param to_median: True is to make all samples have the median number of samples. 
             False is to make all classes have at least 10% of max samples.
             Define the proportions using each augmentation. Proportion used will be 
@@ -60,14 +62,15 @@ class Augmenter:
     
         self.input_dir_path = input_dir_path
         self.multiple_augs  = multiple_augs
+        self.plot           = plot
         
-        species_df = utils.sample_compositions_by_species(input_dir_path, augmented=False)
+        self.species_df = utils.sample_compositions_by_species(input_dir_path, augmented=False)
         
         if plot:
-            species_df.plot.bar()
+            self.species_df.plot.bar()
 
-        species_np = species_df.values.flatten()
-        index_max, index_min = species_df.idxmax().to_numpy()[0], species_df.idxmin().to_numpy()[0]
+        species_np = self.species_df.values.flatten()
+        index_max, index_min = self.species_df.idxmax().to_numpy()[0], self.species_df.idxmin().to_numpy()[0]
         
         val_max = np.max(species_np)
         max_tenth = val_max//10 +1
@@ -101,6 +104,31 @@ class Augmenter:
         utils.create_folder(self.output_dir_path)
         utils.create_folder(os.path.join(self.output_dir_path, self.AUG_WAV_DIR))
         utils.create_folder(os.path.join(self.output_dir_path, self.AUG_SPECTROGRAMS_DIR))
+
+    #------------------------------------
+    # generate_all_augmentations
+    #-------------------
+
+    def generate_all_augmentations(self):
+
+        for species, rows in self.species_df.iterrows():
+            num_samples_orig = rows['num_samples']
+            self.create_augmentations(species, num_samples_orig, self.sample_threshold)
+        
+        #input(f"Finished for {species}")
+
+        # Clean up directory clutter:
+        search_root_dir = os.path.join(self.output_dir_path + self.AUG_SPECTROGRAMS_DIR) 
+        os.system(f"find {search_root_dir} -name \".DS_Store\" -delete")
+        
+        spectro_dir = os.path.join(self.output_dir_path, self.AUG_SPECTROGRAMS_DIR)
+        augmented_df = utils.sample_compositions_by_species(spectro_dir, augmented=True)
+        augmented_df["total_samples"] = augmented_df.sum(axis=1)
+        
+        self.log.debug(f"augmented_df: {augmented_df}")
+
+        if self.plot:
+            augmented_df.plot.bar(y=["add_bg", "time_shift", "mask", "original"],stacked=True).legend(loc='center left', bbox_to_anchor=(1, 0.5))
 
     #------------------------------------
     # create_augmentations
@@ -190,16 +218,23 @@ class Augmenter:
             if i != 0:  # if not first augmentation, then, source wav is in output wav directory
                 species_wav_input_dir = species_wav_output_dir
             if aug_name == "add_noise":
-                #add_noise which noise to add will be chosen at random
-                updated_name = aug.add_background(sample_name, NOISE_PATH, species_wav_input_dir, species_wav_output_dir, len_noise_to_add=5.0)
+                
+                # Add_noise; which noise to add will be chosen at random
+                updated_name = SoundProcessor.add_background(sample_name, 
+                                              self.NOISE_PATH, 
+                                              species_wav_input_dir, 
+                                              species_wav_output_dir, 
+                                              len_noise_to_add=5.0)
             elif aug_name == "time_shift":
-                #time_shift
-                updated_name = aug.time_shift(sample_name, species_wav_input_dir, species_wav_output_dir)
+                updated_name = SoundProcessor.time_shift(sample_name, species_wav_input_dir, species_wav_output_dir)
             sample_name = updated_name
             
         # create new spectrogram if augmented
         if len(aug_choices) != 0:
-            sample_name = aug.create_spectrogram(sample_name, species_wav_output_dir, species_spectrogram_output_dir, n_mels=128)
+            sample_name = SoundProcessor.create_spectrogram(sample_name, 
+                                             species_wav_output_dir, 
+                                             species_spectrogram_output_dir, 
+                                             n_mels=128)
             
         if warp:
             #warp
@@ -207,52 +242,32 @@ class Augmenter:
             #     input(f"num_augs = {len(aug_choices) +1} for {sample_name}")
             sample_name = sample_name[:-len(".wav")] + ".png"
             # Above: if sample is unaugmented to this point, sample_name will be
-            # *.wav. Since warp_spectrogram expects sample_name to be *.png, we 
+            # *.wav. Since SoundProcessor.warp_spectrogram expects sample_name to be *.png, we 
             # replace extension. If augmented and sample_name is already *.png, 
             # there is no change.
-            warped_name = aug.warp_spectrogram(sample_name, species_spectrogram_output_dir, species_spectrogram_output_dir)
-            if len(aug_choices) != 0: # if warp is not the only augmentation, we do not want spectrogram before warp
+            warped_name = SoundProcessor.warp_sepctrogram(sample_name, 
+                                           species_spectrogram_output_dir, 
+                                           species_spectrogram_output_dir)
+            # if warp is not the only augmentation, 
+            # we do not want spectrogram before warp
+            if len(aug_choices) != 0: 
                 assert(warped_name != sample_name)
-                os.remove(species_spectrogram_output_dir + sample_name)
+                fname = os.path.join(species_spectrogram_output_dir, sample_name)
+                os.remove(fname)
 
-#---------------- Class SpectrogramCreator ---------------
-
-class SpectrogramCreator:
-
-    #------------------------------------
-    # Constructor 
-    #-------------------
-
-    def __init__(self):
-        pass
-
-    #------------------------------------
-    # create_original_spectrograms 
-    #-------------------
-
-    def create_original_spectrograms(self, samples, n, species_wav_input_dir, species_spectrogram_output_dir):
-        samples = random.sample(samples, int(n)) # choose n from all samples
-        for sample_name in samples:
-            aug.create_spectrogram(sample_name, species_wav_input_dir, species_spectrogram_output_dir, n_mels=128)
+        #------------------------------------
+        # create_original_spectrograms 
+        #-------------------
+    
+        def create_original_spectrograms(self, samples, n, species_wav_input_dir, species_spectrogram_output_dir):
+            samples = random.sample(samples, int(n)) # choose n from all samples
+            for sample_name in samples:
+                SoundProcessor.create_spectrogram(sample_name, species_wav_input_dir, species_spectrogram_output_dir, n_mels=128)
 
 #-------------------------
 # In[127]:
 
 
-for species, rows in species_df.iterrows():
-    num_samples_orig = rows['num_samples']
-    create_augmentations(species, num_samples_orig, sample_threshold)
-#     input(f"Finished for {species}")
-
-
-# In[130]:
-
-
-os.system(f"find {self.output_dir_path + AUG_SPECTROGRAMS_DIR} -name \".DS_Store\" -delete")
-augmented_df = utils.sample_compositions_by_species(self.output_dir_path + AUG_SPECTROGRAMS_DIR, augmented=True)
-augmented_df["total_samples"] = augmented_df.sum(axis=1)
-print(augmented_df)
-augmented_df.plot.bar(y=["add_bg", "time_shift", "mask", "original"],stacked=True).legend(loc='center left', bbox_to_anchor=(1, 0.5))
 
 # ------------------------ Main ------------
 if __name__ == '__main__':
@@ -260,20 +275,7 @@ if __name__ == '__main__':
                                      formatter_class=argparse.RawTextHelpFormatter,
                                      description="Chop audio files into snippets, plus data augmentation."
                                      )
-
-    # parser.add_argument('-l', '--errLogFile',
-                        # help='fully qualified log file name to which info and error messages \n' +\
-                        # 'are directed. Default: stdout.',
-                        # dest='errLogFile',
-                        # default=None)
-    # parser.add_argument('-d', '--dryRun',
-                        # help='show what script would do if run normally; no actual downloads \nor other changes are performed.',
-                        # action='store_true')
-    # parser.add_argument('my_integers',
-                        # type=int,
-                        # nargs='+',
-                        # help='Repeatable: integers. Will show as list in my_integers')
-    
+   
     parser.add_argument('-p', '--plot',
                         help='whether or not to plot species distributions; default: False',
                         action='store_true',
@@ -295,7 +297,7 @@ if __name__ == '__main__':
                           plot=args.plot
                           )
 
-    augmenter.create_augmentations(species, num_samples_orig, threshold)
+    augmenter.generate_all_augmentations()
 
 #create_augmentations("TANGYR_S", 8, sample_threshold)
 
