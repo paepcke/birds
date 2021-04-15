@@ -2,16 +2,37 @@
 # coding: utf-8
 
 import argparse
+from enum import Enum
 import os
 import random
 import sys
 
-import numpy as np
-
 from logging_service import LoggingService
 
+from data_augmentation.sound_processor import SoundProcessor
 import data_augmentation.utils as utils
-from data_augmentation.augmentations import SoundProcessor
+import numpy as np
+
+
+# How many augmentations to create 
+# for each species. Measured against
+# the number of samples of the species 
+# with the most number of available
+# samples.
+# Meaning: 
+#    TENTH: all species will have at least a 				  
+#           10th of samples in the most populous 
+#           species 	  
+#   MEDIAN: all species will have at least the median
+#    	    number of samples in the species populations
+#      MAX: all species will end up with the number of
+#           species of the most populously represented species
+#           in the training set: 
+
+class AugmentationVolume(Enum):
+    TENTH   = 0
+    MEDIAN  = 1
+    MAX     = 2
 
 #---------------- Class Augmenter ---------------
 
@@ -34,7 +55,8 @@ class Augmenter:
     def __init__(self, 
                  input_dir_path,
                  plot=False,
-                 to_median=True,
+                 overwrite_freely=False,
+                 aug_volume=AugmentationVolume.MEDIAN,
                  random_augs = False,
                  multiple_augs = False,):
 
@@ -45,11 +67,14 @@ class Augmenter:
         @param plot: whether or not to plot informative chars 
             along the way
         @type plot: bool
-        @param to_median: True is to make all samples have the median number of samples. 
-            False is to make all classes have at least 10% of max samples.
-            Define the proportions using each augmentation. Proportion used will be 
-            num_in_category / total_of_categories
-        @type to_median: bool
+        @param overwrite_freely: if true, don't ask each time
+            previously created work will be replaced
+        @type overwrite_freely: bool 
+        @param aug_volume: either an AugmentationVolume member,
+               or a dict with a separate AugmentationVolume
+               for each species: {species : AugmentationVolume}
+               (See definition of AugmentationVolume)
+        @type aug_volume: {AugmentationVolume | {str : AugmentationVolume}}
         @param random_augs: if this is true, will randomly choose augmentation 
             to use for each new sample
         @type random_augs: bool
@@ -60,38 +85,44 @@ class Augmenter:
 
         self.log = LoggingService()
     
-        self.input_dir_path = input_dir_path
-        self.multiple_augs  = multiple_augs
-        self.plot           = plot
-        
-        self.species_df = utils.sample_compositions_by_species(input_dir_path, augmented=False)
+        self.input_dir_path   = input_dir_path
+        self.multiple_augs    = multiple_augs
+        self.plot             = plot
+        self.overwrite_freely = overwrite_freely
+
+        # Get dataframe with row lables being the
+        # species, and one col with number of samples
+        # in the respective species:
+        #       num_species
+        # sp1       10
+        # sp2       15
+        #      ..
+
+        self.sample_distrib_df = utils.sample_compositions_by_species(input_dir_path, 
+                                                                      augmented=False)
         
         if plot:
-            self.species_df.plot.bar()
+            # Plot a distribution:
+            self.sample_distrib_df.plot.bar()
 
-        species_np = self.species_df.values.flatten()
-        index_max, index_min = self.species_df.idxmax().to_numpy()[0], self.species_df.idxmin().to_numpy()[0]
-        
-        val_max = np.max(species_np)
-        max_tenth = val_max//10 +1
-        val_median = np.median(species_np)
-        
-        self.log.info(f"Median: {val_median},  Min: {np.min(species_np)} ({index_min}) ,  Max: {val_max} ({index_max})")
-        self.log.info(f"10% of max is {max_tenth}")
+        # Build a dict with number of augmentations to do
+        # for each species:
+        self.augs_to_do = self.compute_num_augs_per_species(aug_volume, self.sample_distrib_df)
 
         if random_augs:
             self.output_dir_path = f"{input_dir_path[:-1]}_augmented_samples_random"
 
         else:
             assert(self.ADD_NOISE + self.TIME_SHIFT + self.WARP == 1)
-            self.output_dir_path = f"{input_dir_path[:-1]}_augmented_samples-{self.ADD_NOISE:.2f}n-{self.IME_SHIFT:.2f}ts-{self.WARP:.2f}w"
+            self.output_dir_path = f"{input_dir_path[:-1]}_augmented_samples-{self.ADD_NOISE:.2f}n-{self.TIME_SHIFT:.2f}ts-{self.WARP:.2f}w"
 
         if self.multiple_augs:
             self.output_dir_path += "/"
         else:
-            self.output_dir_path += "-exc/"  # indicate that augmentations are mutually exclusive
+            # Indicate that augmentations are mutually exclusive
+            self.output_dir_path += "-exc/"  
 
-        self.sample_threshold = val_median if to_median else max_tenth
+        self.log.info(f"Results will be in {self.output_dir_path}")
 
         # Creates output file structure
         # Self.output_dir_path
@@ -101,19 +132,100 @@ class Augmenter:
         #       |-- AUG_SPECTROGRAMS_DIR
         #       |         |----
         #       |         |----
-        utils.create_folder(self.output_dir_path)
-        utils.create_folder(os.path.join(self.output_dir_path, self.AUG_WAV_DIR))
-        utils.create_folder(os.path.join(self.output_dir_path, self.AUG_SPECTROGRAMS_DIR))
+        utils.create_folder(self.output_dir_path, self.overwrite_freely)
+        utils.create_folder(os.path.join(self.output_dir_path, self.AUG_WAV_DIR),
+                            self.overwrite_freely)
+        utils.create_folder(os.path.join(self.output_dir_path, self.AUG_SPECTROGRAMS_DIR),
+                            self.overwrite_freely)
+
+    #------------------------------------
+    # compute_num_augs_per_species
+    #-------------------
+
+    def compute_num_augs_per_species(self, aug_volumes, sample_distrib_df):
+        '''
+        Return a dict mapping species name to 
+        number of samples should be available after
+        augmentation. 
+        
+        The aug_volumes arg is either a dict mapping species name
+        to an AugmentationVolume (TENTH, MEDIAN, MAX), or just
+        an individual AugmentationVolume.
+
+        The sample_distrib_df is a dataframe whose row labels are 
+        species names and the single column's values are numbers
+        of available samples for training/validation/test for the
+        respective row's species.
+        
+        @param aug_volumes: how many augmentations for each species
+        @type aug_volumes: {AugmentationVolume | {str : AugmentationVolume}}
+        @param sample_distrib_df: distribution of initially available
+            sample numbers for each species
+        @type sample_distrib_df: pandas.DataFrame
+        @return: dict mapping each species to the 
+            number of samples that need to be created.
+        @rtype: {str : int}
+        '''
+        
+        # Get straight array of number of audio samples
+        # for each species. Ex: array([6,4,5]) for
+        # three species with 6,4, and 5 audio recordings,
+        # respectively
+
+        species_np = self.sample_distrib_df.values.flatten()
+        index_max, index_min = (self.sample_distrib_df.idxmax().to_numpy()[0], 
+                                self.sample_distrib_df.idxmin().to_numpy()[0])
+        
+        
+        # Get number of recordings for
+        # the species with the most number
+        # of recordings: 
+        max_num_samples = np.max(species_np)
+        tenth_max_num_samples = max_num_samples//10 +1
+        median_num_samples = np.median(species_np)
+        
+        volumes = {AugmentationVolume.TENTH  : tenth_max_num_samples,
+                   AugmentationVolume.MEDIAN : median_num_samples,
+                   AugmentationVolume.MAX    : max_num_samples
+                   }
+        
+        aug_requirements = {}
+        if type(aug_volumes) == AugmentationVolume:
+            for species in sample_distrib_df.index:
+                aug_requirements[species] = volumes[aug_volumes]
+        else:
+            # Have dict of species-name : AugmentationVolume:
+            for species in sample_distrib_df.index:
+                aug_requirement = aug_volumes[species]
+                aug_requirements[species] = volumes[aug_requirement]
+        
+        self.log.info(f"Median: {median_num_samples},  Min: {np.min(species_np)} ({index_min}) ,  Max: {max_num_samples} ({index_max})")
+        self.log.info(f"10% of max is {tenth_max_num_samples}")
+
+        return aug_requirements 
 
     #------------------------------------
     # generate_all_augmentations
     #-------------------
 
     def generate_all_augmentations(self):
+        '''
+        Create new samples via augmentation or each species. 
+        Augment the audio and/or spectrogram files to reach 
+        the number of spectrograms indicated in the self.aug_requirements.
+        
+        Spectrograms are created on the way.
 
-        for species, rows in self.species_df.iterrows():
+        Assumption: self.aug_requirements is a dict mapping 
+        species-name : num_required_augmentations
+        '''
+
+        for species, rows in self.sample_distrib_df.iterrows():
             num_samples_orig = rows['num_samples']
-            self.create_augmentations(species, num_samples_orig, self.sample_threshold)
+            self.create_augmentations(species, 
+                                      num_samples_orig, 
+                                      self.augs_to_do[species]
+                                      )
         
         #input(f"Finished for {species}")
 
@@ -130,6 +242,7 @@ class Augmenter:
         if self.plot:
             augmented_df.plot.bar(y=["add_bg", "time_shift", "mask", "original"],stacked=True).legend(loc='center left', bbox_to_anchor=(1, 0.5))
 
+        self.log.info("Done")
     #------------------------------------
     # create_augmentations
     #-------------------
@@ -143,8 +256,8 @@ class Augmenter:
         # Make output folders under self.output_dir_path
         # Returns if either folder already exists
         
-        if not (utils.create_folder(species_wav_output_dir) and 
-                utils.create_folder(species_spectrogram_output_dir)):
+        if not (utils.create_folder(species_wav_output_dir, self.overwrite_freely) and 
+                utils.create_folder(species_spectrogram_output_dir, self.overwrite_freely)):
             self.log.info(f"Skipping augmentations for {species}")
             return
     
@@ -167,7 +280,7 @@ class Augmenter:
         
         # Cannot do augmentations for species with 0 samples
         if len(wav_files) == 0:
-            self.log.infor(f"Skipping for {species} since there are no original samples.")
+            self.log.info(f"Skipping for {species} since there are no original samples.")
             return
         
         # Create samples_to_add samples using augmentations
@@ -255,18 +368,14 @@ class Augmenter:
                 fname = os.path.join(species_spectrogram_output_dir, sample_name)
                 os.remove(fname)
 
-        #------------------------------------
-        # create_original_spectrograms 
-        #-------------------
-    
-        def create_original_spectrograms(self, samples, n, species_wav_input_dir, species_spectrogram_output_dir):
-            samples = random.sample(samples, int(n)) # choose n from all samples
-            for sample_name in samples:
-                SoundProcessor.create_spectrogram(sample_name, species_wav_input_dir, species_spectrogram_output_dir, n_mels=128)
+    #------------------------------------
+    # create_original_spectrograms 
+    #-------------------
 
-#-------------------------
-# In[127]:
-
+    def create_original_spectrograms(self, samples, n, species_wav_input_dir, species_spectrogram_output_dir):
+        samples = random.sample(samples, int(n)) # choose n from all samples
+        for sample_name in samples:
+            SoundProcessor.create_spectrogram(sample_name, species_wav_input_dir, species_spectrogram_output_dir, n_mels=128)
 
 
 # ------------------------ Main ------------
@@ -282,6 +391,12 @@ if __name__ == '__main__':
                         default=False
                         )
                         
+    parser.add_argument('-y', '--overwrite_freely',
+                        help='if set, overwrite existing out directories without asking; default: False',
+                        action='store_true',
+                        default=False
+                        )
+
     parser.add_argument('input_dir_path',
                         help='path to .wav files',
                         default=None)
@@ -294,7 +409,8 @@ if __name__ == '__main__':
         sys.exit(1)
 
     augmenter = Augmenter(args.input_dir_path,
-                          plot=args.plot
+                          plot=args.plot,
+                          overwrite_freely=args.overwrite_freely
                           )
 
     augmenter.generate_all_augmentations()
