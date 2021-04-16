@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
+from _collections import OrderedDict
 import argparse
-import os
+import os,sys
 import warnings
 
 import librosa.display
@@ -11,6 +12,7 @@ from matplotlib import MatplotlibDeprecationWarning
 from data_augmentation import utils
 from data_augmentation.sound_processor import SoundProcessor as aug
 import matplotlib.pyplot as plt
+import multiprocessing as mp
 import numpy as np
 import soundfile as sf
 
@@ -72,8 +74,9 @@ class SoundChopper:
                                 category=UserWarning, 
                                 module='', 
                                 lineno=0)
+        
         (num_audios, num_spectros) = self.chop_all()
-        assert(num_audios == num_spectros)
+        #assert(num_audios == num_spectros)
         self.log.info(f"Created {num_audios} audio snippets and {num_spectros} spectrogram snippets")
 
     #------------------------------------
@@ -110,7 +113,11 @@ class SoundChopper:
                             number of created .png spectrogram snippet files,
         
         '''
-        species_list = os.listdir(self.in_dir)
+        if self.specific_species is None:
+            species_list = os.listdir(self.in_dir)
+        else:
+            species_list = self.specific_species
+            
         # Root dir of the two dirs that will hold new 
         # audio snippet and spectrogram files
         utils.create_folder(self.out_dir, overwrite_freely=self.overwrite_freely)
@@ -121,46 +128,25 @@ class SoundChopper:
         utils.create_folder(spectrogram_dir_path, overwrite_freely=self.overwrite_freely)
         utils.create_folder(wav_dir_path, overwrite_freely=self.overwrite_freely)
         
-        if self.specific_species == None:
-            # Chop them all:
-            for species in os.listdir(self.in_dir):
-                # One dir each for the audio and spectrogram
-                # snippets of one species:
-                if (utils.create_folder(os.path.join(spectrogram_dir_path, species),
-                                        overwrite_freely=self.overwrite_freely
-                                        )
-                and utils.create_folder(os.path.join(wav_dir_path, species),
-                                        overwrite_freely=self.overwrite_freely)):
-                    audio_files = os.listdir(os.path.join(self.in_dir, species))
-                    num_files   = len(audio_files)
-                    for i, sample_name in enumerate(audio_files):
-                        # Chop one audio file:
-                        self.log.info(f"Chopping {species} audio {i}/{num_files}")
-                        self.chop_one_audio_file(self.in_dir, species, sample_name, self.out_dir)
-                    self.num_chopped += num_files
-                    
-                else:
-                    print(f"Skipping audio chopping for {species}")
-        else:
-            if self.specific_species in species_list:
+        for species in species_list:
+            # One dir each for the audio and spectrogram
+            # snippets of one species:
+            if (utils.create_folder(os.path.join(spectrogram_dir_path, species),
+                                    overwrite_freely=self.overwrite_freely
+                                    )
+            and utils.create_folder(os.path.join(wav_dir_path, species),
+                                    overwrite_freely=self.overwrite_freely)):
+                audio_files = os.listdir(os.path.join(self.in_dir, species))
+                num_files   = len(audio_files)
+                for i, sample_name in enumerate(audio_files):
+                    # Chop one audio file:
+                    self.log.info(f"Chopping {species} audio {i}/{num_files}")
+                    self.chop_one_audio_file(self.in_dir, species, sample_name, self.out_dir)
+                self.num_chopped += num_files
                 
-                # Creation of spectrogram and/or audio output
-                # directories may fail if one of the dirs already
-                # exists, and user forbade replacement in the
-                # dialog question:
-                
-                created_spectrogram_dir = utils.create_folder(os.path.join(spectrogram_dir_path, self.specific_species),
-                                                              overwrite_freely=self.overwrite_freely
-                                                              )
-                created_audio_dir       = utils.create_folder(os.path.join(wav_dir_path, self.specific_species),
-                                            overwrite_freely=self.overwrite_freely)
-                 
-                if created_spectrogram_dir and created_audio_dir:
-                    for sample_name in os.listdir(os.path.join(self.in_dir, self.specific_species)):
-                        self.chop_one_audio_file(self.in_dir, species, sample_name, self.out_dir)
-                else:
-                    print(f"Skipping audio chopping for {species}")
-                    
+            else:
+                print(f"Skipping audio chopping for {species}")
+
         num_spectros = utils.find_in_dir_tree(spectrogram_dir_path, pattern='*.png')
         num_audios   = utils.find_in_dir_tree(wav_dir_path, pattern='*.wav')
         return (num_audios, num_spectros)
@@ -181,9 +167,8 @@ class SoundChopper:
         plt.tight_layout()
         plt.axis('off')
         spectrogramfile = os.path.join(out_dir, sample_name + '.png')
-        #*****
-        #workaround for Exception in Tkinter callback
-        import sys
+
+        # Workaround for Exception in Tkinter callback
         fig.canvas.start_event_loop(sys.float_info.min) 
         #*****
         plt.savefig(spectrogramfile, dpi=100, bbox_inches='tight', pad_inches=0, format='png', facecolor='none')
@@ -230,8 +215,175 @@ class SoundChopper:
             sf.write(os.path.join(out_dir, 'wav-files', species, window_name + '.wav'), window, sr)
 
 
+    #------------------------------------
+    # compute_worker_assignments 
+    #-------------------
+    
+    @classmethod
+    def compute_worker_assignments(cls, in_dir, num_workers=None):
+        '''
+        Given the root directory of a set of
+        directories whose names are species,
+        and which contain recordings by species,
+        return a multi processing worker assignment.
+        
+        Expected:
+                         in_dir
+
+          Species1        Species2   ...     Speciesn
+           smpl1_1.mp3      smpl2_1.mp3         smpln_1.mp3
+           smpl1_2.mp3      smpl2_2.mp3         smpln_2mp3
+                            ...
+        
+        Collects number of recordings available for
+        each species. Creates a list of species name
+        buckets such that all workers asked to process
+        one of the buckets, will have roughly equal
+        amounts of work.
+        
+        Example return:
+            
+            [['Species1', 'Species2], ['Species3', 'Species4', 'Species5']]
+            
+        The caller can then assign the first list to
+        one worker, and the second list to another worker.
+        
+        The number of buckets, and therefore the number
+        of eventual workers may be passed in. If None, 
+        80% of the cores available on the current machine
+        will be assumed. If num_workers is provided and
+        the number is larger than the number of available
+        cores, the number is reduced to the number of cores.
+        
+        Also returned is the number of workers on which the
+        computation is based. This number is always the same
+        as the number of species name lists in the return.
+        But for clarity, the number is returned explicitly.
+
+        @param in_dir: root of species recordings
+        @type in_dir: str
+        @param num_workers: number of buckets into which to partition 
+        @type num_workers: {int | None}
+        @return: list of species name lists, and number of workers.
+        @rtype: ([[int]], int)
+        '''
+        
+        sample_size_distrib = OrderedDict({})
+        for _dir_name, subdir_list, _file_list in os.walk(in_dir):
+            for species_name in subdir_list:
+                sample_size_distrib[species_name] = (len(os.listdir(os.path.join(in_dir, species_name))))
+            break 
+        
+        num_cores = mp.cpu_count()
+        # Use 80% of the cores:
+        if num_workers is None:
+            num_workers = round(num_cores * 80 /100)
+        elif num_workers > num_cores:
+            # Limit pool size to number of cores:
+            num_workers = num_cores
+
+        sample_sizes = sample_size_distrib.values()
+        
+        # Get list of sample sizes for birds, 
+        # roughly equally distributed across the
+        # workers. Example, asssuming 5 species
+        # with 10, 3, 6, 1, and 6 number of recordings,
+        # respectively, we may get:
+        #
+        #   [[10, 3], [6,1,6],]
+        
+        worker_assignment_sizes = cls.partition_list(sample_sizes, num_workers)
+        
+        # Get the corresponding species names.
+        # We can do that, b/c partition_list preserves
+        # the order of class sizes we pass in, and
+        # b/c we use an ordered dict:
+        
+        species_lists = []
+        species_names = list(sample_size_distrib.keys())
+        name_idx = 0
+        for num_samples_bucket in worker_assignment_sizes:
+            species_lists.append(species_names[name_idx:name_idx+len(num_samples_bucket)])
+            name_idx = name_idx+len(num_samples_bucket)
+        
+        return species_lists, num_workers 
+
+    #------------------------------------
+    # partition_list 
+    #-------------------
+
+    @classmethod
+    def partition_list(cls, a, k):
+        '''
+        Takes a list 'a' of integers, and a bucket size 'k'.
+        Partitions the list into k sublists such as the sum
+        within the sublists are as equal as possible. Order
+        is preserved.
+        
+        [converted to Pyhon 3 from accepted answer in 
+         https://stackoverflow.com/questions/35517051/split-a-list-of-numbers-into-n-chunks-such-that-the-chunks-have-close-to-equal
+        ]
+        
+        Examples:
+            l = [1, 6, 2, 3, 4, 1, 7, 6, 4]
+            
+            best = SoundChopper.partition_list(l, 1)
+            assert(best == [[1, 6, 2, 3, 4, 1, 7, 6, 4]])
+            best = SoundChopper.partition_list(l, 2)
+            assert(best == [[1, 6, 2, 3, 4, 1], [7, 6, 4]])
+        
+            best = SoundChopper.partition_list(l, 3)
+            assert(best == [[1, 6, 2, 3], [4, 1, 7], [6, 4]])
+        
+            best = SoundChopper.partition_list(l, 4)
+            assert(best == [[1, 6], [2, 3, 4, 1], [7], [6, 4]])
+        
+        @param a: list of integers to partition
+        @type a: [int]
+        @param k: number of buckets
+        @type k: int
+        @return: list of buckets
+        @rtype: [[int]]
+        '''
+        if k <= 1: return [a]
+        if k >= len(a): return [[x] for x in a]
+        partition_between = [(i+1)*len(a)/k for i in range(k-1)]
+        average_height = float(sum(a))/k
+        best_score = None
+        best_partitions = None
+        count = 0
+        while True:
+            starts = [0]+partition_between
+            ends = partition_between+[len(a)]
+            partitions = [a[round(starts[i]):round(ends[i])] for i in range(k)]
+            heights = [*map(sum, partitions)]
+            abs_height_diffs = []
+            for height in heights:
+                abs_height_diffs.append(abs(average_height - height))            
+            worst_partition_index = abs_height_diffs.index(max(abs_height_diffs))
+            worst_height_diff = average_height - heights[worst_partition_index]
+            if best_score is None or abs(worst_height_diff) < best_score:
+                best_score = abs(worst_height_diff)
+                best_partitions = partitions
+                no_improvements_count = 0
+            else:
+                no_improvements_count += 1
+            if worst_height_diff == 0 or no_improvements_count > 5 or count > 100:
+                return best_partitions
+            count += 1
+            move = -1 if worst_height_diff < 0 else 1
+            bound_to_move = 0 if worst_partition_index == 0\
+                            else k-2 if worst_partition_index == k-1\
+                            else worst_partition_index-1 if (worst_height_diff < 0) ^ (heights[worst_partition_index-1] > heights[worst_partition_index+1])\
+                            else worst_partition_index
+            direction = -1 if bound_to_move < worst_partition_index else 1
+            partition_between[bound_to_move] += move * direction
+            
+        return best_partitions
+
 # ------------------------ Main -----------------
 if __name__ == '__main__':
+    
     parser = argparse.ArgumentParser(description='List the content of a folder')
 
     # Add the arguments
@@ -243,11 +395,11 @@ if __name__ == '__main__':
                            metavar='OUT_DIR',
                            type=str,
                            help='the path to output directory to write new .wav/.png files')
-    parser.add_argument('-s', '--species',
-                           type=str,
-                           nargs='+',
-                           help='repeatable: specific species to use sliding window on',
-                           default=None)
+    # parser.add_argument('-s', '--species',
+    #                     type=str,
+    #                     nargs='+',
+    #                     help='repeatable: specific species to use sliding window on',
+    #                     default=None)
     parser.add_argument('-y', '--overwrite_freely',
                         help='if set, overwrite existing out directories without asking; default: False',
                         action='store_true',
@@ -256,10 +408,43 @@ if __name__ == '__main__':
 
     # Execute the parse_args() method
     args = parser.parse_args()
+
+    in_dir = args.input_dir
+    # Input makes sense?
+    if not os.path.exists(in_dir) or not os.path.isdir(in_dir):
+        print(f"In directory {in_dir} does not exist, or is not a directory")
+        sys.exit(1)
     
-    sound_chopper = SoundChopper(args.input_dir, 
-                                 args.output_dir, 
-                                 specific_species=args.species,
-                                 overwrite_freely=args.overwrite_freely
-                                 )
-    sound_chopper.log.info("Done")
+    # Get a list of lists of species names
+    # to process. The list is computed such
+    # that each worker has roughly the same
+    # number of recordings to chop. We let
+    # the method determine the number of workers
+    # by using 80% of the available cores. 
+    
+    (worker_assignments, num_workers) = SoundChopper.compute_worker_assignments(in_dir)
+
+    #****def create_sound_chopper(*args, **kwargs):
+    print(f"Distributing workload across {num_workers} workers.")
+    # Assign each list of species to one worker:
+    
+    chopping_jobs = []
+    for species_to_process in worker_assignments:
+        kwargs = {'specific_species' : species_to_process,
+                  'overwrite_freely' : args.overwrite_freely
+                  }
+        job = mp.Process(target=SoundChopper,
+                         args=(in_dir, args.output_dir),
+                         kwargs=kwargs,
+                         name=species_to_process.join(',')
+                         )
+        chopping_jobs.append(job)
+        print(f"Starting chops for {job.name}")
+        job.start()
+    
+    for job in chopping_jobs:
+        job.join()
+        res = "OK" if job.exitcode == 1 else "Error"
+        print(f"Chops of {job.name}: {res}")
+
+    print("Done")
