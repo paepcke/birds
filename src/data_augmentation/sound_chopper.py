@@ -24,7 +24,7 @@ import soundfile as sf
 #********************** For Remote Debugging Only *************
 # Must point to where the minimal PyDev files were
 # installed:
-sys.path.append("/home/paepcke/eclipsePyDev/pysrc/")
+sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
 import pydevd
 global pydevd
 pydevd.settrace('localhost', port=4040)
