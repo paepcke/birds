@@ -20,6 +20,17 @@ import multiprocessing as mp
 import numpy as np
 import soundfile as sf
 
+
+#********************** For Remote Debugging Only *************
+# Must point to where the minimal PyDev files were
+# installed:
+sys.path.append("/home/paepcke/eclipsePyDev/pysrc/")
+import pydevd
+global pydevd
+pydevd.settrace('localhost', port=4040)
+#********************** END Remote Debugging Only *************
+
+
 class SoundChopper:
     '''
     Processes directories of .wav or .mp3 files,
@@ -292,7 +303,7 @@ class SoundChopper:
     #-------------------
     
     @classmethod
-    def compute_worker_assignments(cls, in_dir, num_workers=None, strategy='by_file'):
+    def compute_worker_assignments(cls, in_dir, num_workers=None):
         '''
         Given the root directory of a set of
         directories whose names are species,
@@ -340,8 +351,6 @@ class SoundChopper:
         @rtype: ([[int]], int)
         '''
 
-        if strategy not in ['by_file', 'by_species']:
-            raise ValueError(f"Strategy must be one of by_file or by_species, not {strategy}")
         # Create:
         #     {species : num-recordings}
         #     {species : recordings_dir}
@@ -368,11 +377,6 @@ class SoundChopper:
         elif num_workers > num_cores:
             # Limit pool size to number of cores:
             num_workers = num_cores
-
-        if strategy == 'by_species':
-            sample_sizes = sample_size_distrib.values()
-            species_lists, num_workers = cls.partition_by_species(sample_sizes, num_workers) 
-            return species_lists, num_workers
 
         # Create a partitioning into equal sized files,
         # regardless of species association.
@@ -430,114 +434,91 @@ class SoundChopper:
         return assignments
 
     #------------------------------------
-    # partition_by_species 
+    # run_workers 
     #-------------------
     
     @classmethod
-    def partition_by_species(cls, sample_size_distrib, num_workers):
-        # Get list of sample sizes for birds, 
-        # roughly equally distributed across the
-        # workers. Example, asssuming 5 species
-        # with 10, 3, 6, 1, and 6 number of recordings,
-        # respectively, we may get:
-        #
-        #   [[10, 3], [6,1,6],]
-        
-        sample_sizes = sample_size_distrib.values()
-        worker_assignment_sizes = cls.partition_list(sample_sizes, num_workers)
-        
-        # Get the corresponding species names.
-        # We can do that, b/c partition_list preserves
-        # the order of class sizes we pass in, and
-        # b/c we use an ordered dict:
-        
-        species_names = list(sample_size_distrib.keys())
-        
-        name_idx = 0
-        species_lists = []
-
-        for num_samples_bucket in worker_assignment_sizes:
-            species_lists.append(species_names[name_idx:name_idx+len(num_samples_bucket)])
-            name_idx = name_idx+len(num_samples_bucket)
-        
-        return species_lists, num_workers 
-
-    #------------------------------------
-    # partition_list 
-    #-------------------
-
-    @classmethod
-    def partition_list(cls, a, k):
+    def run_workers(cls, args):
         '''
-        Takes a list 'a' of integers, and a bucket size 'k'.
-        Partitions the list into k sublists such as the sum
-        within the sublists are as equal as possible. Order
-        is preserved.
+        Called by main to run the SoundChopper in
+        multiple processes at once. Partitions the
+        audio files to be processed; runs the chopping
+        while giving visual progress on terminal.
         
-        [converted to Pyhon 3 from accepted answer in 
-         https://stackoverflow.com/questions/35517051/split-a-list-of-numbers-into-n-chunks-such-that-the-chunks-have-close-to-equal
-        ]
-        
-        Examples:
-            l = [1, 6, 2, 3, 4, 1, 7, 6, 4]
-            
-            best = SoundChopper.partition_list(l, 1)
-            assert(best == [[1, 6, 2, 3, 4, 1, 7, 6, 4]])
-            best = SoundChopper.partition_list(l, 2)
-            assert(best == [[1, 6, 2, 3, 4, 1], [7, 6, 4]])
-        
-            best = SoundChopper.partition_list(l, 3)
-            assert(best == [[1, 6, 2, 3], [4, 1, 7], [6, 4]])
-        
-            best = SoundChopper.partition_list(l, 4)
-            assert(best == [[1, 6], [2, 3, 4, 1], [7], [6, 4]])
-        
-        @param a: list of integers to partition
-        @type a: [int]
-        @param k: number of buckets
-        @type k: int
-        @return: list of buckets
-        @rtype: [[int]]
+        Prints success/failure of each worker. Then
+        returns
+
+        @param args: all arguments provided to argparse
+        @type args: {str : Any}
         '''
-        if k <= 1: return [a]
-        if k >= len(a): return [[x] for x in a]
-        partition_between = [(i+1)*len(a)/k for i in range(k-1)]
-        average_height = float(sum(a))/k
-        best_score = None
-        best_partitions = None
-        count = 0
-        while True:
-            starts = [0]+partition_between
-            ends = partition_between+[len(a)]
-            partitions = [a[round(starts[i]):round(ends[i])] for i in range(k)]
-            heights = [*map(sum, partitions)]
-            abs_height_diffs = []
-            for height in heights:
-                abs_height_diffs.append(abs(average_height - height))            
-            worst_partition_index = abs_height_diffs.index(max(abs_height_diffs))
-            worst_height_diff = average_height - heights[worst_partition_index]
-            if best_score is None or abs(worst_height_diff) < best_score:
-                best_score = abs(worst_height_diff)
-                best_partitions = partitions
-                no_improvements_count = 0
-            else:
-                no_improvements_count += 1
-            if worst_height_diff == 0 or no_improvements_count > 5 or count > 100:
-                return best_partitions
-            count += 1
-            move = -1 if worst_height_diff < 0 else 1
-            bound_to_move = 0 if worst_partition_index == 0\
-                            else k-2 if worst_partition_index == k-1\
-                            else worst_partition_index-1 if (worst_height_diff < 0) ^ (heights[worst_partition_index-1] > heights[worst_partition_index+1])\
-                            else worst_partition_index
-            direction = -1 if bound_to_move < worst_partition_index else 1
-            partition_between[bound_to_move] += move * direction
+        
+        in_dir = args.input_dir
+    
+        # Get a list of lists of species names
+        # to process. The list is computed such
+        # that each worker has roughly the same
+        # number of recordings to chop. We let
+        # the method determine the number of workers
+        # by using 80% of the available cores. 
+        
+        (worker_assignments, num_workers) = SoundChopper.compute_worker_assignments(
+            in_dir,
+            num_workers=args.workers)
+    
+        print(f"Distributing workload across {num_workers} workers.")
+        # Assign each list of species to one worker:
+        
+        chopping_jobs = []
+        for ass_num, assignment in enumerate(worker_assignments):
+            chopper = SoundChopper(in_dir, 
+                                   args.output_dir,
+                                   overwrite_freely=args.overwrite_freely
+                                   )
+            ret_value_slot = mp.Value("b", False)
+            job = ProcessWithoutWarnings(target=chopper.chop_file_list,
+                                         args=([assignment, ret_value_slot]),
+                                         name=f"ass# {ass_num}"
+                                         )
+            job.ret_val = ret_value_slot
             
-        return best_partitions
+            chopping_jobs.append(job)
+            print(f"Starting chops for {job.name}")
+            job.start()
+        
+        for job in chopping_jobs:
+            job_done = False
+            while not job_done:
+                # Check for job done with one sec timeout: 
+                job.join(1)
+                # Get number of generated snippets:
+                num_chopped_snippets = len(utils.find_in_dir_tree(SoundChopper.wav_dir_path))
+                # Keep printing number of done snippets in the same
+                # terminal line:
+                print(f"Number of audio snippets: {num_chopped_snippets}", end='\r')
+                # If the call to join() timed out
+                if job.exitcode is None:
+                    # Job not done:
+                    continue
+                res = "OK" if job.ret_val else "Error"
+                # New line after the progress msgs:
+                print("")
+                print(f"Chops of {job.name}/{num_workers}: {res}")
+                job_done = True
+
 
 # -------------------- Class ProcessWithoutWarnings ----------
 
 class ProcessWithoutWarnings(mp.Process):
+    '''
+    Subclass of Process to use when creating
+    multiprocessing jobs. Accomplishes two
+    items in addition to the parent:
+    
+       o Blocks printout of various deprecation warnings connected
+           with matplotlib and librosa
+       o Adds ability for SoundChopper instances to 
+           return a result.
+    '''
     
     def run(self, *args, **kwargs):
 
@@ -587,11 +568,10 @@ if __name__ == '__main__':
                            metavar='OUT_DIR',
                            type=str,
                            help='the path to output directory to write new .wav/.png files')
-    # parser.add_argument('-s', '--species',
-    #                     type=str,
-    #                     nargs='+',
-    #                     help='repeatable: specific species to use sliding window on',
-    #                     default=None)
+    parser.add_argument('-w', '--workers',
+                        type=int,
+                        help='number of cores to use; default: 80% of available cores',
+                        default=None)
     parser.add_argument('-y', '--overwrite_freely',
                         help='if set, overwrite existing out directories without asking; default: False',
                         action='store_true',
@@ -606,58 +586,14 @@ if __name__ == '__main__':
     if not os.path.exists(in_dir) or not os.path.isdir(in_dir):
         print(f"In directory {in_dir} does not exist, or is not a directory")
         sys.exit(1)
-    
 
-    # Get a list of lists of species names
-    # to process. The list is computed such
-    # that each worker has roughly the same
-    # number of recordings to chop. We let
-    # the method determine the number of workers
-    # by using 80% of the available cores. 
-    
-    (worker_assignments, num_workers) = SoundChopper.compute_worker_assignments(
-        in_dir,
-        strategy='by_file')
-
-    print(f"Distributing workload across {num_workers} workers.")
-    # Assign each list of species to one worker:
-    
-    chopping_jobs = []
-    for ass_num, assignment in enumerate(worker_assignments):
+    if args.workers == 1:
         chopper = SoundChopper(in_dir, 
                                args.output_dir,
                                overwrite_freely=args.overwrite_freely
                                )
-        ret_value_slot = mp.Value("b", False)
-        job = ProcessWithoutWarnings(target=chopper.chop_file_list,
-                                     args=([assignment, ret_value_slot]),
-                                     name=f"ass# {ass_num}"
-                                     )
-        job.ret_val = ret_value_slot
-        
-        chopping_jobs.append(job)
-        print(f"Starting chops for {job.name}")
-        job.start()
-    
-    for job in chopping_jobs:
-        job_done = False
-        while not job_done:
-            # Check for job done with one sec timeout: 
-            job.join(1)
-            # Get number of generated snippets:
-            num_chopped_snippets = len(utils.find_in_dir_tree(SoundChopper.wav_dir_path))
-            # Keep printing number of done snippets in the same
-            # terminal line:
-            print(f"Number of audio snippets: {num_chopped_snippets}", end='\r')
-            # If the call to join() timed out
-            if job.exitcode is None:
-                # Job not done:
-                continue
-            res = "OK" if job.ret_val else "Error"
-            # New line after the progress msgs:
-            print("")
-            print(f"Chops of {job.name}/{num_workers}: {res}")
-            job_done = True
-            
+        chopper.chop_all()
+    else:
+        SoundChopper.run_workers(args)
 
     print("Done")
