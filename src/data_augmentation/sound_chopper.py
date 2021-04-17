@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 
+
 from _collections import OrderedDict
 import argparse
 import os,sys
 import warnings
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 import librosa.display
 from logging_service.logging_service import LoggingService
@@ -15,7 +19,6 @@ import matplotlib.pyplot as plt
 import multiprocessing as mp
 import numpy as np
 import soundfile as sf
-
 
 class SoundChopper:
     '''
@@ -74,10 +77,20 @@ class SoundChopper:
                                 category=UserWarning, 
                                 module='', 
                                 lineno=0)
+
+        if self.specific_species is None:
+            self.species_list = os.listdir(self.in_dir)
+        else:
+            self.species_list = self.specific_species
         
-        (num_audios, num_spectros) = self.chop_all()
-        #assert(num_audios == num_spectros)
-        self.log.info(f"Created {num_audios} audio snippets and {num_spectros} spectrogram snippets")
+        # Create directories for new audio snippets
+        # and spectrograms:
+        
+        self.wav_dir_path, self.spectrogram_dir_path = self.create_dest_dirs(self.species_list)
+        
+        # Allow others outside the instance
+        # find the audio snippet destination
+        SoundChopper.wav_dir_path = self.wav_dir_path
 
     #------------------------------------
     # chop_all
@@ -113,67 +126,53 @@ class SoundChopper:
                             number of created .png spectrogram snippet files,
         
         '''
-        if self.specific_species is None:
-            species_list = os.listdir(self.in_dir)
-        else:
-            species_list = self.specific_species
-            
-        # Root dir of the two dirs that will hold new 
-        # audio snippet and spectrogram files
-        utils.create_folder(self.out_dir, overwrite_freely=self.overwrite_freely)
+        for species in self.species_list:
+            audio_files = os.listdir(os.path.join(self.in_dir, species))
+            num_files   = len(audio_files)
+            for i, sample_name in enumerate(audio_files):
+                # Chop one audio file:
+                self.log.info(f"Chopping {species} audio {i}/{num_files}")
+                self.chop_one_audio_file(self.in_dir, species, sample_name, self.out_dir)
+            self.num_chopped += num_files
 
-        # Below the rootP
-        spectrogram_dir_path = os.path.join(self.out_dir,'spectrograms/')
-        wav_dir_path = os.path.join(self.out_dir,'wav-files/')
-        utils.create_folder(spectrogram_dir_path, overwrite_freely=self.overwrite_freely)
-        utils.create_folder(wav_dir_path, overwrite_freely=self.overwrite_freely)
-        
-        for species in species_list:
-            # One dir each for the audio and spectrogram
-            # snippets of one species:
-            if (utils.create_folder(os.path.join(spectrogram_dir_path, species),
-                                    overwrite_freely=self.overwrite_freely
-                                    )
-            and utils.create_folder(os.path.join(wav_dir_path, species),
-                                    overwrite_freely=self.overwrite_freely)):
-                audio_files = os.listdir(os.path.join(self.in_dir, species))
-                num_files   = len(audio_files)
-                for i, sample_name in enumerate(audio_files):
-                    # Chop one audio file:
-                    self.log.info(f"Chopping {species} audio {i}/{num_files}")
-                    self.chop_one_audio_file(self.in_dir, species, sample_name, self.out_dir)
-                self.num_chopped += num_files
-                
-            else:
-                print(f"Skipping audio chopping for {species}")
-
-        num_spectros = utils.find_in_dir_tree(spectrogram_dir_path, pattern='*.png')
-        num_audios   = utils.find_in_dir_tree(wav_dir_path, pattern='*.wav')
+        num_spectros = utils.find_in_dir_tree(self.spectrogram_dir_path, pattern='*.png')
+        num_audios   = utils.find_in_dir_tree(self.wav_dir_path, pattern='*.wav')
         return (num_audios, num_spectros)
-        
+    
     #------------------------------------
-    # create_spectrogram 
+    # chop_file_list 
     #-------------------
-
-    def create_spectrogram(self, sample_name, sample, sr, out_dir, n_mels=128):
-        # Use bandpass filter for audio before converting to spectrogram
-        audio = aug.filter_bird(sample, sr)
-        mel = librosa.feature.melspectrogram(audio, sr=sr, n_mels=n_mels)
-        # create a logarithmic mel spectrogram
-        log_mel = librosa.power_to_db(mel, ref=np.max)
-        # create an image of the spectrogram and save it as file
-        fig = plt.figure(figsize=(6.07, 2.02))
-        librosa.display.specshow(log_mel, sr=sr, x_axis='time', y_axis='mel', cmap='gray_r')
-        plt.tight_layout()
-        plt.axis('off')
-        spectrogramfile = os.path.join(out_dir, sample_name + '.png')
-
-        # Workaround for Exception in Tkinter callback
-        fig.canvas.start_event_loop(sys.float_info.min) 
-        #*****
-        plt.savefig(spectrogramfile, dpi=100, bbox_inches='tight', pad_inches=0, format='png', facecolor='none')
-        plt.close()
-
+    
+    def chop_file_list(self, assignment, return_bool):
+        '''
+        Takes a list like:
+        
+           [(s1,f1),(s1,f2),(s4,f3)]
+           
+        where s_n is a species name, and f_m
+        is the basename of an audio file to chop.
+        Example: foobar.mp3
+        
+        Returns True if all went well, else
+        raises exception
+        
+        @param assignment: list of species/filename pairs
+        @type assignment: [(str,str)]
+        '''
+        
+        for species_name, fname in assignment:
+            try:
+                self.chop_one_audio_file(self.in_dir,
+                                         species_name,
+                                         fname,
+                                         self.out_dir
+                                         )
+            except Exception as e:
+                return_bool.value = False
+                raise e
+            
+        return_bool.value = True
+    
     #------------------------------------
     # chop_one_audio_file 
     #-------------------
@@ -214,13 +213,86 @@ class SoundChopper:
                                     )
             sf.write(os.path.join(out_dir, 'wav-files', species, window_name + '.wav'), window, sr)
 
+    #------------------------------------
+    # create_dest_dirs 
+    #-------------------
+
+    def create_dest_dirs(self, species_list):
+        '''
+        Creates all directories that will hold new 
+        audio snippets and spectrograms for each species.
+        For each directory: if dir exists:
+           o if overwrite_freely is True, wipe the dir
+           o else ask user. 
+                If response is Yes, wipe the dir
+                else raise FileExistsError
+                
+        @param species_list: names of species to process
+        @type species_list: [str]
+        @return: top level dirs for audio snippets and spectrograms
+        @rtype: (str)
+        @raise FileExistsError: if a dest dir exists and not allowed
+            to wipe it.
+        '''
+
+        # Root dir of the two dirs that will hold new 
+        # audio snippet and spectrogram files
+        utils.create_folder(self.out_dir, overwrite_freely=self.overwrite_freely)
+
+        # Below the rootP
+        spectrogram_dir_path = os.path.join(self.out_dir,'spectrograms/')
+        wav_dir_path = os.path.join(self.out_dir,'wav-files/')
+
+        if not utils.create_folder(spectrogram_dir_path, overwrite_freely=self.overwrite_freely):
+            raise FileExistsError(f"Target dir {spectrogram_dir_path} exists; aborting")
+        if not utils.create_folder(wav_dir_path, overwrite_freely=self.overwrite_freely):
+            raise FileExistsError(f"Target dir {spectrogram_dir_path} exists; aborting")
+        
+        # One dir each for the audio and spectrogram
+        # snippets of one species:
+        
+        for species in species_list:
+            species_spectros_dir = os.path.join(spectrogram_dir_path, species)
+            if not utils.create_folder(species_spectros_dir,
+                                       overwrite_freely=self.overwrite_freely):
+                raise FileExistsError(f"Target dir {species_spectros_dir} exists; aborting")
+            
+            species_audio_dir = os.path.join(wav_dir_path, species)
+            if not utils.create_folder(species_audio_dir,
+                                       overwrite_freely=self.overwrite_freely):
+                raise FileExistsError(f"Target dir {species_audio_dir} exists; aborting")
+
+        return(wav_dir_path, spectrogram_dir_path)
+
+    #------------------------------------
+    # create_spectrogram 
+    #-------------------
+
+    def create_spectrogram(self, sample_name, sample, sr, out_dir, n_mels=128):
+        # Use bandpass filter for audio before converting to spectrogram
+        audio = aug.filter_bird(sample, sr)
+        mel = librosa.feature.melspectrogram(audio, sr=sr, n_mels=n_mels)
+        # create a logarithmic mel spectrogram
+        log_mel = librosa.power_to_db(mel, ref=np.max)
+        # create an image of the spectrogram and save it as file
+        fig = plt.figure(figsize=(6.07, 2.02))
+        librosa.display.specshow(log_mel, sr=sr, x_axis='time', y_axis='mel', cmap='gray_r')
+        plt.tight_layout()
+        plt.axis('off')
+        spectrogramfile = os.path.join(out_dir, sample_name + '.png')
+
+        # Workaround for Exception in Tkinter callback
+        fig.canvas.start_event_loop(sys.float_info.min) 
+        #*****
+        plt.savefig(spectrogramfile, dpi=100, bbox_inches='tight', pad_inches=0, format='png', facecolor='none')
+        plt.close()
 
     #------------------------------------
     # compute_worker_assignments 
     #-------------------
     
     @classmethod
-    def compute_worker_assignments(cls, in_dir, num_workers=None):
+    def compute_worker_assignments(cls, in_dir, num_workers=None, strategy='by_file'):
         '''
         Given the root directory of a set of
         directories whose names are species,
@@ -267,11 +339,26 @@ class SoundChopper:
         @return: list of species name lists, and number of workers.
         @rtype: ([[int]], int)
         '''
+
+        if strategy not in ['by_file', 'by_species']:
+            raise ValueError(f"Strategy must be one of by_file or by_species, not {strategy}")
+        # Create:
+        #     {species : num-recordings}
+        #     {species : recordings_dir}
+        #     [(species1, fpath1), (species1, fpath2), (species2, fpath3)...]  
         
         sample_size_distrib = OrderedDict({})
+        sample_dir_dict     = {}
+        species_file_tuples = []
+        
         for _dir_name, subdir_list, _file_list in os.walk(in_dir):
             for species_name in subdir_list:
-                sample_size_distrib[species_name] = (len(os.listdir(os.path.join(in_dir, species_name))))
+                species_recordings_dir = os.path.join(in_dir, species_name)
+                rec_paths = os.listdir(species_recordings_dir)
+                sample_size_distrib[species_name] = len(rec_paths)
+                sample_dir_dict[species_name] = species_recordings_dir
+                species_file_pairs = list(zip([species_name]*len(rec_paths), rec_paths))
+                species_file_tuples.extend(species_file_pairs)
             break 
         
         num_cores = mp.cpu_count()
@@ -282,8 +369,72 @@ class SoundChopper:
             # Limit pool size to number of cores:
             num_workers = num_cores
 
-        sample_sizes = sample_size_distrib.values()
+        if strategy == 'by_species':
+            sample_sizes = sample_size_distrib.values()
+            species_lists, num_workers = cls.partition_by_species(sample_sizes, num_workers) 
+            return species_lists, num_workers
+
+        # Create a partitioning into equal sized files,
+        # regardless of species association.
         
+        assignments = cls.partition_by_recordings(species_file_tuples,
+                                                  num_workers)
+        return assignments, num_workers
+
+    #------------------------------------
+    # partition_by_recordings 
+    #-------------------
+    
+    @classmethod
+    def partition_by_recordings(cls, species_file_pairs, num_workers):
+        '''
+        Given a list of species-name/file-path tuples, 
+        partition that list into num_workers sublists,
+        such that each list contains roughly the same
+        number of tuples. If the number of species_file_pairs
+        tuples is not divisible by num_workers, the left-over
+        tuples are distributed over the first sublists.
+
+        @param species_file_pairs:
+        @type species_file_pairs:
+        @param num_workers:
+        @type num_workers:
+        @return partitioning of the species_file_pairs tuples
+        @rtype: [[(str, str)]]
+        '''
+
+        # Compute near-equal number of files per worker:
+        num_recordings  = len(species_file_pairs)
+        recs_per_worker = num_recordings // num_workers
+        
+        # Create list of species-file pair lists:
+        #    [[(s1,f1), (s1,f2)], [s1,f3,s2:f4], ...]
+        # Each inner list will be handled by one worker:
+        
+        assignments = []
+        assign_idx  = 0
+        for _worker_idx in range(num_workers):
+            assign_sublist = species_file_pairs[assign_idx:assign_idx+recs_per_worker]
+            assignments.append(assign_sublist)
+            assign_idx += recs_per_worker
+        
+        left_overs = num_recordings % num_workers
+        if left_overs > 0:
+            # Can't have more than num_workers left overs,
+            # meaning can't have more leftovers than
+            # sublists. Distribute the leftovers:
+             
+            for idx, left_over in enumerate(species_file_pairs[num_workers:]):
+                assignments[idx].append(left_over)
+            
+        return assignments
+
+    #------------------------------------
+    # partition_by_species 
+    #-------------------
+    
+    @classmethod
+    def partition_by_species(cls, sample_size_distrib, num_workers):
         # Get list of sample sizes for birds, 
         # roughly equally distributed across the
         # workers. Example, asssuming 5 species
@@ -292,6 +443,7 @@ class SoundChopper:
         #
         #   [[10, 3], [6,1,6],]
         
+        sample_sizes = sample_size_distrib.values()
         worker_assignment_sizes = cls.partition_list(sample_sizes, num_workers)
         
         # Get the corresponding species names.
@@ -299,9 +451,11 @@ class SoundChopper:
         # the order of class sizes we pass in, and
         # b/c we use an ordered dict:
         
-        species_lists = []
         species_names = list(sample_size_distrib.keys())
+        
         name_idx = 0
+        species_lists = []
+
         for num_samples_bucket in worker_assignment_sizes:
             species_lists.append(species_names[name_idx:name_idx+len(num_samples_bucket)])
             name_idx = name_idx+len(num_samples_bucket)
@@ -381,6 +535,44 @@ class SoundChopper:
             
         return best_partitions
 
+# -------------------- Class ProcessWithoutWarnings ----------
+
+class ProcessWithoutWarnings(mp.Process):
+    
+    def run(self, *args, **kwargs):
+
+        # Don't show the annoying deprecation
+        # librosa.display() warnings about renaming
+        # 'basey' to 'base' to match matplotlib: 
+        warnings.simplefilter("ignore", category=MatplotlibDeprecationWarning)
+        
+        # Hide the UserWarning: PySoundFile failed. Trying audioread instead.
+        warnings.filterwarnings(action="ignore",
+                                message="PySoundFile failed. Trying audioread instead.",
+                                category=UserWarning, 
+                                module='', 
+                                lineno=0)
+        try:
+            self.ret_value = kwargs['ret_value']
+            del kwargs['ret_value']
+        except KeyError:
+            pass
+        
+        return mp.Process.run(self, *args, **kwargs)
+    
+    @property
+    def ret_val(self):
+        try:
+            return self._ret_val
+        except NameError:
+            return None
+        
+    @ret_val.setter
+    def ret_val(self, new_val):
+        if not type(new_val) == mp.sharedctypes.Synchronized:
+            raise TypeError(f"The ret_val instance var must be multiprocessing shared C-type, not {new_val}")
+        self._ret_val = new_val
+
 # ------------------------ Main -----------------
 if __name__ == '__main__':
     
@@ -415,6 +607,7 @@ if __name__ == '__main__':
         print(f"In directory {in_dir} does not exist, or is not a directory")
         sys.exit(1)
     
+
     # Get a list of lists of species names
     # to process. The list is computed such
     # that each worker has roughly the same
@@ -422,29 +615,49 @@ if __name__ == '__main__':
     # the method determine the number of workers
     # by using 80% of the available cores. 
     
-    (worker_assignments, num_workers) = SoundChopper.compute_worker_assignments(in_dir)
+    (worker_assignments, num_workers) = SoundChopper.compute_worker_assignments(
+        in_dir,
+        strategy='by_file')
 
-    #****def create_sound_chopper(*args, **kwargs):
     print(f"Distributing workload across {num_workers} workers.")
     # Assign each list of species to one worker:
     
     chopping_jobs = []
-    for species_to_process in worker_assignments:
-        kwargs = {'specific_species' : species_to_process,
-                  'overwrite_freely' : args.overwrite_freely
-                  }
-        job = mp.Process(target=SoundChopper,
-                         args=(in_dir, args.output_dir),
-                         kwargs=kwargs,
-                         name=species_to_process.join(',')
-                         )
+    for ass_num, assignment in enumerate(worker_assignments):
+        chopper = SoundChopper(in_dir, 
+                               args.output_dir,
+                               overwrite_freely=args.overwrite_freely
+                               )
+        ret_value_slot = mp.Value("b", False)
+        job = ProcessWithoutWarnings(target=chopper.chop_file_list,
+                                     args=([assignment, ret_value_slot]),
+                                     name=f"ass# {ass_num}"
+                                     )
+        job.ret_val = ret_value_slot
+        
         chopping_jobs.append(job)
         print(f"Starting chops for {job.name}")
         job.start()
     
     for job in chopping_jobs:
-        job.join()
-        res = "OK" if job.exitcode == 1 else "Error"
-        print(f"Chops of {job.name}: {res}")
+        job_done = False
+        while not job_done:
+            # Check for job done with one sec timeout: 
+            job.join(1)
+            # Get number of generated snippets:
+            num_chopped_snippets = len(utils.find_in_dir_tree(SoundChopper.wav_dir_path))
+            # Keep printing number of done snippets in the same
+            # terminal line:
+            print(f"Number of audio snippets: {num_chopped_snippets}", end='\r')
+            # If the call to join() timed out
+            if job.exitcode is None:
+                # Job not done:
+                continue
+            res = "OK" if job.ret_val else "Error"
+            # New line after the progress msgs:
+            print("")
+            print(f"Chops of {job.name}/{num_workers}: {res}")
+            job_done = True
+            
 
     print("Done")
