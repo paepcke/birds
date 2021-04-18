@@ -16,8 +16,7 @@ matplotlib.use('TkAgg')
 from matplotlib import MatplotlibDeprecationWarning
 
 from data_augmentation import utils
-from data_augmentation.sound_processor import SoundProcessor as aug
-import matplotlib.pyplot as plt
+from data_augmentation.sound_processor import SoundProcessor
 import multiprocessing as mp
 import numpy as np
 import soundfile as sf
@@ -205,15 +204,19 @@ class SoundChopper:
         orig, sample_rate = librosa.load(os.path.join(in_dir, species, sample_name))
         length = int(librosa.get_duration(orig, sample_rate))
         for start_time in range(length - window_len):
-            window, sr = librosa.load(os.path.join(in_dir, species, sample_name),
+            window_audio, sr = librosa.load(os.path.join(in_dir, species, sample_name),
                                       offset=start_time, duration=window_len)
             window_name = sample_name[:-len(".wav")] + '_sw-start' + str(start_time)
-            self.create_spectrogram(window_name, 
-                                    window, 
-                                    sr, 
-                                    os.path.join(out_dir, 'spectrograms/', species)
-                                    )
-            sf.write(os.path.join(out_dir, 'wav-files', species, window_name + '.wav'), window, sr)
+            outfile_spectro = os.path.join(out_dir, 
+                                           'spectrograms/', 
+                                           species,
+                                           f"{window_name}.{'png'}")
+            self.create_spectrogram(window_audio,sr,outfile_spectro)
+            outfile_audio = os.path.join(out_dir, 
+                                         'wav-files', 
+                                         species, 
+                                         f"{window_name}.{'wav'}")
+            sf.write(outfile_audio, window_audio, sr)
 
     #------------------------------------
     # create_dest_dirs 
@@ -270,24 +273,15 @@ class SoundChopper:
     # create_spectrogram 
     #-------------------
 
-    def create_spectrogram(self, sample_name, sample, sr, out_dir, n_mels=128):
+    def create_spectrogram(self, audio_sample, sr, outfile, n_mels=128):
         # Use bandpass filter for audio before converting to spectrogram
-        audio = aug.filter_bird(sample, sr)
+        audio = SoundProcessor.filter_bird(audio_sample, sr)
         mel = librosa.feature.melspectrogram(audio, sr=sr, n_mels=n_mels)
         # create a logarithmic mel spectrogram
         log_mel = librosa.power_to_db(mel, ref=np.max)
         # create an image of the spectrogram and save it as file
-        fig = plt.figure(figsize=(6.07, 2.02))
-        librosa.display.specshow(log_mel, sr=sr, x_axis='time', y_axis='mel', cmap='gray_r')
-        plt.tight_layout()
-        plt.axis('off')
-        spectrogramfile = os.path.join(out_dir, sample_name + '.png')
-
-        # Workaround for Exception in Tkinter callback
-        fig.canvas.start_event_loop(sys.float_info.min) 
-        #*****
-        plt.savefig(spectrogramfile, dpi=100, bbox_inches='tight', pad_inches=0, format='png', facecolor='none')
-        plt.close()
+        mesh = librosa.display.specshow(log_mel, sr=sr, x_axis='off', y_axis='off', cmap='gray_r')
+        mesh.figure.savefig(outfile, dpi=100, bbox_inches='tight', pad_inches=0, format='png', facecolor='none')
 
     #------------------------------------
     # compute_worker_assignments 

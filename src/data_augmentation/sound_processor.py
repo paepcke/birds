@@ -199,7 +199,7 @@ class SoundProcessor:
         :type species: str
         """
         cls.log.info(f"Adding masks to {file_name}")
-        print(file_name)
+        # print(file_name)
         orig_spectrogram = np.asarray(Image.open(os.path.join(in_dir, file_name)))
         freq_masked, freq_name = cls.freq_mask(orig_spectrogram, num_masks=2)
         masked_spectrogram, time_name = cls.time_mask(freq_masked, num_masks=2)
@@ -225,7 +225,7 @@ class SoundProcessor:
         :type instance: int
         :param audio: the librosa audio data of the 5s recording to be filtered
         :type audio: audio time
-        :param sr: the sample rate of the audio
+        :param sr: the audio_sample rate of the audio
         :type sr: int
         :param out_dir: the relative or absolute file path to a directory to put the output files
         :type out_dir: str
@@ -298,12 +298,10 @@ class SoundProcessor:
     @classmethod
     def filter_bird(cls, audio, sr):
         """
-        Opens a specifc recording of a bird, filters the audio and converts it to a spectrogram which is saved.
+        Filters the given audio using a bandpass filter.
     
-        :param birdname: the bird's scientific name + recording id
-        :type birdname: str
-        :param audio: the librosa audio data of the 5s recording to be filtered
-        :type audio: audio time
+        :param audio: recording
+        :type audio: np.array
         :param sr: the sample rate of the audio
         :type sr: int
         :returns output: the filtered recording audio time series
@@ -320,7 +318,6 @@ class SoundProcessor:
     
         # normalize the volume
         return output / np.max(output)
-    
     
     #------------------------------------
     # freq_mask 
