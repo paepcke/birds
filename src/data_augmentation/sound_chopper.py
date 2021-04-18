@@ -9,17 +9,15 @@ import warnings
 sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-import librosa.display
 from logging_service.logging_service import LoggingService
-import matplotlib
-matplotlib.use('TkAgg')
 from matplotlib import MatplotlibDeprecationWarning
+import librosa
+import numpy as np
+import soundfile as sf
 
 from data_augmentation import utils
 from data_augmentation.sound_processor import SoundProcessor
 import multiprocessing as mp
-import numpy as np
-import soundfile as sf
 
 class SoundChopper:
     '''
@@ -92,6 +90,12 @@ class SoundChopper:
         # Allow others outside the instance
         # find the audio snippet destination
         SoundChopper.wav_dir_path = self.wav_dir_path
+        
+        #***********
+        SoundProcessor.warp_spectrogram('/users/paepcke/tmp/bird_spectro.png', 
+                                        '/tmp', '/tmp')
+        sys.exit()
+        #***********
 
     #------------------------------------
     # chop_all

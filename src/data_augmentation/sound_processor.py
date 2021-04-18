@@ -1,19 +1,16 @@
 import math
-import os, sys
+import os
+from pathlib import Path
 import random
-import warnings
 
 from PIL import Image
 import librosa.display
 from logging_service import LoggingService
 from scipy.signal import butter
 from scipy.signal import lfilter
-from matplotlib import MatplotlibDeprecationWarning
 
 import data_augmentation.utils as utils
-import matplotlib.pyplot as plt
 import numpy as np
-
 
 class SoundProcessor:
     '''
@@ -203,11 +200,11 @@ class SoundProcessor:
         orig_spectrogram = np.asarray(Image.open(os.path.join(in_dir, file_name)))
         freq_masked, freq_name = cls.freq_mask(orig_spectrogram, num_masks=2)
         masked_spectrogram, time_name = cls.time_mask(freq_masked, num_masks=2)
-        plt.imshow(masked_spectrogram);
-        plt.axis('off')
-        aug_sample_name = file_name[:-len(".png")] + "-" + freq_name + "-" + time_name +".png"
-        plt.savefig(os.path.join(out_dir, aug_sample_name), dpi=100, bbox_inches='tight', pad_inches=0, format='png', facecolor='none')
-        return aug_sample_name
+        img = Image.fromarray(masked_spectrogram)
+        fpath = Path(file_name)
+        new_file_name = f"{fpath.stem}-{freq_name}-{time_name}.png"
+        outpath = Path.joinpath(fpath.parent, new_file_name)
+        img.save(outpath)
 
     #------------------------------------
     # create_spectrogram 
