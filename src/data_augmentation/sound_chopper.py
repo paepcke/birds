@@ -90,12 +90,6 @@ class SoundChopper:
         # Allow others outside the instance
         # find the audio snippet destination
         SoundChopper.wav_dir_path = self.wav_dir_path
-        
-        #***********
-        SoundProcessor.warp_spectrogram('/users/paepcke/tmp/bird_spectro.png', 
-                                        '/tmp', '/tmp')
-        sys.exit()
-        #***********
 
     #------------------------------------
     # chop_all
