@@ -211,7 +211,7 @@ class SoundChopper:
                                            'spectrograms/', 
                                            species,
                                            f"{window_name}.{'png'}")
-            self.create_spectrogram(window_audio,sr,outfile_spectro)
+            SoundProcessor.create_spectrogram(window_audio,sr,outfile_spectro)
             outfile_audio = os.path.join(out_dir, 
                                          'wav-files', 
                                          species, 
@@ -268,20 +268,6 @@ class SoundChopper:
                 raise FileExistsError(f"Target dir {species_audio_dir} exists; aborting")
 
         return(wav_dir_path, spectrogram_dir_path)
-
-    #------------------------------------
-    # create_spectrogram 
-    #-------------------
-
-    def create_spectrogram(self, audio_sample, sr, outfile, n_mels=128):
-        # Use bandpass filter for audio before converting to spectrogram
-        audio = SoundProcessor.filter_bird(audio_sample, sr)
-        mel = librosa.feature.melspectrogram(audio, sr=sr, n_mels=n_mels)
-        # create a logarithmic mel spectrogram
-        log_mel = librosa.power_to_db(mel, ref=np.max)
-        # create an image of the spectrogram and save it as file
-        mesh = librosa.display.specshow(log_mel, sr=sr, x_axis='off', y_axis='off', cmap='gray_r')
-        mesh.figure.savefig(outfile, dpi=100, bbox_inches='tight', pad_inches=0, format='png', facecolor='none')
 
     #------------------------------------
     # compute_worker_assignments 

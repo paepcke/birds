@@ -213,58 +213,30 @@ class SoundProcessor:
     # create_spectrogram 
     #-------------------
 
-    """ Below from src/recording_download.py """
     @classmethod
-    def create_spectrogram(cls, birdname, in_dir, out_dir, n_mels=128):
-        """
-        Filters audio and converts it to a spectrogram which is saved.
-    
-        :param birdname: the bird's scientific name + recording id
-        :type birdname: str
-        :param instance: which chronological 5s segment of the orginal recording recording this clip is from
-        :type instance: int
-        :param audio: the librosa audio data of the 5s recording to be filtered
-        :type audio: audio time
-        :param sr: the audio_sample rate of the audio
-        :type sr: int
-        :param out_dir: the relative or absolute file path to a directory to put the output files
-        :type out_dir: str
-        :param n_mels: the number of mel bands in the spectrogram
-        :type n_mels: int
-        """
-        # create a mel spectrogram
-        spectrogramfile = os.path.join(out_dir, birdname[:-len(".wav")]) + '.png'
-        cls.log.info(f"Creating spectrogram: {spectrogramfile}")
-        audio, sr = librosa.load(os.path.join(in_dir, birdname))
-        cls.log.info(f"Audio len: {len(audio)/sr}")
+    def create_spectrogram(cls, audio_sample, sr, outfile, n_mels=128):
+        '''
+        Create and save a spectrogram from an audio 
+        sample. Bandpass filter is applied, Mel scale is used,
+        and power is converted to decibels.
+         
+        @param audio_sample: audio
+        @type audio_sample: np.array
+        @param sr: sample rate
+        @type sr: int
+        @param outfile: where to store the result
+        @type outfile: str
+        @param n_mels: number of mel scale bands 
+        @type n_mels: int
+        '''
         # Use bandpass filter for audio before converting to spectrogram
-        audio = cls.filter_bird(audio, sr)
+        audio = SoundProcessor.filter_bird(audio_sample, sr)
         mel = librosa.feature.melspectrogram(audio, sr=sr, n_mels=n_mels)
         # create a logarithmic mel spectrogram
         log_mel = librosa.power_to_db(mel, ref=np.max)
         # create an image of the spectrogram and save it as file
-        fig = plt.figure(figsize=(6.07, 2.02))
-        
-        # Don't show the annoying deprecation
-        # librosa.display() warnings about renaming
-        # 'basey' to 'base' to match matplotlib: 
-        warnings.simplefilter("ignore", category=MatplotlibDeprecationWarning)
-        # Same for UserWarning: PySoundFile failed. Trying audioread instead:
-        warnings.filterwarnings(action="ignore",
-                                message="PySoundFile failed. Trying audioread instead.",
-                                category=UserWarning, 
-                                module='', 
-                                lineno=0)
-
-        librosa.display.specshow(log_mel, sr=sr, x_axis='time', y_axis='mel', cmap='gray_r')
-            
-        plt.tight_layout()
-        plt.axis('off')
-        # Workaround for "Done(renderer)" exception in Tkinter callback        
-        fig.canvas.start_event_loop(sys.float_info.min) 
-        plt.savefig(spectrogramfile, dpi=100, bbox_inches='tight', pad_inches=0, format='png', facecolor='none')
-        plt.close()
-        return birdname[:-len(".wav")] + '.png'
+        mesh = librosa.display.specshow(log_mel, sr=sr, x_axis='off', y_axis='off', cmap='gray_r')
+        mesh.figure.savefig(outfile, dpi=100, bbox_inches='tight', pad_inches=0, format='png', facecolor='none')
 
     #------------------------------------
     # define_bandpass 
