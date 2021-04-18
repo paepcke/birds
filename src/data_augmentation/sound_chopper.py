@@ -11,6 +11,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 import librosa.display
 from logging_service.logging_service import LoggingService
+import matplotlib
+matplotlib.use('TkAgg')
 from matplotlib import MatplotlibDeprecationWarning
 
 from data_augmentation import utils
@@ -24,10 +26,10 @@ import soundfile as sf
 #********************** For Remote Debugging Only *************
 # Must point to where the minimal PyDev files were
 # installed:
-sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
-import pydevd
-global pydevd
-pydevd.settrace('localhost', port=4040)
+# sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
+# import pydevd
+# global pydevd
+# pydevd.settrace('localhost', port=5678)
 #********************** END Remote Debugging Only *************
 
 
@@ -409,7 +411,7 @@ class SoundChopper:
 
         # Compute near-equal number of files per worker:
         num_recordings  = len(species_file_pairs)
-        recs_per_worker = num_recordings // num_workers
+        recs_per_worker = int(np.ceil(num_recordings / num_workers))
         
         # Create list of species-file pair lists:
         #    [[(s1,f1), (s1,f2)], [s1,f3,s2:f4], ...]
@@ -426,11 +428,13 @@ class SoundChopper:
         if left_overs > 0:
             # Can't have more than num_workers left overs,
             # meaning can't have more leftovers than
-            # sublists. Distribute the leftovers:
+            # sublists. Distribute the leftovers:=
              
             for idx, left_over in enumerate(species_file_pairs[num_workers:]):
                 assignments[idx].append(left_over)
-            
+        
+        # Remove empty assignments:
+        assignments = [ass for ass in assignments if len(ass) > 0]
         return assignments
 
     #------------------------------------
