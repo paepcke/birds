@@ -10,6 +10,11 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from logging_service.logging_service import LoggingService
+
+import matplotlib
+# Needed when running headless:
+matplotlib.use('TkAgg')
+
 from matplotlib import MatplotlibDeprecationWarning
 import librosa
 import numpy as np
@@ -398,7 +403,7 @@ class SoundChopper:
             # meaning can't have more leftovers than
             # sublists. Distribute the leftovers:=
              
-            for idx, left_over in enumerate(species_file_pairs[num_workers:]):
+            for idx, left_over in enumerate(species_file_pairs[-left_overs:]):
                 assignments[idx].append(left_over)
         
         # Remove empty assignments:
