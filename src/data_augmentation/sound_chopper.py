@@ -358,7 +358,8 @@ class SoundChopper:
         
         assignments = cls.partition_by_recordings(species_file_tuples,
                                                   num_workers)
-        return assignments, num_workers
+        num_workers_used = len(assignments)
+        return assignments, num_workers_used
 
     #------------------------------------
     # partition_by_recordings 
