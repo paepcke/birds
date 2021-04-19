@@ -2,26 +2,28 @@
 
 from _collections import OrderedDict
 import argparse
-import os,sys
+import os, sys
 import warnings
+
+import librosa
+from logging_service.logging_service import LoggingService
+from matplotlib import MatplotlibDeprecationWarning
+import matplotlib
+
+from data_augmentation import utils
+from data_augmentation.sound_processor import SoundProcessor
+from data_augmentation.utils import WhenAlreadyDone
+import multiprocessing as mp
+import numpy as np
+import soundfile as sf
+
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from logging_service.logging_service import LoggingService
 
 # Needed when running headless:
-import matplotlib
 matplotlib.use('TkAgg')
-
-from matplotlib import MatplotlibDeprecationWarning
-import librosa
-import numpy as np
-import soundfile as sf
-
-from data_augmentation import utils
-from data_augmentation.sound_processor import SoundProcessor
-import multiprocessing as mp
 
 class SoundChopper:
     '''
@@ -54,11 +56,11 @@ class SoundChopper:
     
         - If command line arg --workers is set to 1, no parallelism
           is used. 
-        - If multiple cores are available, 80% of them will be
-          deployed to chopping. Each core runs a separate copy
-          of this file.
-        - If 80%
-
+        - If multiple cores are available, some percentage of 
+          of them will be deployed to chopping. Each core runs 
+          a separate copy of this file. The percentage is controlled
+          by MAX_PERC_OF_CORES_TO_USE.
+        
     Method chop_all() is used in the single core scenario.
     Method chop_file_list() is used when multiprocessing. This
     method is the 'target' in the multiprocessing library's sense.
@@ -69,7 +71,7 @@ class SoundChopper:
     # only use some percentage of them to
     # be nice:
     
-    MAX_PERC_OF_CORES_TO_USE = 80
+    MAX_PERC_OF_CORES_TO_USE = 50
 
     #------------------------------------
     # Constructor 
@@ -79,12 +81,42 @@ class SoundChopper:
                  input_dir, 
                  output_dir, 
                  specific_species=None,
-                 overwrite_freely=False
+                 overwrite_policy=WhenAlreadyDone.ASK,
+                 generate_wav_files=False
                  ):
-        self.in_dir       = input_dir
-        self.out_dir      = output_dir
-        self.specific_species = specific_species
-        self.overwrite_freely = overwrite_freely
+        '''
+        The overwrite_policy is one of the WhenAlreadyDone
+        enum members: ASK, OVERWRITE, SKIP. If ASK,
+        request user's permission for each encountered
+        destination file. SKIP should be used when resuming
+        an interrupted chopping session. Any sound file
+        whose destination spectrogram exists is not processed
+        again.
+        
+        If generate_wav_files is True, a .wav file is created
+        for every window of the source soundfile. Usually
+        not necessary.
+        
+        The window_size is the number of seconds by which a
+        sliding window is moved across the source soundfile
+        before a spectrogram is created.
+          
+        
+        @param input_dir: location of soundfile root
+        @type input_dir: str
+        @param output_dir: root of spectrograms/wav_files to create
+        @type output_dir: src
+        @param specific_species: process only a spectific list of species
+        @type specific_species: {None | [str]}
+        @param overwrite_policy: what to do when an output file already exists
+        @type overwrite_policy: WhenAlreadyDone
+        '''
+
+        self.in_dir         	= input_dir
+        self.out_dir        	= output_dir
+        self.specific_species   = specific_species
+        self.overwrite_policy   = overwrite_policy
+        self.generate_wav_files = generate_wav_files
         
         self.log = LoggingService()
         
@@ -273,12 +305,19 @@ class SoundChopper:
                                            'spectrograms/', 
                                            species,
                                            f"{window_name}.{'png'}")
-            SoundProcessor.create_spectrogram(window_audio,sr,outfile_spectro)
-            outfile_audio = os.path.join(out_dir, 
-                                         'wav-files', 
-                                         species, 
-                                         f"{window_name}.{'wav'}")
-            sf.write(outfile_audio, window_audio, sr)
+            spectro_done = os.path.exists(outfile_spectro) 
+            if not spectro_done or (spectro_done and self.overwrite_policy != WhenAlreadyDone.SKIP):
+                SoundProcessor.create_spectrogram(window_audio,sr,outfile_spectro)
+
+            if self.generate_wav_files:
+                outfile_audio = os.path.join(out_dir, 
+                                             'wav-files', 
+                                             species, 
+                                             f"{window_name}.{'wav'}")
+                
+                wav_done = os.path.exists(outfile_audio) 
+                if not wav_done or (wav_done and self.overwrite_policy != WhenAlreadyDone.SKIP):
+                    sf.write(outfile_audio, window_audio, sr)
 
     #------------------------------------
     # create_dest_dirs 
@@ -289,7 +328,7 @@ class SoundChopper:
         Creates all directories that will hold new 
         audio snippets and spectrograms for each species.
         For each directory: if dir exists:
-           o if overwrite_freely is True, wipe the dir
+           o if overwrite_policy is True, wipe the dir
            o else ask user. 
                 If response is Yes, wipe the dir
                 else raise FileExistsError
@@ -304,15 +343,15 @@ class SoundChopper:
 
         # Root dir of the two dirs that will hold new 
         # audio snippet and spectrogram files
-        utils.create_folder(self.out_dir, overwrite_freely=self.overwrite_freely)
+        utils.create_folder(self.out_dir, overwrite_policy=self.overwrite_policy)
 
         # Below the rootP
         spectrogram_dir_path = os.path.join(self.out_dir,'spectrograms/')
         wav_dir_path = os.path.join(self.out_dir,'wav-files/')
 
-        if not utils.create_folder(spectrogram_dir_path, overwrite_freely=self.overwrite_freely):
+        if not utils.create_folder(spectrogram_dir_path, overwrite_policy=self.overwrite_policy):
             raise FileExistsError(f"Target dir {spectrogram_dir_path} exists; aborting")
-        if not utils.create_folder(wav_dir_path, overwrite_freely=self.overwrite_freely):
+        if not utils.create_folder(wav_dir_path, overwrite_policy=self.overwrite_policy):
             raise FileExistsError(f"Target dir {spectrogram_dir_path} exists; aborting")
         
         # One dir each for the audio and spectrogram
@@ -321,12 +360,12 @@ class SoundChopper:
         for species in species_list:
             species_spectros_dir = os.path.join(spectrogram_dir_path, species)
             if not utils.create_folder(species_spectros_dir,
-                                       overwrite_freely=self.overwrite_freely):
+                                       overwrite_policy=self.overwrite_policy):
                 raise FileExistsError(f"Target dir {species_spectros_dir} exists; aborting")
             
             species_audio_dir = os.path.join(wav_dir_path, species)
             if not utils.create_folder(species_audio_dir,
-                                       overwrite_freely=self.overwrite_freely):
+                                       overwrite_policy=self.overwrite_policy):
                 raise FileExistsError(f"Target dir {species_audio_dir} exists; aborting")
 
         return(wav_dir_path, spectrogram_dir_path)
@@ -474,7 +513,7 @@ class SoundChopper:
     #-------------------
     
     @classmethod
-    def run_workers(cls, args):
+    def run_workers(cls, args, overwrite_policy=WhenAlreadyDone.ASK):
         '''
         Called by main to run the SoundChopper in
         multiple processes at once. Partitions the
@@ -508,7 +547,7 @@ class SoundChopper:
         for ass_num, assignment in enumerate(worker_assignments):
             chopper = SoundChopper(in_dir, 
                                    args.output_dir,
-                                   overwrite_freely=args.overwrite_freely
+                                   overwrite_policy=overwrite_policy
                                    )
             ret_value_slot = mp.Value("b", False)
             job = ProcessWithoutWarnings(target=chopper.chop_file_list,
@@ -608,8 +647,13 @@ if __name__ == '__main__':
                         type=int,
                         help='number of cores to use; default: 80% of available cores',
                         default=None)
-    parser.add_argument('-y', '--overwrite_freely',
+    parser.add_argument('-y', '--overwrite',
                         help='if set, overwrite existing out directories without asking; default: False',
+                        action='store_true',
+                        default=False
+                        )
+    parser.add_argument('-r', '--resume',
+                        help='if set, skip any soundfiles whose output spectrogram already exists; default: False',
                         action='store_true',
                         default=False
                         )
@@ -623,13 +667,27 @@ if __name__ == '__main__':
         print(f"In directory {in_dir} does not exist, or is not a directory")
         sys.exit(1)
 
+    # Can't have both -y and -r:
+    if args.overwrite and args.resume:
+        print(f"Cannot have both, --overwrite/-y and --resume/-r")
+        sys.exit(1)
+        
+    if args.overwrite:
+        overwrite_policy = WhenAlreadyDone.OVERWRITE
+    if args.resume:
+        overwrite_policy = WhenAlreadyDone.SKIP
+    else:
+        overwrite_policy = WhenAlreadyDone.ASK
+
     if args.workers == 1:
         chopper = SoundChopper(in_dir, 
                                args.output_dir,
-                               overwrite_freely=args.overwrite_freely
+                               overwrite_policy=args.overwrite_policy
                                )
         chopper.chop_all()
     else:
-        SoundChopper.run_workers(args)
+        SoundChopper.run_workers(args,
+                                 overwrite_policy=args.overwrite_policy
+                                 )
 
     print("Done")
