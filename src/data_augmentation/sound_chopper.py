@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-
 from _collections import OrderedDict
 import argparse
 import os,sys
@@ -11,8 +10,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from logging_service.logging_service import LoggingService
 
-import matplotlib
 # Needed when running headless:
+import matplotlib
 matplotlib.use('TkAgg')
 
 from matplotlib import MatplotlibDeprecationWarning
@@ -27,7 +26,7 @@ import multiprocessing as mp
 class SoundChopper:
     '''
     Processes directories of .wav or .mp3 files,
-    chopping them into window_len second snippets.
+    chopping them into window_len seconds snippets.
     Each audio snippet is saved, and spectrograms
     are created for each.
     
@@ -40,8 +39,7 @@ class SoundChopper:
            smpl1_2.mp3      smpl2_2.mp3         smpln_2mp3
                             ...
                             
-    Chops each .mp3 (or .wav) file into window_len snippets.
-    Saves those snippets in a new directory. Creates a spectrogram 
+    Saves the snippets in a new directory. Creates a spectrogram 
     for each snippet, and saves those in a different, new directory.
         
         Resulting directories under self.out_dir will be:
@@ -49,8 +47,30 @@ class SoundChopper:
                          self.out_dir
             spectrograms               wav-files
 
-    '''
+    Because many spectrograms are created, speed requirements
+    call for the use of parallelism. Since each audio file's processing
+    is independent from the others, the multiprocessing library
+    is used as follows.
     
+        - If command line arg --workers is set to 1, no parallelism
+          is used. 
+        - If multiple cores are available, 80% of them will be
+          deployed to chopping. Each core runs a separate copy
+          of this file.
+        - If 80%
+
+    Method chop_all() is used in the single core scenario.
+    Method chop_file_list() is used when multiprocessing. This
+    method is the 'target' in the multiprocessing library's sense.
+
+    '''
+
+    # If multiple cores are available,
+    # only use some percentage of them to
+    # be nice:
+    
+    MAX_PERC_OF_CORES_TO_USE = 80
+
     #------------------------------------
     # Constructor 
     #-------------------
@@ -147,7 +167,7 @@ class SoundChopper:
     # chop_file_list 
     #-------------------
     
-    def chop_file_list(self, assignment, return_bool):
+    def chop_file_list(self, assignment, return_bool, env=None):
         '''
         Takes a list like:
         
@@ -158,12 +178,51 @@ class SoundChopper:
         Example: foobar.mp3
         
         Returns True if all went well, else
-        raises exception
+        raises exception.
+        
+        Wrinkle: this method is called under two 
+        very different scenarios (S1/S2). S1 is
+        when the process started by the user calls
+        this method. That happens when the command
+        line arg --workers is set to 1, or on a machine
+        where few enough cores are available that only
+        one is used. In that case, env is left at None,
+        and all is as normal.
+        
+        S2 occurs when the initial process (the one started
+        from the command line) starts a new Process. That
+        process normally contains a new environment, i.e. 
+        some default value for all the environment variables.
+        In particular, DISPLAY and PYTHONPATH will not be
+        what is needed. The result is that all spectrogram
+        creating methods fail, because they cannot find a
+        graphics backend. 
+        
+        In that case kwarg env is set to the environment of the 
+        initiating process. At the start of this method this
+        process' default environ is then set to match that
+        of the initiating process.
         
         @param assignment: list of species/filename pairs
         @type assignment: [(str,str)]
+        @param env: if provided, the environment of the
+            parent process. If None, the current env
+            is retained
+        @type env: {str : Any}
+        @param return_bool:
+        @type return_bool:
         '''
+       
+        # During multiprocessing this method is
+        # the target, i.e. the entry point for 
+        # each child. In that case env will be 
+        # the environment of the initiating process.
+        # We adopt that environment for this new,
+        # forked process as well:
         
+        if env is not None:
+            os.environ = env
+
         for species_name, fname in assignment:
             try:
                 self.chop_one_audio_file(self.in_dir,
@@ -347,7 +406,7 @@ class SoundChopper:
         num_cores = mp.cpu_count()
         # Use 80% of the cores:
         if num_workers is None:
-            num_workers = round(num_cores * 80 /100)
+            num_workers = round(num_cores * SoundChopper.MAX_PERC_OF_CORES_TO_USE  / 100)
         elif num_workers > num_cores:
             # Limit pool size to number of cores:
             num_workers = num_cores

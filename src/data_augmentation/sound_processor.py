@@ -3,6 +3,10 @@ import os
 from pathlib import Path
 import random
 
+# Needed when running headless:
+import matplotlib
+matplotlib.use('TkAgg')
+
 from PIL import Image
 import librosa.display
 from logging_service import LoggingService
