@@ -257,10 +257,10 @@ class BirdsTrainingArgumentsParser(ArgumentParser):
         intended for this launcher and the ones destined
         to the training script copies. 
         
-        @return: a dict with keys 'script_args' and
+        :return: a dict with keys 'script_args' and
             'launch_args' with arg-value information
             for each of the two destinations.
-        @rtype: {str : {str : ANY}}
+        :rtype: {str : {str : ANY}}
         """
     
         curr_dir = os.path.dirname(__file__)
@@ -428,8 +428,8 @@ class TrainScriptLauncher:
         # variable gpu_landscape: 
         
         
-        @param launch_args:
-        @type launch_args:
+        :param launch_args:
+        :type launch_args:
         '''
 
         try: 
@@ -631,26 +631,26 @@ class TrainScriptLauncher:
         From provided information, creates a legal 
         command string for starting the training script.
         
-        @param rank: rank of the script; i.e. it's process' place
+        :param rank: rank of the script; i.e. it's process' place
             in the sequence of all train script processes
             across all machines
-        @type rank: int
-        @param gpus_used_this_machine: number of GPU devices to 
+        :type rank: int
+        :param gpus_used_this_machine: number of GPU devices to 
             be used, according to the world_map; may be less than
             number of available GPUs
-        @type gpus_used_this_machine: int
-        @param local_rank: index into the local sequence of GPUs
+        :type gpus_used_this_machine: int
+        :param local_rank: index into the local sequence of GPUs
             for for the GPU that the script is to use
-        @type local_rank: int
-        @param min_rank_this_machine: the lowest of the ranks among
+        :type local_rank: int
+        :param min_rank_this_machine: the lowest of the ranks among
             the training scripts on this machine
-        @type min_rank_this_machine: int
-        @param launch_args: command line arguments intended for the
+        :type min_rank_this_machine: int
+        :param launch_args: command line arguments intended for the
             launch script, as opposed to being destined for the 
             train script
-        @type launch_args: {str : Any}
-        @param script_args: additional args for the train script
-        @type script_args: {str : Any}
+        :type launch_args: {str : Any}
+        :param script_args: additional args for the train script
+        :type script_args: {str : Any}
         '''
 
         # Build the shell command line,
@@ -727,8 +727,8 @@ class TrainScriptLauncher:
         them with an acceptable marker, and then 
         convert back.
                 
-        @param path: path to world map file
-        @type path: string
+        :param path: path to world map file
+        :type path: string
         '''
         dot_substitute = '___'
         
@@ -809,11 +809,11 @@ class TrainScriptLauncher:
         #     o self.WORLD_SIZE, number of GPUs used across all machines
         #     o self.my_gpus, the number of GPUs on this machine
         
-        @param world_map:
-        @type world_map:
-        @return: information about how many GPUs are
+        :param world_map:
+        :type world_map:
+        :return: information about how many GPUs are
             on each node
-        @rtype: OrderedDict
+        :rtype: OrderedDict
         '''
         
         if not self.hostname in world_map.keys():
@@ -935,8 +935,8 @@ class TrainScriptLauncher:
         '''
         Given a list of process instances,
         Send SIGINT (cnt-C) to them:
-        @param procs:
-        @type procs:
+        :param procs:
+        :type procs:
         '''
         # Line processes up, highest rank first,
         # master process last:

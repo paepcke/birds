@@ -269,10 +269,10 @@ class TestBirdsTrainingParallel(unittest.TestCase):
         names, and values are the above numbers and
         sublists.
          
-        @param record_list: one line imported from a json log file
-        @type record_list: list
-        @return dict mapping measure-name to value
-        @rtype {str : {str|list}}
+        :param record_list: one line imported from a json log file
+        :type record_list: list
+        :return dict mapping measure-name to value
+        :rtype {str : {str|list}}
         '''
 
         record_dict = \

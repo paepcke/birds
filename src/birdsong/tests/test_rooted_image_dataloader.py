@@ -302,15 +302,15 @@ class TestNRootsImageDataset(unittest.TestCase):
               lookup is really needed, create a reverse dict
               instead.
          
-        @param the_dict: dict to search
-        @type the_dict: dictionary
-        @param sought_value: constant that is sought among the dict's values
-        @type sought_value: any
-        @param fn: function(key_val_tuple) --> True/False
-        @type fn: function
-        @returns list of keys for which dict[key] matches
+        :param the_dict: dict to search
+        :type the_dict: dictionary
+        :param sought_value: constant that is sought among the dict's values
+        :type sought_value: any
+        :param fn: function(key_val_tuple) --> True/False
+        :type fn: function
+        :returns list of keys for which dict[key] matches
             the condition
-        @rtype hashable
+        :rtype hashable
         '''
         
         if sought_value is None and fn is None:

@@ -62,14 +62,14 @@ class Inferencer:
         not inferencing on up to batch_size - 1 
         samples is OK
         
-        @param model_path:
-        @type model_path:
-        @param samples_path:
-        @type samples_path:
-        @param batch_size:
-        @type batch_size:
-        @param labels_path:
-        @type labels_path:
+        :param model_path:
+        :type model_path:
+        :param samples_path:
+        :type samples_path:
+        :param batch_size:
+        :type batch_size:
+        :param labels_path:
+        :type labels_path:
         '''
 
         self.model_path = model_path
@@ -153,9 +153,9 @@ class Inferencer:
         Returns a ResultCollection with the
         ResultTally instances of each batch.
         
-        @return: collection of tallies, one for each batch,
+        :return: collection of tallies, one for each batch,
             or None if something went wrong.
-        @rtype: {None | ResultCollection}
+        :rtype: {None | ResultCollection}
         '''
         # Just in case the loop never runs:
         batch_num   = -1
@@ -293,11 +293,11 @@ class Inferencer:
         Computes and (pyplot-)shows a set of precision-recall
         curves in one plot:
         
-        @param thresholds: list of cutoff thresholds
+        :param thresholds: list of cutoff thresholds
             for turning logits into class ID predictions.
             If None, the default at TensorBoardPlotter.compute_multiclass_pr_curves()
             is used.
-        @type thresholds: [float]
+        :type thresholds: [float]
         '''
 
         # Obtain a dict of CurveSpecification instances,
@@ -365,10 +365,10 @@ class Inferencer:
         to tensorboard if possible, and return the
         table text.
         
-        @param tally_coll: collect of tallies from batches
-        @type tally_coll: ResultCollection
-        @return table of results
-        @rtype: str
+        :param tally_coll: collect of tallies from batches
+        :type tally_coll: ResultCollection
+        :return table of results
+        :rtype: str
         '''
         
         all_preds   = []

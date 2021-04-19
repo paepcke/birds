@@ -103,20 +103,20 @@ class SingleRootImageDataset:
                  ):
         '''
         
-        @param filepath: path to root of the target
+        :param filepath: path to root of the target
             images, each target being a directory with
             samples for that target
-        @type filepath: str
-        @param sample_width: pixel width to which images are 
+        :type filepath: str
+        :param sample_width: pixel width to which images are 
             to be scaled
-        @type sample_height: pixel height to which images are 
+        :type sample_height: pixel height to which images are 
             to be scaled
-        @param to_grayscale: do or do not convert images
+        :param to_grayscale: do or do not convert images
             to 1-channel grayscale
-        @type to_grayscale: bool
-        @return: new instance of MultiRootImageDataset
-        @rtype MultiRootImageDataset
-        @raises ValueError if any of the roots is not a string.
+        :type to_grayscale: bool
+        :return: new instance of MultiRootImageDataset
+        :rtype MultiRootImageDataset
+        :raises ValueError if any of the roots is not a string.
         '''
         #*******************
 #         self.transform_img = transforms.Compose([
@@ -290,10 +290,10 @@ class SingleRootImageDataset:
         '''
         Given a sample ID, return its class index.
         
-        @param sample_id: ID to look up
-        @type sample_id: int
-        @return: given sample's class ID
-        @rtype: int
+        :param sample_id: ID to look up
+        :type sample_id: int
+        :return: given sample's class ID
+        :rtype: int
         '''
         return self.sample_id_to_class[sample_id]
 
@@ -306,8 +306,8 @@ class SingleRootImageDataset:
         Return a list with the integer class ids
         between which the classifier is to discriminate.
         
-        @return: list of integer class labels
-        @rtype List(int) 
+        :return: list of integer class labels
+        :rtype List(int) 
         '''
         if self._class_id_list is not None:
             return self._class_id_list
@@ -332,8 +332,8 @@ class SingleRootImageDataset:
         file path of the corresponding sample
         in the file system.
         
-        @param sample_id: sample ID to look up
-        @type sample_id: int
+        :param sample_id: sample ID to look up
+        :type sample_id: int
         '''
         return os.path.abspath(self.sample_id_to_path[sample_id])
 
@@ -346,9 +346,9 @@ class SingleRootImageDataset:
         Returns number of samples for each class
         in the dataset
         
-        @return: list of tuples: (class_id, num_samples);
+        :return: list of tuples: (class_id, num_samples);
             one such tuple for each class_id
-        @rtype: [(int, int)]
+        :rtype: [(int, int)]
         '''
         
         class_ids, sample_counts = np.unique(self.sample_classes(), 
@@ -371,9 +371,9 @@ class SingleRootImageDataset:
         '''
         Returns a two-tuple: image tensor, target class
         
-        @param sample_id: Image sample identifier
-        @type sample_id: int
-        @return Image loaded as a PIL, then downsized,
+        :param sample_id: Image sample identifier
+        :type sample_id: int
+        :return Image loaded as a PIL, then downsized,
             and transformed to a tensor.
         '''
 
@@ -453,20 +453,20 @@ class MultiRootImageDataset(SingleRootImageDataset):
         
         Return this instance. 
         
-        @param cls: class for which this instance will 
+        :param cls: class for which this instance will 
             manufacture an instance
-        @type cls: bird_dataset.MultiRootImageDataset
-        @param roots: individual, or list of paths under which
+        :type cls: bird_dataset.MultiRootImageDataset
+        :param roots: individual, or list of paths under which
             subdirectories for classification targets are to
             be included
-        @type roots: {str | [str]}
-        @param sample_width: pixel width to which images are 
+        :type roots: {str | [str]}
+        :param sample_width: pixel width to which images are 
             to be scaled
-        @type sample_height: pixel height to which images are 
+        :type sample_height: pixel height to which images are 
             to be scaled
-        @return: new instance of MultiRootImageDataset
-        @rtype MultiRootImageDataset
-        @raises ValueError if any of the roots is not a string.
+        :return: new instance of MultiRootImageDataset
+        :rtype MultiRootImageDataset
+        :raises ValueError if any of the roots is not a string.
         '''
 
         if type(roots) != list:

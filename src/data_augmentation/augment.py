@@ -62,25 +62,25 @@ class Augmenter:
 
         '''
         
-        @param input_dir_path: directory holding .wav files
-        @type input_dir_path: str
-        @param plot: whether or not to plot informative chars 
+        :param input_dir_path: directory holding .wav files
+        :type input_dir_path: str
+        :param plot: whether or not to plot informative chars 
             along the way
-        @type plot: bool
-        @param overwrite_freely: if true, don't ask each time
+        :type plot: bool
+        :param overwrite_freely: if true, don't ask each time
             previously created work will be replaced
-        @type overwrite_freely: bool 
-        @param aug_volume: either an AugmentationVolume member,
+        :type overwrite_freely: bool 
+        :param aug_volume: either an AugmentationVolume member,
                or a dict with a separate AugmentationVolume
                for each species: {species : AugmentationVolume}
                (See definition of AugmentationVolume)
-        @type aug_volume: {AugmentationVolume | {str : AugmentationVolume}}
-        @param random_augs: if this is true, will randomly choose augmentation 
+        :type aug_volume: {AugmentationVolume | {str : AugmentationVolume}}
+        :param random_augs: if this is true, will randomly choose augmentation 
             to use for each new sample
-        @type random_augs: bool
-        @param multiple_augs: if we want to allow multiple augmentations per sample 
+        :type random_augs: bool
+        :param multiple_augs: if we want to allow multiple augmentations per sample 
             (ie time shift and warp)):
-        @type multiple_augs: bool
+        :type multiple_augs: bool
         '''
 
         self.log = LoggingService()
@@ -157,14 +157,14 @@ class Augmenter:
         of available samples for training/validation/test for the
         respective row's species.
         
-        @param aug_volumes: how many augmentations for each species
-        @type aug_volumes: {AugmentationVolume | {str : AugmentationVolume}}
-        @param sample_distrib_df: distribution of initially available
+        :param aug_volumes: how many augmentations for each species
+        :type aug_volumes: {AugmentationVolume | {str : AugmentationVolume}}
+        :param sample_distrib_df: distribution of initially available
             sample numbers for each species
-        @type sample_distrib_df: pandas.DataFrame
-        @return: dict mapping each species to the 
+        :type sample_distrib_df: pandas.DataFrame
+        :return: dict mapping each species to the 
             number of samples that need to be created.
-        @rtype: {str : int}
+        :rtype: {str : int}
         '''
         
         # Get straight array of number of audio samples

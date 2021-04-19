@@ -312,17 +312,17 @@ class XenoCantoProcessorTester(unittest.TestCase):
         expected_go_ahead and expected_global_default
         values.
 
-        @param rec: XenoCantoRecording on which to call download()
-        @type rec: XenoCantoRecording
-        @param overwrite_existing: whether or not to overwrite
-        @type overwrite_existing: bool
-        @param expected_go_ahead: whether resulting go_ahead should
+        :param rec: XenoCantoRecording on which to call download()
+        :type rec: XenoCantoRecording
+        :param overwrite_existing: whether or not to overwrite
+        :type overwrite_existing: bool
+        :param expected_go_ahead: whether resulting go_ahead should
             be True or False
-        @type expected_go_ahead: bool
-        @param expected_global_default: whether after the call the
+        :type expected_go_ahead: bool
+        :param expected_global_default: whether after the call the
             global default overwrite instruction should be True
             or False
-        @type expected_global_default:bool
+        :type expected_global_default:bool
         '''
         
         vocalization_type = rec.type.upper()

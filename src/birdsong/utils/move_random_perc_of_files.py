@@ -59,14 +59,14 @@ class FileMover(object):
             files_moved    # List of the files moved 
             
         
-        @param move_fn: function to use when moving files.
+        :param move_fn: function to use when moving files.
             Primarily for testing without actually moving
             files
-        @type move_fn: Function(src_file, dst_dir)
-        @param testing: if True, store intermediates in self
-        @type testing: bool
-        @return: number of files moved
-        @rtype: int
+        :type move_fn: Function(src_file, dst_dir)
+        :param testing: if True, store intermediates in self
+        :type testing: bool
+        :return: number of files moved
+        :rtype: int
         '''
         
         # Fast method for finding 

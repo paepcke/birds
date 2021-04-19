@@ -48,15 +48,15 @@ class SKFSampler(StratifiedKFold):
         samples within each fold will still not be 
         shuffled.
           
-        @param dataset: underlying map sample_id --> <img_tensor, label>
-        @type dataset: BirdDataset
-        @param num_folds: number k in k-fold cross validation
-        @type num_folds: int
-        @param seed: also known as seed
-        @type seed: {None | int}
-        @param shuffle: whether or not to shuffle dataset at
+        :param dataset: underlying map sample_id --> <img_tensor, label>
+        :type dataset: BirdDataset
+        :param num_folds: number k in k-fold cross validation
+        :type num_folds: int
+        :param seed: also known as seed
+        :type seed: {None | int}
+        :param shuffle: whether or not to shuffle dataset at
             the outset
-        @type shuffle: bool
+        :type shuffle: bool
         '''
         self.drop_last = drop_last
         super().__init__(n_splits=num_folds,
@@ -324,17 +324,17 @@ class DistributedSKFSampler(SKFSampler):
             o dist.init_process_group() has been called 
               before creating an instance of this class.
 
-        @param dataset: underlying map sample_id --> <img_tensor, label>
-        @type dataset: BirdDataset
-        @param num_folds: number k in k-fold cross validation
-        @type num_folds: int
-        @param seed: also known as seed
-        @type seed: {None | int}
-        @param shuffle: whether or not to shuffle dataset at
+        :param dataset: underlying map sample_id --> <img_tensor, label>
+        :type dataset: BirdDataset
+        :param num_folds: number k in k-fold cross validation
+        :type num_folds: int
+        :param seed: also known as seed
+        :type seed: {None | int}
+        :param shuffle: whether or not to shuffle dataset at
             the outset
-        @type shuffle: bool
-        @param drop_last: whether to discard partially filled folds
-        @type drop_last: bool
+        :type shuffle: bool
+        :param drop_last: whether to discard partially filled folds
+        :type drop_last: bool
         '''
         
         if len(dataset) == 0:

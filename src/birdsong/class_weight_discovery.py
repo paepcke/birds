@@ -45,11 +45,11 @@ class ClassWeightDiscovery(object):
         of the weights corresponds to the 
         naturally sorted class names.
         
-        @param file_root: full path to root
+        :param file_root: full path to root
             of data file subtree
-        @type file_root: str
-        @return weights in naturally sorted class order
-        @rtype: Tensor
+        :type file_root: str
+        :return weights in naturally sorted class order
+        :rtype: Tensor
         '''
 
         

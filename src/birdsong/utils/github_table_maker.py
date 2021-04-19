@@ -28,10 +28,10 @@ class GithubTableMaker:
                            [5,6]
                            ]
 
-        @param content_dict: content information
-        @type content_dict: {str | [Any]}
-        @return the markdown table text
-        @rtype str
+        :param content_dict: content information
+        :type content_dict: {str | [Any]}
+        :return the markdown table text
+        :rtype str
         '''
         
         col_header = content_dict['col_header']

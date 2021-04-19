@@ -221,14 +221,14 @@ class SoundProcessor:
         sample. Bandpass filter is applied, Mel scale is used,
         and power is converted to decibels.
          
-        @param audio_sample: audio
-        @type audio_sample: np.array
-        @param sr: sample rate
-        @type sr: int
-        @param outfile: where to store the result
-        @type outfile: str
-        @param n_mels: number of mel scale bands 
-        @type n_mels: int
+        :param audio_sample: audio
+        :type audio_sample: np.array
+        :param sr: sample rate
+        :type sr: int
+        :param outfile: where to store the result
+        :type outfile: str
+        :param n_mels: number of mel scale bands 
+        :type n_mels: int
         '''
         # Use bandpass filter for audio before converting to spectrogram
         audio = SoundProcessor.filter_bird(audio_sample, sr)

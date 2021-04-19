@@ -499,10 +499,10 @@ class BirdsTrainBasic:
            o epoch_mean_loss        (train and val)
            
          
-        @param latest_result: dict with keys 'train' and
+        :param latest_result: dict with keys 'train' and
             'val', holding the respective most recent
             (i.e. last-epoch) ResultTally
-        @type latest_result: {'train' : ResultTally,
+        :type latest_result: {'train' : ResultTally,
                                'val'   : ResultTally
                                }
         '''
@@ -589,11 +589,11 @@ class BirdsTrainBasic:
         
         No error checking to confirm this structure
         
-        @param data_root: path to parent of train/validation
-        @type data_root: str
-        @return: number of unique classes as obtained
+        :param data_root: path to parent of train/validation
+        :type data_root: str
+        :return: number of unique classes as obtained
             from the directory names
-        @rtype: int
+        :rtype: int
         '''
         self.classes = FileUtils.find_class_names(data_root)
         return len(self.classes)
@@ -613,8 +613,8 @@ class BirdsTrainBasic:
         to None, or open CSV writers, depending on the value of raw_data_dir,
         see create_csv_writer()
         
-        @param logdir: root for tensorboard events
-        @type logdir: str
+        :param logdir: root for tensorboard events
+        :type logdir: str
         '''
         
         if not os.path.isdir(logdir):
@@ -685,15 +685,15 @@ class BirdsTrainBasic:
            o A filed descriptor for a file open for either
              'write' or 'append.
         
-        @param raw_data_dir: If simply True, create dir and file names
+        :param raw_data_dir: If simply True, create dir and file names
             from hparams, and create as needed. If a string, it is 
             assumed to be the directory where a .csv file is to be
             created. If None, self.csv_writer is set to None.
-        @type raw_data_dir: {None | True | str|
-        @return: CSV writer ready for action. Set either to
+        :type raw_data_dir: {None | True | str|
+        :return: CSV writer ready for action. Set either to
             write a fresh file, or append to an existing file.
             Unless file exists, and user decided not to overwrite
-        @rtype: {None | csv.writer}
+        :rtype: {None | csv.writer}
         '''
 
         # Ensure the csv file root dir exists if
@@ -759,13 +759,13 @@ class BirdsTrainBasic:
         Creates facility for saving partially trained
         models along the way.
         
-        @param config:
-        @type config:
-        @param num_classes:
-        @type num_classes:
-        @return: ModelArchive instance ready
+        :param config:
+        :type config:
+        :param num_classes:
+        :type num_classes:
+        :return: ModelArchive instance ready
             for calls to save_model()
-        @rtype: ModelArchive
+        :rtype: ModelArchive
         '''
         model_archive = ModelArchive(config,
                                      num_classes,
@@ -851,12 +851,12 @@ class BirdsTrainBasic:
         If given a NeuralNetConfig instance, it is returned
         unchanged. 
         
-        @param config_info: the information needed to construct
+        :param config_info: the information needed to construct
             the structure
-        @type config_info: {NeuralNetConfig | str}
-        @return a NeuralNetConfig instance with all parms
+        :type config_info: {NeuralNetConfig | str}
+        :return a NeuralNetConfig instance with all parms
             initialized
-        @rtype NeuralNetConfig
+        :rtype NeuralNetConfig
         '''
 
         if isinstance(config_info, str):
@@ -918,12 +918,12 @@ class BirdsTrainBasic:
         
             config['Training'].getfloat('learning_rate')
         
-        @param other_gpu_config_file: path to configuration file
-        @type other_gpu_config_file: str
-        @return: a dict of dicts mirroring the config file sections/entries
-        @rtype: dict[dict]
-        @raises ValueErr
-        @raises TypeError
+        :param other_gpu_config_file: path to configuration file
+        :type other_gpu_config_file: str
+        :return: a dict of dicts mirroring the config file sections/entries
+        :rtype: dict[dict]
+        :raises ValueErr
+        :raises TypeError
         '''
         
         if conf_file is None:
@@ -976,8 +976,8 @@ class BirdsTrainBasic:
         Set the seed across all different necessary platforms
         to allow for comparison of different models and runs
         
-        @param seed: random seed to set for all random num generators
-        @type seed: int
+        :param seed: random seed to set for all random num generators
+        :type seed: int
         '''
         torch.manual_seed(seed)
         cuda.manual_seed_all(seed)
@@ -1020,10 +1020,10 @@ class BirdsTrainBasic:
 
             If duration is less than second, returns '< 1sec>'
             
-        @param epoch_delta:
-        @type epoch_delta:
-        @param granularity:
-        @type granularity:
+        :param epoch_delta:
+        :type epoch_delta:
+        :param granularity:
+        :type granularity:
         '''
         intervals = (
             ('weeks', 604800),  # 60 * 60 * 24 * 7

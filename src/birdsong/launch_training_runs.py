@@ -78,25 +78,25 @@ class TrainScriptRunner(object):
              <hparm2> : [val2_1, val2_2, ...]
              }
         
-        @param starting_config_src: a configuration 
+        :param starting_config_src: a configuration 
             whose neural net related parameters will 
             be modified below for each run.
-        @type starting_config_src: {str | NeuralNetConfig}            
-        @param hparms_spec:
-        @type hparms_spec:
-        @param training_script: path to the training script
+        :type starting_config_src: {str | NeuralNetConfig}            
+        :param hparms_spec:
+        :type hparms_spec:
+        :param training_script: path to the training script
             of which to run multiple copies. If None, will
             look in config for Path:train_script.
-        @type training_script: {None | str}
-        @param logfile: where to log runtime information. If None,
+        :type training_script: {None | str}
+        :param logfile: where to log runtime information. If None,
             log to console
-        @type logfile: {None | str}
-        @param quiet: whether or not to report progress
-        @type quiet: bool
-        @param unittesting: set to True if unittesting so that
+        :type logfile: {None | str}
+        :param quiet: whether or not to report progress
+        :type quiet: bool
+        :param unittesting: set to True if unittesting so that
             __init__() will only do a minimum, and allows unittests
             to call other methods individually
-        @type bool
+        :type bool
         '''
 
         if logfile is not None:
@@ -166,10 +166,10 @@ class TrainScriptRunner(object):
         holds the value for each of the hparms
         for one run.
         
-        @param hparms_spec: client's dict of 
+        :param hparms_spec: client's dict of 
             {param_name : [val1, val2, ...]}
-        @type hparms_spec: {str : [Any]}
-        @return: list of dicts
+        :type hparms_spec: {str : [Any]}
+        :return: list of dicts
         '''
 
         # Running example:
@@ -241,16 +241,16 @@ class TrainScriptRunner(object):
         hyperparameter settings. All other parts of
         the config are kept.
         
-        @param config: a configuration with
+        :param config: a configuration with
             all settings; only the hyperparameter 
             settings will be modified
-        @type config: NeuralNetConfig
-        @param config_dicts: one dict of hyperparm-name : value
+        :type config: NeuralNetConfig
+        :param config_dicts: one dict of hyperparm-name : value
             for each process to run independently
-        @type config_dicts: [{str : Any}]
-        @return: list of configurations for the classifier
+        :type config_dicts: [{str : Any}]
+        :return: list of configurations for the classifier
             script to run
-        @rtype: [NeuralNetConfig]
+        :rtype: [NeuralNetConfig]
         '''
         
         configs = []
@@ -310,11 +310,11 @@ class TrainScriptRunner(object):
         #     o self.WORLD_SIZE, number of GPUs used across all machines
         #     o self.my_gpus, the number of GPUs on this machine
         
-        @param world_map:
-        @type world_map:
-        @return: information about how many GPUs are
+        :param world_map:
+        :type world_map:
+        :return: information about how many GPUs are
             on each node
-        @rtype: OrderedDict
+        :rtype: OrderedDict
         '''
         
         if not self.hostname in world_map.keys():
@@ -410,8 +410,8 @@ class TrainScriptRunner(object):
         them with an acceptable marker, and then 
         convert back.
                 
-        @param path: path to world map file
-        @type path: string
+        :param path: path to world map file
+        :type path: string
         '''
         dot_substitute = '___'
         
@@ -505,12 +505,12 @@ class TrainScriptRunner(object):
                                      # (As opposed to number of GPUs that
                                      # exist on this machine.)
 
-        @param run_configs: list of configurations. Each config
+        :param run_configs: list of configurations. Each config
             may either be a JSON string, the file name of
             a config file, or a NeuralNetConfig instance
-        @type run_configs: [str | NeuralNetConfig]
-        @return 0 for success of all processes, else 1
-        @rtype int
+        :type run_configs: [str | NeuralNetConfig]
+        :return 0 for success of all processes, else 1
+        :rtype int
         '''
 
         gpu_ids_to_use = self.gpu_landscape[self.hostname]['gpu_device_ids']
@@ -608,12 +608,12 @@ class TrainScriptRunner(object):
         From provided information, creates a legal 
         command string for starting the training script.
         
-        @param local_rank: GPU identifier (between 0 and 
+        :param local_rank: GPU identifier (between 0 and 
             num of GPUs in this machine)
-        @type local_rank: int
-        @param config: additional information in a config instance,
+        :type local_rank: int
+        :param config: additional information in a config instance,
             or a path to a configuration file
-        @type config: {NeuralNetConfig | str}
+        :type config: {NeuralNetConfig | str}
         '''
 
         # Build the shell command line,
@@ -657,8 +657,8 @@ class TrainScriptRunner(object):
         '''
         Given a list of process instances,
         Send SIGINT (cnt-C) to them:
-        @param procs:
-        @type procs:
+        :param procs:
+        :type procs:
         '''
 
         if self.cnt_c_received:
@@ -700,10 +700,10 @@ class TrainScriptRunner(object):
         Very primitive test whether a passed-in
         string is (legal) JSON or not.
         
-        @param str_to_check: string to examine
-        @type str_to_check: str
-        @return True/False
-        @rtype bool
+        :param str_to_check: string to examine
+        :type str_to_check: str
+        :return True/False
+        :rtype bool
         '''
         try:
             json5.loads(str_to_check)
@@ -764,9 +764,9 @@ class GPUManager:
         '''
         ****
         
-        @param gpu_ids: ids of GPUs on this machine
+        :param gpu_ids: ids of GPUs on this machine
             that may be used
-        @type gpu_ids: [int]
+        :type gpu_ids: [int]
         '''
         
         if GPUManager.__is_initialized:
@@ -811,8 +811,8 @@ class GPUManager:
         the function passed to wait_proc() must be curried to
         include 'self'; see __init__() method. 
           
-        @param terminated_process: process that terminated
-        @type terminated_process: subprocess.CompletedProcess
+        :param terminated_process: process that terminated
+        :type terminated_process: subprocess.CompletedProcess
         '''
 
         self.update_process_record(terminated_process, 
@@ -841,9 +841,9 @@ class GPUManager:
         It is permitted to client to call obtain_gpu
         again in the future to use the freed GPU.
         
-        @returns GPU ID (i.e. local_rank)
-        @rtype: int
-        @raises RuntimeError if a process finished with error
+        :returns GPU ID (i.e. local_rank)
+        :rtype: int
+        :raises RuntimeError if a process finished with error
         '''
         
         if self.cpu_only:
@@ -928,9 +928,9 @@ class GPUManager:
         Given a procss instance, return 
         a copy of that process' RunInfo
 
-        @param proc: process whose run config to obtain 
-        @type proc: Popen
-        @return RunInfo
+        :param proc: process whose run config to obtain 
+        :type proc: Popen
+        :return RunInfo
         '''
         
         with self.lock:
@@ -947,10 +947,10 @@ class GPUManager:
         of getting a RunInfo, and then accessing an item
         within it.
         
-        @param proc: process whose RunInfo item to retrieve
-        @type proc: Popen
-        @param config_key: key into RunInfo whose value to get
-        @type config_key: str
+        :param proc: process whose RunInfo item to retrieve
+        :type proc: Popen
+        :param config_key: key into RunInfo whose value to get
+        :type config_key: str
         '''
         
         with self.lock:

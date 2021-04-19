@@ -83,18 +83,18 @@ class NetUtils:
         protocol, only the master node will download, and
         then share with the others.
         
-        @param num_classes: number of target classes
-        @type num_classes: int
-        @param pretrained: if true, the pre-trained version
+        :param num_classes: number of target classes
+        :type num_classes: int
+        :param pretrained: if true, the pre-trained version
             is obtained. Else initial weights are undefined
-        @type pretrained: bool
-        @param freeze: how many layers to
+        :type pretrained: bool
+        :param freeze: how many layers to
             freeze, protecting them from training.
-        @type freeze: int
-        @param net_version: which Resnet to return: 18 or 50
-        @type net_version: int
-        @return: a fresh model
-        @rtype: pytorch.nn 
+        :type freeze: int
+        :param net_version: which Resnet to return: 18 or 50
+        :type net_version: int
+        :return: a fresh model
+        :rtype: pytorch.nn 
         '''
 
         
@@ -183,12 +183,12 @@ class NetUtils:
         the network families call their layers.
         So, need to distinguish:
                 
-        @param cls:
-        @type cls:
-        @param model:
-        @type model:
-        @param net_name:
-        @type net_name:
+        :param cls:
+        :type cls:
+        :param model:
+        :type model:
+        :param net_name:
+        :type net_name:
         '''
         
         if net_name == 'resnet':
@@ -274,8 +274,8 @@ class NetUtils:
           )
         )
         
-        @param model:
-        @type model:
+        :param model:
+        :type model:
         '''
         # Get input layer whose weight attr is torch.Size([64, 3, 7, 7])
         l_in = model.conv1
@@ -329,15 +329,15 @@ class NetUtils:
         as we have classes. Models pretrained
         on ImageNet come with 1000 class outputs.
         
-        @param model: model instance to modify
-        @type model: torchvision.model
-        @param net_name: resnet or densenet
-        @type net_name: str
-        @param new_num_classes: desired number of 
+        :param model: model instance to modify
+        :type model: torchvision.model
+        :param net_name: resnet or densenet
+        :type net_name: str
+        :param new_num_classes: desired number of 
             output classes
-        @type new_num_classes: int
-        @return: modified model instance
-        @rtype: torchvision.model
+        :type new_num_classes: int
+        :return: modified model instance
+        :rtype: torchvision.model
         '''
         
         if net_name == 'resnet':
@@ -370,21 +370,21 @@ class NetUtils:
         resnet18 model. Then distributed the model
         to the other nodes. 
         
-        @param rank: this process' rank
+        :param rank: this process' rank
             in the distributed data processing sense
-        @type rank: int
-        @param local_leader_rank: the lowest rank on this machine
-        @type local_leader_rank: int
-        @param log: logging service to log to
-        @type log: LoggingService
-        @param net_version: which resnet version to obtain
-        @type net_version: int
-        @param pretrained: if true, the pre-trained version
+        :type rank: int
+        :param local_leader_rank: the lowest rank on this machine
+        :type local_leader_rank: int
+        :param log: logging service to log to
+        :type log: LoggingService
+        :param net_version: which resnet version to obtain
+        :type net_version: int
+        :param pretrained: if true, the pre-trained version
             is obtained. Else initial weights are undefined
-        @type pretrained: bool
-        @param freeze: how many layers to
+        :type pretrained: bool
+        :param freeze: how many layers to
             freeze, protecting them from training.
-        @type freeze: int
+        :type freeze: int
         '''
 
         if net_version not in (18,50):
@@ -448,12 +448,12 @@ class NetUtils:
         and return the model. Freezing a layer sets the required_grad
         attribute of the layer's weight tensors to False
         
-        @param model: model to partially freeze
-        @type model: pytorch.nn
-        @param num_to_freeze: how many layers to freeze
-        @type num_to_freeze: int
-        @returns: modified model
-        @rtype: pytorch.nn
+        :param model: model to partially freeze
+        :type model: pytorch.nn
+        :param num_to_freeze: how many layers to freeze
+        :type num_to_freeze: int
+        :returns: modified model
+        :rtype: pytorch.nn
         '''
 
         if num_to_freeze == 0:
@@ -486,10 +486,10 @@ class NetUtils:
         Ex: returns ('resnet', 18) for input 'resnet18'
             returns ('resnet', None) for input 'resnet'
              
-        @param net_name_and_version: name of network, such as 'resnet18'
-        @type net_name_and_version: str
-        @return: tuple of network name, and version
-        @rtype:  {None | (str, {None | int}}
+        :param net_name_and_version: name of network, such as 'resnet18'
+        :type net_name_and_version: str
+        :return: tuple of network name, and version
+        :rtype:  {None | (str, {None | int}}
         '''
 
         match = cls.net_name_separation_pat.match(net_name_and_version)

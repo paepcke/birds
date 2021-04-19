@@ -217,10 +217,10 @@ class XenoCantoCollection:
         I.e. the metadata download happens as part of 
         instantiation.
         
-        @param bird_names_or_coll_path: path to saved
+        :param bird_names_or_coll_path: path to saved
             XenoCantoCollection instance, or list of
             bird species.
-        @type bird_names_or_coll_path: {str | list[str]}
+        :type bird_names_or_coll_path: {str | list[str]}
         '''
         
         # Initialize all data structures based on 
@@ -283,24 +283,24 @@ class XenoCantoCollection:
         overwrite. This makes it impossible to run
         a long download unattended.
         
-        @param bird_names_or_coll_path: path to 
+        :param bird_names_or_coll_path: path to 
             previously saved collection (a .json, 
             or .pkl/.pickle file. Or the list of
             bird species as needed to query Xeno Canto
-        @type bird_names_or_coll_path: {list | str|
-        @param courtesy_delay: seconds between downloads
+        :type bird_names_or_coll_path: {list | str|
+        :param courtesy_delay: seconds between downloads
             to be polite to Xeno Canto server. Don't
             set this to zero! You may well be blocked
             from the site.
-        @type courtesy_delay: float
-        @param dest_dir: destination of any recording
+        :type courtesy_delay: float
+        :param dest_dir: destination of any recording
             downloads. Default: subdirectory 'recordings'
             under this script's directory
-        @type dest_dir: str
-        @param always_overwrite: during download, 
+        :type dest_dir: str
+        :param always_overwrite: during download, 
             overwrite any already existing recordings 
             with new one without asking.
-        @type always_overwrite: bool
+        :type always_overwrite: bool
         '''
         # No cached "number of recordings" yet:
         self._num_recordings = None
@@ -335,9 +335,9 @@ class XenoCantoCollection:
         recording. Don't download the recordings
         themselves. 
         
-        @param bird_names: list of species as needed
+        :param bird_names: list of species as needed
             to download from the Xeno Canto server
-        @type bird_names: [str]
+        :type bird_names: [str]
         '''
         collections_metadata = self.xeno_canto_get_bird_metadata(bird_names)
 
@@ -443,8 +443,8 @@ class XenoCantoCollection:
         each phylo_name we feed one recording after the other,  until
         the list is exhausted, then move on to the next phylo_name.
         
-        @return: Xeno Canto recording instance
-        @rtype: XenoCantoRecording
+        :return: Xeno Canto recording instance
+        :rtype: XenoCantoRecording
         '''
         if not self.one_per_bird_phylo:
             curr_phylo_name = self.phylo_name_list[self.curr_bird_phylo_indx]
@@ -592,18 +592,18 @@ class XenoCantoCollection:
         Courtesy delay is time to wait between sound file
         downloads.
         
-        @param birds_to_process: list of bird species names
-        @type birds_to_process: [str]
-        @param one_per_species: whether or not to download all 
+        :param birds_to_process: list of bird species names
+        :type birds_to_process: [str]
+        :param one_per_species: whether or not to download all 
             recordings of each species, or just one
-        @type one_per_species: bool
-        @param courtesy_delay: time between requests to XC server
-        @type courtesy_delay: {int | float}
-        @param overwrite_existing: if True, already existing 
+        :type one_per_species: bool
+        :param courtesy_delay: time between requests to XC server
+        :type courtesy_delay: {int | float}
+        :param overwrite_existing: if True, already existing 
             sound files will be overwritten without asking.
             If False, always ask once, then use answer as 
             default going forward. If None: same as False.
-        @type overwrite_existing: bool
+        :type overwrite_existing: bool
         '''
         
         # If file overwrite behavior is specified,
@@ -710,8 +710,8 @@ class XenoCantoCollection:
 
         Without this trick, iterators aren't callable. 
 
-        @param one_per_bird_phylo:
-        @type one_per_bird_phylo:
+        :param one_per_bird_phylo:
+        :type one_per_bird_phylo:
         '''
         self.one_per_bird_phylo=one_per_bird_phylo
         return self
@@ -754,13 +754,13 @@ class XenoCantoCollection:
               being exactly what they were at saving
               time. So JSON is recommended.
         
-        @param dest: destination directory or
+        :param dest: destination directory or
             file path for the saved collection. 
             Default: 
                 <dir_of_this_script>/xeno_canto_collections
-        @type dest: str
-        @return the full path of the output file
-        @rtype str
+        :type dest: str
+        :return the full path of the output file
+        :rtype str
         '''
 
         # To distinguish between dest
@@ -844,9 +844,9 @@ class XenoCantoCollection:
         the XenoCantoCollection that is
         encoded in the file.
 
-        @param src: full path to pickle or json file
+        :param src: full path to pickle or json file
             of previously saved collection
-        @type src: str
+        :type src: str
         '''
 
         if not os.path.exists(src) or not(os.path.isfile(src)):
@@ -882,12 +882,12 @@ class XenoCantoCollection:
         If the file exists, the user is warned,
         unless force is True.
 
-        @param dest: optional destination file
-        @type dest: {None | str}
-        @param force: set to True if OK to overwrite
+        :param dest: optional destination file
+        :type dest: {None | str}
+        :param force: set to True if OK to overwrite
             dest file. Default: ask permission
-        @type force: bool
-        @return destination file name if written to
+        :type force: bool
+        :return destination file name if written to
             file, else the JSON string
         '''
 
@@ -927,12 +927,12 @@ class XenoCantoCollection:
         Load a collection either from a JSON string,
         or from a file that contains JSON.
         
-        @param src: either a json string to parse,
+        :param src: either a json string to parse,
             or the path to a file ending with
             either .json or .JSON
-        @type src: str
-        @return: the loaded collection
-        @rtype: XenoCantoCollection
+        :type src: str
+        :return: the loaded collection
+        :rtype: XenoCantoCollection
         '''
         if Path(src).suffix in ('.json', '.JSON'):
             # Read JSON from file:
@@ -979,10 +979,10 @@ class XenoCantoCollection:
         Create a file name that is not in the 
         given directory.
         
-        @param dest_dir:
-        @type dest_dir:
-        @return filename 
-        @rtype str
+        :param dest_dir:
+        :type dest_dir:
+        :return filename 
+        :rtype str
         '''
         t = datetime.datetime.now()
         orig_filename_root = t.isoformat().replace('-','_').replace(':','_')
@@ -1037,15 +1037,15 @@ class XenoCantoRecording:
         file download information. Create instance vars
         from just some of them.
 
-        @param recording_metadata: a 'recordings' entry from a
+        :param recording_metadata: a 'recordings' entry from a
             XenoCanto metadata download of available recordings
-        @type recording_metadata: {str | {str : Any}|
-        @param dest_dir: directory were to store downloaded
+        :type recording_metadata: {str | {str : Any}|
+        :param dest_dir: directory were to store downloaded
             sound files. If None, creates subdirectory of
             this script called: 'recordings'
-        @type dest_dir: {None | str}
-        @param log: logging service; if None, creates one
-        @type log: {None | LoggingService}
+        :type dest_dir: {None | str}
+        :param log: logging service; if None, creates one
+        :type log: {None | LoggingService}
         '''
         
         if log is None:
@@ -1216,10 +1216,10 @@ class XenoCantoRecording:
         filenames: spaces, parentheses, backslashes!
         Replace any of those with underscores.
         
-        @param fname: original name
-        @type fname: str
-        @return: cleaned up, unix-safe name
-        @rtype: str
+        :param fname: original name
+        :type fname: str
+        :return: cleaned up, unix-safe name
+        :rtype: str
         '''
         fname = fname.replace('/', '_')
         fname = fname.replace(' ', '_')
@@ -1240,12 +1240,12 @@ class XenoCantoRecording:
         vocalization_type. The vocalization_type can
         actually be anything else to use as prefix.
         
-        @param path: current path without the CALL or SONG
-        @type path: str
-        @param vocalization_type: usually 'CALL' or 'SONG'
-        @type vocalization_type: str
-        @return: new path with the prefix in place
-        @rtype: str
+        :param path: current path without the CALL or SONG
+        :type path: str
+        :param vocalization_type: usually 'CALL' or 'SONG'
+        :type vocalization_type: str
+        :return: new path with the prefix in place
+        :rtype: str
         '''
         
         # Already has the prefix?

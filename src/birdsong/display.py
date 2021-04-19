@@ -245,10 +245,10 @@ class LogReader():
         is available to the eval process: not 
         built-in, or library functions.  
         
-        @param item: a Python expression
-        @type item: str
-        @return: evaluated Python
-        @rtype: Any
+        :param item: a Python expression
+        :type item: str
+        :return: evaluated Python
+        :rtype: Any
         '''
         res = eval(item,
                {"__builtins__":None},    # No built-ins at all

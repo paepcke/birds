@@ -31,19 +31,19 @@ class ModelArchive:
         '''
         Constructor:
         
-        @param config: configuration structure
-        @type config: NeuralNetConfig
-        @param num_classes: number of target classes
-        @type num_classes: int
-        @param history_len: number of model snapshots to 
+        :param config: configuration structure
+        :type config: NeuralNetConfig
+        :param num_classes: number of target classes
+        :type num_classes: int
+        :param history_len: number of model snapshots to 
             maintain
-        @type history_len: int
-        @param model_root: path to where models
+        :type history_len: int
+        :param model_root: path to where models
             will be deposited
-        @type model_root: str
-        @param log: logging service to use. If
+        :type model_root: str
+        :param log: logging service to use. If
             None, create new one for display output
-        @type log: LoggingService
+        :type log: LoggingService
         '''
 
         self.curr_dir = os.path.dirname(os.path.abspath(__file__))
@@ -125,12 +125,12 @@ class ModelArchive:
               before discarding the oldest one as new
               ones are added
                  
-        @param model: model to save
-        @type model: nn.module
-        @param epoch: the epoch that created the model
-        @type epoch: int
-        @param history_len: number of snapshot to retain
-        @type history_len: int
+        :param model: model to save
+        :type model: nn.module
+        :param epoch: the epoch that created the model
+        :type epoch: int
+        :param history_len: number of snapshot to retain
+        :type history_len: int
         '''
         
         deque_len = len(self.model_fnames)
@@ -178,15 +178,15 @@ class ModelArchive:
         Then the state is loaded into that
         instance.
         
-        @param model_path:
-        @type model_path:
-        @param config: a config structure that will be
+        :param model_path:
+        :type model_path:
+        :param config: a config structure that will be
             use to decide which model class to instantiate.
             If None, attempts to reconstruct the 
             information from the model_path.
-        @type config: NeuralNetConfig
-        @return: loaded model
-        @rtype: torch.nn.module
+        :type config: NeuralNetConfig
+        :return: loaded model
+        :rtype: torch.nn.module
         '''
         
         if config is None:
@@ -215,13 +215,13 @@ class ModelArchive:
         
         model_2021-03-11T10_59_02_net_resnet18_pretrain_0_lr_0.01_opt_SGD_bs_64_ks_7_folds_0_gray_True_classes_10.pth 
         
-        @param run_path_str: a path name associated with
+        :param run_path_str: a path name associated with
             a model. 
-        @type run_path_str:
-        @param config: run configuration structure 
-        @type config: NeuralNetConfig
-        @return: a model 
-        @rtype: torch.nn.module
+        :type run_path_str:
+        :param config: run configuration structure 
+        :type config: NeuralNetConfig
+        :return: a model 
+        :rtype: torch.nn.module
         '''
         if config is None:
             # Get a dict with info 
@@ -271,16 +271,16 @@ class ModelArchive:
         all run attr/values needed for calls to 
         FileUtils.construct_filename() 
         
-        @param config: run configuration
-        @type config: NeuralNetConfig
-        @param num_classes: number of target classes 
-        @type num_classes: int
-        @param model_root: full path to dir where the
+        :param config: run configuration
+        :type config: NeuralNetConfig
+        :param num_classes: number of target classes 
+        :type num_classes: int
+        :param model_root: full path to dir where the
             subdir is to be created
-        @type model_root: str
-        @return: unique subdir name of self.model_root,
+        :type model_root: str
+        :return: unique subdir name of self.model_root,
             which has been created
-        @rtype: str
+        :rtype: str
         '''
 
         # Using config, gather run-property/value 

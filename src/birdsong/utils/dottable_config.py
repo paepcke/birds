@@ -73,9 +73,9 @@ class DottableConfigParser(DottableMap):
         a path to a config file, or an
         already made config structure
 
-        @param conf_src: file path to config file,
+        :param conf_src: file path to config file,
             or instance of ConfigParser
-        @type conf_src: {src | ConfigParser}
+        :type conf_src: {src | ConfigParser}
         '''
         
         if type(conf_src) == str:
@@ -173,14 +173,14 @@ class DottableConfigParser(DottableMap):
         the relative_to path is path-joined with the
         config value
         
-        @param section: config section
-        @type section: str
-        @param option: config option within the section 
-        @type option: str
-        @param relative_to: a path or None
-        @type relative_to: {str | None}
-        @param default: if section and/or option do not exist 
-        @type default: {None | str}
+        :param section: config section
+        :type section: str
+        :param option: config option within the section 
+        :type option: str
+        :param relative_to: a path or None
+        :type relative_to: {str | None}
+        :param default: if section and/or option do not exist 
+        :type default: {None | str}
         '''
         try:
             if relative_to is None:
@@ -215,12 +215,12 @@ class DottableConfigParser(DottableMap):
                ['/foo/bar', '5', '[abc]']
 
 
-        @param section: config file section
-        @type section: str
-        @param option: option name
-        @type option: str
-        @param default: return value if option does not exist
-        @type default: Any
+        :param section: config file section
+        :type section: str
+        :param option: option name
+        :type option: str
+        :param default: return value if option does not exist
+        :type default: Any
         '''
 
         try:
@@ -277,13 +277,13 @@ class DottableConfigParser(DottableMap):
             os.path.abspath(os.path.join('/Users/doe/code', './../src/..'))
              --> '/Users/doe'
         
-        @param dotted_path: path to expand, such as ../src
-        @type path: str
-        @param relative_to_path: path to which dotted_path
+        :param dotted_path: path to expand, such as ../src
+        :type path: str
+        :param relative_to_path: path to which dotted_path
             is to be resolved
-        @type relative_to_path: str
-        @return absolute, combined path
-        @rtype: str
+        :type relative_to_path: str
+        :return absolute, combined path
+        :rtype: str
         '''
         
         expanded_path = os.path.abspath(os.path.join(relative_to_path, dotted_path))

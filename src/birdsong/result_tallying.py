@@ -54,8 +54,8 @@ class ResultCollection(dict):
         Iterator for tallies, optionally filtering by
         epoch and/or phase (training vs. validation)
         
-        @param epoch: epoch to filter by
-        @type epoch: int
+        :param epoch: epoch to filter by
+        :type epoch: int
         '''
         
         # Make a shallow copy in case 
@@ -106,11 +106,11 @@ class ResultCollection(dict):
         of the interface is a list of ResultTally
         sorted by epoch.
          
-        @param item: integer or slice
-        @type item: {int | list}
-        @return element of the contained ResultTally
+        :param item: integer or slice
+        :type item: {int | list}
+        :return element of the contained ResultTally
             instances
-        @rtype: ResultTally
+        :rtype: ResultTally
         '''
         if type(item) == tuple:
             # A tuple (epoch, LearningPhase).
@@ -171,8 +171,8 @@ class ResultCollection(dict):
         in its .epoch attr. But the epoch kwarg allows
         placing a ResultTally into any epoch key
         
-        @param new_tally_result: the result to add
-        @type new_tally_result: ResultTally
+        :param new_tally_result: the result to add
+        :type new_tally_result: ResultTally
         '''
 
         if epoch is None:
@@ -317,19 +317,19 @@ class ResultTally:
               classes might not have been involved in this
               epoch
         
-        @param epoch: epoch from which produced the results 
-        @type epoch: int
-        @param phase: the LearningPhase (e.g. LearningPhase.TRAINING)
-        @type phase: LearningPhase
-        @param outputs: predictions that model produced.
+        :param epoch: epoch from which produced the results 
+        :type epoch: int
+        :param phase: the LearningPhase (e.g. LearningPhase.TRAINING)
+        :type phase: LearningPhase
+        :param outputs: predictions that model produced.
             These are the raw logits from the model.
-        @type outputs: [float]
-        @param labels: truth values
-        @type labels: [int]
-        @param loss: loss computed by the loss function
-        @type loss: float
-        @param num_classes: number of target classes
-        @type num_classes: int
+        :type outputs: [float]
+        :param labels: truth values
+        :type labels: [int]
+        :param loss: loss computed by the loss function
+        :type loss: float
+        :param num_classes: number of target classes
+        :type num_classes: int
         '''
 
         # Some of the following assignments to instance
@@ -417,10 +417,10 @@ class ResultTally:
         '''
         Called from __getattr__(), so don't retrieve
         instance vars; pass them in.
-        @param labels:
-        @type labels:
-        @param preds:
-        @type preds:
+        :param labels:
+        :type labels:
+        :param preds:
+        :type preds:
         '''
 
         # Compute accuracy, adjust for chance, given 
@@ -518,8 +518,8 @@ class ResultTally:
         return it as the other part of the return
         tuple. 
 
-        @param loss: initial loss from training
-        @type loss: torch.Tensor
+        :param loss: initial loss from training
+        :type loss: torch.Tensor
         '''
 
         # Loss is per batch. Convert the number
@@ -540,8 +540,8 @@ class ResultTally:
         via softmax, then into class IDs via argmax. 
         The result is assigned to self.preds.
        
-        @param outputs: raw outputs from model
-        @type outputs: torch.Tensor
+        :param outputs: raw outputs from model
+        :type outputs: torch.Tensor
         '''
         
         # Ex.: For a batch_size of 2 we output logits like:
@@ -734,10 +734,10 @@ class ResultTally:
         '''
         Return True if given TrainResult instance
         is equal to self in all property values
-        @param other: instance to compare to
-        @type other: TrainResult
-        @return: True for equality
-        @rtype: bool
+        :param other: instance to compare to
+        :type other: TrainResult
+        :return: True for equality
+        :rtype: bool
         '''
         if not isinstance(other, ResultTally):
             return False

@@ -97,8 +97,8 @@ class TensorBoardPlotter:
             o Result text tables
             o hparams
         
-        @param tally_coll:
-        @type tally_coll:
+        :param tally_coll:
+        :type tally_coll:
         '''
         cls.visualize_epoch(tally_coll,
                             writer,
@@ -134,9 +134,9 @@ class TensorBoardPlotter:
         The the preds and labels as rows to csv 
         files.
         
-        @return: a ResultTally instance with all
+        :return: a ResultTally instance with all
             metrics computed for display
-        @rtype: ResultTally
+        :rtype: ResultTally
         '''
         
         try:
@@ -365,22 +365,22 @@ class TensorBoardPlotter:
         If provided, this data is bar-charted instead of the
         entire dataset's distribution
 
-        @param data_src: either a path to samples,
+        :param data_src: either a path to samples,
             or a dataset
-        @type data_src: {str | {int : int} | torch.utils.data.Dataset}
-        @param writer: a tensorboard summary writer
-        @type writer: tensorboard.SummaryWriter
-        @param epoch: epoch for which support is shown
-        @type epoch: int
-        @param custom_data: an optional dict {class-id : sample-count} whose
+        :type data_src: {str | {int : int} | torch.utils.data.Dataset}
+        :param writer: a tensorboard summary writer
+        :type writer: tensorboard.SummaryWriter
+        :param epoch: epoch for which support is shown
+        :type epoch: int
+        :param custom_data: an optional dict {class-id : sample-count} whose
             per-class count is to be bar-charted instead of the entire
             dataset
-        @type custom_data: {int : int}
-        @param title: optional title above the figure
-        @type title: str
-        @return: dict {<class_name> : <num_samples_for_class_name>}
+        :type custom_data: {int : int}
+        :param title: optional title above the figure
+        :type title: str
+        :return: dict {<class_name> : <num_samples_for_class_name>}
             i.e. number of samples in each class. 
-        @rtype: {str : int}
+        :rtype: {str : int}
         '''
 
         if type(data_src) == str:
@@ -463,22 +463,22 @@ class TensorBoardPlotter:
         if requested. If img_width or img_height
         is None, no scaling is done.
         
-        @param writer: the SummaryWriter to use
-        @type writer: SummaryWriter
-        @param tag: the name of the image in 
+        :param writer: the SummaryWriter to use
+        :type writer: SummaryWriter
+        :param tag: the name of the image in 
             tensorboard display
-        @type tag: str
-        @param img_path: full path to image
-        @type img_path: str
-        @param step: epoch
-        @type step: int
-        @param to_grayscale: whether or not to conver
+        :type tag: str
+        :param img_path: full path to image
+        :type img_path: str
+        :param step: epoch
+        :type step: int
+        :param to_grayscale: whether or not to conver
             to grayscale
-        @type to_grayscale: bool
-        @param img_height: desired image height
-        @type img_height: int
-        @param img_width: desired image width
-        @type img_width: int
+        :type to_grayscale: bool
+        :param img_height: desired image height
+        :type img_height: int
+        :param img_width: desired image width
+        :type img_width: int
         '''
         
         the_transforms = []
@@ -518,30 +518,30 @@ class TensorBoardPlotter:
         be the 'data root': the dir holding one subdir
         per class.
 
-        @param writer: a Tensorboard Pytorch SummaryWriter
-        @type writer: SummaryWriter
-        @param img_root_dir: directory 
+        :param writer: a Tensorboard Pytorch SummaryWriter
+        :type writer: SummaryWriter
+        :param img_root_dir: directory 
             that contains sub-directories with samples. The 
             sub-directory names are taken to be class names.  
-        @type img_root_dir: str
-        @param num_imgs: total number of images to
+        :type img_root_dir: str
+        :param num_imgs: total number of images to
             include in the grid. If None: all images
-        @type num_imgs: {None | int}
-        @param class_sample_file_pairs: <class>/<img_file_name> for
+        :type num_imgs: {None | int}
+        :param class_sample_file_pairs: <class>/<img_file_name> for
             individual images if random choice is not wanted.
-        @type class_sample_file_pairs: {None | str | [str]}
-        @param img_height: height of all images
-        @type img_height: int (pixels)
-        @param img_width: width of all images
-        @type img_width: int (pixels)
-        @param to_grayscale: whether or not to convert 
+        :type class_sample_file_pairs: {None | str | [str]}
+        :param img_height: height of all images
+        :type img_height: int (pixels)
+        :param img_width: width of all images
+        :type img_width: int (pixels)
+        :param to_grayscale: whether or not to convert 
             images to grayscale upon import
-        @type to_grayscale: bool
-        @param unittesting: controls whether grid is
+        :type to_grayscale: bool
+        :param unittesting: controls whether grid is
             actually created, or the img tensor that
             would be contained in the grid is returned
             for testing dimensions.
-        @type unittesting: bool 
+        :type unittesting: bool 
         '''
 
         if img_root_dir is None:
@@ -614,16 +614,16 @@ class TensorBoardPlotter:
         return a matplotlib.pyplot axes with a
         heatmap of the matrix.
         
-        @param conf_matrix: nxn confusion matrix representing
+        :param conf_matrix: nxn confusion matrix representing
             rows:truth, cols:predicted for n classes
-        @type conf_matrix: numpy.ndarray
-        @param class_names: n class names to use for x/y labels
-        @type class_names: [str]
-        @param title: title at top of figure
-        @type title: str
-        @return: matplotlib figure with confusion
+        :type conf_matrix: numpy.ndarray
+        :param class_names: n class names to use for x/y labels
+        :type class_names: [str]
+        :param title: title at top of figure
+        :type title: str
+        :return: matplotlib figure with confusion
             matrix heatmap.
-        @rtype: pyplot.Figure
+        :rtype: pyplot.Figure
         '''
 
         # Subplot 111: array of subplots has
@@ -726,13 +726,13 @@ class TensorBoardPlotter:
         truth labels, and cols to the classes of the
         predictions.
         
-        @param conf_matrix: confusion matrix to normalize
-        @type conf_matrix: numpy.ndarray[int]
-        @returned a new confusion matrix with cells replaced
+        :param conf_matrix: confusion matrix to normalize
+        :type conf_matrix: numpy.ndarray[int]
+        :returned a new confusion matrix with cells replaced
             by the percentage of time that cell's prediction
             was made. Cells of classes without any samples in
             the dataset will contain -1 
-        @rtype numpy.ndarray[float]
+        :rtype numpy.ndarray[float]
         '''
 
         # Get the sum of each row, which is the number
@@ -854,15 +854,15 @@ class TensorBoardPlotter:
             o mAP aggregates the average_precision values
               across all classes. This is one number.
 
-        @param truth_labels: all truth labels shaped
+        :param truth_labels: all truth labels shaped
             torch.Size([num-batches, batch-size])
-        @type truth_labels: Tensor
-        @param raw_preds: the logits for each class for
+        :type truth_labels: Tensor
+        :param raw_preds: the logits for each class for
             each sample as 
             torch.Shape([num-batches, batch-size, num-classes])
-        @type raw_preds: Tensor
-        @return: (precisions, recalls, average_precisions, mAP)
-        @rtype: ({int : [floats]}, {int : [floats]}, [floats], float)
+        :type raw_preds: Tensor
+        :return: (precisions, recalls, average_precisions, mAP)
+        :rtype: ({int : [floats]}, {int : [floats]}, [floats], float)
         '''
 
         (num_batches, 
@@ -1069,24 +1069,24 @@ class TensorBoardPlotter:
                   recalls
                   avg_prec
 
-        @param labels: integer binary class labels.
+        :param labels: integer binary class labels.
             Exs.: [1,1,0,0], ['yes', 'yes', 'no', 'yes']
-        @type labels: [int | str]
-        @param preds: predictions output from a classifier.
+        :type labels: [int | str]
+        :param preds: predictions output from a classifier.
             May be floats or integers
-        @type preds: [float | int]
-        @param class_id: ID of target class for which this
+        :type preds: [float | int]
+        :param class_id: ID of target class for which this
             curve is being constructed
-        @type class_id: {int | str}
-        @param thresholds: list of decision thresholds to
+        :type class_id: {int | str}
+        :param thresholds: list of decision thresholds to
             decide whether preds are one class or the other.
             If None, uses [0.2, 0.4, 0.6, 0.8, 1]
-        @type thresholds: [float | int]
-        @return: CurveSpecification instances with optimal 
+        :type thresholds: [float | int]
+        :return: CurveSpecification instances with optimal 
             operating point, and lists with prec and recall 
             ready for drawing a PR curve
-        @rtype: CurveSpecification
-        @raises ValueError if labels hold more than 
+        :rtype: CurveSpecification
+        :raises ValueError if labels hold more than 
             two distinct values
         '''
         if type(labels) != list:
@@ -1247,11 +1247,11 @@ class TensorBoardPlotter:
         in res_list. One each for train and validation 
         results.
            
-        @param res_list: list of ResultTally
+        :param res_list: list of ResultTally
             instances in oldest-epoch-first order
-        @type res_list: [ResultTally]
-        @return: a table
-        @rtype: str
+        :type res_list: [ResultTally]
+        :return: a table
+        :rtype: str
         '''
         res_len    = len(res_list)
 
@@ -1373,15 +1373,15 @@ class TensorBoardPlotter:
             o A tensor
             o A PIL image
             
-        @param img_src: image, or a way to get the image
-        @type img_src: {str | Tensor | PIL}
-        @param txt: text to be printed onto the image
-        @type txt: str
-        @param point: where to place the text. In pixels,
+        :param img_src: image, or a way to get the image
+        :type img_src: {str | Tensor | PIL}
+        :param txt: text to be printed onto the image
+        :type txt: str
+        :param point: where to place the text. In pixels,
             origin upper left
-        @type point: [int,int]
-        @return: new image with text 'burned' onto it
-        @rtype: Tensor
+        :type point: [int,int]
+        :return: new image with text 'burned' onto it
+        :rtype: Tensor
         '''
         
         if type(img_src) == str:
@@ -1441,15 +1441,15 @@ class TensorBoardPlotter:
         If class_sample_file_pairs is provided,
         then num_imgs is ignored.
         
-        @param img_folder: folder instance with training images
-        @type img_folder: ImageFolder
-        @param class_sample_file_pairs: optionally, pairs of 
+        :param img_folder: folder instance with training images
+        :type img_folder: ImageFolder
+        :param class_sample_file_pairs: optionally, pairs of 
             class-name and path to training images
-        @type class_sample_file_pairs: [(<class-name>, <sample-file-name>)]
-        @param num_imgs: for how many images to create spectrograms 
-        @type num_imgs: int
-        @return: a list of sample IDs
-        @rtype: int
+        :type class_sample_file_pairs: [(<class-name>, <sample-file-name>)]
+        :param num_imgs: for how many images to create spectrograms 
+        :type num_imgs: int
+        :return: a list of sample IDs
+        :rtype: int
         '''
 
         # Caller requests particular images?
@@ -1564,23 +1564,23 @@ class CurveSpecification(dict):
                  ):
         '''
         
-        @param best_operating_pt: information where on the 
+        :param best_operating_pt: information where on the 
             curve the optimal F1 score is achieved
-        @type best_operating_pt: BestOperatingPoint
-        @param recalls: all recall values that with corresponding
+        :type best_operating_pt: BestOperatingPoint
+        :param recalls: all recall values that with corresponding
             precisions define the curve
-        @type recalls: [float]
-        @param precisions: all recall values that with corresponding
+        :type recalls: [float]
+        :param precisions: all recall values that with corresponding
             recall define the curve
-        @type precisions: [float]
-        @param thresholds: the decision thresholds at which the
+        :type precisions: [float]
+        :param thresholds: the decision thresholds at which the
             (recall/precision) points on the curve were computed. 
-        @type thresholds: [float]
-        @param avg_precision: the average of all precisions (AP)
-        @type avg_precision: [float]
-        @param class_id: class for which this obj
+        :type thresholds: [float]
+        :param avg_precision: the average of all precisions (AP)
+        :type avg_precision: [float]
+        :param class_id: class for which this obj
             is the pr-curve
-        @type class_id: {int | str}
+        :type class_id: {int | str}
         
         '''
         
@@ -1631,18 +1631,18 @@ class BestOperatingPoint(dict):
                  ):
         '''
         
-        @param threshold: probability value that is the best
+        :param threshold: probability value that is the best
             decision threshold between two classes
-        @type threshold: float
-        @param f1_score: the F1 score achieved at the 
+        :type threshold: float
+        :param f1_score: the F1 score achieved at the 
             given threshold's recall and precision
-        @type f1_score: float
-        @param precision: the precision value of the 
+        :type f1_score: float
+        :param precision: the precision value of the 
             best operating point on the PR curve
-        @type precision: float
-        @param recall: the recall value of the 
+        :type precision: float
+        :param recall: the recall value of the 
             best operating point on the PR curve
-        @type recall: float
+        :type recall: float
         '''
         super().__init__()
 

@@ -76,9 +76,9 @@ class NeuralNetConfig(DottableConfigParser):
         Instead, conf_src may be an instance
         of the parent (DottableConfigParser).
         
-        @param conf_src: file path to config file,
+        :param conf_src: file path to config file,
             or a DottableConfigParser instance
-        @type conf_src: {str | DottableConfigParser}
+        :type conf_src: {str | DottableConfigParser}
         '''
 
         built_in_content, section_names = self.process_init_info(conf_src)
@@ -137,8 +137,8 @@ class NeuralNetConfig(DottableConfigParser):
         Add a new section, initializing
         it to an empty DottableMap
         
-        @param sec_name: name of new config section
-        @type sec_name: str
+        :param sec_name: name of new config section
+        :type sec_name: str
         '''
         self[sec_name] = DottableMap({})
 
@@ -175,18 +175,18 @@ class NeuralNetConfig(DottableConfigParser):
         is raised. If the file exists, and check_file_exists
         is False, the existing file is overwritten.
         
-        @param file_info: If None, return a json string.
+        :param file_info: If None, return a json string.
             If a StringIO handle, fill the stream and 
             return it. Else, must be a file path where to
             write the JSON
-        @type file_info: {None | str | StringIO}
-        @param check_file_exists: whether or not to raise
+        :type file_info: {None | str | StringIO}
+        :param check_file_exists: whether or not to raise
             exception upon destination file existence
-        @type check_file_exists: bool
-        @return: JSON string, a StringIO filled with the
+        :type check_file_exists: bool
+        :return: JSON string, a StringIO filled with the
             JSON, or None if writing to a file
-        @rtype: {str | StringIO | None}
-        @raise FileExistsError: if file exists and check_file_exists
+        :rtype: {str | StringIO | None}
+        :raise FileExistsError: if file exists and check_file_exists
             is True
         '''
         
@@ -220,10 +220,10 @@ class NeuralNetConfig(DottableConfigParser):
         a NeuralNetConfig instance, reconstitute
         that instance and return it.
         
-        @param json_str: json string
-        @type json_str: str
-        @return: a reconsituted NeuralNetConfig instance
-        @rtype: NeuralNetConfig
+        :param json_str: json string
+        :type json_str: str
+        :return: a reconsituted NeuralNetConfig instance
+        :rtype: NeuralNetConfig
         '''
         
         content_info = json.loads(json_str)
@@ -241,10 +241,10 @@ class NeuralNetConfig(DottableConfigParser):
         a human readable string, listing neural-net
         relevant parameters in their respective sections
         
-        @param json_str: string to humanize
-        @type json_str: str
-        @return: printable string with vals for nn parameters
-        @rtype: str
+        :param json_str: string to humanize
+        :type json_str: str
+        :return: printable string with vals for nn parameters
+        :rtype: str
         '''
         config = json.loads(json_str)
         human_str = ''
@@ -305,10 +305,10 @@ class NeuralNetConfig(DottableConfigParser):
         and both instances must have the same
         number of sections
         
-        @param other: instance to compare against
-        @type other: NeuralNetConfig
-        @return: True for equality, False for not
-        @rtype: bool
+        :param other: instance to compare against
+        :type other: NeuralNetConfig
+        :return: True for equality, False for not
+        :rtype: bool
         '''
         
         sec_dicts_this = [self[sec_name]
@@ -533,11 +533,11 @@ class NeuralNetConfig(DottableConfigParser):
         be the same as the keys of the returned outer dict.
         But not always. 
         
-        @param conf_src: configuration content
-        @type conf_src: {str | dict | NeuralNetConfig}
-        @return dict of dict with outer dict being
+        :param conf_src: configuration content
+        :type conf_src: {str | dict | NeuralNetConfig}
+        :return dict of dict with outer dict being
             section names
-        @rtype: dict
+        :rtype: dict
         '''
         
         if type(conf_src) == str:

@@ -153,40 +153,40 @@ class CrossValidatingDataLoader(DataLoader):
         are folds. Any following call to next() will raise
         a StopIteration exception.
 
-        @param dataset: underlying map-store that 
+        :param dataset: underlying map-store that 
                 supplies(img_torch, label) tuples
-        @type dataset: BirdDataset
-        @param batch_size: number of samples to combine into 
+        :type dataset: BirdDataset
+        :param batch_size: number of samples to combine into 
             a batch to feed model during training
-        @type batch_size: int
-        @param shuffle: whether or not to shuffle the
+        :type batch_size: int
+        :param shuffle: whether or not to shuffle the
             dataset once, initially.
-        @type shuffle: bool
-        @param seed: random seed to use if shuffle is True
-        @type shuffle: int
-        @param num_workers: number of threads used to preload
-        @type num_workers: int
-        @param pin_memory: set to True if using a GPU. Speeds
+        :type shuffle: bool
+        :param seed: random seed to use if shuffle is True
+        :type shuffle: int
+        :param num_workers: number of threads used to preload
+        :type num_workers: int
+        :param pin_memory: set to True if using a GPU. Speeds
             transfer of tensors from CPU to GPU
-        @type pin_memory: bool
-        @param prefetch_factor: how many samples to prefetch from
+        :type pin_memory: bool
+        :param prefetch_factor: how many samples to prefetch from
             underlying database to speed access to file system
-        @type prefetch_factor: int
-        @param drop_last: whether or not to serve only partially 
+        :type prefetch_factor: int
+        :param drop_last: whether or not to serve only partially 
             filled batches. Those occur when samples cannot be
             evenly packed into batches. 
-        @type drop_last: bool
-        @param num_folds: the 'k' in k-fold cross validation
-        @type num_folds: int
-        @param sampler: Only used when MultiprocessingDataLoader
+        :type drop_last: bool
+        :param num_folds: the 'k' in k-fold cross validation
+        :type num_folds: int
+        :param sampler: Only used when MultiprocessingDataLoader
             is being instantiated, and that class's __init__()
             calls super(). Leave out for singleprocess/single-GPU
             use
-        @type sampler: {None | DistributedSKFSampler}
-        @param logger: the LoggingService instance to use
+        :type sampler: {None | DistributedSKFSampler}
+        :param logger: the LoggingService instance to use
             for logging info/warnings/errors. If None, fetches
             the LoggingService singleton.
-        @type logger: LoggingService
+        :type logger: LoggingService
         '''
         
         if len(dataset) == 0:
@@ -466,8 +466,8 @@ class CrossValidatingDataLoader(DataLoader):
         
         We use the public dataset method.
         
-        @param sample_id: sample ID to look up
-        @type sample_id: int
+        :param sample_id: sample ID to look up
+        :type sample_id: int
         '''
         return self.dataset.file_from_sample_id(sample_id)
 
@@ -479,10 +479,10 @@ class CrossValidatingDataLoader(DataLoader):
         '''
         Given a sample ID, return its class index.
         
-        @param sample_id: ID to look up
-        @type sample_id: int
-        @return: given sample's class ID
-        @rtype: int
+        :param sample_id: ID to look up
+        :type sample_id: int
+        :return: given sample's class ID
+        :rtype: int
         '''
         return self.dataset.sample_id_to_class[sample_id]
 
@@ -498,9 +498,9 @@ class CrossValidatingDataLoader(DataLoader):
         the dataset before beginning to draw
         samples.
 
-        @param new_epoch: the epoch under which the dataloader
+        :param new_epoch: the epoch under which the dataloader
             is (re)started
-        @type new_epoch: int
+        :type new_epoch: int
         '''
         self.sampler.set_epoch(new_epoch)
 

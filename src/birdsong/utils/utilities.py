@@ -95,12 +95,12 @@ class FileUtils:
         class names. This assumption is often made in 
         torchvision packages.  
 
-        @param data_root: root directory for search 
-        @type data_root: str
-        @return dict mapping target classes to a list
+        :param data_root: root directory for search 
+        :type data_root: str
+        :return dict mapping target classes to a list
             of directories that contain samples of that
             class. The directories will be Path objs
-        @rtype Ordered{str : [Path]}
+        :rtype Ordered{str : [Path]}
         '''
         
         # If path is relative, compute abs
@@ -173,10 +173,10 @@ class FileUtils:
         paths, i.e. the class names, are
         returned.
         
-        @param dir_name: root of dir to search
-        @type dir_name: str
-        @return: naturally sorted list of class names 
-        @rtype: [str]
+        :param dir_name: root of dir to search
+        :type dir_name: str
+        :return: naturally sorted list of class names 
+        :rtype: [str]
         '''
         class_names = set([])
         for root, _dirs, files in os.walk(dir_name):
@@ -252,19 +252,19 @@ class FileUtils:
         at the start of the returned name, or right after
         the prefix
         
-        @param props_info: names and values to include,
+        :param props_info: names and values to include,
             or an object that provides all needed values
             as attributes (instance vars)
-        @type props_info: {str : Any}
-        @param prefix: leading part of file name
-        @type prefix: str
-        @param suffix: trailing part of file name
-        @type suffix: str
-        @param incl_date: whether or not to include current
+        :type props_info: {str : Any}
+        :param prefix: leading part of file name
+        :type prefix: str
+        :param suffix: trailing part of file name
+        :type suffix: str
+        :param incl_date: whether or not to include current
             data in the file name
-        @type incl_date: bool
-        @return: a string appropriate for use as a filename
-        @rtype: str
+        :type incl_date: bool
+        :return: a string appropriate for use as a filename
+        :rtype: str
         '''
         fname = prefix if prefix is not None else ''
         if incl_date:
@@ -314,10 +314,10 @@ class FileUtils:
               ...
            }
            
-        @param fname: file name to parse
-        @type fname: str
-        @return: dict with the elements and their values
-        @rtype: {str : {int|float|str}}
+        :param fname: file name to parse
+        :type fname: str
+        :return: dict with the elements and their values
+        :rtype: {str : {int|float|str}}
         '''
         prop_dict = {}
         
@@ -389,8 +389,8 @@ class FileUtils:
         returned string is fit for inclusion in a
         filename.
         
-        @return: string for inclusion in filename
-        @rtype: str
+        :return: string for inclusion in filename
+        :rtype: str
         '''
         # Remove the msecs part:
         # Replace colons with underscores:
@@ -420,9 +420,9 @@ class FileUtils:
                 mean_loss
                 losses
         
-        @param csv_path: path to CSV file with info
+        :param csv_path: path to CSV file with info
             from a past run
-        @type csv_path: str
+        :type csv_path: str
         '''
 
         # Deferred import to avoid import circularity
@@ -526,15 +526,15 @@ class FileUtils:
         to all images in the application. Always
         get the transforms from here.
 
-        @param sample_width: desired resize width
-        @type sample_width: int
-        @param sample_height: desired resize height
-        @type sample_height: int
-        @param to_grayscale: whether or not to convert
+        :param sample_width: desired resize width
+        :type sample_width: int
+        :param sample_height: desired resize height
+        :type sample_height: int
+        :param to_grayscale: whether or not to convert
             images to 1-channel grayscale during load
-        @type to_grayscale: bool
-        @return: transform composite
-        @rtype: whatever torchvision.transforms.Compose returns
+        :type to_grayscale: bool
+        :return: transform composite
+        :rtype: whatever torchvision.transforms.Compose returns
         '''
         
         img_transforms = [transforms.Resize((sample_width, sample_height)),
@@ -559,12 +559,12 @@ class FileUtils:
         Moves item to the specified device.
         device may be 'cpu', or 'gpu'
         
-        @param item: tensor to move to device
-        @type item: pytorch.Tensor
-        @param device: one of 'cpu', or 'gpu'
-        @type device: str
-        @return: the moved item
-        @rtype: pytorch.Tensor
+        :param item: tensor to move to device
+        :type item: pytorch.Tensor
+        :param device: one of 'cpu', or 'gpu'
+        :type device: str
+        :return: the moved item
+        :rtype: pytorch.Tensor
         '''
         fastest_device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         if device == 'cpu':
@@ -641,12 +641,12 @@ class FileUtils:
                 ...
             }
          
-        @param inst: instance from which to 
+        :param inst: instance from which to 
             draw values for each file element
-        @type inst: Any
-        @return: Dict mapping file elements 
+        :type inst: Any
+        :return: Dict mapping file elements 
             to values.
-        @rtype: {str : Any}
+        :rtype: {str : Any}
         '''
         
         res = {}
@@ -677,13 +677,13 @@ class FileUtils:
         messages and log entries when the entire
         path is not needed. 
         
-        @param path:
-        @type path:
-        @param acceptable_len: number of letters
+        :param path:
+        :type path:
+        :param acceptable_len: number of letters
             acceptable to keep in the result
-        @type path: int
-        @return shortened path for printing in messages
-        @rtype: str
+        :type path: int
+        :return shortened path for printing in messages
+        :rtype: str
         
         '''
         if len(path) <= acceptable_len:

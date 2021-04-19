@@ -154,11 +154,11 @@ class TestLauncher(unittest.TestCase):
         complain that the local machine is not represented
         in the map.
         
-        @param world_map: a world_map that contains the
+        :param world_map: a world_map that contains the
             hard coded key 'quintus.stanford.edu'
-        @type world_map: {str : {str : Any}}
-        @return: modified world map
-        @rtype: {str : {str : Any}}
+        :type world_map: {str : {str : Any}}
+        :return: modified world map
+        :rtype: {str : {str : Any}}
         '''
         
         if self.full_host_name == 'quintus.stanford.edu':

@@ -157,10 +157,10 @@ class TensorBoardManager(object):
         'tensorboard, return the path to the
         respective executable. 
         
-        @param application_name: name of application to find
-        @type application_name: str
-        @return: full path to application, or None if not found
-        @rtype {str | None}
+        :param application_name: name of application to find
+        :type application_name: str
+        :return: full path to application, or None if not found
+        :rtype {str | None}
         '''
         
         if sys.platform == "linux" or sys.platform == "linux2":
@@ -238,11 +238,11 @@ class TensorBoardManager(object):
         return None; if more than one found, raise
         ValueError 
 
-        @param application_name: name of application executable to find
-        @type application_name: str
-        @return path to executable or None
-        @rtype {None | str}
-        @raise ValueError: if multiple executables are found 
+        :param application_name: name of application executable to find
+        :type application_name: str
+        :return path to executable or None
+        :rtype {None | str}
+        :raise ValueError: if multiple executables are found 
         '''
 
         root_dir = '/Applications'

@@ -753,13 +753,13 @@ class TestTensorBoardPlotter(unittest.TestCase):
         Second, a sequence that matches the truth labels
         perc_correct number of times.
 
-        @param num_classes: number of hypothetical 
+        :param num_classes: number of hypothetical 
             classes
-        @type num_classes: int
-        @param perc_correct: percentage of hypothetial
+        :type num_classes: int
+        :param perc_correct: percentage of hypothetial
             class predictions that are to match the truth
-        @type perc_correct: float
-        @return: a dict: {'truth': [int], 'pred' : [int]}
+        :type perc_correct: float
+        :return: a dict: {'truth': [int], 'pred' : [int]}
         '''
         
         truth       = torch.randperm(num_classes)
@@ -792,9 +792,9 @@ class TestTensorBoardPlotter(unittest.TestCase):
         matrix, and corresponding fake class
         names.
         
-        @returns tuple of class name list, and the
+        :returns tuple of class name list, and the
            confusion matrix
-        @rtype ([str], np.ndarray)
+        :rtype ([str], np.ndarray)
         '''
         
         # Get dict {'truth' : <tensor>, 'pred' : <tensor>}
@@ -827,8 +827,8 @@ class TestTensorBoardPlotter(unittest.TestCase):
         of the test suite will remove the tensorflow
         event files; so then it would be too late. 
         
-        @param msg: prompt to print
-        @type msg: {str | None}
+        :param msg: prompt to print
+        :type msg: {str | None}
         '''
         if msg is None:
             msg = "Wrote a record to Tensorboard; hit \n" +\

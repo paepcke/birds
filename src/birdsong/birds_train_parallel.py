@@ -195,40 +195,40 @@ class BirdTrainer(object):
     		 GPUS_USED_THIS_MACHINE = int(args.GPUS_USED_THIS_MACHINE)
     		 WORLD_SIZE  = int(args.WORLD_SIZE)
 
-        @param config_info: a NeuralNetConfig instance, 
+        :param config_info: a NeuralNetConfig instance, 
             the path to a config file, or a JSON string containing
             all configuration info. If None, look for config 
             file in <proj-root>/config.cfg
-        @type config_info: {None | str | NeuralNetConfig
-        @param root_train_test_data: path to root of all training and 
+        :type config_info: {None | str | NeuralNetConfig
+        :param root_train_test_data: path to root of all training and 
             validation data. If none, find the path in the configuration
-        @type root_train_test_data: {None | str}
-        @param batch_size: size of each batch during training. If None,
+        :type root_train_test_data: {None | str}
+        :param batch_size: size of each batch during training. If None,
             look for the value in the config
-        @type batch_size: {None | int|
-        @param checkpoint: optional path to a previously saved partially
+        :type batch_size: {None | int|
+        :param checkpoint: optional path to a previously saved partially
             trained model. If None, train from scratch
-        @type checkpoint: {None | str}
-        @param logdir: root directory for Tensorboard event files. If
+        :type checkpoint: {None | str}
+        :param logdir: root directory for Tensorboard event files. If
             None, use <script-dir>/runs
-        @type logdir: {None | str}
-        @param logfile: file where to log runtime activity info
-        @type logfile: {None | str}
-        @param logging_level: logging detail as per Python logging module
-        @type logging_level: {None | LoggingLevel}
-        @param performance_log_dir: directory for the JSON version of
+        :type logdir: {None | str}
+        :param logfile: file where to log runtime activity info
+        :type logfile: {None | str}
+        :param logging_level: logging detail as per Python logging module
+        :type logging_level: {None | LoggingLevel}
+        :param performance_log_dir: directory for the JSON version of
             result logging (legacy). If None: <script-dir>/runs_json
-        @type performance_log_dir: {None | str|
-        @param testing_cuda_on_cpu: if True, operations normally done
+        :type performance_log_dir: {None | str|
+        :param testing_cuda_on_cpu: if True, operations normally done
             on a GPU are being tested on a CPU-only machine
-        @type testing_cuda_on_cpu: bool
-        @param comm_info: all information about computation distribution
-        @type comm_info: {str : Any}
-        @param unit_testing: whether or not to call all initialization
+        :type testing_cuda_on_cpu: bool
+        :param comm_info: all information about computation distribution
+        :type comm_info: {str : Any}
+        :param unit_testing: whether or not to call all initialization
             methods in __init__() that are usuall called. If True, only
             a minimum of initialization is done, leaving calls to 
             remaining method to unittests
-        @type unit_testing: bool
+        :type unit_testing: bool
         '''
 
         if unit_testing:
@@ -584,9 +584,9 @@ class BirdTrainer(object):
         the name of one of the backend names. If none are 
         available, raise NotImplementedError
         
-        @return Name of torch backend
-        @rtype: str
-        @raise NotImplementedError 
+        :return Name of torch backend
+        :rtype: str
+        :raise NotImplementedError 
         '''
         
         if dist.is_nccl_available():
@@ -631,10 +631,10 @@ class BirdTrainer(object):
 
            o Without GPU in use, returns the model unchanged
         
-        @param model: a pytorch model instance
-        @type model: pytorch.nn.model
-        @param local_rank: id of GPU
-        @type local_rank: int
+        :param model: a pytorch model instance
+        :type model: pytorch.nn.model
+        :param local_rank: id of GPU
+        :type local_rank: int
         '''
         
         if self.independent_runs:
@@ -709,15 +709,15 @@ class BirdTrainer(object):
         
         Initializes self.cuda_dev: f"cuda:{device_id}"
         
-        @param local_rank: which GPU to use. Created by the launch.py
+        :param local_rank: which GPU to use. Created by the launch.py
             script. If None, just look for the next available GPU
-        @type local_rank: {None|int|
-        @param raise_gpu_unavailable: whether to raise error
+        :type local_rank: {None|int|
+        :param raise_gpu_unavailable: whether to raise error
             when GPUs exist on this machine, but none are available.
-        @type raise_gpu_unavailable: bool
-        @return: a GPU device_residence ID, or device('cpu')
-        @rtype: int
-        @raise NoGPUAvailable: if exception requested via 
+        :type raise_gpu_unavailable: bool
+        :return: a GPU device_residence ID, or device('cpu')
+        :rtype: int
+        :raise NoGPUAvailable: if exception requested via 
             raise_gpu_unavailable, and no GPU is available.
         '''
 
@@ -892,11 +892,11 @@ class BirdTrainer(object):
 #         the 'running_loss' is carried over from
 #         the old tallies.
 #         
-#         @param curr_tallies: if given, the tallies from
+#         :param curr_tallies: if given, the tallies from
 #             a current epoch
-#         @type curr_tallies: {str : float}
-#         @return: dict with float zeros
-#         @rtype: {str : float}
+#         :type curr_tallies: {str : float}
+#         :return: dict with float zeros
+#         :rtype: {str : float}
 #         '''
 #         tallies = {'running_loss' : 0.0,
 #                    'running_corrects' : 0.0,
@@ -981,16 +981,16 @@ class BirdTrainer(object):
             validation, logging is delayed until a tally for
             the validation phase is being created.
 
-        @param labels_tns: ground truth labels for batch
-        @type labels_tns: torch.Tensor (integer class IDs)
-        @param pred_prob_tns: model prediction probabilities
-        @type pred_prob_tns: torch.Tensor
-        @param loss: accumulated result of loss function from
+        :param labels_tns: ground truth labels for batch
+        :type labels_tns: torch.Tensor (integer class IDs)
+        :param pred_prob_tns: model prediction probabilities
+        :type pred_prob_tns: torch.Tensor
+        :param loss: accumulated result of loss function from
             run through all the folds.
-        @type loss: torch.Tensor (float)
-        @param learning_phase: phase under which to record this
+        :type loss: torch.Tensor (float)
+        :param learning_phase: phase under which to record this
             result: training, validation, or test.
-        @type learning_phase: LearningPhase
+        :type learning_phase: LearningPhase
         '''
         
         # Predictions are for one batch. Example for
@@ -1126,8 +1126,8 @@ class BirdTrainer(object):
         Called at the end of each epoch. Writes
         all epoch-level measures to tensorboard.
 
-        @param epoch:
-        @type epoch:
+        :param epoch:
+        :type epoch:
         '''
         
         # A new training sample class distribution
@@ -1790,19 +1790,19 @@ class BirdTrainer(object):
         next call to this method. I.e. this method does not
         store output_stack or label_stack anywhere.
         
-        @param outputs: an output tensor from the model 
-        @type outputs: Tensor [batch_size x num_classes]
-        @param targets: correct label for each sample in batch
-        @type targets: Tensor [batch_size x 1]
-        @param output_stack: current (partially filled) stack
+        :param outputs: an output tensor from the model 
+        :type outputs: Tensor [batch_size x num_classes]
+        :param targets: correct label for each sample in batch
+        :type targets: Tensor [batch_size x 1]
+        :param output_stack: current (partially filled) stack
             of model outputs
-        @type output_stack: [Tensor]
-        @param label_stack: current (partially filled) stack 
+        :type output_stack: [Tensor]
+        :param label_stack: current (partially filled) stack 
             of labels
-        @type label_stack:[Tensor]
-        @param learning_phase: whether currently training or validating 
-        @type learning_phase: LearningPhase
-        @return: tuple of updated (output_stack, label_stack)
+        :type label_stack:[Tensor]
+        :param learning_phase: whether currently training or validating 
+        :type learning_phase: LearningPhase
+        :return: tuple of updated (output_stack, label_stack)
         '''
         
         # If training we expect one row for
@@ -1859,9 +1859,9 @@ class BirdTrainer(object):
         Returns the distribution of samples
         in the underlying dataset by class
         
-        @return: list of tuples: (class_id, num_samples);
+        :return: list of tuples: (class_id, num_samples);
             one such tuple for each class_id
-        @rtype: [(int, int)]
+        :rtype: [(int, int)]
         '''
         return self.dataloader.dataset.sample_distribution()
 
@@ -1893,12 +1893,12 @@ class BirdTrainer(object):
         If given a NeuralNetConfig instance, it is returned
         unchanged. 
         
-        @param config_info: the information needed to construct
+        :param config_info: the information needed to construct
             the structure
-        @type config_info: {NeuralNetConfig | str}
-        @return a NeuralNetConfig instance with all parms
+        :type config_info: {NeuralNetConfig | str}
+        :return a NeuralNetConfig instance with all parms
             initialized
-        @rtype NeuralNetConfig
+        :rtype NeuralNetConfig
         '''
 
         if isinstance(config_info, str):
@@ -1928,14 +1928,14 @@ class BirdTrainer(object):
         If operating in Distributed Data Parallel,
         calls init_process_group().
         
-        @param batch_size: desired batch size
-        @type batch_size: int
-        @param to_grayscale: do or do not tell dataset
+        :param batch_size: desired batch size
+        :type batch_size: int
+        :param to_grayscale: do or do not tell dataset
             to convert images to grayscale as the
             are pulled from disk
-        @type to_grayscale: bool
-        @return: a dataloader in the pytorch sense
-        @rtype CrossValidatingDataLoader, or subclass
+        :type to_grayscale: bool
+        :return: a dataloader in the pytorch sense
+        :rtype CrossValidatingDataLoader, or subclass
         '''
         
         # In the dataloader creation, make drop_last=True 
@@ -1994,11 +1994,11 @@ class BirdTrainer(object):
         
         Creates a network  
         
-        @param checkpoint: optional path to previously saved
+        :param checkpoint: optional path to previously saved
             model
-        @type checkpoint: {None | str}
-        @param unit_testing: early return if unit testing
-        @type unit_testing: bool
+        :type checkpoint: {None | str}
+        :param unit_testing: early return if unit testing
+        :type unit_testing: bool
         '''
 
         self.net_name = self.config.Training.net_name
@@ -2180,11 +2180,11 @@ class BirdTrainer(object):
         instance of the problem class.
         
         
-        @param scheduler: scheduler whose learning rate 
+        :param scheduler: scheduler whose learning rate 
             is to be retrieved
-        @type scheduler:torch.optim.lr_scheduler
-        @return: the scheduler's current learning rate
-        @rtype: float
+        :type scheduler:torch.optim.lr_scheduler
+        :return: the scheduler's current learning rate
+        :rtype: float
         '''
         
         if isinstance(self.scheduler, optim.lr_scheduler.ReduceLROnPlateau):
@@ -2206,12 +2206,12 @@ class BirdTrainer(object):
         and false positive, and the sum of true positive,
         and false negatives (tp, tp_fp, tp_fn)
         
-        @param pred_tns: tensors of 1.0 and 0.0 stacked batch_size high
-        @type pred_tns: torch.Tensor [batch_size, 1]
-        @param label_tns: 1.0 or 2.0 true labels stacked batch_size high
-        @type label_tns: torch.Tensor [batch_size, 1]
-        @return: precision values tp, tp_fp, tp_fn
-        @rtype: [int,int,int]
+        :param pred_tns: tensors of 1.0 and 0.0 stacked batch_size high
+        :type pred_tns: torch.Tensor [batch_size, 1]
+        :param label_tns: 1.0 or 2.0 true labels stacked batch_size high
+        :type label_tns: torch.Tensor [batch_size, 1]
+        :return: precision values tp, tp_fp, tp_fn
+        :rtype: [int,int,int]
         '''
         
         # Get the values from tensor [batch_size, label_val]:
@@ -2241,8 +2241,8 @@ class BirdTrainer(object):
         Set the seed across all different necessary platforms
         to allow for comparison of different models and runs
         
-        @param seed: random seed to set for all random num generators
-        @type seed: int
+        :param seed: random seed to set for all random num generators
+        :type seed: int
         '''
         torch.manual_seed(seed)
         cuda.manual_seed_all(seed)
@@ -2263,15 +2263,15 @@ class BirdTrainer(object):
         Re-instate that checkpoint in a new session
         by using self.load_model_checkpoint()
         
-        @param dest_path: absolute path where to save the 
+        :param dest_path: absolute path where to save the 
             pickled model. Use .pth or .tar extension
-        @type dest_path: str
-        @param model: the model instance to save
-        @type model: torch model class
-        @param optimizer: the optimizer instance to save
-        @type optimizer: torch optimizer class
-        @param epoch: the last finished epoch 
-        @type epoch: int
+        :type dest_path: str
+        :param model: the model instance to save
+        :type model: torch model class
+        :param optimizer: the optimizer instance to save
+        :type optimizer: torch optimizer class
+        :param epoch: the last finished epoch 
+        :type epoch: int
         '''
         
         # Remove results from the current
@@ -2300,16 +2300,16 @@ class BirdTrainer(object):
         save_model_checkpoint() such that training 
         can resume.
         
-        @param src_path: path where the app_state is stored
-        @type src_path: str
-        @param fresh_model: a new, uninitialized instance of the model used
-        @type fresh_model: torch model
-        @param fresh_optimizer: a new, uninitialized instance of the optimizer used
-        @type fresh_optimizer: torch optimizer
-        @return: dict with the initialized model, 
+        :param src_path: path where the app_state is stored
+        :type src_path: str
+        :param fresh_model: a new, uninitialized instance of the model used
+        :type fresh_model: torch model
+        :param fresh_optimizer: a new, uninitialized instance of the optimizer used
+        :type fresh_optimizer: torch optimizer
+        :return: dict with the initialized model, 
             optimizer, last completed epoch, most recent
             loss measure, and tallies collection.
-        @rtype {str : *}
+        :rtype {str : *}
         '''
 
         app_state = torch.load(src_path)
@@ -2361,12 +2361,12 @@ class BirdTrainer(object):
         
             config['Training'].getfloat('learning_rate')
         
-        @param other_gpu_config_file: path to configuration file
-        @type other_gpu_config_file: str
-        @return: a dict of dicts mirroring the config file sections/entries
-        @rtype: dict[dict]
-        @raises ValueErr
-        @raises TypeError
+        :param other_gpu_config_file: path to configuration file
+        :type other_gpu_config_file: str
+        :return: a dict of dicts mirroring the config file sections/entries
+        :rtype: dict[dict]
+        :raises ValueErr
+        :raises TypeError
         '''
         
         if conf_file is None:
@@ -2427,10 +2427,10 @@ class BirdTrainer(object):
         Though not having the root of the train/test
         samples should probably be an error.
         
-        @param configparser_obj: an empty configparser instance
-        @type configparser_obj: configparser
-        @return the same config parser object filled-in 
-        @rtype configparser
+        :param configparser_obj: an empty configparser instance
+        :type configparser_obj: configparser
+        :return the same config parser object filled-in 
+        :rtype configparser
         '''
         sec_paths = {
             'root_train_test_data' : '/home/data/birds/recombined_data/'
@@ -2488,8 +2488,8 @@ class BirdTrainer(object):
         
         Method creates the dir if needed.
         
-        @param logdir: root for tensorboard events
-        @type logdir: str
+        :param logdir: root for tensorboard events
+        :type logdir: str
         '''
         
         if not os.path.isdir(logdir):
@@ -2593,9 +2593,9 @@ class BirdTrainer(object):
            o epoch_loss_train
            o epoch_loss_val
         
-        @param tally_coll: the collection of results for
+        :param tally_coll: the collection of results for
             each epoch
-        @type tally_coll: TrainResultCollection
+        :type tally_coll: TrainResultCollection
         '''
         
         summary = EpochSummary(tally_coll, epoch, logger=self.log)
@@ -2649,8 +2649,8 @@ class BirdTrainer(object):
         NOTE: Works only if model parameters are not
               spread across multiple GPUs 
         
-        @param model: any pytorch model
-        @type model: torchvision.models
+        :param model: any pytorch model
+        :type model: torchvision.models
         '''
         return next(model.parameters()).device
 
@@ -2670,12 +2670,12 @@ class BirdTrainer(object):
         in a stack for subsequent tensor_pop()
         operations
          
-        @param tnsr: tensor to move to GPU, or
+        :param tnsr: tensor to move to GPU, or
             'pretend' to move there
-        @type tnsr: torch.Tensor
-        @return a tensor; either a newly GPU resident
+        :type tnsr: torch.Tensor
+        :return a tensor; either a newly GPU resident
             one, or the tnsr itself
-        @raise ValueError if tnsr is not a tensor
+        :raise ValueError if tnsr is not a tensor
         '''
         
         if self.device != self.cuda:
@@ -2708,10 +2708,10 @@ class BirdTrainer(object):
         In both cases, popping from an empty stack
         raises a IndexError.
         
-        @return: a tensor; either one that was already
+        :return: a tensor; either one that was already
             in the CPU, or one that results from moving
             a tensor from the GPU to the CPU
-        @raises IndexError when popping from an empty stack
+        :raises IndexError when popping from an empty stack
         '''
         if self.device != self.cuda:
             tnsr = self.cpu_tensor_stack.pop()
@@ -2757,12 +2757,12 @@ class BirdTrainer(object):
         datetime.datetime.now(), return the difference in 
         seconds. 
         
-        @param datetime1: earlier time
-        @type datetime1: datetime
-        @param datetime2: later time
-        @type datetime2: datetime
-        @return difference in seconds
-        @rtype int
+        :param datetime1: earlier time
+        :type datetime1: datetime
+        :param datetime2: later time
+        :type datetime2: datetime
+        :return difference in seconds
+        :rtype int
         '''
         
         diff = datetime2 - datetime1
@@ -2780,12 +2780,12 @@ class BirdTrainer(object):
         successive computations. Only intended
         for 1D tensors.
          
-        @param x: tensor of dim 1 
-        @type x: torch.Tensor
-        @returns: mean of differences between 
+        :param x: tensor of dim 1 
+        :type x: torch.Tensor
+        :returns: mean of differences between 
             successive elements. Or nan if 
             tensor only has one element.
-        @rtype: float
+        :rtype: float
         '''
         x1 = x.roll(-1)
         res = (x1 - x)[:-1]
@@ -2827,12 +2827,12 @@ class BirdTrainer(object):
         Create human readable string from a
         (usually large) number of bytes.
          
-        @param num: the number to convert
-        @type num: int
-        @param suffix: desired suffix in the 
+        :param num: the number to convert
+        :type num: int
+        :param suffix: desired suffix in the 
             output (default B for Bytes)
-        @type suffix: str
-        @return: human readable str. such as
+        :type suffix: str
+        :return: human readable str. such as
             13MB, or 140TB
         '''
         for unit in ['','K','M','G','T','P','E','Z']:
@@ -2864,10 +2864,10 @@ class BirdTrainer(object):
         
         Assumptions: self.rank contains this node's rank
         
-        @param logfile: specification for the log file
-        @type logfile: {None | str}
-        @return: a ready-to-use LoggingService instance
-        @rtype: LoggingService
+        :param logfile: specification for the log file
+        :type logfile: {None | str}
+        :return: a ready-to-use LoggingService instance
+        :rtype: LoggingService
         '''
         if logfile is None:
             try:

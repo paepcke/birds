@@ -114,14 +114,14 @@ def find_in_dir_tree(root_dir, pattern='*', entry_type='file'):
           find_in_dir_tree('/tmp', pattern="Kfold", entry_type='d')
           
     
-    @param root_dir: directory in which to start recursive descent
-    @type root_dir: str
-    @param pattern: pattern that file or dir must match
-    @type pattern: str
-    @param entry_type: whether file or directories are included
-    @type entry_type: str
-    @return: list of file or directory names
-    @rtype: [str]
+    :param root_dir: directory in which to start recursive descent
+    :type root_dir: str
+    :param pattern: pattern that file or dir must match
+    :type pattern: str
+    :param entry_type: whether file or directories are included
+    :type entry_type: str
+    :return: list of file or directory names
+    :rtype: [str]
     '''
 
     file_list = []

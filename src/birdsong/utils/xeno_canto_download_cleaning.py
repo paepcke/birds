@@ -34,10 +34,10 @@ class BirdCorrector(object):
         for each species. Move recordings into the proper
         subdirs.
 
-        @param coll_loc: path to previously saved XenoCantoCollection
-        @type coll_loc: str
-        @param download_dir: path to where the sound files are located
-        @type download_dir: str
+        :param coll_loc: path to previously saved XenoCantoCollection
+        :type coll_loc: str
+        :param download_dir: path to where the sound files are located
+        :type download_dir: str
         '''
         coll = XenoCantoCollection(coll_loc)
         #*************
@@ -131,10 +131,10 @@ class BirdCorrector(object):
         
         Prints remaining unresolved cases. 
         
-        @param coll_loc: path to previously saved XenoCantoCollection
-        @type coll_loc: str
-        @param download_dir: path to where the sound files are located
-        @type download_dir: str
+        :param coll_loc: path to previously saved XenoCantoCollection
+        :type coll_loc: str
+        :param download_dir: path to where the sound files are located
+        :type download_dir: str
         '''
         
         #coll_loc = '/Users/paepcke/EclipseWorkspacesNew/birds/src/birdsong/xeno_canto_collections/2021_03_26T18_07_39.560878.json'
@@ -189,10 +189,10 @@ class BirdCorrector(object):
         filenames: spaces, parentheses, backslashes!
         Replace any of those with underscores.
         
-        @param fname: original name
-        @type fname: str
-        @return: cleaned up, unix-safe name
-        @rtype: str
+        :param fname: original name
+        :type fname: str
+        :return: cleaned up, unix-safe name
+        :rtype: str
         '''
         fname = fname.replace('/', '_')
         fname = fname.replace(' ', '_')

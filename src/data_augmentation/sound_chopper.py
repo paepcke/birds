@@ -203,14 +203,14 @@ class SoundChopper:
         process' default environ is then set to match that
         of the initiating process.
         
-        @param assignment: list of species/filename pairs
-        @type assignment: [(str,str)]
-        @param env: if provided, the environment of the
+        :param assignment: list of species/filename pairs
+        :type assignment: [(str,str)]
+        :param env: if provided, the environment of the
             parent process. If None, the current env
             is retained
-        @type env: {str : Any}
-        @param return_bool:
-        @type return_bool:
+        :type env: {str : Any}
+        :param return_bool:
+        :type return_bool:
         '''
        
         # During multiprocessing this method is
@@ -294,11 +294,11 @@ class SoundChopper:
                 If response is Yes, wipe the dir
                 else raise FileExistsError
                 
-        @param species_list: names of species to process
-        @type species_list: [str]
-        @return: top level dirs for audio snippets and spectrograms
-        @rtype: (str)
-        @raise FileExistsError: if a dest dir exists and not allowed
+        :param species_list: names of species to process
+        :type species_list: [str]
+        :return: top level dirs for audio snippets and spectrograms
+        :rtype: (str)
+        :raise FileExistsError: if a dest dir exists and not allowed
             to wipe it.
         '''
 
@@ -376,12 +376,12 @@ class SoundChopper:
         as the number of species name lists in the return.
         But for clarity, the number is returned explicitly.
 
-        @param in_dir: root of species recordings
-        @type in_dir: str
-        @param num_workers: number of buckets into which to partition 
-        @type num_workers: {int | None}
-        @return: list of species name lists, and number of workers.
-        @rtype: ([[int]], int)
+        :param in_dir: root of species recordings
+        :type in_dir: str
+        :param num_workers: number of buckets into which to partition 
+        :type num_workers: {int | None}
+        :return: list of species name lists, and number of workers.
+        :rtype: ([[int]], int)
         '''
 
         # Create:
@@ -433,12 +433,12 @@ class SoundChopper:
         tuples is not divisible by num_workers, the left-over
         tuples are distributed over the first sublists.
 
-        @param species_file_pairs:
-        @type species_file_pairs:
-        @param num_workers:
-        @type num_workers:
-        @return partitioning of the species_file_pairs tuples
-        @rtype: [[(str, str)]]
+        :param species_file_pairs:
+        :type species_file_pairs:
+        :param num_workers:
+        :type num_workers:
+        :return partitioning of the species_file_pairs tuples
+        :rtype: [[(str, str)]]
         '''
 
         # Compute near-equal number of files per worker:
@@ -484,8 +484,8 @@ class SoundChopper:
         Prints success/failure of each worker. Then
         returns
 
-        @param args: all arguments provided to argparse
-        @type args: {str : Any}
+        :param args: all arguments provided to argparse
+        :type args: {str : Any}
         '''
         
         in_dir = args.input_dir
