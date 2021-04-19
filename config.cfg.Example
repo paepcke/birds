@@ -56,6 +56,11 @@ verbose       = yes
 # to the console, if verbose is 'yes':
 show_alive    = 30
 
+# Number of pretrained layers to protect
+# from further training if a pretrained
+# model is used:
+freeze = 0
+
 [Parallelism]
 
 # If True, every training script runs with

@@ -115,6 +115,9 @@ class NetUtils:
         if to_grayscale:
             model = cls._first_layer_to_in_channel1(model, net_name)
 
+        # Keep as many layers as requested
+        # in the config file protected against
+        # further learning:
         cls.freeze_model_layers(model, freeze)
 
         num_in_features = model.fc.in_features

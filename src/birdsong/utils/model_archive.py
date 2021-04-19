@@ -232,11 +232,11 @@ class ModelArchive:
             data_root   = config.Paths.root_train_test_data
             class_names = FileUtils.find_class_names(data_root)
             fname_props['classes'] = len(class_names)
-            fname_props['pretrain'] = config.Training.getint('num_pretrained_layers', 0)
+            fname_props['pretrain'] = config.Training.getint('freeze', 0)
         
         model = NetUtils.get_net(net_name=fname_props['net_name'],
                                  num_classes=fname_props['classes'],
-                                 num_layers_to_retain=fname_props['pretrain'],
+                                 freeze=fname_props['pretrain'],
                                  to_grayscale=fname_props['to_grayscale']
                                  )
         return model

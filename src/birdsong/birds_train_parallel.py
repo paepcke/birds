@@ -10,7 +10,10 @@ code by
 @author: paepcke
 '''
 
+#!!!!! CURRENTLY NOT MAINTAINED !!!!!!!!!!
+
 # TODO:
+#   o NOTE: NOT maintained till time to revisit.
 #   o Test model save on cnt-c, and start from savepoint
 
 from _collections import OrderedDict

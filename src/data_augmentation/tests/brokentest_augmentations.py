@@ -1,6 +1,6 @@
-import sys
-sys.path.append("data_augmentation/src")
-import augmentations as aug
+import sys,os
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+import sound_processor as aug
 import specaugment as sa
 import os
 import numpy as np

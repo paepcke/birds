@@ -80,7 +80,10 @@ class Test(unittest.TestCase):
             # To make things easier, ensure that
             # this first suffix looks as if it
             # had ended in 'r<>'
-            if suffix[-2] != 'r':
+            try:
+                if suffix[-2] != 'r':
+                    suffix += 'r0'
+            except IndexError:
                 suffix += 'r0'
             
             # Get the '0' or other num after

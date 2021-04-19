@@ -34,7 +34,7 @@ class NeuralNetConfig(DottableConfigParser):
 			 batch_size    = 32
 			 num_folds     = 10
 			 seed          = 42
-			 optimizer     = SGD
+			 opt_name      = SGD
 			 loss_fn       = CrossEntropyLoss
 			 weighted      = True
 			 kernel_size   = 7
@@ -43,8 +43,8 @@ class NeuralNetConfig(DottableConfigParser):
     '''
     
     NEURAL_NET_ATTRS = {
-            'net_name'   : 'Training',
-            'num_pretrained_layers' : 'Training',
+            'net_name'    : 'Training',
+            'freeze'      : 'Training',
             'min_epochs'  : 'Training',
             'max_epochs'  : 'Training',
             'batch_size'  : 'Training',
@@ -277,7 +277,7 @@ class NeuralNetConfig(DottableConfigParser):
         nm = (f"Exp_lr{self.Training.lr}"
               f"_bs{self.Training.batch_size}"
               f"_kern{self.Training.kernel_size}"
-              f"_opt{self.Training.optimizer}"
+              f"_opt{self.Training.opt_name}"
               )
         return nm
 
@@ -388,9 +388,9 @@ class NeuralNetConfig(DottableConfigParser):
         conf_dict = self.Training
         conf_dict['net_name'] = new_name
 
-    def set_num_pretrained_layers(self, new_name):
+    def set_freeze(self, new_name):
         conf_dict = self.Training
-        conf_dict['num_pretrained_layers'] = new_name
+        conf_dict['freeze'] = new_name
 
     def set_min_epochs(self, new_val):
         
@@ -428,7 +428,7 @@ class NeuralNetConfig(DottableConfigParser):
         conf_dict = self.Training
         conf_dict['num_folds'] = new_val
 
-    def set_optimizer(self, new_val):
+    def set_opt_name(self, new_val):
 
         # If desired, add check for specific
         # set of optimizers where it now says 'True':
@@ -436,7 +436,7 @@ class NeuralNetConfig(DottableConfigParser):
          True, 'Optimizers must be a string'
 
         conf_dict = self.Training
-        conf_dict['optimizer'] = new_val
+        conf_dict['opt_name'] = new_val
 
     def set_loss_fn(self, new_val):
         
