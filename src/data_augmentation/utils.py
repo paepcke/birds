@@ -1,4 +1,4 @@
-import enum
+from enum import Enum
 from fnmatch import fnmatch
 import os
 import random
@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 #-------------------------- Enum for Policy When Output Files Exist -----------
-class WhenAlreadyDone(enum):
+class WhenAlreadyDone(Enum):
     ASK = 0
     OVERWRITE = 1
     SKIP = 2

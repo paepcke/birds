@@ -10,17 +10,15 @@ from logging_service.logging_service import LoggingService
 from matplotlib import MatplotlibDeprecationWarning
 import matplotlib
 
+sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
 from data_augmentation import utils
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import WhenAlreadyDone
 import multiprocessing as mp
 import numpy as np
 import soundfile as sf
-
-
-sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-
 
 # Needed when running headless:
 matplotlib.use('TkAgg')
@@ -636,27 +634,23 @@ if __name__ == '__main__':
 
     # Add the arguments
     parser.add_argument('input_dir',
-                           metavar='IN_DIR',
-                           type=str,
-                           help='the path to original directory with .wav files')
+                        type=str,
+                        help='the path to original directory with .wav files')
     parser.add_argument('output_dir',
-                           metavar='OUT_DIR',
-                           type=str,
-                           help='the path to output directory to write new .wav/.png files')
+                        type=str,
+                        help='the path to output directory to write new .wav/.png files')
     parser.add_argument('-w', '--workers',
                         type=int,
-                        help='number of cores to use; default: 80% of available cores',
+                        help='number of cores to use; default: 80 percent of available cores',
                         default=None)
     parser.add_argument('-y', '--overwrite',
                         help='if set, overwrite existing out directories without asking; default: False',
                         action='store_true',
-                        default=False
-                        )
+                        default=False)
     parser.add_argument('-r', '--resume',
                         help='if set, skip any soundfiles whose output spectrogram already exists; default: False',
                         action='store_true',
-                        default=False
-                        )
+                        default=False)
 
     # Execute the parse_args() method
     args = parser.parse_args()
