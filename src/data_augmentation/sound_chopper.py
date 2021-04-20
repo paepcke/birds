@@ -13,29 +13,28 @@ then you need to install ffmpeg:
 from _collections import OrderedDict
 import argparse
 import os, sys
+from pathlib import Path
 import warnings
+
+import librosa
+from logging_service.logging_service import LoggingService
+from matplotlib import MatplotlibDeprecationWarning
+
+from data_augmentation.sound_processor import SoundProcessor
+from data_augmentation.utils import Utils as utils
+from data_augmentation.utils import WhenAlreadyDone
+import multiprocessing as mp
+import numpy as np
+import soundfile as sf
+
 
 # Needed when running headless:
 # Do this before any other matplotlib
 # imports; directly or indirectly 
 # through librosa
-import matplotlib
-matplotlib.use('TkAgg')
-
-import librosa
-from logging_service.logging_service import LoggingService
-from matplotlib import MatplotlibDeprecationWarning
-import matplotlib
-
 sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from data_augmentation.utils import Utils as utils
-from data_augmentation.sound_processor import SoundProcessor
-from data_augmentation.utils import WhenAlreadyDone
-import multiprocessing as mp
-import numpy as np
-import soundfile as sf
 
 class SoundChopper:
     '''
@@ -159,6 +158,7 @@ class SoundChopper:
         # Allow others outside the instance
         # find the audio snippet destination
         SoundChopper.wav_dir_path = self.wav_dir_path
+        SoundChopper.spectrogram_dir_path = self.spectrogram_dir_path
 
     #------------------------------------
     # chop_all
@@ -310,25 +310,44 @@ class SoundChopper:
         orig, sample_rate = librosa.load(os.path.join(in_dir, species, sample_name))
         length = int(librosa.get_duration(orig, sample_rate))
         for start_time in range(length - window_len):
-            window_audio, sr = librosa.load(os.path.join(in_dir, species, sample_name),
-                                      offset=start_time, duration=window_len)
-            window_name = sample_name[:-len(".wav")] + '_sw-start' + str(start_time)
+            fpath = Path(sample_name)
+            window_name = f"{fpath.stem}_sw-start{str(start_time)}"
+            window_file_name = str(Path.joinpath(fpath.parent, window_name))
+
             outfile_spectro = os.path.join(out_dir, 
                                            'spectrograms/', 
                                            species,
-                                           f"{window_name}.{'png'}")
-            spectro_done = os.path.exists(outfile_spectro) 
+                                           f"{window_file_name}.png")
+            
+            outfile_audio = os.path.join(out_dir, 
+                                         'wav-files', 
+                                         species, 
+                                         f"{window_file_name}.{'wav'}")
+            
+            
+            spectro_done = os.path.exists(outfile_spectro)
+            audio_done   = os.path.exists(outfile_audio)
+
+            if spectro_done and audio_done and WhenAlreadyDone.SKIP:
+                # No brainer no need to even read the audio excerpt:
+                continue
+            
+            if spectro_done and not audio_done and not self.generate_wav_files:
+                continue
+
+            # Need an audio snippet either for
+            # a spectrogram or wav file:
+            window_audio, sr = librosa.load(os.path.join(in_dir, species, sample_name),
+                                      offset=start_time, duration=window_len)
+
             if not spectro_done or (spectro_done and self.overwrite_policy != WhenAlreadyDone.SKIP):
                 SoundProcessor.create_spectrogram(window_audio,sr,outfile_spectro)
+            
 
             if self.generate_wav_files:
-                outfile_audio = os.path.join(out_dir, 
-                                             'wav-files', 
-                                             species, 
-                                             f"{window_name}.{'wav'}")
-                
-                wav_done = os.path.exists(outfile_audio) 
-                if not wav_done or (wav_done and self.overwrite_policy != WhenAlreadyDone.SKIP):
+                if audio_done and self.overwrite_policy == WhenAlreadyDone.SKIP:
+                    continue 
+                else:
                     sf.write(outfile_audio, window_audio, sr)
 
     #------------------------------------
@@ -382,6 +401,8 @@ class SoundChopper:
 
         return(wav_dir_path, spectrogram_dir_path)
 
+    # -------------------- Class Methods ------------
+    
     #------------------------------------
     # compute_worker_assignments 
     #-------------------
@@ -528,7 +549,7 @@ class SoundChopper:
     def run_workers(cls, args, overwrite_policy=WhenAlreadyDone.ASK):
         '''
         Called by main to run the SoundChopper in
-        multiple processes at once. Partitions the
+        multiple processes at once. Pajcrtitions the
         audio files to be processed; runs the chopping
         while giving visual progress on terminal.
         
@@ -578,7 +599,8 @@ class SoundChopper:
                 # Check for job done with one sec timeout: 
                 job.join(1)
                 # Get number of generated snippets:
-                num_chopped_snippets = len(utils.find_in_dir_tree(SoundChopper.wav_dir_path))
+                num_chopped_snippets = \
+                    len(utils.find_in_dir_tree(SoundChopper.spectrogram_dir_path))
                 # Keep printing number of done snippets in the same
                 # terminal line:
                 print(f"Number of audio snippets: {num_chopped_snippets}", end='\r')

@@ -53,9 +53,11 @@ class Utils:
         
         '''
         if os.path.exists(dir_path):
-            if overwrite_policy:
+            if overwrite_policy == WhenAlreadyDone.OVERWRITE:
                 shutil.rmtree(dir_path)
                 os.mkdir(dir_path)
+                return True
+            elif overwrite_policy == WhenAlreadyDone.SKIP:
                 return True
             # Need to ask client for permission to replace:
             ans = input(f"{dir_path} already exists. Replace? [y/N]:  ")
@@ -68,6 +70,7 @@ class Utils:
         else:
             os.mkdir(dir_path)
             return True
+        
     @classmethod
     def sample_compositions_by_species(cls, path, augmented):
         num_samples_in = {} # initialize dict - usage num_samples_in['CORALT_S'] = 64

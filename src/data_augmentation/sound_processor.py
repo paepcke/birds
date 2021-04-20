@@ -3,18 +3,16 @@ import os
 from pathlib import Path
 import random
 
-# Needed when running headless:
-import matplotlib
-matplotlib.use('TkAgg')
-
+import librosa
 from PIL import Image
-import librosa.display
 from logging_service import LoggingService
 from scipy.signal import butter
 from scipy.signal import lfilter
+import skimage.io
 
 import data_augmentation.utils as utils
 import numpy as np
+
 
 class SoundProcessor:
     '''
@@ -235,9 +233,14 @@ class SoundProcessor:
         mel = librosa.feature.melspectrogram(audio, sr=sr, n_mels=n_mels)
         # create a logarithmic mel spectrogram
         log_mel = librosa.power_to_db(mel, ref=np.max)
-        # create an image of the spectrogram and save it as file
-        mesh = librosa.display.specshow(log_mel, sr=sr, x_axis='off', y_axis='off', cmap='gray_r')
-        mesh.figure.savefig(outfile, dpi=100, bbox_inches='tight', pad_inches=0, format='png', facecolor='none')
+        
+        # Create an image of the spectrogram and save it as file
+        img = cls.scale_minmax(log_mel, 0, 255).astype(np.uint8)
+        img = np.flip(img, axis=0) # put low frequencies at the bottom in image
+        img = 255-img # invert. make black==more energy
+
+        # Save as PNG
+        skimage.io.imsave(outfile, img)
 
     #------------------------------------
     # define_bandpass 
@@ -342,3 +345,14 @@ class SoundProcessor:
             else: cloned[:,t_zero:mask_end] = cloned.mean()
         return cloned, f"tmask{int(t_zero)}_{int(mask_end)}"
     
+
+    #------------------------------------
+    # scale_minmax
+    #-------------------
+    
+    @classmethod
+    def scale_minmax(cls, X, min_val=0.0, max_val=1.0):
+        X_std = (X - X.min()) / (X.max() - X.min())
+        X_scaled = X_std * (max_val - min_val) + min_val
+        return X_scaled
+
