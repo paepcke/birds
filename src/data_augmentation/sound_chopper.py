@@ -1,9 +1,26 @@
 #!/usr/bin/env python3
 
+'''
+NOTE: if on Linux you get:
+
+     audioread.exceptions.NoBackendError
+   
+then you need to install ffmpeg:
+
+     sudo snap install ffmpeg
+'''
+
 from _collections import OrderedDict
 import argparse
 import os, sys
 import warnings
+
+# Needed when running headless:
+# Do this before any other matplotlib
+# imports; directly or indirectly 
+# through librosa
+import matplotlib
+matplotlib.use('TkAgg')
 
 import librosa
 from logging_service.logging_service import LoggingService
@@ -13,15 +30,12 @@ import matplotlib
 sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from data_augmentation import utils
+from data_augmentation.utils import Utils as utils
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import WhenAlreadyDone
 import multiprocessing as mp
 import numpy as np
 import soundfile as sf
-
-# Needed when running headless:
-matplotlib.use('TkAgg')
 
 class SoundChopper:
     '''
@@ -676,12 +690,12 @@ if __name__ == '__main__':
     if args.workers == 1:
         chopper = SoundChopper(in_dir, 
                                args.output_dir,
-                               overwrite_policy=args.overwrite_policy
+                               overwrite_policy=overwrite_policy
                                )
         chopper.chop_all()
     else:
         SoundChopper.run_workers(args,
-                                 overwrite_policy=args.overwrite_policy
+                                 overwrite_policy=overwrite_policy
                                  )
 
     print("Done")
