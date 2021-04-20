@@ -40,6 +40,7 @@ setup(
                         'psutil>=5.8.0',
                         'adjustText>=0.7.3',
                         'discrete-differentiator>=0.1',
+                        'scikit-image>=0.18.1',
                         ],
 
     tests_require    =[
