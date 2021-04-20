@@ -704,7 +704,7 @@ if __name__ == '__main__':
         
     if args.overwrite:
         overwrite_policy = WhenAlreadyDone.OVERWRITE
-    if args.resume:
+    elif args.resume:
         overwrite_policy = WhenAlreadyDone.SKIP
     else:
         overwrite_policy = WhenAlreadyDone.ASK
