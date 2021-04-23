@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import random
 
+import soundfile
 import librosa
 from PIL import Image
 from logging_service import LoggingService
@@ -10,7 +11,7 @@ from scipy.signal import butter
 from scipy.signal import lfilter
 import skimage.io
 
-import data_augmentation.utils as utils
+from data_augmentation.utils import Utils
 import numpy as np
 
 
@@ -48,30 +49,45 @@ class SoundProcessor:
     #-------------------
 
     @classmethod
-    def add_background(cls, file_name, noise_path, in_dir, out_dir, len_noise_to_add=5.0):
-        """
-        Combines the wav recording in the species subdirectory with a random 5s clip of audio from a random recording in
-        data_augmentation/lib.
-    
-        :param species: the directory names of the species to modify the wav files of. If species=None, all subdirectories will be used.
-        :type species: str
-        """
-        len_noise_to_add = float(len_noise_to_add)  # need length to be float
+    def add_background(cls, file_name, noise_path, out_dir, len_noise_to_add=5.0):
+        '''
+        Takes an absolute file path, and the path to a
+        directory that contains noise to overlay onto the 
+        given sound file (wind, rain, etc.).
+        
+        Returns a numpy structure corresponding to the
+        original audio with the noise overlaid, plus the
+        sample rate of the new sample. A file name is suggested
+        for the sample. It is composed of elements such 
+        as the nature and duration of the noise. Client
+        may choose to ignore or use.
+
+        :param file_name: absolute path to sound file
+        :type file_name: str
+        :param noise_path: absolute path to directory
+            with noise files
+        :type noise_path: str
+        :param out_dir: destination directory of new audio file
+        :type out_dir: str
+        :param len_noise_to_add: how much of a noise snippet
+            to overlay (seconds)
+        :type len_noise_to_add: float
+        :return: full path of new audio file
+        :rtype: str
+        '''
+        
+        len_noise_to_add = float(len_noise_to_add)
         backgrounds = os.listdir(noise_path)
     
+        # Pick a random noise file:
         background_name = backgrounds[random.randint(0, len(backgrounds)-1)]
-        # Check if augmented file exists
-        output_path = os.path.join(out_dir, file_name[:-len(".wav")]) + "-" + background_name
-        if os.path.exists(output_path):
-            ans = input(f"Do you want to rewrite {output_path}? [y/N]  ")
-            if ans not in ["y", "yes"]:
-                return file_name
     
         cls.log.info(f"Adding {background_name} to {file_name}.")
+        
         # We will be working with 1 second as the smallest unit of time
         # load all of both wav files and determine the length of each
         noise, noise_sr = librosa.load(os.path.join(noise_path, background_name))  # type(noise) = np.ndarray
-        orig_recording, orig_sr = librosa.load(os.path.join(in_dir, file_name))
+        orig_recording, orig_sr = librosa.load(file_name)
     
         new_sr = math.gcd(noise_sr, orig_sr)
         if noise_sr != orig_sr:
@@ -79,14 +95,15 @@ class SoundProcessor:
             cls.log.info(f"Resampling: {background_name} and {file_name}")
             noise = librosa.resample(noise, noise_sr, new_sr)
             orig_recording = librosa.resample(orig_recording, orig_sr, new_sr)
-            input("ready?")
+            # input("ready?")
     
         noise_duration = librosa.get_duration(noise, noise_sr)
         if noise_duration < len_noise_to_add:
             cls.log.info(f"Duration:{noise_duration} < len_noise_to_add:{len_noise_to_add}. Will only add {noise_duration}s of noise")
             samples_per_segment = len(noise)
-        elif noise_duration > len_noise_to_add:  # randomly choose noise segment
+        elif noise_duration >= len_noise_to_add:  # randomly choose noise segment
             samples_per_segment = int(new_sr * len_noise_to_add)  # this is the number of samples per 5 seconds
+            # Place noise randomly:
             subsegment_start = random.randint(0, len(noise) - samples_per_segment)
             noise = noise[subsegment_start: subsegment_start + samples_per_segment]
         cls.log.info(f"len(noise) after random segment: {len(noise)}; noise duration: {len(noise)/new_sr}")
@@ -107,24 +124,28 @@ class SoundProcessor:
     
         assert(len(during_noise) == len(noise))
     
-        segment_with_noise = during_noise + utils.noise_multiplier(orig_recording, noise) * noise
-        first_half = np.concatenate((before_noise, segment_with_noise))
-        new_record = np.concatenate((first_half, after_noise)) # what i think it should be
-        new_duration = librosa.get_duration(new_record, float(new_sr))
+        segment_with_noise = during_noise + Utils.noise_multiplier(orig_recording, noise) * noise
+        first_half   = np.concatenate((before_noise, segment_with_noise))
+        new_sample   = np.concatenate((first_half, after_noise)) # what i think it should be
+        new_duration = librosa.get_duration(new_sample, float(new_sr))
     
         assert(new_duration == orig_duration)
-        # output the new wav data to a file
-        aug_sample_name = file_name[:-len(".wav")] + "-" + background_name[:-len(".wav")] + "_bgd" + str(int(noise_start_loc/new_sr * 1000)) + "ms.wav"
-        output_path = os.path.join(out_dir, aug_sample_name)
-        librosa.output.write_wav(output_path, new_record, new_sr)
-        return aug_sample_name
+        # File name w/o extension:
+        sample_file_stem = Path(file_name).stem
+        noise_file_stem  = Path(background_name).stem
+        noise_dur = str(int(noise_start_loc/new_sr * 1000))
+        file_name= f"{sample_file_stem}-{noise_file_stem}_bgd{noise_dur}ms.wav"
+        out_path = os.path.join(out_dir, file_name)
+        
+        soundfile.write(out_path, new_sample, new_sr)
+        return out_path
 
     #------------------------------------
-    # change_volume 
+    # change_all_volumes 
     #-------------------
 
     @classmethod
-    def change_volume(in_dir, out_dir, species=None):
+    def change_all_volumes(cls, in_dir, out_dir, species=None):
         """
         Adjusts the volume of all the wav files in the species directory.
     
@@ -132,54 +153,94 @@ class SoundProcessor:
         :type in_dir: str
         :param out_dir: the path to the directory to save the new files to
         :type out_dir: str
-        :param species: the directory names of the species to modify the wav files of. If species=None, all subdirectories will be used.
+        :param species: the directory names of the species to modify the wav 
+            files of. If species=None, all subdirectories will be used.
         :type species: str
         """
-        for file_name in os.listdir(in_dir):
-            if species is None or species in file_name:
-                y0, sample_rate0 = librosa.load(os.path.join(in_dir, file_name))
-    
-                # adjust the volume
-                factor = random.randrange(-12, 12, 1)
-                y1 = y0 * (10 ** (factor / 20))
-    
-                # output the new wav data to a file
-                librosa.output.write_wav(os.path.join(out_dir, file_name[:len(file_name) - 4])
-                                         + "-volume" + str(factor) + ".wav", y1, sample_rate0)
+        for species_dir in os.listdir(in_dir):
+            if species is None or species_dir in species:
+                full_species_dir = os.path.join(in_dir, species_dir)
+                for sample_file_nm in os.listdir(full_species_dir):
+                    sample_path = os.path.join(in_dir, sample_file_nm)
+                    cls.change_sample_volume(sample_path, out_dir)
+
+    #------------------------------------
+    # change_sample_volume 
+    #-------------------
+
+    @classmethod
+    def change_sample_volume(cls, sample_path, out_dir):
+        '''
+        Randomly changes an audio clip's volume, and writes
+        the new audio file to out_dir
+
+        :param sample_path: full path to sample
+        :type sample_path: src
+        :param out_dir: destination directory
+        :type out_dir: src
+        :return full path to the new audio file
+        :rtype str
+        '''
+        y0, sample_rate0 = librosa.load(sample_path)
+
+        # Adjust the volume
+        factor = random.randrange(-12, 12, 1)
+        
+        cls.log.info(f"Changing volume of {sample_path} by factor {factor}.")
+
+        y1 = y0 * (10 ** (factor / 20))
+
+        # Output the new wav data to a file
+        # Just the foofile part of /home/me/foofile.mp3:
+        sample_root = Path(sample_path).stem
+        new_sample_fname = f"{sample_root}-volume{factor}.wav"
+        out_file = os.path.join(out_dir, new_sample_fname)
+        soundfile.write(out_file, y1, sample_rate0)
+        return out_file
+
     #------------------------------------
     # time_shift 
     #-------------------
 
     @classmethod
-    def time_shift(cls, file_name, in_dir, out_dir):
+    def time_shift(cls, file_name, out_dir):
         """
-        Performs a time shift on all the wav files in the species directory. The shift is 'rolling' such that
-        no information is lost.
+        Performs a time shift on all the wav files in the 
+        species directory. The shift is 'rolling' such that
+        no information is lost: a random-sized snippet of
+        the audio is moved from the start of the clip to
+        its end.
     
-        :param in_dir: the path to the directory to fetch samples from
-        :type in_dir: str
-        :param out_dir: the path to the directory to save the new files to
+        :param file_name: full path to audio file
+        :type file_name: str
+        :param out_dir: the path to the directory to save the new file to
         :type out_dir: str
-        :param species: the directory names of the species to modify the wav files of. If species=None, all subdirectories will be used.
-        :type species: str
+        :return full path to the new audio file
+        :rtype str
         """
-        y, sample_rate = librosa.load(os.path.join(in_dir, file_name))
+        y, sample_rate = librosa.load(file_name)
         length = librosa.get_duration(y, sample_rate)  # returns length in seconds
         # shifts the recording by a random amount between 0 and length of recording by a multiple of 10 ms
         amount = random.randrange(0, int(length)*10, 1)/10  # shift is in seconds
     
-        # create two seperate sections of the audio
-        y0, sample_rate0 = librosa.load(os.path.join(in_dir, file_name), offset=amount)
-        y1, _sample_rate1 = librosa.load(os.path.join(in_dir, file_name), duration=amount)
+        # Create two seperate sections of the audio
+        # Snippet after the shift amount:
+        y0, sample_rate0 = librosa.load(file_name, offset=amount)
+        # Snippet before the shift amount:
+        y1, _sample_rate1 = librosa.load(file_name, duration=amount)
     
-        # combine the wav data
+        # Append the before-snippet to the 
+        # end of the after-snippet: 
         y2 = np.append(y0, y1)
         # print(f"Amount: {amount}ms")
         assert(len(y) == len(y2))
-        # output the new wav data to a file
-        aug_sample_name = file_name[:len(file_name) - 4] + "-shift" + str(int(amount * 1000)) + "ms.wav"
-        librosa.output.write_wav(os.path.join(out_dir, aug_sample_name), y2, sample_rate0)
-        return aug_sample_name
+        # Output the new wav data to a file
+        # Get just the 'foo' part of '/blue/red/foo.mp3':
+        file_stem = Path(file_name).stem
+        aug_sample_name = f"{file_stem}-shift{str(int(amount * 1000))}ms.wav"
+        out_path = os.path.join(out_dir, aug_sample_name)
+        soundfile.write(out_path, y2, sample_rate0)
+        return out_path
 
     #------------------------------------
     # warp_spectrogram 

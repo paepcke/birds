@@ -29,7 +29,7 @@ import numpy as np
 #           species of the most populously represented species
 #           in the training set: 
 
-class AugmentationVolume(Enum):
+class AugmentationGoals(Enum):
     TENTH   = 0
     MEDIAN  = 1
     MAX     = 2
@@ -43,7 +43,7 @@ class Augmenter:
     WARP        = 1/3
     
     P_DIST    = [ADD_NOISE, TIME_SHIFT, WARP]
-    AUG_NAMES = ["add_noise", "time_shift", "warp"]
+    AUDIO_AUG_NAMES = ["add_noise", "time_shift", "warp"]
     AUG_SPECTROGRAMS_DIR = "spectrograms_augmented/"
     AUG_WAV_DIR = "wav_augmented/"
     NOISE_PATH = "data_augmentation/lib/Noise_Recordings/"
@@ -55,8 +55,8 @@ class Augmenter:
     def __init__(self, 
                  input_dir_path,
                  plot=False,
-                 overwrite_freely=False,
-                 aug_volume=AugmentationVolume.MEDIAN,
+                 overwrite_policy=False,
+                 aug_goals=AugmentationGoals.MEDIAN,
                  random_augs = False,
                  multiple_augs = False,):
 
@@ -67,14 +67,14 @@ class Augmenter:
         :param plot: whether or not to plot informative chars 
             along the way
         :type plot: bool
-        :param overwrite_freely: if true, don't ask each time
+        :param overwrite_policy: if true, don't ask each time
             previously created work will be replaced
-        :type overwrite_freely: bool 
-        :param aug_volume: either an AugmentationVolume member,
-               or a dict with a separate AugmentationVolume
-               for each species: {species : AugmentationVolume}
-               (See definition of AugmentationVolume)
-        :type aug_volume: {AugmentationVolume | {str : AugmentationVolume}}
+        :type overwrite_policy: bool 
+        :param aug_goals: either an AugmentationGoals member,
+               or a dict with a separate AugmentationGoals
+               for each species: {species : AugmentationGoals}
+               (See definition of AugmentationGoals)
+        :type aug_goals: {AugmentationGoals | {str : AugmentationGoals}}
         :param random_augs: if this is true, will randomly choose augmentation 
             to use for each new sample
         :type random_augs: bool
@@ -88,7 +88,7 @@ class Augmenter:
         self.input_dir_path   = input_dir_path
         self.multiple_augs    = multiple_augs
         self.plot             = plot
-        self.overwrite_freely = overwrite_freely
+        self.overwrite_freely = overwrite_policy
 
         # Get dataframe with row lables being the
         # species, and one col with number of samples
@@ -107,7 +107,7 @@ class Augmenter:
 
         # Build a dict with number of augmentations to do
         # for each species:
-        self.augs_to_do = self.compute_num_augs_per_species(aug_volume, self.sample_distrib_df)
+        self.augs_to_do = self.compute_num_augs_per_species(aug_goals, self.sample_distrib_df)
 
         if random_augs:
             self.output_dir_path = f"{input_dir_path[:-1]}_augmented_samples_random"
@@ -145,12 +145,12 @@ class Augmenter:
     def compute_num_augs_per_species(self, aug_volumes, sample_distrib_df):
         '''
         Return a dict mapping species name to 
-        number of samples should be available after
+        number of samples that should be available after
         augmentation. 
         
         The aug_volumes arg is either a dict mapping species name
-        to an AugmentationVolume (TENTH, MEDIAN, MAX), or just
-        an individual AugmentationVolume.
+        to an AugmentationGoals (TENTH, MEDIAN, MAX), or just
+        an individual AugmentationGoals.
 
         The sample_distrib_df is a dataframe whose row labels are 
         species names and the single column's values are numbers
@@ -158,7 +158,7 @@ class Augmenter:
         respective row's species.
         
         :param aug_volumes: how many augmentations for each species
-        :type aug_volumes: {AugmentationVolume | {str : AugmentationVolume}}
+        :type aug_volumes: {AugmentationGoals | {str : AugmentationGoals}}
         :param sample_distrib_df: distribution of initially available
             sample numbers for each species
         :type sample_distrib_df: pandas.DataFrame
@@ -184,17 +184,17 @@ class Augmenter:
         tenth_max_num_samples = max_num_samples//10 +1
         median_num_samples = np.median(species_np)
         
-        volumes = {AugmentationVolume.TENTH  : tenth_max_num_samples,
-                   AugmentationVolume.MEDIAN : median_num_samples,
-                   AugmentationVolume.MAX    : max_num_samples
+        volumes = {AugmentationGoals.TENTH  : tenth_max_num_samples,
+                   AugmentationGoals.MEDIAN : median_num_samples,
+                   AugmentationGoals.MAX    : max_num_samples
                    }
         
         aug_requirements = {}
-        if type(aug_volumes) == AugmentationVolume:
+        if type(aug_volumes) == AugmentationGoals:
             for species in sample_distrib_df.index:
                 aug_requirements[species] = volumes[aug_volumes]
         else:
-            # Have dict of species-name : AugmentationVolume:
+            # Have dict of species-name : AugmentationGoals:
             for species in sample_distrib_df.index:
                 aug_requirement = aug_volumes[species]
                 aug_requirements[species] = volumes[aug_requirement]
@@ -222,7 +222,7 @@ class Augmenter:
 
         for species, rows in self.sample_distrib_df.iterrows():
             num_samples_orig = rows['num_samples']
-            self.create_augmentations(species, 
+            self.augment_one_species(species, 
                                       num_samples_orig, 
                                       self.augs_to_do[species]
                                       )
@@ -244,10 +244,10 @@ class Augmenter:
 
         self.log.info("Done")
     #------------------------------------
-    # create_augmentations
+    # augment_one_species
     #-------------------
 
-    def create_augmentations(self, species, num_samples_orig, threshold):
+    def augment_one_species(self, species, num_samples_orig, threshold):
 
         species_wav_input_dir  = os.path.join(self.input_dir_path, species)
         species_wav_output_dir = os.path.join(self.output_dir_path, self.AUG_WAV_DIR, species)
@@ -299,22 +299,22 @@ class Augmenter:
                                    (species_wav_input_dir, 
                                     species_wav_output_dir, 
                                     species_spectrogram_output_dir),
-                                   num_augs_per_sample=num_augs_per_sample
+                                   num_augs=num_augs_per_sample
                                    )
 
     #------------------------------------
     # create_new_sample 
     #-------------------
 
-    def create_new_sample(self, sample_name, paths, num_augs_per_sample=1):
+    def create_new_sample(self, sample_name, paths, num_augs=1):
 
         (species_wav_input_dir, species_wav_output_dir, species_spectrogram_output_dir) = paths
         
-        aug_choices = np.random.choice(self.AUG_NAMES, 
-                                       size=num_augs_per_sample, 
+        aug_choices = np.random.choice(self.AUDIO_AUG_NAMES, 
+                                       size=num_augs, 
                                        p=self.P_DIST, 
                                        replace=False)
-        # input(f"Aug chioces: {aug_choices}")
+        # input(f"Aug choices: {aug_choices}")
         # Warping must be done after all the other augmentations take place, 
         # after spectrogram is created
         warp = False
@@ -358,7 +358,7 @@ class Augmenter:
             # *.wav. Since SoundProcessor.warp_spectrogram expects sample_name to be *.png, we 
             # replace extension. If augmented and sample_name is already *.png, 
             # there is no change.
-            warped_name = SoundProcessor.warp_sepctrogram(sample_name, 
+            warped_name = SoundProcessor.warp_spectrogram(sample_name, 
                                            species_spectrogram_output_dir, 
                                            species_spectrogram_output_dir)
             # if warp is not the only augmentation, 
@@ -415,7 +415,7 @@ if __name__ == '__main__':
 
     augmenter.generate_all_augmentations()
 
-#create_augmentations("TANGYR_S", 8, sample_threshold)
+#augment_one_species("TANGYR_S", 8, sample_threshold)
 
 # Old:
 #   INPUT_DIR_PATH = '../TAKAO_BIRD_WAV_feb20/'
