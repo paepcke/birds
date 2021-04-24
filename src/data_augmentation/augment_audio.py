@@ -359,6 +359,7 @@ class AudioAugmenter:
         '''
         
         failures = None
+        out_path = None
         if method == AugMethod.ADD_NOISE:
             if noise_path is None:
                 noise_path = AudioAugmenter.NOISE_PATH
