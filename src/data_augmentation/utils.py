@@ -108,23 +108,61 @@ class Utils:
     #-------------------
 
     @classmethod
-    def sample_compositions_by_species(cls, path, augmented):
-        num_samples_in = {} # initialize dict - usage num_samples_in['CORALT_S'] = 64
+    def sample_compositions_by_species(cls, path, augmented=False):
+        '''
+        Return a dict with frequencies of sound or spectrogram
+        files in path by species. Two cases:
+        
+           augmented is False:
+               return like
+               
+                         num_samples
+               DYSMEN_S            2
+               HENLES_S            6
+
+           augmented is True:
+           
+			                        add_bg  time_shift  volume  mask  original
+			   AMADEC                   17          12      19     0         0
+			   ARRAUR_C                  0           0       0     0         0
+			   Automolusexsertus        17          17      17     0         0
+			   Brotogerisjugularis       0           0       0     0         0
+			   CORALT_C                 11          11      11     0         0           
+			           
+        :param path: root of species subdirs
+        :type path: src
+        :param augmented: whether or not to differentiate between
+            augmented and not augmented files
+        :type augmented: bool
+        :return: dataframe with distribution
+        :rtype: pandas.DataFrame
+        '''
+
+        # initialize dict - usage num_samples_in['CORALT_S'] = 64
+        num_samples_in = {} 
         for species in os.listdir(path):
             if augmented:
-                aug_type_dict = {"add_bg":0, "time_shift":0, "mask":0, "original":0}
+                aug_type_dict = {"add_bg":0, 
+                                 "time_shift":0,
+                                 "volume":0, 
+                                 "mask":0, 
+                                 "original":0}
                 for sample_name in os.listdir(os.path.join(path, species)):
                     if "_bgd" in sample_name: aug_type_dict["add_bg"] += 1
                     elif "-shift" in sample_name: aug_type_dict["time_shift"] += 1
+                    elif "-volume" in sample_name: aug_type_dict["volume"] += 1
+                    # For Spectrograms:
                     elif "fmask" in sample_name or "tmask" in sample_name: aug_type_dict["mask"] += 1
                     else: aug_type_dict["original"] += 1
                 num_samples_in[species]= aug_type_dict
             else:
+                # Get like: 
+                #     num_samples
+                #     DYSMEN_S            2
+                #     HENLES_S            6
+
                 num_samples_in[species] = {"num_samples":len(os.listdir(os.path.join(path, species)))}
         df = pd.DataFrame.from_dict(num_samples_in, orient='index').sort_index()
-        # Add a nice col header:
-        df.colums = ['num_samples']
-        df.colums
         return df
     
     #------------------------------------
