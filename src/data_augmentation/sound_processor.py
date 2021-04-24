@@ -1,18 +1,21 @@
 import math
-import os
+import os,sys
 from pathlib import Path
 import random
 
 import soundfile
 import librosa
+import numpy as np
 from PIL import Image
 from logging_service import LoggingService
 from scipy.signal import butter
 from scipy.signal import lfilter
 import skimage.io
 
+sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
 from data_augmentation.utils import Utils
-import numpy as np
 
 
 class SoundProcessor:
