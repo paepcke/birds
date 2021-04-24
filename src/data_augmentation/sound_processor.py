@@ -428,7 +428,7 @@ class SoundProcessor:
         '''
         
         clone = spectrogram.copy()
-        clone_noised  = clone + np.random.normal(mean=0, std=std, clone.shape)
+        clone_noised  = clone + np.random.Generator.normal(mean=0, std=std, size=clone.shape)
 
         # We might get out of bounds due to noise addition.
         # Here is where normalization to 1 is assumed.
