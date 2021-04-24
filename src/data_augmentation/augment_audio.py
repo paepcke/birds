@@ -362,9 +362,16 @@ if __name__ == '__main__':
         print(f"Wav file directory {args.input_dir_path} does not exist")
         sys.exit(1)
 
+    # Turn the overwrite_policy arg into the
+    # proper enum mem
+    if args.overwrite_policy:
+        overwrite_policy = WhenAlreadyDone.OVERWRITE
+    else:
+        overwrite_policy = WhenAlreadyDone.ASK
+
     augmenter = AudioAugmenter(args.input_dir_path,
                           plot=args.plot,
-                          overwrite_policy=args.overwrite_policy
+                          overwrite_policy=overwrite_policy
                           )
 
     augmenter.generate_all_augmentations()
