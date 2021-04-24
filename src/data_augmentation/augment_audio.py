@@ -280,6 +280,11 @@ class AudioAugmenter:
             sample_path = in_wav_files[i]
             methods_already_used = methods_applied[sample_path]
             available_methods =  methods_set.difference(methods_already_used)
+            if len(available_methods) < 1:
+                # Used all audio aug methods on this
+                # sample. Reuse them: each introduces
+                # randomness:
+                available_methods = set(AugMethod)
             method = random.sample(available_methods, 1)
             out_path = self.create_new_sample(sample_path, out_dir, method)
             if out_path is not None:
