@@ -3,18 +3,21 @@
 
 import argparse
 from enum import Enum
+import math
 from pathlib import Path
 import random
 import sys, os
 
 from logging_service import LoggingService
 
-sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import AugmentationGoals, WhenAlreadyDone
 from data_augmentation.utils import Utils
+
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
 
 
 #---------------- Enum AugMethod ---------------
@@ -179,7 +182,7 @@ class AudioAugmenter:
         search_root_dir = os.path.join(self.output_dir_path)
         os.system(f"find {search_root_dir} -name \".DS_Store\" -delete")
         
-        self.log.info(f"Total of {num_augmentations} new audio files in {out_dir}")
+        self.log.info(f"Total of {num_augmentations} new audio files")
         
         self.log.info("Done")
         
@@ -241,32 +244,45 @@ class AudioAugmenter:
             return
         
         # How many augs per file?
-        num_avail_methods = len(AugMethod)
-        num_augs_per_file = min(num_avail_methods, num_augs_to_do // num_aud_files)
+        num_augs_per_file = num_augs_to_do // num_aud_files
+        # Num of augs left to do after we will have
+        # applied an even number of augs to each sample:
         remainder = num_augs_to_do - num_augs_per_file * num_aud_files
         new_sample_paths = []
-        
-        # Must keep track of which aug methods
-        # were applied to each file, so that 
-        # remainders can be taken care of later:
-         
-        methods_applied  = {}
-        files_augmented  = 0
-        failures         = 0
+
+        failures = 0
 
         for sample_path in in_wav_files:
             # Create num_augs_per_file samples with
             # different methods:
             
-            # Pick audio aug methods to apply (without replacement):
+            # Pick audio aug methods to apply (without replacement)
+            # Note that if more augs are to be applied to each file
+            # than methods are available, some methods will need
+            # to be applied multiple times; no problem, as each
+            # method includes randomness:
             methods = random.sample(list(AugMethod), num_augs_per_file)
-            methods_applied[sample_path] = set(methods)
             
-            for method in methods:
+            # Now have something like:
+            #     [volume, time-shift], or all methods: [volume, time-shift, noise]
+            
+            if num_augs_per_file > len(methods):
+                # Repeat the methods as often as
+                # needed:
+                num_method_set_repeats = int(math.ceil(num_augs_per_file/len(methods)))
+                # The slice to num_augs_per_file chops off
+                # the possible excess from the array replication: 
+                method_seq = (methods * num_method_set_repeats)[:num_augs_per_file]
+                
+                # Assuming num_augs_per_file is 7, we not have method_seq:
+                #    [m1,m2,m3,m1,m2,m3,m1]
+            else:
+                method_seq = methods
+                
+            for method in method_seq:
                 out_path = self.create_new_sample(sample_path, out_dir, method)
                 if out_path is not None:
                     new_sample_paths.append(out_path)
-                    files_augmented += 1
                 else:
                     failures += 1
 
@@ -274,26 +290,17 @@ class AudioAugmenter:
         # of augmentations to be done that were not
         # covered in the above loop. We apply additional
         # methods to a few of the files:
-        
-        methods_set = set(AugMethod)
+
         for i in range(remainder):
             sample_path = in_wav_files[i]
-            methods_already_used = methods_applied[sample_path]
-            available_methods =  methods_set.difference(methods_already_used)
-            if len(available_methods) < 1:
-                # Used all audio aug methods on this
-                # sample. Reuse them: each introduces
-                # randomness:
-                available_methods = set(AugMethod)
-            method = random.sample(available_methods, 1)
+            method = random.sample(list(AugMethod), 1)
             out_path = self.create_new_sample(sample_path, out_dir, method)
             if out_path is not None:
                 new_sample_paths.append(out_path)
-                files_augmented += 1
             else:
                 failures += 1
 
-        self.log.info(f"Audio aug report: {files_augmented} new files; {failures} failures")
+        self.log.info(f"Audio aug report: {len(new_sample_paths)} new files; {failures} failures")
         return new_sample_paths
 
     #------------------------------------
