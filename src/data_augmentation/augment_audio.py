@@ -159,7 +159,8 @@ class AudioAugmenter:
         	       ...
         	  
         '''
-
+        num_augmentations = 0
+        
         for species, _rows in self.sample_distrib_df.iterrows():
             # For each species, create as many augmentations
             # as was computed earlier:
@@ -168,14 +169,17 @@ class AudioAugmenter:
                 continue
             in_dir = os.path.join(self.input_dir_path, species)
             out_dir = os.path.join(self.output_dir_path, species)
-            self.augment_one_species(in_dir,
-                                     out_dir,
-                                     num_needed_augs 
-                                     )
+            aug_paths = self.augment_one_species(in_dir,
+                                                 out_dir,
+                                                 num_needed_augs 
+                                                 )
+            num_augmentations += len(aug_paths)
 
         # Clean up directory clutter:
         search_root_dir = os.path.join(self.output_dir_path)
         os.system(f"find {search_root_dir} -name \".DS_Store\" -delete")
+        
+        self.log.info(f"Total of {num_augmentations} new audio files in {out_dir}")
         
         self.log.info("Done")
         
@@ -247,6 +251,8 @@ class AudioAugmenter:
         # remainders can be taken care of later:
          
         methods_applied  = {}
+        files_augmented  = 0
+        failures         = 0
 
         for sample_path in in_wav_files:
             # Create num_augs_per_file samples with
@@ -258,7 +264,11 @@ class AudioAugmenter:
             
             for method in methods:
                 out_path = self.create_new_sample(sample_path, out_dir, method)
-                new_sample_paths.append(out_path)
+                if out_path is not None:
+                    new_sample_paths.append(out_path)
+                    files_augmented += 1
+                else:
+                    failures += 1
 
         # Take care of the remainders: the number
         # of augmentations to be done that were not
@@ -272,8 +282,13 @@ class AudioAugmenter:
             available_methods =  methods_set.difference(methods_already_used)
             method = random.sample(available_methods, 1)
             out_path = self.create_new_sample(sample_path, out_dir, method)
-            new_sample_paths.append(out_path)
+            if out_path is not None:
+                new_sample_paths.append(out_path)
+                files_augmented += 1
+            else:
+                failures += 1
 
+        self.log.info(f"Audio aug report: {files_augmented} new files; {failures} failures")
         return new_sample_paths
 
     #------------------------------------
@@ -309,27 +324,43 @@ class AudioAugmenter:
             noises to overlay onto audio (wind, rain, etc.). Ignored
             unless method is AugMethod.ADD_NOISE.
         :type noise_path: str
-        :return: Newly created audio file (full path)
-        :rtype: str
+        :return: Newly created audio file (full path) or None,
+            if a failure occurred.
+        :rtype: {str | None|
         '''
         
+        success = False
         if method == AugMethod.ADD_NOISE:
             if noise_path is None:
                 noise_path = AudioAugmenter.NOISE_PATH
             # Add rain, wind, or such at random:
-            out_path = SoundProcessor.add_background(
-                    sample_path,
-                    self.NOISE_PATH,
-                    out_dir, 
-                    len_noise_to_add=5.0)
+            try:
+                out_path = SoundProcessor.add_background(
+                        sample_path,
+                        self.NOISE_PATH,
+                        out_dir, 
+                        len_noise_to_add=5.0)
+                success = True
+            except Exception as e:
+                sample_fname = Path(sample_path).stem
+                self.log.err(f"Failed to add background sounds to {sample_fname} ({repr(e)})")
 
         elif method == AugMethod.TIME_SHIFT:
-            out_path = SoundProcessor.time_shift(sample_path, out_dir)
-            
+            try:
+                out_path = SoundProcessor.time_shift(sample_path, out_dir)
+                success = True
+            except Exception as e:
+                sample_fname = Path(sample_path).stem                
+                self.log.err(f"Failed to time shift on {sample_fname} ({repr(e)})")
         elif method == AugMethod.VOLUME:
-            out_path = SoundProcessor.change_sample_volume(sample_path, out_dir)
+            try:
+                out_path = SoundProcessor.change_sample_volume(sample_path, out_dir)
+                success = True
+            except Exception as e:
+                sample_fname = Path(sample_path).stem
+                self.log.err(f"Failed to modify volume on {sample_fname} ({repr(e)})")
 
-        return out_path
+        return out_path if success else None
     
     
 # ------------------------ Main ------------

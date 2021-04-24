@@ -220,6 +220,7 @@ class SoundProcessor:
         :type out_dir: str
         :return full path to the new audio file
         :rtype str
+        :raise AssertionError when before & after lengths disagree
         """
         y, sample_rate = librosa.load(file_name)
         length = librosa.get_duration(y, sample_rate)  # returns length in seconds
@@ -236,7 +237,9 @@ class SoundProcessor:
         # end of the after-snippet: 
         y2 = np.append(y0, y1)
         # print(f"Amount: {amount}ms")
-        assert(len(y) == len(y2))
+        assert(len(y) == len(y2),
+               f"Before-len: {len(y)}; after-len: {len(y2)}"
+               )
         # Output the new wav data to a file
         # Get just the 'foo' part of '/blue/red/foo.mp3':
         file_stem = Path(file_name).stem
