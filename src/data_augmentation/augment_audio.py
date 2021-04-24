@@ -270,7 +270,8 @@ class AudioAugmenter:
             # than methods are available, some methods will need
             # to be applied multiple times; no problem, as each
             # method includes randomness:
-            methods = random.sample(list(AugMethod), num_augs_per_file)
+            max_sample_size = min(len(list(AugMethod)), num_augs_per_file)
+            methods = random.sample(list(AugMethod), max_sample_size)
             
             # Now have something like:
             #     [volume, time-shift], or all methods: [volume, time-shift, noise]

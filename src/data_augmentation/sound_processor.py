@@ -38,14 +38,7 @@ class SoundProcessor:
     def __init__(self):
         raise NotImplementedError("Class SoundProcessor is not intended for instantiation")
 
-    #------------------------------------
-    # set_random_seed 
-    #-------------------
-
-    @classmethod
-    def set_random_seed(cls, seed):
-        random.seed(seed)
-        np.random.seed(seed)
+    # ------------------ Operations on Sound Files --------------
 
     #------------------------------------
     # add_background
@@ -248,32 +241,7 @@ class SoundProcessor:
         soundfile.write(out_path, y2, sample_rate0)
         return out_path
 
-    #------------------------------------
-    # warp_spectrogram 
-    #-------------------
-
-    @classmethod
-    def warp_spectrogram(cls, file_name, in_dir, out_dir):
-        """
-        Performs Frequency and Time Masking for Spectrograms
-    
-        :param in_dir: the path to the directory containing spectrograms
-        :type in_dir: str
-        :param out_dir: the path to the directory to save the augmented spectrograms
-        :type out_dir: str
-        :param species: the directory names of the species to modify the wav files of. If species=None, all subdirectories will be used.
-        :type species: str
-        """
-        cls.log.info(f"Adding masks to {file_name}")
-        # print(file_name)
-        orig_spectrogram = np.asarray(Image.open(os.path.join(in_dir, file_name)))
-        freq_masked, freq_name = cls.freq_mask(orig_spectrogram, num_masks=2)
-        masked_spectrogram, time_name = cls.time_mask(freq_masked, num_masks=2)
-        img = Image.fromarray(masked_spectrogram)
-        fpath = Path(file_name)
-        new_file_name = f"{fpath.stem}-{freq_name}-{time_name}.png"
-        outpath = Path.joinpath(fpath.parent, new_file_name)
-        img.save(outpath)
+    # --------------- Operations on Spectrograms Files --------------
 
     #------------------------------------
     # create_spectrogram 
@@ -308,6 +276,176 @@ class SoundProcessor:
 
         # Save as PNG
         skimage.io.imsave(outfile, img)
+
+
+    #------------------------------------
+    # add_time_freq_masks
+    #-------------------
+
+    @classmethod
+    def add_time_freq_masks(cls, file_name, in_dir, out_dir=None):
+        '''
+        Performs Frequency and Time Masking for Spectrograms. The
+        masks add horizontal (freq), and vertical (time) masks.
+
+        :param file_name: name of spectrogram file without parents
+        :type file_name: str
+        :param in_dir: directory in which the spectrogram resides
+        :type in_dir: str
+        :param out_dir: optionally: destination directory. If None,
+            augmented copy is written to in_dir
+        :type out_dir: {None | str}
+        :return: full path of augmented spectrogram
+        :rtype: str
+        '''
+        cls.log.info(f"Adding masks to {file_name}")
+        # print(file_name)
+        orig_spectrogram = np.asarray(Image.open(os.path.join(in_dir, file_name)))
+        freq_masked, freq_name = cls.freq_mask(orig_spectrogram, num_masks=2)
+        masked_spectrogram, time_name = cls.time_mask(freq_masked, num_masks=2)
+        img = Image.fromarray(masked_spectrogram)
+        fpath = Path(file_name)
+        new_file_name = f"{fpath.stem}-{freq_name}-{time_name}.png"
+        if out_dir is None:
+            # Write masked spectrogram to the same dir as original:
+            outpath = Path.joinpath(fpath.parent, new_file_name)
+        else:
+            outpath = Path.joinpath(out_dir, new_file_name)
+        img.save(outpath)
+        return outpath
+
+    #------------------------------------
+    # add_gaussian_noise
+    #-------------------
+
+    @classmethod
+    def add_gaussian_noise(cls, file_name, in_dir, std=1.0, out_dir=None):
+        '''
+        Reads a spectrogram from a file, adds gaussian 'jitter' to it,
+        and writes the result back to a file.
+
+        :param file_name: name of spectrogram file without parents
+        :type file_name: str
+        :param in_dir: directory in which the spectrogram resides
+        :type in_dir: str
+        :param std: standard deviation of the noise; default: 1.0
+        :type std: {int | float}
+        :param out_dir: optionally: destination directory. If None,
+            augmented copy is written to in_dir
+        :type out_dir: {None | str}
+        :return: full path of augmented spectrogram
+        :rtype: str
+        '''
+        
+        if std < 0:
+            raise ValueError(f"Standard deviation must be non-negative; was {std}")
+        
+        cls.log.info(f"Adding masks to {file_name}")
+        # print(file_name)
+        spectro_orig   = np.asarray(Image.open(os.path.join(in_dir, file_name)))
+        spectro_noised = cls.gaussian_noise(spectro_orig, std=std)
+        img = Image.fromarray(spectro_noised)
+        fpath = Path(file_name)
+        new_file_name = f"{fpath.stem}-gauss{std}.png"
+        if out_dir is None:
+            # Write masked spectrogram to the same dir as original:
+            outpath = Path.joinpath(fpath.parent, new_file_name)
+        else:
+            outpath = Path.joinpath(out_dir, new_file_name)
+        img.save(outpath)
+        return outpath
+
+    #------------------------------------
+    # freq_mask 
+    #-------------------
+
+    # Functions below are from https://github.com/zcaceres/spec_augment/blob/master/SpecAugment.ipynb
+    # Functions edited to support np arrays
+    @classmethod
+    def freq_mask(cls, spec, F=30, num_masks=1, replace_with_zero=False):
+        cloned = spec.copy()
+        num_mel_channels = cloned.shape[0]
+        cls.log.info(f"num_mel_channels is {num_mel_channels}")
+    
+        for _i in range(0, num_masks):
+            f = random.randrange(0, F)
+            f_zero = random.randrange(0, num_mel_channels - f)
+    
+            # avoids randrange error if values are equal and range is empty
+            if (f_zero == f_zero + f): continue
+    
+            mask_end = random.randrange(f_zero, f_zero + f)
+            cls.log.info(f"Masked freq is [{f_zero} : {mask_end}]")
+            cls.log.info(f"Mean inserted is {cloned.mean()}")
+            if (replace_with_zero): cloned[f_zero:mask_end] = 0
+            else: cloned[f_zero:mask_end] = cloned.mean()
+        return cloned, f"fmask{int(f_zero)}_{int(mask_end)}"
+
+    #------------------------------------
+    # time_mask 
+    #-------------------
+
+    @classmethod
+    def time_mask(cls, spec, T=40, num_masks=1, replace_with_zero=False):
+        cloned = spec.copy()
+        len_spectro = cloned.shape[1]
+        for _i in range(0, num_masks):
+            t = random.randrange(0, T)
+            t_zero = random.randrange(0, len_spectro - t)
+    
+            # avoids randrange error if values are equal and range is empty
+            if (t_zero == t_zero + t):
+                mask_end = 0
+                continue
+    
+            mask_end = random.randrange(t_zero, t_zero + t)
+            cls.log.info(f"Masked time is [{t_zero} : {mask_end}]")
+            cls.log.info(f"Mean inserted is {cloned.mean()}")
+            if (replace_with_zero): cloned[:,t_zero:mask_end] = 0
+            else: cloned[:,t_zero:mask_end] = cloned.mean()
+        return cloned, f"tmask{int(t_zero)}_{int(mask_end)}"
+    
+
+    #------------------------------------
+    # gaussian_noise
+    #-------------------
+    
+    def gaussian_noise(self, spectrogram, std=1.0):
+        '''
+        Adds Gaussian noise to a numpy array, and returns
+        the result. The std arg controls with width of the
+        (standard) distribution. 
+        
+           Assumes that std is a positive number
+           Assumes that spectrogram is normalized: 0 to 1
+        
+        :param spectrogram: the spectrogram to modify
+        :type spectrogram: np.array
+        :param std: standard deviation of the noise
+        :type std: float
+        :return: spectrogram with random noise added
+        :rtype: np.array
+        '''
+        
+        clone = spectrogram.copy()
+        clone_noised  = clone + np.random.normal(mean=0, std=std, clone.shape)
+
+        # We might get out of bounds due to noise addition.
+        # Here is where normalization to 1 is assumed.
+        clone_clipped = np.clip(clone_noised, 0, 1)
+        return clone_clipped
+
+
+    # ----------------- Utilities --------------
+
+    #------------------------------------
+    # set_random_seed 
+    #-------------------
+
+    @classmethod
+    def set_random_seed(cls, seed):
+        random.seed(seed)
+        np.random.seed(seed)
 
     #------------------------------------
     # define_bandpass 
@@ -361,57 +499,8 @@ class SoundProcessor:
     
         # normalize the volume
         return output / np.max(output)
-    
-    #------------------------------------
-    # freq_mask 
-    #-------------------
 
-    # Functions below are from https://github.com/zcaceres/spec_augment/blob/master/SpecAugment.ipynb
-    # Functions edited to support np arrays
-    @classmethod
-    def freq_mask(cls, spec, F=30, num_masks=1, replace_with_zero=False):
-        cloned = spec.copy()
-        num_mel_channels = cloned.shape[0]
-        cls.log.info(f"num_mel_channels is {num_mel_channels}")
-    
-        for _i in range(0, num_masks):
-            f = random.randrange(0, F)
-            f_zero = random.randrange(0, num_mel_channels - f)
-    
-            # avoids randrange error if values are equal and range is empty
-            if (f_zero == f_zero + f): continue
-    
-            mask_end = random.randrange(f_zero, f_zero + f)
-            cls.log.info(f"Masked freq is [{f_zero} : {mask_end}]")
-            cls.log.info(f"Mean inserted is {cloned.mean()}")
-            if (replace_with_zero): cloned[f_zero:mask_end] = 0
-            else: cloned[f_zero:mask_end] = cloned.mean()
-        return cloned, f"fmask{int(f_zero)}_{int(mask_end)}"
 
-    #------------------------------------
-    # time_mask 
-    #-------------------
-
-    @classmethod
-    def time_mask(cls, spec, T=40, num_masks=1, replace_with_zero=False):
-        cloned = spec.copy()
-        len_spectro = cloned.shape[1]
-        for _i in range(0, num_masks):
-            t = random.randrange(0, T)
-            t_zero = random.randrange(0, len_spectro - t)
-    
-            # avoids randrange error if values are equal and range is empty
-            if (t_zero == t_zero + t):
-                mask_end = 0
-                continue
-    
-            mask_end = random.randrange(t_zero, t_zero + t)
-            cls.log.info(f"Masked time is [{t_zero} : {mask_end}]")
-            cls.log.info(f"Mean inserted is {cloned.mean()}")
-            if (replace_with_zero): cloned[:,t_zero:mask_end] = 0
-            else: cloned[:,t_zero:mask_end] = cloned.mean()
-        return cloned, f"tmask{int(t_zero)}_{int(mask_end)}"
-    
 
     #------------------------------------
     # scale_minmax
