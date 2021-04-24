@@ -7,6 +7,7 @@ import math
 from pathlib import Path
 import random
 import sys, os
+import warnings
 
 from logging_service import LoggingService
 
@@ -139,6 +140,14 @@ class AudioAugmenter:
         self.log.info(f"Results will be in {self.output_dir_path}")
 
         Utils.create_folder(self.output_dir_path, self.overwrite_policy)
+
+        # Hide the UserWarning: PySoundFile failed. Trying audioread instead.
+        warnings.filterwarnings(action="ignore",
+                                message="PySoundFile failed. Trying audioread instead.",
+                                category=UserWarning, 
+                                module='', 
+                                lineno=0)
+
 
     #------------------------------------
     # generate_all_augmentations
