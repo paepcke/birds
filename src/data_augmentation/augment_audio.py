@@ -295,7 +295,8 @@ class AudioAugmenter:
 
         # Get record of which augmentation each file has already
         # received:
-        curr_aug_files = Utils.sample_compositions_by_species(out_dir, augmented=True)
+        augmented_files_root = os.path.dirname(out_dir)
+        curr_aug_files = Utils.sample_compositions_by_species(augmented_files_root, augmented=True)
         # Build: {orig_name : [method1, method2, ...]
         #    where the methods are those which were 
         #    used in an augmentation of the original file:
