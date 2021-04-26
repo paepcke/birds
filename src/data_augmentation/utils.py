@@ -1,6 +1,7 @@
 from enum import Enum
 from fnmatch import fnmatch
 import os
+from pathlib import Path
 import random
 import shutil
 
@@ -8,6 +9,7 @@ import librosa
 
 import numpy as np
 import pandas as pd
+
 
 #-------------------------- Enum for Policy When Output Files Exist -----------
 class WhenAlreadyDone(Enum):
@@ -36,6 +38,29 @@ class AugmentationGoals(Enum):
     MEDIAN  = 1
     MAX     = 2
     NUMBER  = 3 # not implemented yet: Arbitrary number of samples to create
+    
+#---------------- Enum AudAugMethod ---------------
+
+# Audio augmentation methods:
+
+# The value of each element is the 
+# substring used in augmentation files to 
+# indicate the type of aug used:
+
+class AudAugMethod(Enum):
+    ADD_NOISE   = '_bgd'
+    TIME_SHIFT  = '-shift'
+    VOLUME      = '-volume'
+
+#---------------- Enum ImgAugMethod ---------------
+
+# Spectrogram image augmentation methods:
+
+class ImgAugMethod(Enum):
+    GAUSS       = '-gauss'
+    FMASK       = 'fmask'
+    TMASK       = 'tmask'
+    ORIGINAL    = 'original'
 
 #------------------------------ Utility  -------------
 
@@ -338,7 +363,8 @@ class Utils:
                'bird1'   2
                'bird2'   6
         
-        :param aug_volumes: how many augmentations for each species
+        :param aug_volumes: augmentation goal for each species (median of 
+            most popolous species, same as maximally populated, or 1/10th).
         :type aug_volumes: {AugmentationGoals | {str : AugmentationGoals}}
         :param sample_distrib_df: distribution of initially available
             sample numbers for each species
@@ -401,3 +427,133 @@ class Utils:
             aug_requirements[species] = max(0,end_goal - curr_num_recordings)
         
         return aug_requirements 
+
+    #------------------------------------
+    # orig_file_name
+    #-------------------
+    
+    @classmethod
+    def orig_file_name(cls, augmented_fname):
+        '''
+        Given the name of an augmented file, like Amaziliadecora1061880-volume-10.wav,
+        return the original file from which the augmentation was created:
+        Amaziliadecora1061880.wav
+        
+        :param augmented_fname: file name to decipher
+        :type augmented_fname: src
+        :return: the original file name
+        :rtype: str
+        '''
+
+        path_elements = Utils.path_elements(augmented_fname)
+        # Even if given name is already the orginal
+        # name, the following will do the right thing:
+        # return that name:
+        orig_stem = path_elements['fname'].split('-')[0]
+        orig_name = os.path.join(path_elements['root'], orig_stem+path_elements['suffix'])
+        return orig_name
+
+    #------------------------------------
+    # path_elements 
+    #-------------------
+    
+    @classmethod
+    def path_elements(cls, path):
+        '''
+        Given a path, return a dict of its elements:
+        root, fname, and suffix. The method is almost
+        like Path.parts or equivalent os.path method.
+        But the 'root' may be absolute, or relative.
+        And fname is provided without extension.
+        
+          foo/bar/blue.txt ==> {'root' : 'foo/bar',
+                                'fname': 'blue',
+                                'suffix: '.txt'
+                                }
+
+          /foo/bar/blue.txt ==> {'root' : '/foo/bar',
+                                'fname': 'blue',
+                                'suffix: '.txt'
+                                }
+
+          blue.txt ==> {'root' : '',
+                        'fname': 'blue',
+                        'suffix: '.txt'
+                        }
+        
+        :param path: path to dissect
+        :type path: str
+        :return: dict with file elements
+        :rtype: {str : str}
+        '''
+        
+        p = Path(path)
+        
+        f_els = {}
+        
+        # Separate the dir from the fname:
+        # From foo/bar/blue.txt  get ('foo', 'bar', 'blue.txt')
+        # From /foo/bar/blue.txt get ('/', 'foo', 'bar', 'blue.txt')
+        # From blue.txt          get ('blue.txt',)
+        
+        elements = p.parts
+        if len(elements) == 1:
+            # just blue.txt
+            f_els['root']   = ''
+            nm              = elements[0]
+            f_els['fname']  = Path(nm).stem
+            f_els['suffix'] = Path(nm).suffix
+        else:
+            # 
+            f_els['root']     = os.path.join(*list(elements[:-1]))
+            f_els['fname']    = p.stem
+            f_els['suffix']   = p.suffix
+        
+        return f_els
+
+    #------------------------------------
+    # method_from_fname 
+    #-------------------
+    
+    @classmethod
+    def method_from_fname(cls, aug_name):
+
+        # For audio:
+        for meth_enum_el in AudAugMethod:
+            if meth_enum_el.value in aug_name: return meth_enum_el.name
+        # For Spectrograms:
+            
+        for meth_enum_el in ImgAugMethod:
+            if meth_enum_el.value in aug_name: return meth_enum_el.name
+
+    #------------------------------------
+    # unique_fname 
+    #-------------------
+    
+    @classmethod
+    def unique_fname(cls, out_dir, fname):
+        '''
+        Returns a file name unique in the
+        given directory. I.e. NOT globally unique.
+        
+        :param out_dir: directory for which fname is to 
+            be uniquified
+        :type out_dir: str
+        :param fname: unique fname without leading path
+        :type fname: str
+        :return: either new, or given file name such that
+            the returned name is unique within out_dir
+        :rtype: str
+        '''
+        
+        full_path   = os.path.join(out_dir, fname)
+        fname_dict = Utils.path_elements(full_path)
+
+        while True:
+            try:
+                new_path = os.path.join(fname_dict['root'], fname_dict['fname']+fname_dict['suffix'])
+                with open(new_path, 'r') as _fd:
+                    # Succeed in opening, so file exists.
+                    fname_dict['fname'] += '_'
+            except:
+                return new_path

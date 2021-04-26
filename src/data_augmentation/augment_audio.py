@@ -2,7 +2,6 @@
 # coding: utf-8
 
 import argparse
-from enum import Enum
 import math
 from pathlib import Path
 import random
@@ -13,22 +12,13 @@ from logging_service import LoggingService
 
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import AugmentationGoals, WhenAlreadyDone
-from data_augmentation.utils import Utils
-
+from data_augmentation.utils import Utils, AudAugMethod
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-
-
-#---------------- Enum AugMethod ---------------
-#AUDIO_AUG_NAMES
-class AugMethod(Enum):
-    ADD_NOISE   = 0
-    TIME_SHIFT  = 1
-    VOLUME      = 2
-
 #---------------- Class AudioAugmenter ---------------
+
 class AudioAugmenter:
 
     ADD_NOISE   = 1/3 # Add background noise, such as wind or water
@@ -272,8 +262,8 @@ class AudioAugmenter:
             # than methods are available, some methods will need
             # to be applied multiple times; no problem, as each
             # method includes randomness:
-            max_sample_size = min(len(list(AugMethod)), num_augs_per_file)
-            methods = random.sample(list(AugMethod), max_sample_size)
+            max_sample_size = min(len(list(AudAugMethod)), num_augs_per_file)
+            methods = random.sample(list(AudAugMethod), max_sample_size)
             
             # Now have something like:
             #     [volume, time-shift], or all methods: [volume, time-shift, noise]
@@ -303,9 +293,25 @@ class AudioAugmenter:
         # covered in the above loop. We apply additional
         # methods to a few of the files:
 
+        # Get record of which augmentation each file has already
+        # received:
+        curr_aug_files = Utils.sample_compositions_by_species(out_dir, augmented=True)
+        # Build: {orig_name : [method1, method2, ...]
+        #    where the methods are those which were 
+        #    used in an augmentation of the original file:
+        methods_used = {}
+        for aug_file in curr_aug_files:
+            method    = Utils.method_from_fname(aug_file)
+            orig_file = Utils.orig_file_name(aug_file)
+            try:
+                methods_used[orig_file].append(method)
+            except Exception:
+                methods_used[orig_file] = [method]
+
         for i in range(remainder):
+
             sample_path = in_wav_files[i]
-            method = random.sample(list(AugMethod), 1)
+            method = random.sample(list(AudAugMethod), 1)
             out_path_or_err = self.create_new_sample(sample_path, out_dir, method)
             if isinstance(out_path_or_err, Exception):
                     failures.append(out_path_or_err)
@@ -347,10 +353,10 @@ class AudioAugmenter:
         :param out_dir: destination of resulting new samples
         :type out_dir: src
         :param method: the audio augmentation method to apply
-        :type method: AugMethod
+        :type method: AudAugMethod
         :param: noise_path: full path to audio files with background
             noises to overlay onto audio (wind, rain, etc.). Ignored
-            unless method is AugMethod.ADD_NOISE.
+            unless method is AudAugMethod.ADD_NOISE.
         :type noise_path: str
         :return: Newly created audio file (full path) or an Exception
             object whose e.args attribute is a tuple with the error
@@ -360,7 +366,7 @@ class AudioAugmenter:
         
         failures = None
         out_path = None
-        if method == AugMethod.ADD_NOISE:
+        if method == AudAugMethod.ADD_NOISE:
             if noise_path is None:
                 noise_path = AudioAugmenter.NOISE_PATH
             # Add rain, wind, or such at random:
@@ -377,7 +383,7 @@ class AudioAugmenter:
                 e.args = tuple([e.args[0], msg])
                 failures = e
 
-        elif method == AugMethod.TIME_SHIFT:
+        elif method == AudAugMethod.TIME_SHIFT:
             try:
                 out_path = SoundProcessor.time_shift(sample_path, out_dir)
             except Exception as e:
@@ -386,7 +392,7 @@ class AudioAugmenter:
                 self.log.err(msg)
                 e.args = tuple([e.args[0], msg])
                 failures = e
-        elif method == AugMethod.VOLUME:
+        elif method == AudAugMethod.VOLUME:
             try:
                 out_path = SoundProcessor.change_sample_volume(sample_path, out_dir)
             except Exception as e:

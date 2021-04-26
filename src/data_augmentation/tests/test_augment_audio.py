@@ -10,17 +10,14 @@ import unittest
 import warnings
 
 import librosa
+import pandas as pd
 
-from data_augmentation.augment_audio import AugMethod, AudioAugmenter
+from data_augmentation.augment_audio import AudAugMethod, AudioAugmenter
 from data_augmentation.sound_processor import SoundProcessor
-from data_augmentation.utils import AugmentationGoals, WhenAlreadyDone
+from data_augmentation.utils import AugmentationGoals, WhenAlreadyDone, Utils
 
-
-# ******* - In test_create_new_sample(): call with 
-#          permission to overwrite.
-#        - Suppress the retry warnings
-TEST_ALL = True
-#TEST_ALL = False
+#******TEST_ALL = True
+TEST_ALL = False
 
 
 class AudioAugmentationTester(unittest.TestCase):
@@ -124,7 +121,7 @@ class AudioAugmentationTester(unittest.TestCase):
 
         with tempfile.TemporaryDirectory(prefix='aud_tests', dir='/tmp') as tmpdir_nm:
 
-            for method in AugMethod:
+            for method in AudAugMethod:
                 out_file = self.aud_augmenter_median.create_new_sample(self.one_aud_file, 
                                                                 tmpdir_nm,
                                                                 method)
@@ -186,6 +183,45 @@ class AudioAugmentationTester(unittest.TestCase):
         new_files = os.listdir(dirs_with_augs)
         self.assertEqual(len(new_files), 0)
 
+    #------------------------------------
+    # test_compute_num_augs_per_species 
+    #-------------------
+    
+    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_compute_num_augs_per_species(self):
+        
+        # Get
+        #           num_samples
+        #      foo           10
+        #      bar           25
+        #      fum           50
+        aug_goals  = AugmentationGoals.MEDIAN
+        
+        #********
+        population = pd.DataFrame.from_dict({'AMADEC_C' : 20, 'ARRAUR_C' : 36}, 
+                                            orient='index', 
+                                            columns=['num_samples']
+                                            )
+
+         
+        # population = pd.DataFrame.from_dict({'foo' : 10, 'bar' : 25, 'fum' : 50}, 
+                                            # orient='index', 
+                                            # columns=['num_samples']
+                                            # )
+        # #********
+
+        Utils.compute_num_augs_per_species(aug_goals, population)
+        num_samples = population.loc[:,'num_samples']
+        med = num_samples.median()
+        print(f"Median: {med}")
+        
+        # species foo must receive med-10  = 15           augmentations
+        #         bar              med-25  =  0           augmentations
+        #         fum              med-50  = -25 --> 0    augmentations
+
+        truth = {'foo' : 15, 'bar' : 0, 'fum' : 0}
+        res   = Utils.compute_num_augs_per_species(aug_goals, population)
+        self.assertDictEqual(truth, res)
 
 # ------------------------- Utilities -----------------------
 

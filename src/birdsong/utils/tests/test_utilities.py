@@ -120,7 +120,7 @@ class TestUtilities(unittest.TestCase):
         self.assertEqual(len(tally_coll), 4)
         tally = tally_coll[0]
         self.assertEqual(tally.batch_size, 64)
-        self.assertEqual(str(tally.phase), 'LearningPhase.TRAINING')
+        self.assertEqual(str(tally.phase), 'TRAINING')
 
     #------------------------------------
     # test_ellipsed_file_path 

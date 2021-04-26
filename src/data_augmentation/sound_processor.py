@@ -131,7 +131,10 @@ class SoundProcessor:
         noise_file_stem  = Path(background_name).stem
         noise_dur = str(int(noise_start_loc/new_sr * 1000))
         file_name= f"{sample_file_stem}-{noise_file_stem}_bgd{noise_dur}ms.wav"
-        out_path = os.path.join(out_dir, file_name)
+        
+        # Ensure that the fname doesn't exist:
+        uniq_fname = Utils.unique_fname(out_dir, file_name)
+        out_path = os.path.join(out_dir, uniq_fname)
         
         soundfile.write(out_path, new_sample, new_sr)
         return out_path

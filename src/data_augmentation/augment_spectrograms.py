@@ -1,8 +1,11 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+# TODO:
+#    - This is a rough copy of augment_audio, and
+#      needs to be modified to be for spectrograms.
+
 import argparse
-from enum import Enum
 import math
 from pathlib import Path
 import random
@@ -11,22 +14,13 @@ import warnings
 
 from logging_service import LoggingService
 
-from data_augmentation.sound_processor import SoundProcessor
-from data_augmentation.utils import AugmentationGoals, WhenAlreadyDone
-from data_augmentation.utils import Utils
-
-
 sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
+from data_augmentation.sound_processor import SoundProcessor
+from data_augmentation.utils import AugmentationGoals, WhenAlreadyDone
+from data_augmentation.utils import Utils, ImgAugMethod
 
-
-#---------------- Enum AugMethod ---------------
-#AUDIO_AUG_NAMES
-class AugMethod(Enum):
-    ADD_NOISE   = 0
-    TIME_SHIFT  = 1
-    VOLUME      = 2
 
 #---------------- Class AudioAugmenter ---------------
 class SpectrogramAugmenter:
@@ -270,7 +264,7 @@ class SpectrogramAugmenter:
             # than methods are available, some methods will need
             # to be applied multiple times; no problem, as each
             # method includes randomness:
-            methods = random.sample(list(AugMethod), num_augs_per_file)
+            methods = random.sample(list(Utils.AudAugMethod), num_augs_per_file)
             
             # Now have something like:
             #     [volume, time-shift], or all methods: [volume, time-shift, noise]
@@ -302,7 +296,7 @@ class SpectrogramAugmenter:
 
         for i in range(remainder):
             sample_path = in_wav_files[i]
-            method = random.sample(list(AugMethod), 1)
+            method = random.sample(list(Utils.AudAugMethod), 1)
             out_path = self.create_new_sample(sample_path, out_dir, method)
             if out_path is not None:
                 new_sample_paths.append(out_path)
@@ -340,10 +334,10 @@ class SpectrogramAugmenter:
         :param out_dir: destination of resulting new samples
         :type out_dir: src
         :param method: the audio augmentation method to apply
-        :type method: AugMethod
+        :type method: AudAugMethod
         :param: noise_path: full path to audio files with background
             noises to overlay onto audio (wind, rain, etc.). Ignored
-            unless method is AugMethod.ADD_NOISE.
+            unless method is AudAugMethod.ADD_NOISE.
         :type noise_path: str
         :return: Newly created audio file (full path) or None,
             if a failure occurred.
@@ -351,9 +345,9 @@ class SpectrogramAugmenter:
         '''
         
         success = False
-        if method == AugMethod.ADD_NOISE:
+        if method == Utils.AudAugMethod.ADD_NOISE:
             if noise_path is None:
-                noise_path = AudioAugmenter.NOISE_PATH
+                noise_path = SpectrogramAugmenter.NOISE_PATH
             # Add rain, wind, or such at random:
             try:
                 out_path = SoundProcessor.add_background(
@@ -366,14 +360,14 @@ class SpectrogramAugmenter:
                 sample_fname = Path(sample_path).stem
                 self.log.err(f"Failed to add background sounds to {sample_fname} ({repr(e)})")
 
-        elif method == AugMethod.TIME_SHIFT:
+        elif method == Utils.AudAugMethod.TIME_SHIFT:
             try:
                 out_path = SoundProcessor.time_shift(sample_path, out_dir)
                 success = True
             except Exception as e:
                 sample_fname = Path(sample_path).stem                
                 self.log.err(f"Failed to time shift on {sample_fname} ({repr(e)})")
-        elif method == AugMethod.VOLUME:
+        elif method == Utils.AudAugMethod.VOLUME:
             try:
                 out_path = SoundProcessor.change_sample_volume(sample_path, out_dir)
                 success = True
@@ -421,9 +415,9 @@ if __name__ == '__main__':
     else:
         overwrite_policy = WhenAlreadyDone.ASK
 
-    augmenter = AudioAugmenter(args.input_dir_path,
-                          plot=args.plot,
-                          overwrite_policy=overwrite_policy
-                          )
+    augmenter = SpectrogramAugmenter(args.input_dir_path,
+                                     plot=args.plot,
+                                     overwrite_policy=overwrite_policy
+                                     )
 
     augmenter.generate_all_augmentations()
