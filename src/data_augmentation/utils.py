@@ -454,6 +454,28 @@ class Utils:
         return orig_name
 
     #------------------------------------
+    # listdir_abs
+    #-------------------
+    
+    @classmethod
+    def listdir_abs(cls, dir_path):
+        '''
+        Given a directory, return its content files. 
+        But, in contrast to os.listdir(), the returned
+        files are all absolute.
+        
+        :param dir_path: absolute path for directory to list 
+        :type dir_path: src
+        :returns: list of absolute paths to all contained files
+        :rtype: (str)
+        '''
+        abs_path_list = [os.path.join(dir_path, fname)
+                         for fname
+                         in os.listdir(dir_path)
+                         ]
+        return abs_path_list
+
+    #------------------------------------
     # path_elements 
     #-------------------
     

@@ -1,21 +1,24 @@
 import math
-import os,sys
+import os, sys
 from pathlib import Path
 import random
+import warnings
 
-import soundfile
-import librosa
-import numpy as np
 from PIL import Image
+import librosa
 from logging_service import LoggingService
 from scipy.signal import butter
 from scipy.signal import lfilter
 import skimage.io
+import soundfile
+
+from data_augmentation.utils import Utils
+import numpy as np
+
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from data_augmentation.utils import Utils
 
 
 class SoundProcessor:
@@ -82,8 +85,8 @@ class SoundProcessor:
         
         # We will be working with 1 second as the smallest unit of time
         # load all of both wav files and determine the length of each
-        noise, noise_sr = librosa.load(os.path.join(noise_path, background_name))  # type(noise) = np.ndarray
-        orig_recording, orig_sr = librosa.load(file_name)
+        noise, noise_sr = SoundProcessor.load(os.path.join(noise_path, background_name))  # type(noise) = np.ndarray
+        orig_recording, orig_sr = SoundProcessor.load(file_name)
     
         new_sr = math.gcd(noise_sr, orig_sr)
         if noise_sr != orig_sr:
@@ -180,7 +183,7 @@ class SoundProcessor:
         :return full path to the new audio file
         :rtype str
         '''
-        y0, sample_rate0 = librosa.load(sample_path)
+        y0, sample_rate0 = SoundProcessor.load(sample_path)
 
         # Adjust the volume
         factor = random.randrange(-12, 12, 1)
@@ -218,16 +221,16 @@ class SoundProcessor:
         :rtype str
         :raise AssertionError when before & after lengths disagree
         """
-        y, sample_rate = librosa.load(file_name)
+        y, sample_rate = SoundProcessor.load(file_name)
         length = librosa.get_duration(y, sample_rate)  # returns length in seconds
         # shifts the recording by a random amount between 0 and length of recording by a multiple of 10 ms
         amount = random.randrange(0, int(length)*10, 1)/10  # shift is in seconds
     
         # Create two seperate sections of the audio
         # Snippet after the shift amount:
-        y0, sample_rate0 = librosa.load(file_name, offset=amount)
+        y0, sample_rate0 = SoundProcessor.load(file_name, offset=amount)
         # Snippet before the shift amount:
-        y1, _sample_rate1 = librosa.load(file_name, duration=amount)
+        y1, _sample_rate1 = SoundProcessor.load(file_name, duration=amount)
     
         # Append the before-snippet to the 
         # end of the after-snippet: 
@@ -515,3 +518,34 @@ class SoundProcessor:
         X_scaled = X_std * (max_val - min_val) + min_val
         return X_scaled
 
+    #------------------------------------
+    # load 
+    #-------------------
+    
+    @classmethod
+    def load(cls, fname):
+        '''
+        Loads a .wav or mp3 audio file,
+        and returns a numpy array, and
+        the recording's sample rate.
+
+        :param fname: audio file to load
+        :type fname: str
+        :returns the recording and the associated sample rate
+        :rtype: (np.array, float)
+        :raises FileNotFoundError
+        '''
+        
+        if not os.path.exists(fname):
+            raise FileNotFoundError(f"File {fname} does not exist.")
+
+        # Hide the UserWarning: PySoundFile failed. Trying audioread instead.
+        # Happens when loading mp3 files:
+        warnings.filterwarnings(action="ignore",
+                                message="PySoundFile failed. Trying audioread instead.",
+                                category=UserWarning, 
+                                module='', 
+                                lineno=0)
+
+        recording, sample_rate = librosa.load(fname)
+        return recording, sample_rate
