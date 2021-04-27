@@ -20,7 +20,7 @@ def test_time_shift():
 
 def test_create_spectrogram():
     file_name, in_dir, out_dir = "Corapipoaltera13180.wav", "raw_wav_files/", "spectrogram_augmented/"
-    spectrogram_name = aug.create_spectrogram(file_name, in_dir, out_dir, n_mels=128)
+    spectrogram_name = aug.create_spectrograms(file_name, in_dir, out_dir, n_mels=128)
     print(f"Spectrogram name: {spectrogram_name}")
 
 def test_warp_spectrogram():

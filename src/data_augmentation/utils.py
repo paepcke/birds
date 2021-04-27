@@ -579,3 +579,21 @@ class Utils:
                     fname_dict['fname'] += '_'
             except:
                 return new_path
+
+    #------------------------------------
+    # is.audio_file
+    #-------------------
+    
+    @classmethod
+    def is_audio_file(cls, fpath):
+        '''
+        Very primitive check whether given file is
+        and audio file. Just check the extension.
+        
+        :param fpath: path to check
+        :type fpath: str
+        :return True if extension is .wav or .mp3, else False
+        :rtype bool
+        '''
+        return Path(fpath).suffix in ('.wav', '.mp3')
+    

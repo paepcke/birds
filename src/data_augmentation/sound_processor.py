@@ -250,11 +250,11 @@ class SoundProcessor:
     # --------------- Operations on Spectrograms Files --------------
 
     #------------------------------------
-    # create_spectrogram 
+    # create_spectrograms 
     #-------------------
 
     @classmethod
-    def create_spectrogram(cls, audio_sample, sr, outfile, n_mels=128):
+    def create_spectrograms(cls, audio_sample, sr, outfile, n_mels=128):
         '''
         Create and save a spectrogram from an audio 
         sample. Bandpass filter is applied, Mel scale is used,
