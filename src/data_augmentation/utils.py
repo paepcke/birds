@@ -597,3 +597,14 @@ class Utils:
         '''
         return Path(fpath).suffix in ('.wav', '.mp3')
     
+    #------------------------------------
+    # user_confirm
+    #-------------------
+    
+    @classmethod
+    def user_confirm(cls, prompt_for_yes_no, default='Y'):
+        resp = input(f"{prompt_for_yes_no} (default {default}): ")
+        if resp in ('y','Y','yes','Yes', ''):
+            return True
+        else:
+            return False

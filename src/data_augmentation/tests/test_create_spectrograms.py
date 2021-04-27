@@ -8,7 +8,7 @@ import tempfile
 import unittest
 
 from data_augmentation.create_spectrograms import Spectrogrammer
-from data_augmentation.utils import Utils
+from data_augmentation.utils import Utils, WhenAlreadyDone
 
 
 TEST_ALL = True
@@ -59,7 +59,9 @@ class TestSpectrogramCreator(unittest.TestCase):
                                          prefix='test_spectro') as dst_dir:
             dirs_filled = Spectrogrammer.create_spectrograms(src_dir, 
                                                              dst_dir, 
-                                                             num=2)
+                                                             num=2,
+                                                             overwrite_policy=WhenAlreadyDone.OVERWRITE
+                                                             )
 
             # Check that each spectro is of
             # reasonable size:
