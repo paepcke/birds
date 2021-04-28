@@ -15,8 +15,8 @@ from data_augmentation.utils import ImgAugMethod, Utils
 from data_augmentation.utils import WhenAlreadyDone, AugmentationGoals
 
 
-#*******TEST_ALL = True
-TEST_ALL = False
+TEST_ALL = True
+#TEST_ALL = False
 
 
 class TestAugmentSpectrograms(unittest.TestCase):

@@ -162,6 +162,7 @@ class AudioAugmenter:
         	  
         '''
         num_augmentations = 0
+        failures = 0
         
         for species, _rows in self.sample_distrib_df.iterrows():
             # For each species, create as many augmentations
@@ -182,7 +183,7 @@ class AudioAugmenter:
         os.system(f"find {search_root_dir} -name \".DS_Store\" -delete")
         
         self.log.info(f"Total of {num_augmentations} new audio files")
-        if len(failures) > 0:
+        if failures > 0:
             self.log.info(f"Grant total of audio augmentation failures: {len(failures)}")
         
         self.log.info("Done")
@@ -231,50 +232,54 @@ class AudioAugmenter:
         # Create subfolder for the given species:
         if not Utils.create_folder(out_dir, self.overwrite_policy):
             self.log.info(f"Skipping augmentations for {species_name}")
-            return
-    
-        in_wav_files     = [os.path.join(in_dir, fname) 
-                            for fname 
-                            in os.listdir(in_dir)
-                            ]
-        num_aud_files = len(in_wav_files)
+            return []
 
+        # Get dict: {full-path-to-an-audio_file : 0}
+        # The zeroes will be counts of augmentations
+        # needed for that file:    
+        in_wav_files     = {full_in_path : 0
+                            for full_in_path
+                            in Utils.listdir_abs(in_dir)
+                            } 
         # Cannot do augmentations for species with 0 samples
-        if num_aud_files == 0:
+        if len(in_wav_files) == 0:
             self.log.info(f"Skipping for {species_name} since there are no original samples.")
-            return
-        
-        # How many augs per file?
-        num_augs_per_file = num_augs_to_do // num_aud_files
-        # Num of augs left to do after we will have
-        # applied an even number of augs to each sample:
-        remainder = num_augs_to_do - num_augs_per_file * num_aud_files
+            return []
+
+        # Distribute augmenations across the original
+        # input files:
+        aug_assigned = 0
+        while aug_assigned < num_augs_to_do:
+            for fname in in_wav_files.keys():
+                in_wav_files[fname] += 1
+                aug_assigned += 1
+                if aug_assigned >= num_augs_to_do:
+                    break
         new_sample_paths = []
+        failures = 0
 
-        failures = []
+        for in_fname, num_augs_this_file in in_wav_files.items():
 
-        for sample_path in in_wav_files:
-            # Create num_augs_per_file samples with
-            # different methods:
-            
+            # Create augs with different methods:
+
             # Pick audio aug methods to apply (without replacement)
             # Note that if more augs are to be applied to each file
             # than methods are available, some methods will need
             # to be applied multiple times; no problem, as each
             # method includes randomness:
-            max_sample_size = min(len(list(AudAugMethod)), num_augs_per_file)
-            methods = random.sample(list(AudAugMethod), max_sample_size)
+            max_methods_sample_size = min(len(list(AudAugMethod)), num_augs_this_file)
+            methods = random.sample(list(AudAugMethod), max_methods_sample_size)
             
             # Now have something like:
             #     [volume, time-shift], or all methods: [volume, time-shift, noise]
             
-            if num_augs_per_file > len(methods):
+            if num_augs_this_file > len(methods):
                 # Repeat the methods as often as
                 # needed:
-                num_method_set_repeats = int(math.ceil(num_augs_per_file/len(methods)))
-                # The slice to num_augs_per_file chops off
+                num_method_set_repeats = int(math.ceil(num_augs_this_file/len(methods)))
+                # The slice to num_augs_this_file chops off
                 # the possible excess from the array replication: 
-                method_seq = (methods * num_method_set_repeats)[:num_augs_per_file]
+                method_seq = (methods * num_method_set_repeats)[:num_augs_this_file]
                 
                 # Assuming num_augs_per_file is 7, we not have method_seq:
                 #    [m1,m2,m3,m1,m2,m3,m1]
@@ -282,47 +287,13 @@ class AudioAugmenter:
                 method_seq = methods
                 
             for method in method_seq:
-                out_path_or_err = self.create_new_sample(sample_path, out_dir, method)
+                out_path_or_err = self.create_new_sample(in_fname, out_dir, method)
                 if isinstance(out_path_or_err, Exception):
-                    failures.append(out_path_or_err)
+                    failures += 1
                 else:
                     new_sample_paths.append(out_path_or_err)
 
-        # Take care of the remainders: the number
-        # of augmentations to be done that were not
-        # covered in the above loop. We apply additional
-        # methods to a few of the files:
-
-        # Get record of which augmentation each file has already
-        # received:
-        augmented_files_root = os.path.dirname(out_dir)
-        curr_aug_files = Utils.sample_compositions_by_species(augmented_files_root, augmented=True)
-        # Build: {orig_name : [method1, method2, ...]
-        #    where the methods are those which were 
-        #    used in an augmentation of the original file:
-        methods_used = {}
-        for aug_file in curr_aug_files:
-            method    = Utils.method_from_fname(aug_file)
-            orig_file = Utils.orig_file_name(aug_file)
-            try:
-                methods_used[orig_file].append(method)
-            except Exception:
-                methods_used[orig_file] = [method]
-
-        for i in range(remainder):
-
-            sample_path = in_wav_files[i]
-            method = random.sample(list(AudAugMethod), 1)
-            out_path_or_err = self.create_new_sample(sample_path, out_dir, method)
-            if isinstance(out_path_or_err, Exception):
-                    failures.append(out_path_or_err)
-            else:
-                new_sample_paths.append(out_path_or_err)
-
         self.log.info(f"Audio aug report: {len(new_sample_paths)} new files; {failures} failures")
-        if len(failures) > 0:
-            for failure in failures:
-                self.log.err(f"***** {failure.args}")
                 
         return new_sample_paths, failures
 
@@ -449,11 +420,6 @@ if __name__ == '__main__':
                           )
 
     augmenter.generate_all_augmentations()
-
-#augment_one_species("TANGYR_S", 8, sample_threshold)
-
-# Old:
-#   INPUT_DIR_PATH = '../TAKAO_BIRD_WAV_feb20/'
 
 
 

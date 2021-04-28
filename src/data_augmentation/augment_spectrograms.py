@@ -200,50 +200,54 @@ class SpectrogramAugmenter:
             self.log.info(f"Skipping augmentations for {species_name}")
             return []
     
-        in_spectro_files     = [os.path.join(in_dir, fname) 
-                            for fname 
-                            in os.listdir(in_dir)
-                            ]
-        num_spectro_files = len(in_spectro_files)
 
+        # Get dict: {full-path-to-an-audio_file : 0}
+        # The zeroes will be counts of augmentations
+        # needed for that file:    
+        in_spectro_files     = {full_in_path : 0
+                                for full_in_path
+                                in Utils.listdir_abs(in_dir)
+                                } 
         # Cannot do augmentations for species with 0 samples
-        if num_spectro_files == 0:
+        if len(in_spectro_files) == 0:
             self.log.info(f"Skipping for {species_name} since there are no original samples.")
             return []
-        
-        # How many augs per file?
-        num_augs_per_file = num_spectro_files // num_augs_to_do 
-        # Num of augs left to do after we will have
-        # applied an even number of augs to each sample:
-        remainder = num_augs_to_do - num_augs_per_file * num_spectro_files
-        new_sample_paths = []
 
+        # Distribute augmenations across the original
+        # input files:
+        aug_assigned = 0
+        while aug_assigned < num_augs_to_do:
+            for fname in in_spectro_files.keys():
+                in_spectro_files[fname] += 1
+                aug_assigned += 1
+                if aug_assigned >= num_augs_to_do:
+                    break
+
+        new_sample_paths = []
         failures = 0
 
-        for sample_path in in_spectro_files:
-            # Create num_augs_per_file samples with
-            # different methods:
-            
-            # Pick spectro aug methods to apply (without replacement)
+        for in_fname, num_augs_this_file in in_spectro_files.items():
+
+            # Create augs with different methods:
+
+            # Pick audio aug methods to apply (without replacement)
             # Note that if more augs are to be applied to each file
             # than methods are available, some methods will need
             # to be applied multiple times; no problem, as each
             # method includes randomness:
-            method_list = list(ImgAugMethod)
-            methods = random.sample(method_list, 
-                                    min(num_augs_per_file, len(method_list))
-                                    )
+            max_methods_sample_size = min(len(list(ImgAugMethod)), num_augs_this_file)
+            methods = random.sample(list(ImgAugMethod), max_methods_sample_size)
             
             # Now have something like:
-            #     [noise, fmask], or all methods: [noise, fmask, tmask]
+            #     [volume, time-shift], or all methods: [volume, time-shift, noise]
             
-            if num_augs_per_file > len(method_list):
+            if num_augs_this_file > len(methods):
                 # Repeat the methods as often as
                 # needed:
-                num_method_set_repeats = int(math.ceil(num_augs_per_file/len(methods)))
-                # The slice to num_augs_per_file chops off
+                num_method_set_repeats = int(math.ceil(num_augs_this_file/len(methods)))
+                # The slice to num_augs_this_file chops off
                 # the possible excess from the array replication: 
-                method_seq = (methods * num_method_set_repeats)[:num_augs_per_file]
+                method_seq = (methods * num_method_set_repeats)[:num_augs_this_file]
                 
                 # Assuming num_augs_per_file is 7, we not have method_seq:
                 #    [m1,m2,m3,m1,m2,m3,m1]
@@ -251,25 +255,11 @@ class SpectrogramAugmenter:
                 method_seq = methods
                 
             for method in method_seq:
-                out_path = self.create_new_sample(sample_path, out_dir, method)
-                if out_path is not None:
-                    new_sample_paths.append(out_path)
-                else:
+                out_path_or_err = self.create_new_sample(in_fname, out_dir, method)
+                if isinstance(out_path_or_err, Exception):
                     failures += 1
-
-        # Take care of the remainders: the number
-        # of augmentations to be done that were not
-        # covered in the above loop. We apply additional
-        # methods to a few of the files:
-
-        for i in range(remainder):
-            sample_path = in_spectro_files[i]
-            method = random.sample(list(ImgAugMethod), 1)
-            out_path = self.create_new_sample(sample_path, out_dir, method)
-            if out_path is not None:
-                new_sample_paths.append(out_path)
-            else:
-                failures += 1
+                else:
+                    new_sample_paths.append(out_path_or_err)
 
         self.log.info(f"Spectrogram aug report: {len(new_sample_paths)} new files; {failures} failures")
         return new_sample_paths

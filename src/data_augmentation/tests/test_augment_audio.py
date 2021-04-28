@@ -16,8 +16,8 @@ from data_augmentation.augment_audio import AudAugMethod, AudioAugmenter
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import AugmentationGoals, WhenAlreadyDone, Utils
 
-#******TEST_ALL = True
-TEST_ALL = False
+TEST_ALL = True
+#TEST_ALL = False
 
 
 class AudioAugmentationTester(unittest.TestCase):
@@ -153,7 +153,7 @@ class AudioAugmentationTester(unittest.TestCase):
     # test_generate_all_augmentations_max 
     #-------------------
     
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_generate_all_augmentations_max(self):
         self.aud_augmenter_max.generate_all_augmentations()
         dirs_with_augs = os.path.join(self.curr_dir,
@@ -197,18 +197,10 @@ class AudioAugmentationTester(unittest.TestCase):
         #      fum           50
         aug_goals  = AugmentationGoals.MEDIAN
         
-        #********
-        population = pd.DataFrame.from_dict({'AMADEC_C' : 20, 'ARRAUR_C' : 36}, 
+        population = pd.DataFrame.from_dict({'foo' : 10, 'bar' : 25, 'fum' : 50}, 
                                             orient='index', 
                                             columns=['num_samples']
                                             )
-
-         
-        # population = pd.DataFrame.from_dict({'foo' : 10, 'bar' : 25, 'fum' : 50}, 
-                                            # orient='index', 
-                                            # columns=['num_samples']
-                                            # )
-        # #********
 
         Utils.compute_num_augs_per_species(aug_goals, population)
         num_samples = population.loc[:,'num_samples']
