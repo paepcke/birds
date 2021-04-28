@@ -55,7 +55,8 @@ class SpectrogramCreator:
             audio_dirs = [in_dir]
         else:
             audio_dirs = dirs_to_do
-            
+        
+        cls.log.info(f"Number of audio file dirs for which to create spectrograms: {len(audio_dirs)}")
         # Go through the absolute paths of the director(y/ies):
         for one_dir in audio_dirs:
             # At the destination, create a directory
@@ -64,6 +65,7 @@ class SpectrogramCreator:
             dst_dir = os.path.join(out_dir, Path(one_dir).stem)
             
             if not os.path.exists(dst_dir):
+                cls.log.info(f"Creating dest dir {dst_dir}")
                 os.makedirs(dst_dir)
                 
             # Check overwrite policy: if the destination
@@ -75,10 +77,12 @@ class SpectrogramCreator:
             # the files right now: 
             if len(existing_files) > 0:
                 if overwrite_policy == WhenAlreadyDone.OVERWRITE:
+                    cls.log.info(f"Removing any existing files in {dst_dir}")
                     for fname in existing_files:
                         os.remove(fname)
 
             for i, aud_file in enumerate(Utils.listdir_abs(one_dir)):
+                cls.log.info(f"Creating spectros for audio in {one_dir}")
                 if not Utils.is_audio_file(aud_file):
                     continue
                 sound, sr = SoundProcessor.load_audio(aud_file)
@@ -140,7 +144,7 @@ if __name__ == '__main__':
         overwrite_policy = WhenAlreadyDone.ASK
         
         SpectrogramCreator.create_spectrograms(args.indir, 
-                                           args.outdir,
-                                           num=args.num,
-                                           overwrite_policy=overwrite_policy
-                                           )
+                                               args.outdir,
+                                               num=args.num,
+                                               overwrite_policy=overwrite_policy
+                                               )
