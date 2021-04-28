@@ -11,12 +11,11 @@ import torch.optim as optim
 import torch.multiprocessing
 import logging
 from datetime import datetime, date, time
-from nets import BasicNet
+# from nets import BasicNet
 import json
 
 IMG_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif', '.tiff', '.webp')
 FILEPATH = "/home/data/birds/ENSEMBLE_DATA/"
-
 EPOCHS = 6
 SEED = 42
 BATCH_SIZE = 32
