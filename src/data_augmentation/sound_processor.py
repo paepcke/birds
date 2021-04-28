@@ -121,14 +121,14 @@ class SoundProcessor:
         during_noise = orig_recording[noise_start_loc: noise_start_loc + samples_per_segment]
         after_noise = orig_recording[noise_start_loc + samples_per_segment:]
     
-        assert(len(during_noise) == len(noise))
+        assert len(during_noise) == len(noise)
     
         segment_with_noise = during_noise + Utils.noise_multiplier(orig_recording, noise) * noise
         first_half   = np.concatenate((before_noise, segment_with_noise))
         new_sample   = np.concatenate((first_half, after_noise)) # what i think it should be
         new_duration = librosa.get_duration(new_sample, float(new_sr))
     
-        assert(new_duration == orig_duration)
+        assert new_duration == orig_duration
         # File name w/o extension:
         sample_file_stem = Path(file_name).stem
         noise_file_stem  = Path(background_name).stem
@@ -236,9 +236,8 @@ class SoundProcessor:
         # end of the after-snippet: 
         y2 = np.append(y0, y1)
         # print(f"Amount: {amount}ms")
-        assert(len(y) == len(y2),
-               f"Before-len: {len(y)}; after-len: {len(y2)}"
-               )
+        assert len(y) == len(y2), f"Before-len: {len(y)}; after-len: {len(y2)}"
+
         # Output the new wav data to a file
         # Get just the 'foo' part of '/blue/red/foo.mp3':
         file_stem = Path(file_name).stem
@@ -321,24 +320,19 @@ class SoundProcessor:
         return outpath
 
     #------------------------------------
-    # add_gaussian_noise
+    # add_noise
     #-------------------
 
     @classmethod
-    def add_gaussian_noise(cls, file_name, in_dir, std=1.0, out_dir=None):
+    def add_noise(cls, spectrogram, std=1.0):
         '''
-        Reads a spectrogram from a file, adds gaussian 'jitter' to it,
+        Reads a spectrogram from a file, adds uniform noise 'jitter' to it,
         and writes the result back to a file.
 
-        :param file_name: name of spectrogram file without parents
-        :type file_name: str
-        :param in_dir: directory in which the spectrogram resides
-        :type in_dir: str
+        :param spectrogram: the spectrogram to modify
+        :type spectrogram: np.array
         :param std: standard deviation of the noise; default: 1.0
         :type std: {int | float}
-        :param out_dir: optionally: destination directory. If None,
-            augmented copy is written to in_dir
-        :type out_dir: {None | str}
         :return: full path of augmented spectrogram
         :rtype: str
         '''
@@ -346,20 +340,10 @@ class SoundProcessor:
         if std < 0:
             raise ValueError(f"Standard deviation must be non-negative; was {std}")
         
-        cls.log.info(f"Adding masks to {file_name}")
-        # print(file_name)
-        spectro_orig   = np.asarray(Image.open(os.path.join(in_dir, file_name)))
-        spectro_noised = cls.gaussian_noise(spectro_orig, std=std)
-        img = Image.fromarray(spectro_noised)
-        fpath = Path(file_name)
-        new_file_name = f"{fpath.stem}-gauss{std}.png"
-        if out_dir is None:
-            # Write masked spectrogram to the same dir as original:
-            outpath = Path.joinpath(fpath.parent, new_file_name)
-        else:
-            outpath = Path.joinpath(out_dir, new_file_name)
-        img.save(outpath)
-        return outpath
+        cls.log.info(f"Adding uniform noise to spectrogram")
+        new_spectro = spectrogram.copy()
+        spectro_noised = cls.random_noise(new_spectro, std=std)
+        return spectro_noised 
 
     #------------------------------------
     # freq_mask 
@@ -368,79 +352,151 @@ class SoundProcessor:
     # Functions below are from https://github.com/zcaceres/spec_augment/blob/master/SpecAugment.ipynb
     # Functions edited to support np arrays
     @classmethod
-    def freq_mask(cls, spec, F=30, num_masks=1, replace_with_zero=False):
+    def freq_mask(cls, spec, max_height=40, num_masks=1, replace_with_zero=False):
+        '''
+        Takes a spectrogram array, and returns a new
+        spectrogram array with a frequency mask added. 
+        Also returns a suggested file name based on
+        the randomly chosen mask parameters.
+        
+        :param spec: the spectrogram
+        :type spec: np.array
+        :param max_height: max height of horizontal stripes
+        :type max_height: int
+        :param num_masks: how many masks to add
+        :type num_masks: int
+        :param replace_with_zero: if True, replaces the existing
+            values with zero. Else replaces them with the mean
+            of the entire image
+        :type replace_with_zero: bool
+        :returns a new array, and a suggested file name
+        :rtype (np.array, str)
+        '''
         cloned = spec.copy()
         num_mel_channels = cloned.shape[0]
-        cls.log.info(f"num_mel_channels is {num_mel_channels}")
-    
+        if max_height >= num_mel_channels:
+            # Ensure that random choice of 
+            # mask height is at least 1 below:
+            max_height = num_mel_channels - 1
+
         for _i in range(0, num_masks):
-            f = random.randrange(0, F)
-            f_zero = random.randrange(0, num_mel_channels - f)
+            # Choose random stripe height within given limit,
+            # but at least 1:
+            mask_height = random.randrange(1, max_height)
+            # Random choice of where to place the stripe:
+            f_zero = random.randrange(0, num_mel_channels - mask_height)
     
             # avoids randrange error if values are equal and range is empty
-            if (f_zero == f_zero + f): continue
+            #if (f_zero == f_zero + mask_height): continue
     
-            mask_end = random.randrange(f_zero, f_zero + f)
-            cls.log.info(f"Masked freq is [{f_zero} : {mask_end}]")
-            cls.log.info(f"Mean inserted is {cloned.mean()}")
-            if (replace_with_zero): cloned[f_zero:mask_end] = 0
-            else: cloned[f_zero:mask_end] = cloned.mean()
-        return cloned, f"fmask{int(f_zero)}_{int(mask_end)}"
+            mask_end = f_zero + mask_height
+            if (replace_with_zero): 
+                cloned[f_zero:mask_end,:] = 0
+            else:
+                cloned[f_zero:mask_end,:] = cloned.mean()
+        return cloned, f"-fmask{int(f_zero)}_{int(mask_end)}"
 
     #------------------------------------
     # time_mask 
     #-------------------
 
     @classmethod
-    def time_mask(cls, spec, T=40, num_masks=1, replace_with_zero=False):
+    def time_mask(cls, spec, max_width=20, num_masks=1, replace_with_zero=False):
+        '''
+        Takes a spectrogram array, and returns a new
+        spectrogram array with a time mask added. 
+        Also returns a suggested file name based on
+        the randomly chosen time mask parameters.
+        
+        :param spec: the spectrogram
+        :type spec: np.array
+        :param max_width: width of vertical stripes
+        :type max_width: int
+        :param num_masks: how many masks to add
+        :type num_masks: int
+        :param replace_with_zero: if True, replaces the existing
+            values with zero. Else replaces them with the mean
+            of the entire image
+        :type replace_with_zero: bool
+        :returns a new array, and a suggested file name
+        :rtype (np.array, str)
+        '''
         cloned = spec.copy()
+        min_width   = 1 # Time slice
         len_spectro = cloned.shape[1]
+        # Is width of stripe ge width of spectro?
+        if max_width >= len_spectro:
+            max_width = len_spectro - 1 
+            
         for _i in range(0, num_masks):
-            t = random.randrange(0, T)
-            t_zero = random.randrange(0, len_spectro - t)
+            # Random stripe width:
+            mask_width = random.randrange(min_width, max_width)
+            # Random stripe placement: up to case 
+            # when stripe is at the edge of the spectro:
+            t_zero = random.randrange(0, len_spectro - mask_width)
     
             # avoids randrange error if values are equal and range is empty
-            if (t_zero == t_zero + t):
-                mask_end = 0
-                continue
+            #if (t_zero == t_zero + t):
+            #    mask_end = 0
+            #    continue
     
-            mask_end = random.randrange(t_zero, t_zero + t)
-            cls.log.info(f"Masked time is [{t_zero} : {mask_end}]")
-            cls.log.info(f"Mean inserted is {cloned.mean()}")
-            if (replace_with_zero): cloned[:,t_zero:mask_end] = 0
-            else: cloned[:,t_zero:mask_end] = cloned.mean()
-        return cloned, f"tmask{int(t_zero)}_{int(mask_end)}"
-    
+            mask_end = t_zero + mask_width
+            cls.log.info(f"Time masked width: [{t_zero} : {mask_end}]")
+            if (replace_with_zero): 
+                cloned[:,t_zero:mask_end] = 0
+            else:
+                spectro_mean = cloned.mean()
+                cls.log.info(f"Mean inserted is {spectro_mean}")
+                cloned[:,t_zero:mask_end] = spectro_mean
+
+        return cloned, f"-tmask{int(t_zero)}_{int(mask_end)}"
 
     #------------------------------------
-    # gaussian_noise
+    # random_noise
     #-------------------
     
-    def gaussian_noise(self, spectrogram, std=1.0):
+    @classmethod
+    def random_noise(cls, spectrogram, noise_type='uniform', std=1.0):
         '''
-        Adds Gaussian noise to a numpy array, and returns
+        Adds Gaussian or uniform noise to a numpy array, and returns
         the result. The std arg controls with width of the
         (standard) distribution. 
         
            Assumes that std is a positive number
-           Assumes that spectrogram is normalized: 0 to 1
+           Assumes that spectrogram is normalized: 0 to 255
         
         :param spectrogram: the spectrogram to modify
         :type spectrogram: np.array
+        :param noise_type: whether to add normal (gaussian) or uniform noise;
+            must be 'uniform' or 'normal'
+        :type noise_type: str
         :param std: standard deviation of the noise
         :type std: float
         :return: spectrogram with random noise added
         :rtype: np.array
         '''
+    
+        if noise_type not in ('uniform', 'normal'):
+            raise ValueError(f"Noise type must be 'uniform', or 'normal'")
         
         clone = spectrogram.copy()
-        clone_noised  = clone + np.random.Generator.normal(mean=0, std=std, size=clone.shape)
+        if noise_type == 'uniform':
+            noise = np.random.Generator.normal(np.random.default_rng(),
+                                               loc=0.0, 
+                                               scale=std, 
+                                               size=clone.shape)
+        else:
+            noise = np.random.Generator.uniform(np.random.default_rng(),
+                                                low=0, 
+                                                high=1.0, 
+                                                size=clone.shape)
+        clone_noised  = clone + np.uint8(np.round(noise))
 
         # We might get out of bounds due to noise addition.
-        # Here is where normalization to 1 is assumed.
-        clone_clipped = np.clip(clone_noised, 0, 1)
-        return clone_clipped
-
+        # Since this method is intended for images, the
+        # required value range is 0-255
+        clone_clipped = np.clip(clone_noised, 0, 255)
+        return clone_clipped, f"-noise{noise.mean()}"
 
     # ----------------- Utilities --------------
 
@@ -519,11 +575,11 @@ class SoundProcessor:
         return X_scaled
 
     #------------------------------------
-    # load 
+    # load_audio 
     #-------------------
     
     @classmethod
-    def load(cls, fname):
+    def load_audio(cls, fname):
         '''
         Loads a .wav or mp3 audio file,
         and returns a numpy array, and
@@ -549,3 +605,41 @@ class SoundProcessor:
 
         recording, sample_rate = librosa.load(fname)
         return recording, sample_rate
+
+    #------------------------------------
+    # load_spectrogram 
+    #-------------------
+    
+    @classmethod
+    def load_spectrogram(cls, fname):
+        '''
+        Loads a .png spectrogram file,
+        and returns a numpy array
+
+        :param fname: file to load
+        :type fname: str
+        :returns the image
+        :rtype: np.array
+        :raises FileNotFoundError
+        '''
+        
+        if not os.path.exists(fname):
+            raise FileNotFoundError(f"File {fname} does not exist.")
+
+        img = np.asarray(Image.open(fname))
+        return img
+
+    #------------------------------------
+    # save_img_array 
+    #-------------------
+    
+    @classmethod
+    def save_img_array(cls, img_arr, dst_path):
+        
+        dst_dir = os.path.dirname(dst_path)
+        if not os.path.exists(dst_dir):
+            os.makedirs(dst_dir)
+            
+        img = Image.fromarray(img_arr)
+        img.save(dst_path)
+

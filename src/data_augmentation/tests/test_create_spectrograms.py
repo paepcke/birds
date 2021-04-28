@@ -7,7 +7,7 @@ import os
 import tempfile
 import unittest
 
-from data_augmentation.create_spectrograms import Spectrogrammer
+from data_augmentation.create_spectrograms import SpectrogramCreator
 from data_augmentation.utils import Utils, WhenAlreadyDone
 
 
@@ -57,7 +57,7 @@ class TestSpectrogramCreator(unittest.TestCase):
     def run_spectrogrammer(self, src_dir):
         with tempfile.TemporaryDirectory(dir='/tmp', 
                                          prefix='test_spectro') as dst_dir:
-            dirs_filled = Spectrogrammer.create_spectrograms(src_dir, 
+            dirs_filled = SpectrogramCreator.create_spectrograms(src_dir, 
                                                              dst_dir, 
                                                              num=2,
                                                              overwrite_policy=WhenAlreadyDone.OVERWRITE

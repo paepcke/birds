@@ -16,7 +16,7 @@ from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import Utils, WhenAlreadyDone
 
 
-class Spectrogrammer:
+class SpectrogramCreator:
     '''
     Spectrogram creation and manipulation
     '''
@@ -81,7 +81,7 @@ class Spectrogrammer:
             for i, aud_file in enumerate(Utils.listdir_abs(one_dir)):
                 if not Utils.is_audio_file(aud_file):
                     continue
-                sound, sr = SoundProcessor.load(aud_file)
+                sound, sr = SoundProcessor.load_audio(aud_file)
                 # Get parts of the file: root, fname, suffix
                 path_el_dict  = Utils.path_elements(aud_file)
                 new_fname = path_el_dict['fname'] + '.png'
@@ -139,8 +139,8 @@ if __name__ == '__main__':
     else:
         overwrite_policy = WhenAlreadyDone.ASK
         
-        Spectrogrammer.create_spectrograms(args.in_dir, 
-                                          args.outdir,
-                                          num=args.num,
-                                          overwrite_policy=overwrite_policy
-                                          )
+        SpectrogramCreator.create_spectrograms(args.indir, 
+                                           args.outdir,
+                                           num=args.num,
+                                           overwrite_policy=overwrite_policy
+                                           )

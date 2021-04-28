@@ -57,10 +57,10 @@ class AudAugMethod(Enum):
 # Spectrogram image augmentation methods:
 
 class ImgAugMethod(Enum):
-    GAUSS       = '-gauss'
-    FMASK       = 'fmask'
-    TMASK       = 'tmask'
-    ORIGINAL    = 'original'
+    NOISE       = '-noise'
+    FMASK       = '-fmask'
+    TMASK       = '-tmask'
+    #ORIGINAL    = 'original'
 
 #------------------------------ Utility  -------------
 
@@ -147,7 +147,7 @@ class Utils:
 
            augmented is True:
            
-			                        add_bg  time_shift  volume  mask  gauss original
+			                        add_bg  time_shift  volume  mask  noise original
 			   AMADEC                   17          12      19     0      1         0     
 			   ARRAUR_C                  0           0       0     0      2         0
 			   Automolusexsertus        17          17      17     0      3         0
@@ -171,7 +171,7 @@ class Utils:
                                  "time_shift":0,
                                  "volume":0, 
                                  "mask":0,
-                                 "gauss":0,
+                                 "noise":0,
                                  "original":0}
                 for sample_name in os.listdir(os.path.join(path, species)):
                     if "_bgd" in sample_name: aug_type_dict["add_bg"] += 1
@@ -179,7 +179,7 @@ class Utils:
                     elif "-volume" in sample_name: aug_type_dict["volume"] += 1
                     
                     # For Spectrograms:
-                    elif "-gauss" in sample_name: aug_type_dict["gauss"] += 1
+                    elif "-noise" in sample_name: aug_type_dict["noise"] += 1
                     elif "fmask" in sample_name or "tmask" in sample_name: aug_type_dict["mask"] += 1
                     else: aug_type_dict["original"] += 1
                 num_samples_in[species]= aug_type_dict

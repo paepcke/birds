@@ -25,12 +25,6 @@ from data_augmentation.utils import Utils, ImgAugMethod
 #---------------- Class AudioAugmenter ---------------
 class SpectrogramAugmenter:
 
-    ADD_NOISE   = 1/3 # Add background noise, such as wind or water
-    TIME_SHIFT  = 1/3 # Cut audio at random point into snippets A & B
-    VOLUME      = 1/3 #    then create new audio: B-A
-    
-    NOISE_PATH = os.path.join(os.path.dirname(__file__),'lib')
-
     #------------------------------------
     # Constructor 
     #-------------------
@@ -39,15 +33,14 @@ class SpectrogramAugmenter:
                  input_dir_path,
                  plot=False,
                  overwrite_policy=False,
-                 aug_goals=AugmentationGoals.MEDIAN,
-                 random_augs = False,
-                 multiple_augs = False,):
+                 aug_goals=AugmentationGoals.MEDIAN
+                ):
 
         '''
         
-        :param input_dir_path: directory holding .wav files
+        :param input_dir_path: directory holding .png files
         :type input_dir_path: str
-        :param plot: whether or not to plot informative chars 
+        :param plot: whether or not to plot informative charts 
             along the way
         :type plot: bool
         :param overwrite_policy: if true, don't ask each time
@@ -58,12 +51,6 @@ class SpectrogramAugmenter:
                for each species: {species : AugmentationGoals}
                (See definition of AugmentationGoals; TENTH/MAX/MEDIAN)
         :type aug_goals: {AugmentationGoals | {str : AugmentationGoals}}
-        :param random_augs: if this is true, will randomly choose augmentation 
-            to use for each new sample
-        :type random_augs: bool
-        :param multiple_augs: if we want to allow multiple augmentations per sample 
-            (e.g. time shift and volume)):
-        :type multiple_augs: bool
         '''
 
         self.log = LoggingService()
@@ -75,7 +62,6 @@ class SpectrogramAugmenter:
             raise ValueError(f"Input path must be a full, absolute path; not {input_dir_path}")
 
         self.input_dir_path   = input_dir_path
-        self.multiple_augs    = multiple_augs
         self.plot             = plot
         self.overwrite_policy = overwrite_policy
         
@@ -95,7 +81,7 @@ class SpectrogramAugmenter:
         # Get dataframe with row lables being the
         # species, and one col with number of samples
         # in the respective species:
-        #       num_samples
+        #       num_species
         # sp1       10
         # sp2       15
         #      ..
@@ -116,32 +102,11 @@ class SpectrogramAugmenter:
 #****        canonical_in_path = str(Path(input_dir_path))
         # Create the descriptive name of an output directory 
         # for the augmented samples: 
-        if random_augs:
-            os.path.join(Path(input_dir_path).parent, 'augmented_samples_random')
-            self.output_dir_path = os.path.join(Path(input_dir_path).parent, 
-                                                'augmented_samples_random')
-        else:
-            assert(self.ADD_NOISE + self.TIME_SHIFT + self.VOLUME == 1)
-            dir_nm = f"Augmented_samples_-{self.ADD_NOISE:.2f}n-{self.TIME_SHIFT:.2f}ts-{self.VOLUME:.2f}w"
-            self.output_dir_path = os.path.join(Path(input_dir_path).parent, dir_nm)
-
-        if self.multiple_augs:
-            self.output_dir_path += "/"
-        else:
-            # Indicate that augmentations are mutually exclusive
-            self.output_dir_path += "-exc/"  
-
+        dir_nm = f"AugmentedSpectros"
+        self.output_dir_path = os.path.join(Path(input_dir_path).parent, dir_nm)
         self.log.info(f"Results will be in {self.output_dir_path}")
 
         Utils.create_folder(self.output_dir_path, self.overwrite_policy)
-
-        # Hide the UserWarning: PySoundFile failed. Trying audioread instead.
-        warnings.filterwarnings(action="ignore",
-                                message="PySoundFile failed. Trying audioread instead.",
-                                category=UserWarning, 
-                                module='', 
-                                lineno=0)
-
 
     #------------------------------------
     # generate_all_augmentations
@@ -150,8 +115,8 @@ class SpectrogramAugmenter:
     def generate_all_augmentations(self):
         '''
         Workhorse:
-        Create new samples via augmentation for each species. 
-        Augment the audio files to reach the number of audio files
+        Create new samples via augmentation for each spectrogram. 
+        Augment the spectro files to reach the number of spectro files
         indicated in the self.aug_requirements.
         
         Assumption: self.aug_requirements is a dict mapping 
@@ -168,7 +133,7 @@ class SpectrogramAugmenter:
         num_augmentations = 0
         
         for species, _rows in self.sample_distrib_df.iterrows():
-            # For each species, create as many augmentations
+            # For each spectrogram, create as many augmentations
             # as was computed earlier:
             num_needed_augs = self.augs_to_do[species]
             if num_needed_augs == 0:
@@ -185,7 +150,7 @@ class SpectrogramAugmenter:
         search_root_dir = os.path.join(self.output_dir_path)
         os.system(f"find {search_root_dir} -name \".DS_Store\" -delete")
         
-        self.log.info(f"Total of {num_augmentations} new audio files")
+        self.log.info(f"Total of {num_augmentations} new spectrogam files")
         
         self.log.info("Done")
         
@@ -235,11 +200,11 @@ class SpectrogramAugmenter:
             self.log.info(f"Skipping augmentations for {species_name}")
             return
     
-        in_wav_files     = [os.path.join(in_dir, fname) 
+        in_spectro_files     = [os.path.join(in_dir, fname) 
                             for fname 
                             in os.listdir(in_dir)
                             ]
-        num_aud_files = len(in_wav_files)
+        num_aud_files = len(in_spectro_files)
 
         # Cannot do augmentations for species with 0 samples
         if num_aud_files == 0:
@@ -255,21 +220,24 @@ class SpectrogramAugmenter:
 
         failures = 0
 
-        for sample_path in in_wav_files:
+        for sample_path in in_spectro_files:
             # Create num_augs_per_file samples with
             # different methods:
             
-            # Pick audio aug methods to apply (without replacement)
+            # Pick spectro aug methods to apply (without replacement)
             # Note that if more augs are to be applied to each file
             # than methods are available, some methods will need
             # to be applied multiple times; no problem, as each
             # method includes randomness:
-            methods = random.sample(list(Utils.AudAugMethod), num_augs_per_file)
+            method_list = list(ImgAugMethod)
+            methods = random.sample(method_list, 
+                                    min(num_augs_per_file, len(method_list))
+                                    )
             
             # Now have something like:
-            #     [volume, time-shift], or all methods: [volume, time-shift, noise]
+            #     [noise, fmask], or all methods: [noise, fmask, tmask]
             
-            if num_augs_per_file > len(methods):
+            if num_augs_per_file > len(method_list):
                 # Repeat the methods as often as
                 # needed:
                 num_method_set_repeats = int(math.ceil(num_augs_per_file/len(methods)))
@@ -295,15 +263,15 @@ class SpectrogramAugmenter:
         # methods to a few of the files:
 
         for i in range(remainder):
-            sample_path = in_wav_files[i]
-            method = random.sample(list(Utils.AudAugMethod), 1)
+            sample_path = in_spectro_files[i]
+            method = random.sample(list(ImgAugMethod), 1)
             out_path = self.create_new_sample(sample_path, out_dir, method)
             if out_path is not None:
                 new_sample_paths.append(out_path)
             else:
                 failures += 1
 
-        self.log.info(f"Audio aug report: {len(new_sample_paths)} new files; {failures} failures")
+        self.log.info(f"Spectrogram aug report: {len(new_sample_paths)} new files; {failures} failures")
         return new_sample_paths
 
     #------------------------------------
@@ -313,19 +281,19 @@ class SpectrogramAugmenter:
     def create_new_sample(self,
                           sample_path,
                           out_dir,
-                          method,
-                          noise_path=None):
+                          method
+                          ):
         '''
-        Given one audio recording and an audio augmentation
+        Given one spectrogram file, and an image augmentation
         method name, compute that augmentation, create a file name
         that gives insight into the aug applied, and write that
-        new audio file to out_dir.
+        new spectrogram file to out_dir.
         
-        Currently available types of audio augmentation technique:
+        Currently available types of image augmentation technique:
         
-            o adding background sounds
-            o randomly changing volume
-            o random time shifts
+            o adding random or uniform sounds
+            o frequency masking
+            o time masking
 
         Returns the full path of the newly created audio file:
         
@@ -334,50 +302,53 @@ class SpectrogramAugmenter:
         :param out_dir: destination of resulting new samples
         :type out_dir: src
         :param method: the audio augmentation method to apply
-        :type method: AudAugMethod
-        :param: noise_path: full path to audio files with background
-            noises to overlay onto audio (wind, rain, etc.). Ignored
-            unless method is AudAugMethod.ADD_NOISE.
-        :type noise_path: str
+        :type method: ImgAugMethod
         :return: Newly created audio file (full path) or None,
             if a failure occurred.
         :rtype: {str | None|
         '''
         
         success = False
-        if method == Utils.AudAugMethod.ADD_NOISE:
-            if noise_path is None:
-                noise_path = SpectrogramAugmenter.NOISE_PATH
-            # Add rain, wind, or such at random:
+        spectro = SoundProcessor.load_spectrogram(sample_path) 
+        if method == ImgAugMethod.NOISE:
             try:
-                out_path = SoundProcessor.add_background(
-                        sample_path,
-                        self.NOISE_PATH,
-                        out_dir, 
-                        len_noise_to_add=5.0)
+                # Default is uniform noise:
+                new_spectro, out_fname = SoundProcessor.random_noise(spectro)
                 success = True
             except Exception as e:
                 sample_fname = Path(sample_path).stem
-                self.log.err(f"Failed to add background sounds to {sample_fname} ({repr(e)})")
+                self.log.err(f"Failed to add noise to {sample_fname} ({repr(e)})")
 
-        elif method == Utils.AudAugMethod.TIME_SHIFT:
+        elif method == ImgAugMethod.FMASK:
             try:
-                out_path = SoundProcessor.time_shift(sample_path, out_dir)
+                # Horizontal bands:
+                new_spectro, out_fname = SoundProcessor.freq_mask(spectro, 
+                                                                  max_height=15 # num freq bands
+                                                                  ) 
                 success = True
             except Exception as e:
                 sample_fname = Path(sample_path).stem                
                 self.log.err(f"Failed to time shift on {sample_fname} ({repr(e)})")
-        elif method == Utils.AudAugMethod.VOLUME:
+                
+        elif method == ImgAugMethod.TMASK:
             try:
-                out_path = SoundProcessor.change_sample_volume(sample_path, out_dir)
+                # Vertical bands:
+                new_spectro, out_fname = SoundProcessor.time_mask(spectro, 
+                                                                  max_width=15 # num time ticks
+                                                                  ) 
                 success = True
             except Exception as e:
-                sample_fname = Path(sample_path).stem
-                self.log.err(f"Failed to modify volume on {sample_fname} ({repr(e)})")
-
+                sample_fname = Path(sample_path).stem                
+                self.log.err(f"Failed to time shift on {sample_fname} ({repr(e)})")
+            
+        if success:
+            sample_p = Path(sample_path)
+            appended_fname = sample_p.stem + out_fname + sample_p.suffix
+            out_path = os.path.join(out_dir, appended_fname)
+            SoundProcessor.save_img_array(new_spectro, out_path)
         return out_path if success else None
     
-    
+
 # ------------------------ Main ------------
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
