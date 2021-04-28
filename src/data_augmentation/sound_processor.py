@@ -441,12 +441,12 @@ class SoundProcessor:
             #    continue
     
             mask_end = t_zero + mask_width
-            cls.log.info(f"Time masked width: [{t_zero} : {mask_end}]")
+            # cls.log.info(f"Time masked width: [{t_zero} : {mask_end}]")
             if (replace_with_zero): 
                 cloned[:,t_zero:mask_end] = 0
             else:
                 spectro_mean = cloned.mean()
-                cls.log.info(f"Mean inserted is {spectro_mean}")
+                #cls.log.info(f"Mean inserted is {spectro_mean}")
                 cloned[:,t_zero:mask_end] = spectro_mean
 
         return cloned, f"-tmask{int(t_zero)}_{int(mask_end)}"
