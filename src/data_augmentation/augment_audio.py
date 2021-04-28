@@ -410,7 +410,7 @@ class AudioAugmenter:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
                                      formatter_class=argparse.RawTextHelpFormatter,
-                                     description="Chop audio files into snippets, plus data augmentation."
+                                     description="Augment existing set of audio recordings."
                                      )
    
     parser.add_argument('-p', '--plot',

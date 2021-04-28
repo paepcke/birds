@@ -10,7 +10,6 @@ import math
 from pathlib import Path
 import random
 import sys, os
-import warnings
 
 from logging_service import LoggingService
 
@@ -22,7 +21,8 @@ from data_augmentation.utils import AugmentationGoals, WhenAlreadyDone
 from data_augmentation.utils import Utils, ImgAugMethod
 
 
-#---------------- Class AudioAugmenter ---------------
+#---------------- Class SpectrogramAugmenter ---------------
+
 class SpectrogramAugmenter:
 
     #------------------------------------
@@ -160,17 +160,17 @@ class SpectrogramAugmenter:
 
     def augment_one_species(self, in_dir, out_dir, num_augs_to_do):
         '''
-        Takes one species, and a number of audio
+        Takes one species, and a number of spectrogram
         augmentations to do. Generates the files,
         and returns a list of the newly created 
         files (full paths).
         
         The maximum number of augmentations created
-        depends on the number of audio augmentation 
+        depends on the number of spectrogram augmentation 
         methods available (currently 3), and the number
-        of audio files available for the given species:
+        of spectgrogram files available for the given species:
         
-           num-available-audio-augs * num-of-audio-files
+           num-available-spectro-augs * num-of-spectro-files
         
         If num_augs_to_do is higher than the above maximum,
         only that maximum is created. The rest will need to 
@@ -178,13 +178,13 @@ class SpectrogramAugmenter:
         different portion of the workflow.
 
         Augmentations are effectively done round robin across all of
-        the species' audio files such that each file is
+        the species' spectro files such that each file is
         augmented roughly the same number of times until
         num_augs_to_do is accomplished.
 
-        :param in_dir: directory holding one species' audio files
+        :param in_dir: directory holding one species' spectro files
         :type in_dir: str
-        :param out_dir: destination for new audio files
+        :param out_dir: destination for new spectro files
         :type out_dir: src
         :param num_augs_to_do: number of augmentations
         :type num_augs_to_do: int
@@ -198,24 +198,24 @@ class SpectrogramAugmenter:
         # Create subfolder for the given species:
         if not Utils.create_folder(out_dir, self.overwrite_policy):
             self.log.info(f"Skipping augmentations for {species_name}")
-            return
+            return []
     
         in_spectro_files     = [os.path.join(in_dir, fname) 
                             for fname 
                             in os.listdir(in_dir)
                             ]
-        num_aud_files = len(in_spectro_files)
+        num_spectro_files = len(in_spectro_files)
 
         # Cannot do augmentations for species with 0 samples
-        if num_aud_files == 0:
+        if num_spectro_files == 0:
             self.log.info(f"Skipping for {species_name} since there are no original samples.")
-            return
+            return []
         
         # How many augs per file?
-        num_augs_per_file = num_augs_to_do // num_aud_files
+        num_augs_per_file = num_spectro_files // num_augs_to_do 
         # Num of augs left to do after we will have
         # applied an even number of augs to each sample:
-        remainder = num_augs_to_do - num_augs_per_file * num_aud_files
+        remainder = num_augs_to_do - num_augs_per_file * num_spectro_files
         new_sample_paths = []
 
         failures = 0
@@ -295,15 +295,15 @@ class SpectrogramAugmenter:
             o frequency masking
             o time masking
 
-        Returns the full path of the newly created audio file:
+        Returns the full path of the newly created spectrogram file:
         
-        :param sample_path: absolute path to audio sample
+        :param sample_path: absolute path to spectrogram
         :type sample_path: str
-        :param out_dir: destination of resulting new samples
+        :param out_dir: destination of resulting new spectros
         :type out_dir: src
-        :param method: the audio augmentation method to apply
+        :param method: the (spectrogram) image augmentation method to apply
         :type method: ImgAugMethod
-        :return: Newly created audio file (full path) or None,
+        :return: Newly created spectro file (full path) or None,
             if a failure occurred.
         :rtype: {str | None|
         '''
@@ -353,7 +353,7 @@ class SpectrogramAugmenter:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
                                      formatter_class=argparse.RawTextHelpFormatter,
-                                     description="Chop audio files into snippets, plus data augmentation."
+                                     description="Augment existing set of spectrograms"
                                      )
    
     parser.add_argument('-p', '--plot',
