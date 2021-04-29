@@ -82,7 +82,7 @@ class SpectrogramCreator:
                         os.remove(fname)
 
             for i, aud_file in enumerate(Utils.listdir_abs(one_dir)):
-                cls.log.info(f"Creating spectros for audio in {one_dir}")
+                #cls.log.info(f"Creating spectros for audio in {one_dir}")
                 if not Utils.is_audio_file(aud_file):
                     continue
                 sound, sr = SoundProcessor.load_audio(aud_file)
@@ -100,7 +100,7 @@ class SpectrogramCreator:
                     else:
                         os.remove(dst_path)
                 
-                cls.log.info(f"Creating spectrogram for {os.path.basename(dst_path)}")
+                #cls.log.info(f"Creating spectrogram for {os.path.basename(dst_path)}")
                 SoundProcessor.create_spectrograms(sound, sr, dst_path)
                 if num is not None and i >= num-1:
                     break
@@ -143,8 +143,9 @@ if __name__ == '__main__':
     else:
         overwrite_policy = WhenAlreadyDone.ASK
         
-        SpectrogramCreator.create_spectrograms(args.indir, 
-                                               args.outdir,
-                                               num=args.num,
-                                               overwrite_policy=overwrite_policy
-                                               )
+    SpectrogramCreator.create_spectrograms(args.indir, 
+                                           args.outdir,
+                                           num=args.num,
+                                           overwrite_policy=overwrite_policy
+                                           )
+        

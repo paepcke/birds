@@ -680,7 +680,7 @@ if __name__ == '__main__':
                         help='number of cores to use; default: 80 percent of available cores',
                         default=None)
     parser.add_argument('-y', '--overwrite',
-                        help='if set, overwrite existing out directories without asking; default: False',
+                        help='if set, overwrite existing out directories without asking; default: False (ask)',
                         action='store_true',
                         default=False)
     parser.add_argument('-r', '--resume',
