@@ -28,7 +28,7 @@ class SpectrogramCreator:
     log = LoggingService()
 
     @classmethod
-    def create_spectrograms(cls, 
+    def create_spectrogram(cls, 
                             in_dir, 
                             out_dir, 
                             num=None,
@@ -59,6 +59,11 @@ class SpectrogramCreator:
         cls.log.info(f"Number of audio file dirs for which to create spectrograms: {len(audio_dirs)}")
         # Go through the absolute paths of the director(y/ies):
         for one_dir in audio_dirs:
+            
+            # By convention, directory names reflect
+            # species names:
+            species_name = one_dir
+            
             # At the destination, create a directory
             # named the same as one_dir, which we are about
             # to process:
@@ -101,7 +106,7 @@ class SpectrogramCreator:
                         os.remove(dst_path)
                 
                 #cls.log.info(f"Creating spectrogram for {os.path.basename(dst_path)}")
-                SoundProcessor.create_spectrograms(sound, sr, dst_path)
+                SoundProcessor.create_spectrogram(sound, sr, dst_path, info={'species' : species_name})
                 if num is not None and i >= num-1:
                     break
             dirs_filled.append(dst_dir)
@@ -143,7 +148,7 @@ if __name__ == '__main__':
     else:
         overwrite_policy = WhenAlreadyDone.ASK
         
-    SpectrogramCreator.create_spectrograms(args.indir, 
+    SpectrogramCreator.create_spectrogram(args.indir, 
                                            args.outdir,
                                            num=args.num,
                                            overwrite_policy=overwrite_policy

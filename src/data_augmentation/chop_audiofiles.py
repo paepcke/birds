@@ -8,6 +8,13 @@ NOTE: if on Linux you get:
 then you need to install ffmpeg:
 
      sudo snap install ffmpeg
+     
+NOTE: This module loads, and partitions audio files into in-memory.
+      snippets. It then creates spectrograms from the audio snippets.
+      
+      If spectrograms of the full recordings are already available,
+      it is better to use chop_spectrograms.py to chop them, rather
+      than starting with the audio. 
 '''
 
 from _collections import OrderedDict
@@ -36,7 +43,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 
-class SoundChopper:
+class SpectrogramChopper:
     '''
     Processes directories of .wav or .mp3 files,
     chopping them into window_len seconds snippets.
@@ -157,8 +164,8 @@ class SoundChopper:
         
         # Allow others outside the instance
         # find the audio snippet destination
-        SoundChopper.wav_dir_path = self.wav_dir_path
-        SoundChopper.spectrogram_dir_path = self.spectrogram_dir_path
+        SpectrogramChopper.wav_dir_path = self.wav_dir_path
+        SpectrogramChopper.spectrogram_dir_path = self.spectrogram_dir_path
 
     #------------------------------------
     # chop_all
@@ -284,7 +291,7 @@ class SoundChopper:
     # chop_one_audio_file 
     #-------------------
 
-    def chop_one_audio_file(self, in_dir, species, sample_name, out_dir, window_len = 5):
+    def chop_one_audio_file(self, in_dir, species, spectro_fname, out_dir, window_len = 5):
         """
         Generates window_len second sound file snippets
         and associated spectrograms from sound files of
@@ -300,17 +307,17 @@ class SoundChopper:
             modify the wav files of. If species=None, all 
             subdirectories will be processed.
         :type species: {None | [str]}
-        :param sample_name: basefile name of audio file to chop
-        :type sample_name: str
+        :param spectro_fname: basefile name of audio file to chop
+        :type spectro_fname: str
         :param out_dir: root directory under which spectrogram
             and audio snippets will be saved (in different subdirs)
         :type out_dir: str
         """
 
-        orig, sample_rate = librosa.load(os.path.join(in_dir, species, sample_name))
+        orig, sample_rate = librosa.load(os.path.join(in_dir, species, spectro_fname))
         length = int(librosa.get_duration(orig, sample_rate))
         for start_time in range(length - window_len):
-            fpath = Path(sample_name)
+            fpath = Path(spectro_fname)
             window_name = f"{fpath.stem}_sw-start{str(start_time)}"
             window_file_name = str(Path.joinpath(fpath.parent, window_name))
 
@@ -337,11 +344,11 @@ class SoundChopper:
 
             # Need an audio snippet either for
             # a spectrogram or wav file:
-            window_audio, sr = librosa.load(os.path.join(in_dir, species, sample_name),
+            window_audio, sr = librosa.load(os.path.join(in_dir, species, spectro_fname),
                                       offset=start_time, duration=window_len)
 
             if not spectro_done or (spectro_done and self.overwrite_policy != WhenAlreadyDone.SKIP):
-                SoundProcessor.create_spectrograms(window_audio,sr,outfile_spectro)
+                SoundProcessor.create_spectrogram(window_audio,sr,outfile_spectro)
             
 
             if self.generate_wav_files:
@@ -478,7 +485,7 @@ class SoundChopper:
         num_cores = mp.cpu_count()
         # Use 80% of the cores:
         if num_workers is None:
-            num_workers = round(num_cores * SoundChopper.MAX_PERC_OF_CORES_TO_USE  / 100)
+            num_workers = round(num_cores * SpectrogramChopper.MAX_PERC_OF_CORES_TO_USE  / 100)
         elif num_workers > num_cores:
             # Limit pool size to number of cores:
             num_workers = num_cores
@@ -548,7 +555,7 @@ class SoundChopper:
     @classmethod
     def run_workers(cls, args, overwrite_policy=WhenAlreadyDone.ASK):
         '''
-        Called by main to run the SoundChopper in
+        Called by main to run the SpectrogramChopper in
         multiple processes at once. Pajcrtitions the
         audio files to be processed; runs the chopping
         while giving visual progress on terminal.
@@ -569,7 +576,7 @@ class SoundChopper:
         # the method determine the number of workers
         # by using 80% of the available cores. 
         
-        (worker_assignments, num_workers) = SoundChopper.compute_worker_assignments(
+        (worker_assignments, num_workers) = SpectrogramChopper.compute_worker_assignments(
             in_dir,
             num_workers=args.workers)
     
@@ -578,7 +585,7 @@ class SoundChopper:
         
         chopping_jobs = []
         for ass_num, assignment in enumerate(worker_assignments):
-            chopper = SoundChopper(in_dir, 
+            chopper = SpectrogramChopper(in_dir, 
                                    args.output_dir,
                                    overwrite_policy=overwrite_policy
                                    )
@@ -600,7 +607,7 @@ class SoundChopper:
                 job.join(1)
                 # Get number of generated snippets:
                 num_chopped_snippets = \
-                    len(utils.find_in_dir_tree(SoundChopper.spectrogram_dir_path))
+                    len(utils.find_in_dir_tree(SpectrogramChopper.spectrogram_dir_path))
                 # Keep printing number of done snippets in the same
                 # terminal line:
                 print(f"Number of audio snippets: {num_chopped_snippets}", end='\r')
@@ -625,7 +632,7 @@ class ProcessWithoutWarnings(mp.Process):
     
        o Blocks printout of various deprecation warnings connected
            with matplotlib and librosa
-       o Adds ability for SoundChopper instances to 
+       o Adds ability for SpectrogramChopper instances to 
            return a result.
     '''
     
@@ -710,13 +717,13 @@ if __name__ == '__main__':
         overwrite_policy = WhenAlreadyDone.ASK
 
     if args.workers == 1:
-        chopper = SoundChopper(in_dir, 
+        chopper = SpectrogramChopper(in_dir, 
                                args.output_dir,
                                overwrite_policy=overwrite_policy
                                )
         chopper.chop_all()
     else:
-        SoundChopper.run_workers(args,
+        SpectrogramChopper.run_workers(args,
                                  overwrite_policy=overwrite_policy
                                  )
 

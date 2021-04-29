@@ -57,7 +57,7 @@ class TestSpectrogramCreator(unittest.TestCase):
     def run_spectrogrammer(self, src_dir):
         with tempfile.TemporaryDirectory(dir='/tmp', 
                                          prefix='test_spectro') as dst_dir:
-            dirs_filled = SpectrogramCreator.create_spectrograms(src_dir, 
+            dirs_filled = SpectrogramCreator.create_spectrogram(src_dir, 
                                                              dst_dir, 
                                                              num=2,
                                                              overwrite_policy=WhenAlreadyDone.OVERWRITE

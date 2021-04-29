@@ -5,6 +5,7 @@ import random
 import warnings
 
 from PIL import Image
+from PIL.PngImagePlugin import PngImageFile, PngInfo
 import librosa
 from logging_service import LoggingService
 from scipy.signal import butter
@@ -249,15 +250,23 @@ class SoundProcessor:
     # --------------- Operations on Spectrograms Files --------------
 
     #------------------------------------
-    # create_spectrograms 
+    # create_spectrogram 
     #-------------------
 
     @classmethod
-    def create_spectrograms(cls, audio_sample, sr, outfile, n_mels=128):
+    def create_spectrogram(cls, audio_sample, sr, outfile, n_mels=128, info=None):
         '''
         Create and save a spectrogram from an audio 
         sample. Bandpass filter is applied, Mel scale is used,
         and power is converted to decibels.
+        
+        The sampling rate (sr) and time duration in fractional
+        seconds is added as metadata under keys "sr" and "duration".
+        Additional info may be included in the .png if info is 
+        a dict of key/value pairs.
+        
+        Retrieving the metadata can be done via SoundProcessor.load_spectrogram(),
+        or any other PNG reading software that handles the PNG specification.
          
         :param audio_sample: audio
         :type audio_sample: np.array
@@ -267,7 +276,17 @@ class SoundProcessor:
         :type outfile: str
         :param n_mels: number of mel scale bands 
         :type n_mels: int
+        :param info: if provided,  a dict of information to
+            store as text-only key/value pairs in the png.
+            Retrieve info via SoundProcessor.load_spectrogram()
+            or other standard PNG reading software that supports
+            PNG metadata
+        :type info: {str : str}
         '''
+        
+        if info is not None and type(info) != dict:
+            raise TypeError(f"If provided, info must be a dict, not {type(info)}")
+        
         # Use bandpass filter for audio before converting to spectrogram
         audio = SoundProcessor.filter_bird(audio_sample, sr)
         mel = librosa.feature.melspectrogram(audio, sr=sr, n_mels=n_mels)
@@ -279,8 +298,21 @@ class SoundProcessor:
         img = np.flip(img, axis=0) # put low frequencies at the bottom in image
         img = 255-img # invert. make black==more energy
 
-        # Save as PNG
-        skimage.io.imsave(outfile, img)
+        # Save as PNG, including sampling rate and
+        # (superfluously) duration in seconds:
+        duration = round(len(audio)/sr, 1)
+        
+        # Create metadata to include in the 
+        # spectrogram .png file:
+        
+        metadata = PngInfo()
+        metadata.add_text("sr", str(sr))
+        metadata.add_text("duration", str(duration))
+        if info is not None:
+            for key, val in info.items():
+                metadata.add_text(key, str(val))
+
+        skimage.io.imsave(outfile, img, pnginfo=metadata)
 
 
     #------------------------------------
@@ -630,8 +662,15 @@ class SoundProcessor:
         if not os.path.exists(fname):
             raise FileNotFoundError(f"File {fname} does not exist.")
 
+        png_img = PngImageFile(fname)
+        try:
+            info = png_img.text
+        except Exception as e:
+            cls.log.info(f"No available info in .png file: {repr(e)}")
+            info = None
+        
         img = np.asarray(Image.open(fname))
-        return img
+        return (img, info)
 
     #------------------------------------
     # save_img_array 
