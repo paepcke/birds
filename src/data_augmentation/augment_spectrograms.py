@@ -382,7 +382,7 @@ if __name__ == '__main__':
     else:
         overwrite_policy = WhenAlreadyDone.ASK
         
-    goal_txt = args.gaol
+    goal_txt = args.goal
     if goal_txt == 'median':
         goal = AugmentationGoals.MEDIAN
     elif goal_txt == 'tenth':
