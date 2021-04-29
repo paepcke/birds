@@ -299,7 +299,7 @@ class SpectrogramAugmenter:
         '''
         
         success = False
-        spectro = SoundProcessor.load_spectrogram(sample_path) 
+        spectro, _metadata = SoundProcessor.load_spectrogram(sample_path) 
         if method == ImgAugMethod.NOISE:
             try:
                 # Default is uniform noise:
@@ -357,6 +357,12 @@ if __name__ == '__main__':
                         action='store_true',
                         default=False
                         )
+    
+    parser.add_argument('-g', '--goal',
+                        help='one of median, max, or tenth; how many augmentations relative to most populated class',
+                        choices=['median', 'max', 'tenth'],
+                        default='median'
+                        )
 
     parser.add_argument('input_dir_path',
                         help='path to .wav files',
@@ -375,10 +381,19 @@ if __name__ == '__main__':
         overwrite_policy = WhenAlreadyDone.OVERWRITE
     else:
         overwrite_policy = WhenAlreadyDone.ASK
+        
+    goal_txt = args.gaol
+    if goal_txt == 'median':
+        goal = AugmentationGoals.MEDIAN
+    elif goal_txt == 'tenth':
+        goal = AugmentationGoals.TENTH
+    else:
+        goal = AugmentationGoals.MAX
 
     augmenter = SpectrogramAugmenter(args.input_dir_path,
                                      plot=args.plot,
-                                     overwrite_policy=overwrite_policy
+                                     overwrite_policy=overwrite_policy,
+                                     aug_goals=goal
                                      )
 
     augmenter.generate_all_augmentations()

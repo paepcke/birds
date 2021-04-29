@@ -67,9 +67,9 @@ class TestAugmentSpectrograms(unittest.TestCase):
 
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_create_random_noise(self):
-        spectro = SoundProcessor.load_spectrogram(self.one_spectro_file)
+        spectro, _metadata = SoundProcessor.load_spectrogram(self.one_spectro_file)
         new_spectro, _fname = SoundProcessor.random_noise(spectro, 
-                                                         noise_type='uniform')
+                                                          noise_type='uniform')
         self.assertTrue((new_spectro > spectro).any())
         self.assertTrue((new_spectro <= 255).all())
 
@@ -88,8 +88,8 @@ class TestAugmentSpectrograms(unittest.TestCase):
                     ImgAugMethod.TMASK
                     )
             # The two images shouldn't be the same:
-            orig = SoundProcessor.load_spectrogram(self.one_spectro_file)
-            aug  = SoundProcessor.load_spectrogram(aug_spectro_path)
+            orig, _metadata = SoundProcessor.load_spectrogram(self.one_spectro_file)
+            aug, _metadata  = SoundProcessor.load_spectrogram(aug_spectro_path)
             
             self.assertFalse((orig == aug).all())
 
@@ -101,8 +101,8 @@ class TestAugmentSpectrograms(unittest.TestCase):
                     ImgAugMethod.FMASK
                     )
             # The two images shouldn't be the same:
-            orig = SoundProcessor.load_spectrogram(self.one_spectro_file)
-            aug  = SoundProcessor.load_spectrogram(aug_spectro_path)
+            orig, _metadata = SoundProcessor.load_spectrogram(self.one_spectro_file)
+            aug, _metadata  = SoundProcessor.load_spectrogram(aug_spectro_path)
             self.assertFalse((orig == aug).all())
 
     #------------------------------------

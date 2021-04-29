@@ -654,8 +654,8 @@ class SoundProcessor:
 
         :param fname: file to load
         :type fname: str
-        :returns the image
-        :rtype: np.array
+        :returns tuple: the image and the .png file's possibly empty metadata dict
+        :rtype: (np.array, {str : str}
         :raises FileNotFoundError
         '''
         
@@ -671,6 +671,38 @@ class SoundProcessor:
         
         img = np.asarray(Image.open(fname))
         return (img, info)
+
+    #------------------------------------
+    # save_image 
+    #-------------------
+    
+    @classmethod
+    def save_image(cls, img, outfile, info=None):
+        '''
+        Given an image and an optional metadata
+        dictionary, write the image as .png, include
+        the metadata. 
+        
+        :param img: image to save
+        :type img: np_array
+        :param outfile: destination path
+        :type outfile: str
+        :param info: metadata to add
+        :type info: {str : str}
+        '''
+        
+        # Create metadata to include in the 
+        # spectrogram .png file:
+        if info is not None:
+            metadata = PngInfo()
+
+            if info is not None:
+                for key, val in info.items():
+                    metadata.add_text(key, str(val))
+
+        skimage.io.imsave(outfile, img, pnginfo=metadata)
+        
+
 
     #------------------------------------
     # save_img_array 
