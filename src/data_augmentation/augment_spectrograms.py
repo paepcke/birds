@@ -368,8 +368,12 @@ if __name__ == '__main__':
                         )
 
     parser.add_argument('input_dir_path',
-                        help='path to .wav files',
+                        help='path to .png files',
                         default=None)
+
+    parser.add_argument('output_dir_path',
+                        help='destination root directory'
+                        )
 
     args = parser.parse_args()
 
@@ -394,6 +398,7 @@ if __name__ == '__main__':
         goal = AugmentationGoals.MAX
 
     augmenter = SpectrogramAugmenter(args.input_dir_path,
+                                     args.output_dir_path,
                                      plot=args.plot,
                                      overwrite_policy=overwrite_policy,
                                      aug_goals=goal
