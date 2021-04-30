@@ -240,11 +240,12 @@ class SpectrogramChopper:
             os.environ = env
 
         for species_name, fname in assignment:
+            # Ex. species_name: AMADEC
+            # Ex. fname       : dysmen_my_bird.png
+            full_spectro_path = os.path.join(self.in_dir, species_name, fname)
             try:
-                self.chop_one_spectro_file(self.in_dir,
-                                           species_name,
-                                           fname,
-                                           self.out_dir
+                self.chop_one_spectro_file(full_spectro_path,
+                                           os.path.join(self.out_dir, species_name)
                                            )
             except Exception as e:
                 return_bool.value = False
@@ -262,13 +263,8 @@ class SpectrogramChopper:
                               skip_size=2,
                               original_duration=None):
         """
-        Generates window_len second sound file snippets
-        and associated spectrograms from sound files of
-        arbitrary length. 
-        
-        Performs a time shift on all the wav files in the 
-        species directories. The shift is 'rolling' such that
-        no information is lost.
+        Generates window_len second spectrogram snippets
+        from spectrograms files of arbitrary length. 
         
         To compute the number of time slices to extract
         for each snippet, the time_slices of the spectrogram time
@@ -288,9 +284,9 @@ class SpectrogramChopper:
         For now, if neither the embedded metadata, nor the original_duration
         is supplied, an ValueError is raised. 
     
-        :param spectro_fname: basefile name of audio file to chop
+        :param spectro_fname: full path to spectrogram file to chop
         :type spectro_fname: str
-        :param window_len: number of seconds covered by each snippet
+        :param window_len: number of seconds to be covered by each snippet
         :type window_len: int
         :param skip_size: number of seconds to shift right in 
             time for the start of each chop
