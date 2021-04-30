@@ -379,6 +379,7 @@ class SpectrogramChopper:
         Creates all directories that will hold new 
         spectrogram snippets for each species.
         For each directory: if dir exists:
+        
            o if overwrite_policy is True, wipe the dir
            o if overwrite_policy is SKIP, leave the
                directory in place, contents intact 
@@ -729,7 +730,7 @@ if __name__ == '__main__':
                         action='store_true',
                         default=False)
     parser.add_argument('-r', '--resume',
-                        help='if set, skip any soundfiles whose output spectrogram already exists; default: False',
+                        help='if set, skip any spectrogram snippets that already exist; default: False',
                         action='store_true',
                         default=False)
 
@@ -761,8 +762,10 @@ if __name__ == '__main__':
                                )
         chopper.chop_all()
     else:
+        # Use SKIP overwrite policy to ensure
+        # workers don't step on each others' toes:
         SpectrogramChopper.run_workers(args,
-                                 overwrite_policy=overwrite_policy
-                                 )
+                                       overwrite_policy=WhenAlreadyDone.SKIP
+                                       )
 
     print("Done")
