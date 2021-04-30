@@ -107,13 +107,16 @@ class SpectrogramChopper:
         
         @param input_dir: location of soundfile root
         @type input_dir: str
-        @param output_dir: root of spectrograms/wav_files to create
+        @param output_dir: root of spectrograms to create
         @type output_dir: src
         @param specific_species: process only a spectific list of species
         @type specific_species: {None | [str]}
         @param overwrite_policy: what to do when an output file already exists
         @type overwrite_policy: WhenAlreadyDone
         '''
+
+        # Ensure the outdir and all its intermediate dirs exist:
+        os.makedirs(output_dir, exists_ok=True)
 
         self.in_dir         	= input_dir
         self.out_dir        	= output_dir
@@ -717,10 +720,10 @@ if __name__ == '__main__':
     # Add the arguments
     parser.add_argument('input_dir',
                         type=str,
-                        help='the path to original directory with .wav files')
+                        help='the path to original directory with .png files')
     parser.add_argument('output_dir',
                         type=str,
-                        help='the path to output directory to write new .wav/.png files')
+                        help='the path to output directory to write new .png files')
     parser.add_argument('-w', '--workers',
                         type=int,
                         help='number of cores to use; default: 80 percent of available cores',
