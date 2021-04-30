@@ -31,6 +31,7 @@ class SpectrogramAugmenter:
 
     def __init__(self, 
                  input_dir_path,
+                 output_dir_path,
                  plot=False,
                  overwrite_policy=False,
                  aug_goals=AugmentationGoals.MEDIAN
@@ -40,6 +41,10 @@ class SpectrogramAugmenter:
         
         :param input_dir_path: directory holding .png files
         :type input_dir_path: str
+        :param output_dir_path: root of destination dir under
+            which each species' subdirectories will be placed.
+            Augmentations will be placed in those subdirs.
+        :type output_dir_path: str
         :param plot: whether or not to plot informative charts 
             along the way
         :type plot: bool
@@ -62,6 +67,7 @@ class SpectrogramAugmenter:
             raise ValueError(f"Input path must be a full, absolute path; not {input_dir_path}")
 
         self.input_dir_path   = input_dir_path
+        self.output_dir_path  = output_dir_path
         self.plot             = plot
         self.overwrite_policy = overwrite_policy
         
@@ -98,12 +104,6 @@ class SpectrogramAugmenter:
         self.augs_to_do = Utils.compute_num_augs_per_species(aug_goals, 
                                                              self.sample_distrib_df)
         
-        # Get input dir path without trailing slash:
-#****        canonical_in_path = str(Path(input_dir_path))
-        # Create the descriptive name of an output directory 
-        # for the augmented samples: 
-        dir_nm = f"AugmentedSpectros"
-        self.output_dir_path = os.path.join(Path(input_dir_path).parent, dir_nm)
         self.log.info(f"Results will be in {self.output_dir_path}")
 
         Utils.create_folder(self.output_dir_path, self.overwrite_policy)
