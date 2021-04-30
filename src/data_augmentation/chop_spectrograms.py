@@ -116,7 +116,7 @@ class SpectrogramChopper:
         '''
 
         # Ensure the outdir and all its intermediate dirs exist:
-        os.makedirs(output_dir, exists_ok=True)
+        os.makedirs(output_dir, exist_ok=True)
 
         self.in_dir         	= input_dir
         self.out_dir        	= output_dir
