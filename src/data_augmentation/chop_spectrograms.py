@@ -253,7 +253,11 @@ class SpectrogramChopper:
     # chop_one_audio_file 
     #-------------------
 
-    def chop_one_spectro_file(self, spectro_fname, out_dir, window_len = 5, skip_size=2):
+    def chop_one_spectro_file(self, spectro_fname, 
+                              out_dir, 
+                              window_len = 5, 
+                              skip_size=2,
+                              original_duration=None):
         """
         Generates window_len second sound file snippets
         and associated spectrograms from sound files of
@@ -262,6 +266,24 @@ class SpectrogramChopper:
         Performs a time shift on all the wav files in the 
         species directories. The shift is 'rolling' such that
         no information is lost.
+        
+        To compute the number of time slices to extract
+        for each snippet, the time_slices of the spectrogram time
+        slices in fractional seconds must be known. The time_slices
+        can be approximated if the play length of the underlying
+        audio is known (even if the precise fft settings are unavailable).
+        
+        If the given .png file contains metadata with a 'duration' 
+        key, then the corresponding value is used as the duration of 
+        the original audio file in fractional seconds. This metadata
+        will be present if the .png file was created with the 
+        SoundProcessor.create_spectrogram(). 
+        
+        To enable use of spectrogram images created elsewhere, callers
+        can instead supply original_duration in fractional seconds.
+        
+        For now, if neither the embedded metadata, nor the original_duration
+        is supplied, an ValueError is raised. 
     
         :param spectro_fname: basefile name of audio file to chop
         :type spectro_fname: str
@@ -273,18 +295,40 @@ class SpectrogramChopper:
         :param out_dir: root directory under which spectrogram
             snippets will be saved (in different subdirs)
         :type out_dir: str
+        :param original_duration:
+        :raise ValueError: if neither embedded duration metadata is found
+            in the given file, nor original_duration is provided
         """
 
         # Read the spectrogram, getting an np array:
         spectro_arr, metadata = SoundProcessor.load_spectrogram(spectro_fname)
         duration	   = metadata.get('duration', None)
-        _sr  		   = metadata.get('sr', None)
-        _species        =  metadata.get('label', None)
+
+        if duration is None:
+            if original_duration is None:
+                raise ValueError(f"Time duration of original recording cannot be determined for {spectro_fname}")
+            else:
+                duration = float(original_duration)
+        else:
+            duration = float(duration)
+             
+        # If original file is already at or below
+        # the single window length, it's a snippet
+        # in itself. Copy it to the output with an
+        # appropriate snippet name to match the other
+        # snippets: wall start time is zero:
         
-        _height, width  = spectro_arr.shape 
+        if duration <= window_len:
+            snippet_path = self.create_snippet_fpath(spectro_fname, 0, out_dir)
+            SoundProcessor.save_image(spectro_arr, snippet_path, metadata)
+            return
+        # Note: Also have sample rate ('sr') and species ('label')
+        # in the metadata, but don't need those here.
+        
+        _freq_bands, time_slices  = spectro_arr.shape 
         # Time in franctions of second
         # per spectrogram column: 
-        twidth       = duration / width
+        twidth       = duration / time_slices
         
         # Integer of duration (which is in seconds):
         time_dur_int = int(np.ceil(duration))
@@ -294,23 +338,21 @@ class SpectrogramChopper:
         # length in *seconds*. Convert to spectrogram 
         # time slices (with rounding error):
 
-        samples_win_len     = window_len * twidth
-        samples_skip_size   = skip_size * twidth
-        samples_upper_bound = time_upper_bound * twidth
+        samples_win_len     = int(window_len // twidth)
+        samples_skip_size   = int(skip_size // twidth)
+        samples_upper_bound = int(time_upper_bound // twidth)
 
-        # Prepare snippet file name creation:
-        #   From '/foo/bar/infile.png'
-        # make 'infile'
-        snippet_name_stem = Path(spectro_fname).stem
-
+        assert(samples_upper_bound <= time_slices)
+        
         for snip_num, samples_start_time in enumerate(range(0, 
                                                             samples_upper_bound, 
                                                             samples_skip_size)):
 
             # Create a name for the snippet file:
             wall_start_time   = snip_num * skip_size
-            snippet_name = f"{snippet_name_stem}_sw-start{str(wall_start_time)}.png"
-            snippet_path = Path.joinpath(out_dir, snippet_name)
+            snippet_path = self.create_snippet_fpath(spectro_fname,
+                                                     wall_start_time, 
+                                                     out_dir)
             
             spectro_done = os.path.exists(snippet_path)
 
@@ -319,13 +361,13 @@ class SpectrogramChopper:
                     # Next snippet:
                     continue
                 elif self.WhenAlreadyDone.ASK:
-                    if not Utils.user_confirm(f"Snippet {snippet_name} exists, overwrite?", default='N'):
+                    if not Utils.user_confirm(f"Snippet {Path(snippet_path).stem} exists, overwrite?", default='N'):
                         continue
 
             # Now know that whether or not snippet
             # exists, we can (re)-create that file: 
             snippet_data = spectro_arr[:,samples_start_time : samples_start_time + samples_win_len]
-            snippet_info = metadata.clone()
+            snippet_info = metadata.copy()
             snippet_info['duration'] = window_len
             SoundProcessor.save_image(snippet_data, snippet_path, snippet_info)
 
@@ -365,6 +407,45 @@ class SpectrogramChopper:
                 raise FileExistsError(f"Target dir {species_spectros_dir} exists; aborting")
 
         return self.out_dir
+
+    #------------------------------------
+    # create_snippet_fpath 
+    #-------------------
+    
+    def create_snippet_fpath(self, origin_nm, wall_start_time, out_dir):
+        '''
+        Given constituent elements, construct the
+        full output path of a new spectrogram snippet.
+        
+        Name format if full-length spectrogram file were
+        named my_file.png:
+        
+              my_file_sw-start123.png
+              
+        where 123 is the snippet's start time in seconds
+        from the beginning of the full length file
+        
+        :param origin_nm: name of full length file; either full path or
+            just the file name are fine
+        :type origin_nm: str
+        :param wall_start_time: snipet start time from beginning
+            of full length spectrogram
+        :type wall_start_time: int
+        :param out_dir: destination directory
+        :type out_dir: str
+        :return: full path to the future snippet's destination
+        :rtype: str
+        '''
+        
+        # Prepare snippet file name creation:
+        
+        #   From '/foo/bar/infile.png'
+        # make 'infile'
+        snippet_name_stem = Path(origin_nm).stem
+        
+        snippet_name = f"{snippet_name_stem}_sw-start{str(wall_start_time)}.png"
+        snippet_path = os.path.join(out_dir, snippet_name)
+        return snippet_path
 
     # -------------------- Class Methods ------------
     

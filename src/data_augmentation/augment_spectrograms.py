@@ -299,11 +299,12 @@ class SpectrogramAugmenter:
         '''
         
         success = False
-        spectro, _metadata = SoundProcessor.load_spectrogram(sample_path) 
+        spectro, metadata = SoundProcessor.load_spectrogram(sample_path) 
         if method == ImgAugMethod.NOISE:
             try:
                 # Default is uniform noise:
                 new_spectro, out_fname = SoundProcessor.random_noise(spectro)
+                metadata['augmentation'] = 'noise'
                 success = True
             except Exception as e:
                 sample_fname = Path(sample_path).stem
@@ -314,7 +315,8 @@ class SpectrogramAugmenter:
                 # Horizontal bands:
                 new_spectro, out_fname = SoundProcessor.freq_mask(spectro, 
                                                                   max_height=15 # num freq bands
-                                                                  ) 
+                                                                  )
+                metadata['augmentation'] = 'fmask' 
                 success = True
             except Exception as e:
                 sample_fname = Path(sample_path).stem                
@@ -325,7 +327,8 @@ class SpectrogramAugmenter:
                 # Vertical bands:
                 new_spectro, out_fname = SoundProcessor.time_mask(spectro, 
                                                                   max_width=15 # num time ticks
-                                                                  ) 
+                                                                  )
+                metadata['augmentation'] = 'tmask' 
                 success = True
             except Exception as e:
                 sample_fname = Path(sample_path).stem                
@@ -335,7 +338,7 @@ class SpectrogramAugmenter:
             sample_p = Path(sample_path)
             appended_fname = sample_p.stem + out_fname + sample_p.suffix
             out_path = os.path.join(out_dir, appended_fname)
-            SoundProcessor.save_img_array(new_spectro, out_path)
+            SoundProcessor.save_image(new_spectro, out_path, metadata)
         return out_path if success else None
     
 

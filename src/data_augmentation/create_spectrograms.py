@@ -62,12 +62,12 @@ class SpectrogramCreator:
             
             # By convention, directory names reflect
             # species names:
-            species_name = one_dir
+            species_name = Path(one_dir).stem
             
             # At the destination, create a directory
             # named the same as one_dir, which we are about
             # to process:
-            dst_dir = os.path.join(out_dir, Path(one_dir).stem)
+            dst_dir = os.path.join(out_dir, species_name)
             
             if not os.path.exists(dst_dir):
                 cls.log.info(f"Creating dest dir {dst_dir}")

@@ -26,20 +26,22 @@ class PNGMetadataLister(object):
     #-------------------
 
     @classmethod
-    def list_metadata(self, png_fname, show=False):
+    def extract_metadata(self, png_fname, show=False, printout=False):
         if show:
             # To save startup time, only load
             # matplotlib if needed:
             import matplotlib.pyplot as plt
         
         img, metadata = SoundProcessor.load_spectrogram(png_fname)
-        try:
-            if len(metadata) == 0:
-                print("No metadata")
-            for key, val in metadata.items():
-                print(f"{key} : {val}")
-        except Exception as _e:
-            print("No metadata available")
+
+        if printout: 
+            try:
+                if len(metadata) == 0:
+                    print("No metadata")
+                for key, val in metadata.items():
+                    print(f"{key} : {val}")
+            except Exception as _e:
+                print("No metadata available")
 
         if show:
             fig = plt.figure()
@@ -49,6 +51,8 @@ class PNGMetadataLister(object):
             plt.imshow(img, cmap='gray')
             plt.show()
 
+        return metadata
+        
     #------------------------------------
     # add_metadata
     #-------------------
@@ -79,10 +83,15 @@ if __name__ == '__main__':
                         help='show png image in addition to listing the metadata',
                         action='store_true')
 
+    parser.add_argument('-p-', '--printout',
+                        help='if set, print metadate to console; default: True',
+                        default=True
+                        )
+
     parser.add_argument('--info',
                         type=str,
                         nargs='+',
-                        help='Repeatable: key and value; ex.: --info foo 10 bar 20',
+                        help='set metadata; repeatable: key and value; ex.: --info foo 10 bar 20',
                         default=None
                         )
 
@@ -92,24 +101,39 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
+    # File exists?
     if not os.path.exists(args.fname):
         print(f"File {args.fname} not found")
         sys.exit(1)
 
+    # User wants to set metadata in image file?
     info = args.info
     if info is not None and len(info) % 2 != 0:
         print("Info entries must be pairs of keys and values; this entry's length is odd numbered")
         sys.exit(1)
 
-    if info is not None:
+    if info is not None and args.printout:
         print("Metadata before:")
-    PNGMetadataLister.list_metadata(args.fname, args.show)
 
-    if info is not None:
-        if args.outfile is None:
-            # Overwrite the input file,
-            # i.e. add metadata in place:
-            outfile = args.fname
-        else:
-            outfile = args.outfile
-        PNGMetadataLister.add_metadata(args.fname, info, outfile)
+    PNGMetadataLister.extract_metadata(args.fname, show=args.show, printout=args.printout)
+
+    if info is None:
+        # All done:
+        sys.exit(0)
+
+    # Setting info:
+    if args.outfile is None:
+        # Overwrite the input file,
+        # i.e. add metadata in place:
+        outfile = args.fname
+    else:
+        outfile = args.outfile
+
+    PNGMetadataLister.add_metadata(args.fname, info, outfile)
+
+    # If printing to console, show metadata 
+    # after this update:
+    
+    if args.printout:
+        PNGMetadataLister.extract_metadata(args.fname, show=False, printout=True)
+

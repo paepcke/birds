@@ -669,8 +669,8 @@ class SoundProcessor:
             cls.log.info(f"No available info in .png file: {repr(e)}")
             info = None
         
-        img = np.asarray(Image.open(fname))
-        return (img, info)
+        img_arr = np.asarray(Image.open(fname))
+        return (img_arr, info)
 
     #------------------------------------
     # save_image 
@@ -695,14 +695,10 @@ class SoundProcessor:
         # spectrogram .png file:
         if info is not None:
             metadata = PngInfo()
-
-            if info is not None:
-                for key, val in info.items():
-                    metadata.add_text(key, str(val))
+            for key, val in info.items():
+                metadata.add_text(key, str(val))
 
         skimage.io.imsave(outfile, img, pnginfo=metadata)
-        
-
 
     #------------------------------------
     # save_img_array 
