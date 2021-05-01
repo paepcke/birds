@@ -15,8 +15,8 @@ from data_augmentation.utils import ImgAugMethod, Utils
 from data_augmentation.utils import WhenAlreadyDone, AugmentationGoals
 
 
-TEST_ALL = True
-#TEST_ALL = False
+#*******8TEST_ALL = True
+TEST_ALL = False
 
 
 class TestAugmentSpectrograms(unittest.TestCase):
@@ -33,8 +33,18 @@ class TestAugmentSpectrograms(unittest.TestCase):
         # AMADEC and FONTANA:
         species_root = Path(self.species_dir).parent.stem
         full_species_root = os.path.abspath(species_root)
+        self.out_dir_med_fd = tempfile.TemporaryDirectory(dir='/tmp',
+                                                          prefix='augspecmedian'
+                                                          )
+        self.out_dir_tnth_fd = tempfile.TemporaryDirectory(dir='/tmp',
+                                                           prefix='augspectenth'
+                                                           )
+        self.out_dir_max_fd = tempfile.TemporaryDirectory(dir='/tmp',
+                                                          prefix='augspecmax'
+                                                          )
         self.spectro_augmenter_median = SpectrogramAugmenter (
                 full_species_root,
+                self.out_dir_med_fd.name,
                 plot=False,
                 overwrite_policy=WhenAlreadyDone.OVERWRITE,
                 aug_goals=AugmentationGoals.MEDIAN
@@ -42,6 +52,7 @@ class TestAugmentSpectrograms(unittest.TestCase):
 
         self.spectro_augmenter_max = SpectrogramAugmenter (
                 full_species_root,
+                self.out_dir_max_fd.name,
                 plot=False,
                 overwrite_policy=WhenAlreadyDone.OVERWRITE,
                 aug_goals=AugmentationGoals.MAX
@@ -49,6 +60,7 @@ class TestAugmentSpectrograms(unittest.TestCase):
 
         self.spectro_augmenter_tenth = SpectrogramAugmenter (
                 full_species_root,
+                self.out_dir_tnth_fd.name,
                 plot=False,
                 overwrite_policy=WhenAlreadyDone.OVERWRITE,
                 aug_goals=AugmentationGoals.TENTH
@@ -137,7 +149,7 @@ class TestAugmentSpectrograms(unittest.TestCase):
     # test_generate_all_augmentations_max
     #-------------------
 
-    #********88@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #***********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_generate_all_augmentations_max(self):
         with tempfile.TemporaryDirectory(dir='/tmp', 
                                          prefix='test_spectro') as dst_dir:

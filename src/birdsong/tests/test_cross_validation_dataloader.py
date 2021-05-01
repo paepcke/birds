@@ -3,23 +3,28 @@ Created on Dec 13, 2020
 
 @author: paepcke
 '''
+import os, sys
 import unittest
 
 import numpy as np
 
-import os, sys
+from birdsong.rooted_image_dataset import SingleRootImageDataset
+from birdsong.cross_validation_dataloader import CrossValidatingDataLoader
+from birdsong.cross_validation_dataloader import SKFSampler, EndOfSplit
+
 packet_root = os.path.abspath(__file__.split('/')[0])
 sys.path.insert(0,packet_root)
 
-from birdsong.cross_validation_dataloader import CrossValidatingDataLoader, SKFSampler
-from birdsong.rooted_image_dataset import SingleRootImageDataset
-from birdsong.rooted_image_dataset import MultiRootImageDataset
+#from birdsong.rooted_image_dataset import SingleRootImageDataset
+#from birdsong.rooted_image_dataset import MultiRootImageDataset
 
 TEST_ALL = True
 #TEST_ALL = False
 
 class TestBirdDataLoader(unittest.TestCase):
 
+    SAMPLE_WIDTH  = 400
+    SAMPLE_HEIGHT = 400
     CURR_DIR = os.path.dirname(__file__)
     TEST_FILE_PATH_BIRDS = os.path.join(CURR_DIR, 'data')
 
@@ -29,14 +34,22 @@ class TestBirdDataLoader(unittest.TestCase):
     
     @classmethod
     def setUpClass(cls):
-        pass
-    
+        cls.cur_dir = os.path.dirname(__file__)
+        cls.data_root = os.path.join(cls.cur_dir, cls.TEST_FILE_PATH_BIRDS)
+
     #------------------------------------
     # setUp
     #-------------------
 
     def setUp(self):
-        self.dataset = SingleRootImageDataset(self.TEST_FILE_PATH_BIRDS)
+        self.dataset = SingleRootImageDataset(
+            self.data_root,
+            sample_height=self.SAMPLE_HEIGHT,
+            sample_width=self.SAMPLE_WIDTH,
+            to_grayscale=True
+            )
+        
+        #self.dataset = SingleRootImageDataset(self.TEST_FILE_PATH_BIRDS)
 
     #------------------------------------
     # tearDown
@@ -44,7 +57,6 @@ class TestBirdDataLoader(unittest.TestCase):
 
     def tearDown(self):
         pass
-
 
     #------------------------------------
     # test_sampler 
@@ -134,7 +146,7 @@ class TestBirdDataLoader(unittest.TestCase):
         # Tensor dimensions should be: batch size,
         # 3 for RGB, pixel-height, pixel-width:
          
-        self.assertTupleEqual(batch1.shape, (batch_size,3,400,400))
+        self.assertTupleEqual(batch1.shape, (batch_size,1,400,400))
         
         # There should be one truth label for each
         # sample in batch1:
@@ -160,7 +172,7 @@ class TestBirdDataLoader(unittest.TestCase):
                                delta=1)
         
         (batch2, _y2) = next(it)
-        self.assertTupleEqual(batch2.shape, (batch_size,3,400,400))
+        self.assertTupleEqual(batch2.shape, (batch_size,1,400,400))
         
         # Start over with a new dataloader, same data,
         # and count how many batches it servers out:
@@ -177,41 +189,29 @@ class TestBirdDataLoader(unittest.TestCase):
         # 
         # more batches:
 
-        # Count number of batches,
-        # but ignore the inter-split (None,None)
-        # results:
-        got_batches = 0
-        for _i, batch in enumerate(dl):
-            if batch != (None,None):
-                got_batches += 1
-
-        self.assertEqual(got_batches, num_batches_total)
+        # Count number of batches and splits:
+        got_splits  = 0
+        batches_per_split = num_batches_total // dl.num_folds
+        
+        # 'Safety count' just in case StopIteration
+        # never happens due to a bug:
+        
+        for _safety_count in range(dl.num_folds + 2):
+            try:
+                got_batches = 0
+                for _i, _batch in enumerate(dl):
+                    got_batches += 1
+            except EndOfSplit:
+                self.assertEqual(got_batches, batches_per_split)
+                got_splits += 1
+                
+        self.assertEqual(got_splits, dl.num_folds)
         
         # Last fold's number of test sample ids
         # should be the full length as in previous
         # batches:
         self.assertEqual(len(dl.get_split_test_sample_ids()), 
                          samples_per_fold)
-
-        # Run through one more time with
-        # dropping the incomplete batches:
-        dl = CrossValidatingDataLoader(self.dataset, 
-                            batch_size=batch_size,
-                            drop_last=True, 
-                            num_folds=num_folds)
-
-        # Count number of batches,
-        # but ignore the inter-split (None,None)
-        # results:
-        got_batches = 0
-        for _i, batch in enumerate(dl):
-            if batch != (None,None):
-                got_batches += 1
-
-        # This time we get exactly the
-        # expected number of batches: 
-        self.assertEqual(got_batches, num_batches_total)
-        self.assertEqual(len(dl), num_batches_total)
 
     #------------------------------------
     # test_some_batches_partly_filled 
@@ -274,7 +274,7 @@ class TestBirdDataLoader(unittest.TestCase):
         batch_size   = 3
         num_folds    = 5
         num_samples  = 34
-        samples_per_fold = num_samples // num_folds
+        #samples_per_fold = num_samples // num_folds
 
         dl = CrossValidatingDataLoader(self.dataset, 
                             batch_size=batch_size,
@@ -287,7 +287,7 @@ class TestBirdDataLoader(unittest.TestCase):
         samples_per_split = (num_folds-1) * samples_per_fold # 32
         samples_total     = (num_folds-1) * samples_per_split # 128
         batches_total     = samples_total // batch_size # 128/3: 42.666666666666664
-        batches_per_split = batches_total / (num_folds-1)  # 42.666666666666664 / 4 
+        #batches_per_split = batches_total / (num_folds-1)  # 42.666666666666664 / 4 
 
         # Compute batches_per_split assuming
         # all num_folds folds:
@@ -302,20 +302,21 @@ class TestBirdDataLoader(unittest.TestCase):
         num_batches_seen = 0
         batches_seen_in_splits = []
         batch_count = 0
-        for _i, (batch, _y) in enumerate(dl):
-            if batch is not None:
-                # Did not get the inter-split (None, None) result:
-                num_samples_seen += len(batch)
-                num_batches_seen += 1
-                batch_count += 1
-            else:
+        for _safety_cnt in range(dl.num_folds + 2):
+            try:
+                for _i, (batch, _y) in enumerate(dl):
+                    num_samples_seen += len(batch)
+                    num_batches_seen += 1
+                    batch_count += 1
+            except EndOfSplit:
                 # End of split:
                 batches_seen_in_splits.append(batch_count)
                 batch_count = 0
         
         # True number of batches per split is 9
         # or the average of the delivered batches per split:
-        self.assertEqual(num_batches_seen, np.mean(batches_seen_in_splits)*num_folds)
+        self.assertEqual(num_batches_seen, 
+                         np.mean(batches_seen_in_splits)*num_folds)
 
 
 # --------------------------------- Main --------------------

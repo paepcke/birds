@@ -269,6 +269,55 @@ class ResultCollection(dict):
                                           self._sorted_tallies
                                           )
 
+    #------------------------------------
+    # _place_partial_scores 
+    #-------------------
+    
+    @classmethod
+    def _place_partial_scores(cls, labels, scores, num_classes):
+        '''
+        Some measures from sklearn.metrics return
+        values only for classes represented in the 
+        the truth labels. Example:
+        
+             labels = [0,3,4]
+             preds  = [0,2,5] 
+             f1_all_represented_classes = f1_score(labels, preds, average=None)
+             
+        Only three of the probably 5 classes will have
+        f1 values in result f1_all_represented_classes: 0, 3, and 4.
+        Classes 1, 2, 5 any any higher classeswill have no f1 score 
+        because they were not present in the samples.
+        
+        Say the returned values are [3, 4, 4].
+        Assuming num_classes is 6, this method would return:
+        
+               [0.3, None, None, 0.4, 0.8, None]
+               
+        :param labels:
+        :type labels:
+        :param scores: list of scores, one for each 
+            class. The units, or even type of scores
+            may be anything
+        :type scores: [Any]
+        :param num_classes: number of (integer-encoded) classes
+        :type num_classes: int
+        :return: list of length num_classes, with 
+            scores inserted in the correct places.
+        :rtype: [type(scores)]
+        '''
+        
+        scores_list = [float('NaN')]*num_classes
+        # Get one entry for each of the classes that 
+        # are present in the labels in reverse order,
+        # smallest last, so we can use pop() and get 
+        # smallest to largest order: 
+        represented_classes = sorted(list(set(labels)), reverse=True)
+        for score in scores:
+            scores_list[represented_classes.pop()] = score
+            
+        return scores_list
+        
 
 # ----------------------- Class Train Results -----------
 
@@ -401,7 +450,7 @@ class ResultTally:
         if attr_name not in self._static_attrs and \
                 self.metrics_stale:
             # (Re)compute attrs from the (presumably)
-            # expanced preds and labels list:
+            # expanded preds and labels list:
             
             self.update_tally_metrics(self.__getattribute__('labels'),
                                       self.__getattribute__('preds'),
@@ -456,9 +505,11 @@ class ResultTally:
                                      zero_division=1
                                      )
 
-        self.f1_all_classes  = f1_score(labels, preds, average=None,
-                                     zero_division=1
-                                     )
+        self.f1_all_classes  = ResultCollection._place_partial_scores(
+                labels,
+                f1_score(labels, preds, average=None, zero_division=1),
+                self.num_classes
+                )
 
         
         self.prec_macro   = precision_score(labels, preds, average='macro',
@@ -470,10 +521,11 @@ class ResultTally:
         self.prec_weighted= precision_score(labels, preds, average='weighted',
                                             zero_division=1
                                            )
-        self.prec_all_classes = precision_score(labels, preds, average=None,
-                                            zero_division=1
-                                           )
-
+        self.prec_all_classes  = ResultCollection._place_partial_scores(
+                labels,
+                precision_score(labels, preds, average=None, zero_division=1),
+                self.num_classes
+                )
 
         self.recall_macro   = recall_score(labels, preds, average='macro',
                                            zero_division=1
@@ -484,9 +536,11 @@ class ResultTally:
         self.recall_weighted= recall_score(labels, preds, average='weighted',
                                            zero_division=1
                                            )
-        self.recall_all_classes = recall_score(labels, preds, average=None,
-                                           zero_division=1
-                                           )
+        self.recall_all_classes  = ResultCollection._place_partial_scores(
+                labels,
+                recall_score(labels, preds, average=None, zero_division=1),
+                self.num_classes
+                )
 
         # A confusion matrix whose entries
         # are normalized to show percentage

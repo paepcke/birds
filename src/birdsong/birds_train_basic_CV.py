@@ -9,50 +9,32 @@ import argparse
 import datetime
 from logging import DEBUG
 import os
-from pathlib import Path
 import random
 import sys
 
 from logging_service.logging_service import LoggingService
-from torch import cuda
+from torch import cuda, unsqueeze
 from torch import nn
 from torch import optim
 import torch
-from torch.utils.data.dataloader import DataLoader
-from torchvision.datasets.folder import ImageFolder
 
+from birdsong.birds_train_basic import BirdsTrainBasic
+from birdsong.cross_validation_dataloader import CrossValidatingDataLoader, \
+    EndOfSplit
 from birdsong.nets import NetUtils
 from birdsong.result_tallying import ResultTally, ResultCollection
+from birdsong.rooted_image_dataset import SingleRootImageDataset
+from birdsong.samplers import SKFSampler
 from birdsong.utils.dottable_config import DottableConfigParser
 from birdsong.utils.learning_phase import LearningPhase
 from birdsong.utils.model_archive import ModelArchive
 from birdsong.utils.neural_net_config import NeuralNetConfig, ConfigError
 from birdsong.utils.tensorboard_plotter import SummaryWriterPlus, TensorBoardPlotter
-from birdsong.utils.utilities import FileUtils, CSVWriterCloseable #, Differentiator
+from birdsong.utils.utilities import FileUtils, CSVWriterCloseable  # , Differentiator
 import numpy as np
 
 
-#*****************
-#
-# import socket
-# if socket.gethostname() in ('quintus', 'quatro', 'sparky'):
-#     # Point to where the pydev server 
-#     # software is installed on the remote
-#     # machine:
-#     sys.path.append(os.path.expandvars("$HOME/Software/Eclipse/PyDevRemote/pysrc"))
-#         
-#     import pydevd
-#     global pydevd
-#     # Uncomment the following if you
-#     # want to break right on entry of
-#     # this module. But you can instead just
-#     # set normal Eclipse breakpoints:
-#     #*************
-#     print("About to call settrace()")
-#     #*************
-#     pydevd.settrace('localhost', port=4040)
-# **************** 
-class BirdsTrainBasic:
+class BirdsBasicTrainerCV:
     '''
     classdocs
     '''
@@ -109,6 +91,7 @@ class BirdsTrainBasic:
         self.net_name   = self.config.Training.net_name
         self.pretrained = self.config.Training.getboolean('pretrained',
                                                             False)
+        self.num_folds  = self.config.Training.getint('num_folds')
         self.freeze     = self.config.Training.getint('freeze', 0)
         self.to_grayscale = self.config.Training.getboolean('to_grayscale', True)
 
@@ -124,6 +107,7 @@ class BirdsTrainBasic:
         self.log.info(f"batch_size  {self.batch_size}")
         
         self.fastest_device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = self.fastest_device
         self.num_classes = self.find_num_classes(self.root_train_test_data)
 
         self.model    = NetUtils.get_net(self.net_name,
@@ -154,10 +138,10 @@ class BirdsTrainBasic:
         
         sample_width  = self.config.getint('Training', 'sample_width', 400)
         sample_height = self.config.getint('Training', 'sample_height', 400)
-        self.train_loader, self.val_loader = self.get_dataloader(sample_width, 
-                                                                  sample_height
-                                                                  )
-        self.class_names = self.train_loader.dataset.classes
+        
+        self.train_loader = self.get_dataloader(sample_width, sample_height)  
+        
+        self.class_names = self.train_loader.dataset.class_names()
         
         log_dir      = os.path.join(self.curr_dir, 'runs')
         raw_data_dir = os.path.join(self.curr_dir, 'runs_raw_results')
@@ -194,6 +178,10 @@ class BirdsTrainBasic:
         overall_start_time = datetime.datetime.now()
         for epoch in range(self.max_epochs):
             
+            # Tell dataloader and its sampler that we
+            # are starting a new epoch:
+            
+            self.train_loader.set_epoch(epoch)
             self.log.info(f"Starting epoch {epoch} training")
             start_time = datetime.datetime.now()
             
@@ -201,89 +189,54 @@ class BirdsTrainBasic:
             self.model.train()
             
             # Training
-            for batch, targets in self.train_loader:
-
-                self.log.debug(f"Top of training loop: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
-                
-                images = FileUtils.to_device(batch, 'gpu')
-                labels = FileUtils.to_device(targets, 'gpu')
-                
-                outputs = self.model(images)
-                loss = self.loss_fn(outputs, labels)
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
-
-                self.log.debug(f"Just before clearing gpu: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
-                
-                images  = FileUtils.to_device(images, 'cpu')
-                outputs = FileUtils.to_device(outputs, 'cpu')
-                labels  = FileUtils.to_device(labels, 'cpu')
-                loss    = FileUtils.to_device(loss, 'cpu')
-
-                self.remember_results(LearningPhase.TRAINING,
-                                      epoch,
-                                      outputs,
-                                      labels,
-                                      loss
-                                      )
-
-                del images
-                del outputs
-                del labels
-                del loss
-                torch.cuda.empty_cache()
-                
-                self.log.debug(f"Just after clearing gpu: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")                
-
-            # Validation
-            
-            end_time = datetime.datetime.now()
-            train_time_duration = end_time - start_time
-            # A human readable duration st down to minues:
-            duration_str = self.time_delta_str(train_time_duration, granularity=4)
-            
-            self.log.info(f"Done epoch {epoch} training (duration: {duration_str})")
-
-            self.log.debug(f"Start of validation: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
-            
-            start_time = datetime.datetime.now()
-            self.log.info(f"Starting epoch {epoch} validation")
-            
-            self.model.eval()
-            with torch.no_grad():
-                for batch, targets in self.val_loader:
-                    images = FileUtils.to_device(batch, 'gpu')
-                    labels = FileUtils.to_device(targets, 'gpu')
+            for split_num in range(self.train_loader.num_folds):
+                self.log.info(f"Train epoch {epoch} split {split_num}/{self.train_loader.num_folds}")
+                try:
+                    for batch, targets in self.train_loader:
+        
+                        self.log.debug(f"Top of training loop: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
+                        
+                        images = FileUtils.to_device(batch, 'gpu')
+                        labels = FileUtils.to_device(targets, 'gpu')
+                        
+                        outputs = self.model(images)
+                        loss = self.loss_fn(outputs, labels)
+                        self.optimizer.zero_grad()
+                        loss.backward()
+                        self.optimizer.step()
+        
+                        self.log.debug(f"Just before clearing gpu: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
+                        
+                        images  = FileUtils.to_device(images, 'cpu')
+                        outputs = FileUtils.to_device(outputs, 'cpu')
+                        labels  = FileUtils.to_device(labels, 'cpu')
+                        loss    = FileUtils.to_device(loss, 'cpu')
+        
+                        self.remember_results(LearningPhase.TRAINING,
+                                              epoch,
+                                              outputs,
+                                              labels,
+                                              loss
+                                              )
+        
+                        del images
+                        del outputs
+                        del labels
+                        del loss
+                        torch.cuda.empty_cache()
+                        
+                        self.log.debug(f"Just after clearing gpu: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")                
+                except EndOfSplit:
+                    end_time = datetime.datetime.now()
+                    train_time_duration = end_time - start_time
+                    # A human readable duration st down to minutes:
+                    duration_str = self.time_delta_str(train_time_duration, granularity=4)
                     
-                    outputs = self.model(images)
-                    loss = self.loss_fn(outputs, labels)
-                    
-                    images  = FileUtils.to_device(images, 'cpu')
-                    outputs = FileUtils.to_device(outputs, 'cpu')
-                    labels  = FileUtils.to_device(labels, 'cpu')
-                    loss    = FileUtils.to_device(loss, 'cpu')
-                    
-                    self.remember_results(LearningPhase.VALIDATING,
-                                          epoch,
-                                          outputs,
-                                          labels,
-                                          loss
-                                          )
-                    del images
-                    del outputs
-                    del labels
-                    del loss
-                    torch.cuda.empty_cache()
+                    self.log.info(f"Done training split {split_num} of epoch {epoch} (duration: {duration_str})")
 
-            self.log.debug(f"After eval: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
-            
-            end_time = datetime.datetime.now()
-            val_time_duration = end_time - start_time
-            # A human readable duration st down to minues:
-            duration_str = self.time_delta_str(val_time_duration, granularity=4)
-            self.log.info(f"Done validation (duration: {duration_str})")
-            
+                    val_time_duration = self.validate_split(epoch, split_num)
+
+                    self.log.debug(f"After eval: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
             
             epoch_duration = train_time_duration + val_time_duration
             epoch_dur_str  = self.time_delta_str(epoch_duration, granularity=4)
@@ -304,7 +257,9 @@ class BirdsTrainBasic:
             # Fresh results tallying 
             self.results.clear()
 
-            # Back around to next epoch
+            # Back around to next epoch; the StopIteration
+            # of the "for epoch..." will get us out:
+            continue
 
         self.log.info(f"Training complete after {epoch + 1} epochs")
         
@@ -317,7 +272,66 @@ class BirdsTrainBasic:
         # The final epoch number:
         return epoch
     
+    #------------------------------------
+    # validate_split
+    #-------------------
     
+    def validate_split(self, epoch, split_num):
+        '''
+        Validate one split, using that split's 
+        validation fold. Return time taken. Record
+        results for tensorboard and other record keeping.
+        
+        :param epoch: current epoch
+        :type epoch: int
+        :param split_num: the how maniesth split being validated
+        :type split_num: int
+        :return: number of epoch seconds needed for the validation
+        :rtype: int
+        '''
+        # Validation
+        
+        self.log.debug(f"Start of validation: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
+        
+        start_time = datetime.datetime.now()
+        self.log.info(f"Starting validation for split {split_num} of epoch {epoch}")
+        
+        self.model.eval()
+        with torch.no_grad():
+            for img_tensor, targets in self.train_loader.validation_samples():
+                expanded_img_tensor = unsqueeze(img_tensor, dim=0)
+                expanded_targets    = unsqueeze(targets, dim=0)
+                images = FileUtils.to_device(expanded_img_tensor, 'gpu')
+                labels = FileUtils.to_device(expanded_targets, 'gpu')
+                
+                outputs = self.model(images)
+                loss = self.loss_fn(outputs, labels)
+                
+                images  = FileUtils.to_device(images, 'cpu')
+                outputs = FileUtils.to_device(outputs, 'cpu')
+                labels  = FileUtils.to_device(labels, 'cpu')
+                loss    = FileUtils.to_device(loss, 'cpu')
+                
+                self.remember_results(LearningPhase.VALIDATING,
+                                      epoch,
+                                      outputs,
+                                      labels,
+                                      loss
+                                      )
+                del images
+                del outputs
+                del labels
+                del loss
+                torch.cuda.empty_cache()
+
+        end_time = datetime.datetime.now()
+        val_time_duration = end_time - start_time
+        # A human readable duration st down to minues:
+        duration_str = self.time_delta_str(val_time_duration, granularity=4)
+        self.log.info(f"Done validation (duration: {duration_str})")
+
+        return val_time_duration
+        
     # ------------- Utils -----------
 
     #------------------------------------
@@ -540,37 +554,28 @@ class BirdsTrainBasic:
     
     def get_dataloader(self, sample_width, sample_height):
         '''
-        Returns a train and a validate dataloader
+        Returns a cross validating dataloader
         '''
-        IMG_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif', '.tiff', '.webp')
         data_root = self.root_train_test_data
         
-        transformation = FileUtils.get_image_transforms(sample_width, 
-                                                        sample_height, 
-                                                        to_grayscale=False)
-
-        train_dataset = ImageFolder(os.path.join(data_root, 'train'),
-                                    transformation,
-                                    is_valid_file=lambda file: Path(file).suffix in IMG_EXTENSIONS
-                                    )
-
-        val_dataset   = ImageFolder(os.path.join(data_root, 'validation'),
-                                    transformation,
-                                    is_valid_file=lambda file: Path(file).suffix in IMG_EXTENSIONS
-                                    )
-        train_loader = DataLoader(train_dataset,
-                                  batch_size=self.batch_size, 
-                                  shuffle=True, 
-                                  drop_last=True 
-                                  )
+        train_dataset = SingleRootImageDataset(data_root, to_grayscale=True)
         
-        val_loader   = DataLoader(val_dataset,
-                                  batch_size=self.batch_size, 
-                                  shuffle=True, 
-                                  drop_last=True 
-                                  )
+        sampler = SKFSampler(
+            train_dataset,
+            num_folds=self.num_folds,
+            seed=42,
+            shuffle=True,
+            drop_last=True
+            )
 
-        return train_loader, val_loader
+        train_loader = CrossValidatingDataLoader(train_dataset,
+                                                 batch_size=self.batch_size, 
+                                                 shuffle=True, 
+                                                 drop_last=True,
+                                                 sampler=sampler,
+                                                 num_folds=self.num_folds 
+                                                 )
+        return train_loader
 
     #------------------------------------
     # find_num_classes 
@@ -1045,7 +1050,23 @@ class BirdsTrainBasic:
         if len(dur_str) == 0:
             dur_str = '< 1sec>'
         return dur_str
+
+    #------------------------------------
+    # cleanup 
+    #-------------------
+    
+    def cleanup(self):
+        '''
+        Recover resources taken by collaborating
+        processes. OK to call multiple times.
+        '''
+        # self.clear_gpu()
         
+        try:
+            self.writer.close()
+        except Exception as e:
+            self.log.err(f"Could not close tensorboard writer: {repr(e)}")
+
 # ------------------------ Main ------------
 if __name__ == '__main__':
         parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),

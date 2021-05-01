@@ -99,7 +99,8 @@ class SingleRootImageDataset:
                  filepath,
                  sample_width=SAMPLE_WIDTH,
                  sample_height=SAMPLE_HEIGHT,
-                 to_grayscale=False
+                 to_grayscale=False,
+                 num_folds=10
                  ):
         '''
         

@@ -334,7 +334,7 @@ class FileUtils:
             try:
                 # Index into the list of fname elements:
                 nm_idx = fname_els.index(short_name)
-            except ValueError as e:
+            except ValueError as _e:
                 fname_el_val = 'na'
             else:
                 # Value of element always follows

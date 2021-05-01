@@ -73,17 +73,6 @@ class SpectrogramAugmenter:
         
         self.species_names = Utils.find_species_names(self.input_dir_path)
 
-        # If aug_goals is not a dict mapping
-        # each species to an aug_goals, but just
-        # a single AugmentationGoals, create
-        # a dict from all bird species, mapping
-        # each to that same value:
-        
-        if type(aug_goals) != dict:
-            aug_goals = {species : aug_goals
-                          for species in self.species_names
-                          }
-
         # Get dataframe with row lables being the
         # species, and one col with number of samples
         # in the respective species:

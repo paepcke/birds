@@ -12,6 +12,14 @@ from torch.utils.data import DataLoader
 from birdsong.samplers import SKFSampler, DistributedSKFSampler
 
 
+class EndOfSplit(Exception):
+    # Raised after each split
+    # configuration is exhausted, and 
+    # client should call get_split_test_sample_ids()
+    # to get the validation sample ids of the
+    # just exhausted split
+    pass
+
 # ------------------------- Class CrossValidatingDataLoader ----------------
 class CrossValidatingDataLoader(DataLoader):
     '''
@@ -304,10 +312,10 @@ class CrossValidatingDataLoader(DataLoader):
             
         return self.total_num_batches
 
-    #------------------------------------
-    # __iter__
-    #-------------------
-    
+    # #------------------------------------
+    # # __iter__
+    # #-------------------
+    #
     def __iter__(self):
         # Call to __next__() returns
         # a generator, which does the 
@@ -330,8 +338,12 @@ class CrossValidatingDataLoader(DataLoader):
         # covers all train samples in one split.
         # And one list of sample IDs that
         # are to be used for validation in this
-        # split:
-         
+        # split.
+        
+        # Raise EndOfSplit exception at the end of
+        # each split, i.e. when client is to validate.
+        # When all splits are exhausted, raise StopIteration.
+
         for split_train_ids, split_test_ids in self.sampler:
             
             # Keep track of which split we are working
@@ -348,7 +360,7 @@ class CrossValidatingDataLoader(DataLoader):
             # one batch at a time.
             
             # Set this split's test ids aside for client
-            # to retrieve via: get_split_test_sample_ids()
+            # to retrieve later via: get_split_test_sample_ids()
             # once they pulled all the batches of this
             # split:
             self.curr_test_sample_ids = split_test_ids
@@ -414,7 +426,7 @@ class CrossValidatingDataLoader(DataLoader):
             # Let client know that all batches for one split
             # have been delivered by a None/None pair:
 
-            yield (None, None)
+            raise EndOfSplit()
 
             # Next split:
             continue
