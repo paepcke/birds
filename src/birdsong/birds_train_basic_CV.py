@@ -18,7 +18,6 @@ from torch import nn
 from torch import optim
 import torch
 
-from birdsong.birds_train_basic import BirdsTrainBasic
 from birdsong.cross_validation_dataloader import CrossValidatingDataLoader, \
     EndOfSplit
 from birdsong.nets import NetUtils
@@ -1081,16 +1080,11 @@ if __name__ == '__main__':
                             )
 
 
-        parser.add_argument('-c', '--config',
+        parser.add_argument('config',
                             help='fully qualified path to config.cfg file',
                             )
     
         args = parser.parse_args();
         
-        #*************
-        args.config = os.path.join(os.path.dirname(__file__),
-                                   '../../config.cfg'
-                                   )
-        #*************
-        BirdsTrainBasic(args.config, args.debug)
+        BirdsBasicTrainerCV(args.config, args.debug)
         print('Done')
