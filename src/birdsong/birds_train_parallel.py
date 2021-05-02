@@ -1142,7 +1142,7 @@ class BirdTrainer(object):
             self.tensorboard_plotter.class_support_to_tensorboard(
                 self.dataloader.dataset,
                 self.writer,
-                epoch=self.epoch,
+                step=self.epoch,
                 title="Training Class Support"
                 )
         
@@ -1272,7 +1272,7 @@ class BirdTrainer(object):
             self.writer,
             epoch_results['epoch_conf_matrix'], 
             self.class_names,
-            epoch=self.epoch,
+            step=self.epoch,
             title=f"Confusion Matrix Series"
             )
 

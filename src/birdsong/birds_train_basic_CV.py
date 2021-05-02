@@ -155,16 +155,15 @@ class BirdsBasicTrainerCV:
                                           )
 
         # All ResultTally instances are
-        # collected here (two per epoch, for
-        # for all training loop runs, and one
-        # for all val loop runs:
+        # collected here: (num_folds * num-epochs) 
+        # each for training and validation steps.
         
-        self.epoch_results = ResultCollection()
+        self.step_results = ResultCollection()
         
         self.log.debug(f"Just before train: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
         try:
-            final_epoch = self.train()
-            self.visualize_final_epoch_results(final_epoch)
+            final_step = self.train()
+            self.visualize_final_epoch_results(final_step)
         finally:
             self.close_tensorboard()
         
@@ -203,21 +202,27 @@ class BirdsBasicTrainerCV:
                         self.optimizer.zero_grad()
                         loss.backward()
                         self.optimizer.step()
-        
+                        
+                        # Remember the last batch's train result of this
+                        # split (results for earlier batches of 
+                        # the same split will be overwritten). This statement
+                        # must sit before deleting output and labels:
+                        
+                        step_num = self.step_number(epoch, split_num, self.num_folds)
+                        self.remember_results(LearningPhase.TRAINING,
+                                              step_num,
+                                              outputs,
+                                              labels,
+                                              loss
+                                              )
+
                         self.log.debug(f"Just before clearing gpu: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
                         
                         images  = FileUtils.to_device(images, 'cpu')
                         outputs = FileUtils.to_device(outputs, 'cpu')
                         labels  = FileUtils.to_device(labels, 'cpu')
                         loss    = FileUtils.to_device(loss, 'cpu')
-        
-                        self.remember_results(LearningPhase.TRAINING,
-                                              epoch,
-                                              outputs,
-                                              labels,
-                                              loss
-                                              )
-        
+
                         del images
                         del outputs
                         del labels
@@ -226,6 +231,7 @@ class BirdsBasicTrainerCV:
                         
                         self.log.debug(f"Just after clearing gpu: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")                
                 except EndOfSplit:
+                    
                     end_time = datetime.datetime.now()
                     train_time_duration = end_time - start_time
                     # A human readable duration st down to minutes:
@@ -233,7 +239,8 @@ class BirdsBasicTrainerCV:
                     
                     self.log.info(f"Done training split {split_num} of epoch {epoch} (duration: {duration_str})")
 
-                    val_time_duration = self.validate_split(epoch, split_num)
+                    val_time_duration = self.validate_split(step_num)
+                    self.visualize_step(step_num)
 
                     self.log.debug(f"After eval: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
             
@@ -251,8 +258,6 @@ class BirdsBasicTrainerCV:
 
             self.scheduler.step()
 
-            self.visualize_epoch(epoch)
-            
             # Fresh results tallying 
             self.results.clear()
 
@@ -275,16 +280,15 @@ class BirdsBasicTrainerCV:
     # validate_split
     #-------------------
     
-    def validate_split(self, epoch, split_num):
+    def validate_split(self, step):
         '''
         Validate one split, using that split's 
         validation fold. Return time taken. Record
         results for tensorboard and other record keeping.
         
-        :param epoch: current epoch
-        :type epoch: int
-        :param split_num: the how maniesth split being validated
-        :type split_num: int
+        :param step: current combination of epoch and 
+            split
+        :type step: int
         :return: number of epoch seconds needed for the validation
         :rtype: int
         '''
@@ -293,7 +297,7 @@ class BirdsBasicTrainerCV:
         self.log.debug(f"Start of validation: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
         
         start_time = datetime.datetime.now()
-        self.log.info(f"Starting validation for split {split_num} of epoch {epoch}")
+        self.log.info(f"Starting validation for step {step}")
         
         self.model.eval()
         with torch.no_grad():
@@ -312,7 +316,7 @@ class BirdsBasicTrainerCV:
                 loss    = FileUtils.to_device(loss, 'cpu')
                 
                 self.remember_results(LearningPhase.VALIDATING,
-                                      epoch,
+                                      step,
                                       outputs,
                                       labels,
                                       loss
@@ -350,14 +354,14 @@ class BirdsBasicTrainerCV:
     
     def remember_results(self, 
                          phase,
-                         epoch,
+                         step,
                          outputs,
                          labels,
                          loss,
                          ):
 
         # Add the results 
-        tally = ResultTally(epoch,
+        tally = ResultTally(step,
                             phase, 
                             outputs, 
                             labels, 
@@ -366,26 +370,26 @@ class BirdsBasicTrainerCV:
                             self.batch_size)
         # Add result to intermediate results collection of
         # tallies:
-        self.results[epoch] = tally
+        self.results[step] = tally
         
         # Same with the session-wide
         # collection:
         
-        self.epoch_results.add(tally)
+        self.step_results.add(tally)
         
 
     #------------------------------------
-    # visualize_epoch 
+    # visualize_step 
     #-------------------
     
-    def visualize_epoch(self, epoch):
+    def visualize_step(self, step):
         '''
         Take the ResultTally instances
         in the train and val ResultCollections
         in self.results, and report appropriate
         aggregates to tensorboard. Computes
         f1 scores, accuracies, etc. for given
-        epoch.
+        step.
 
         Separately for train and validation
         results: build one long array 
@@ -393,17 +397,17 @@ class BirdsBasicTrainerCV:
         array of labels. Also, average the
         loss across all instances.
         
-        The the preds and labels as rows to csv 
+        The preds and labels as rows to csv 
         files.
 
         '''
 
-        val_tally   = self.results[(epoch, str(LearningPhase.VALIDATING))]
-        train_tally = self.results[(epoch, str(LearningPhase.TRAINING))]
+        val_tally   = self.results[(step, str(LearningPhase.VALIDATING))]
+        train_tally = self.results[(step, str(LearningPhase.TRAINING))]
         
         result_coll = ResultCollection()
-        result_coll.add(val_tally, epoch)
-        result_coll.add(train_tally, epoch)
+        result_coll.add(val_tally, step)
+        result_coll.add(train_tally, step)
 
         self.latest_result = {'train': train_tally,
                               'val'  : val_tally
@@ -414,24 +418,24 @@ class BirdsBasicTrainerCV:
 
         if self.csv_writer is not None:
             self.csv_writer.writerow(
-                [epoch, 
+                [step, 
                  train_tally.preds,
                  train_tally.labels,
                  val_tally.preds,
                  val_tally.labels
                  ])
 
-        TensorBoardPlotter.visualize_epoch(result_coll,
+        TensorBoardPlotter.visualize_step(result_coll,
                                            self.writer, 
                                            [LearningPhase.TRAINING,
                                             LearningPhase.VALIDATING
                                             ],
-                                           epoch, 
+                                           step, 
                                            self.class_names)
         # History of learning rate adjustments:
-        lr_this_epoch = self.optimizer.param_groups[0]['lr']
-        self.writer.add_scalar('learning_rate', lr_this_epoch,
-                               global_step=epoch
+        lr_this_step = self.optimizer.param_groups[0]['lr']
+        self.writer.add_scalar('learning_rate', lr_this_step,
+                               global_step=step
                                )
 
     #------------------------------------
@@ -453,10 +457,10 @@ class BirdsBasicTrainerCV:
         # that there are that many, and show fewer
         # if needed:
         
-        num_res_to_show = min(len(self.epoch_results),
+        num_res_to_show = min(len(self.step_results),
                               2*self.DISPLAY_HISTORY_LEN)
         
-        f1_hist = self.epoch_results[- num_res_to_show:]
+        f1_hist = self.step_results[- num_res_to_show:]
         
         # First: the table of train and val f1-macro
         # scores for the past few epochs:
@@ -1049,6 +1053,30 @@ class BirdsBasicTrainerCV:
         if len(dur_str) == 0:
             dur_str = '< 1sec>'
         return dur_str
+
+    #------------------------------------
+    # step_number
+    #-------------------
+    
+    def step_number(self, epoch, split_num, num_folds):
+        '''
+        Combines an epoch with a split number into 
+        a single integer series as epochs increase,
+        and split_num cycles from 0 to num_folds.
+        
+        :param epoch: epoch to encode
+        :type epoch: int
+        :param split_num: split number to encode
+        :type split_num: int
+        :param num_folds: number of folds for CV splitting
+            must be contant!
+        :type num_folds: int
+        :return: an integer the combines epoch and split-num
+        :rtype: int
+        '''
+        
+        step_num = epoch*num_folds + split_num
+        return step_num
 
     #------------------------------------
     # cleanup 

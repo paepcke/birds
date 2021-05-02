@@ -110,7 +110,7 @@ class TestTensorBoardPlotter(unittest.TestCase):
             plotter.conf_matrix_to_tensorboard(self.writer,
                                                conf_matrix,
                                                class_names,
-                                               epoch=epoch
+                                               step=epoch
                                                )
         self.await_user_ack(f"Reload in browser, then should see confusion matrix\n" +\
                             "Hit key when inspected:")
@@ -365,7 +365,7 @@ class TestTensorBoardPlotter(unittest.TestCase):
         # For testing, prepare 
         # a train and a val tally
         # each for epochs 0 and 1.
-        # visualize_epoch will need
+        # visualize_step will need
         # to only show results for
         # one of the epochs:
 
@@ -398,14 +398,14 @@ class TestTensorBoardPlotter(unittest.TestCase):
             tally_coll.add(new_tally, epoch=epoch)
 
         class_names = ['c1', 'c2']
-        TensorBoardPlotter.visualize_epoch(
+        TensorBoardPlotter.visualize_step(
             tally_coll,
             self.writer,
             [LearningPhase.TRAINING, LearningPhase.VALIDATING],
             0,
             class_names
             )
-        TensorBoardPlotter.visualize_epoch(
+        TensorBoardPlotter.visualize_step(
             tally_coll,
             self.writer,
             [LearningPhase.TRAINING, LearningPhase.VALIDATING],
@@ -433,7 +433,7 @@ class TestTensorBoardPlotter(unittest.TestCase):
         tally_coll.add(tally0, epoch)
         
 
-        TensorBoardPlotter.visualize_epoch(
+        TensorBoardPlotter.visualize_step(
             tally_coll,
             self.writer,
             [LearningPhase.TESTING],

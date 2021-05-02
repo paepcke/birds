@@ -176,7 +176,7 @@ class BirdsTrainBasic:
         # for all training loop runs, and one
         # for all val loop runs:
         
-        self.epoch_results = ResultCollection()
+        self.step_results = ResultCollection()
         
         self.log.debug(f"Just before train: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
         try:
@@ -299,7 +299,7 @@ class BirdsTrainBasic:
 
             self.scheduler.step()
 
-            self.visualize_epoch(epoch)
+            self.visualize_step(epoch)
             
             # Fresh results tallying 
             self.results.clear()
@@ -337,14 +337,14 @@ class BirdsTrainBasic:
     
     def remember_results(self, 
                          phase,
-                         epoch,
+                         step,
                          outputs,
                          labels,
                          loss,
                          ):
 
         # Add the results 
-        tally = ResultTally(epoch,
+        tally = ResultTally(step,
                             phase, 
                             outputs, 
                             labels, 
@@ -353,26 +353,26 @@ class BirdsTrainBasic:
                             self.batch_size)
         # Add result to intermediate results collection of
         # tallies:
-        self.results[epoch] = tally
+        self.results[step] = tally
         
         # Same with the session-wide
         # collection:
         
-        self.epoch_results.add(tally)
+        self.step_results.add(tally)
         
 
     #------------------------------------
-    # visualize_epoch 
+    # visualize_step 
     #-------------------
     
-    def visualize_epoch(self, epoch):
+    def visualize_step(self, step):
         '''
         Take the ResultTally instances
         in the train and val ResultCollections
         in self.results, and report appropriate
         aggregates to tensorboard. Computes
         f1 scores, accuracies, etc. for given
-        epoch.
+        step.
 
         Separately for train and validation
         results: build one long array 
@@ -385,12 +385,12 @@ class BirdsTrainBasic:
 
         '''
 
-        val_tally   = self.results[(epoch, str(LearningPhase.VALIDATING))]
-        train_tally = self.results[(epoch, str(LearningPhase.TRAINING))]
+        val_tally   = self.results[(step, str(LearningPhase.VALIDATING))]
+        train_tally = self.results[(step, str(LearningPhase.TRAINING))]
         
         result_coll = ResultCollection()
-        result_coll.add(val_tally, epoch)
-        result_coll.add(train_tally, epoch)
+        result_coll.add(val_tally, step)
+        result_coll.add(train_tally, step)
 
         self.latest_result = {'train': train_tally,
                               'val'  : val_tally
@@ -401,24 +401,24 @@ class BirdsTrainBasic:
 
         if self.csv_writer is not None:
             self.csv_writer.writerow(
-                [epoch, 
+                [step, 
                  train_tally.preds,
                  train_tally.labels,
                  val_tally.preds,
                  val_tally.labels
                  ])
 
-        TensorBoardPlotter.visualize_epoch(result_coll,
+        TensorBoardPlotter.visualize_step(result_coll,
                                            self.writer, 
                                            [LearningPhase.TRAINING,
                                             LearningPhase.VALIDATING
                                             ],
-                                           epoch, 
+                                           step, 
                                            self.class_names)
         # History of learning rate adjustments:
         lr_this_epoch = self.optimizer.param_groups[0]['lr']
         self.writer.add_scalar('learning_rate', lr_this_epoch,
-                               global_step=epoch
+                               global_step=step
                                )
 
     #------------------------------------
@@ -440,10 +440,10 @@ class BirdsTrainBasic:
         # that there are that many, and show fewer
         # if needed:
         
-        num_res_to_show = min(len(self.epoch_results),
+        num_res_to_show = min(len(self.step_results),
                               2*self.DISPLAY_HISTORY_LEN)
         
-        f1_hist = self.epoch_results[- num_res_to_show:]
+        f1_hist = self.step_results[- num_res_to_show:]
         
         # First: the table of train and val f1-macro
         # scores for the past few epochs:

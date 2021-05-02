@@ -28,7 +28,10 @@ class ResultCollection(dict):
     '''
     Hold an arbitrary number of ResultTally
     instances. Services:
-        o acts as dict with keys being the epoch number
+        o acts as dict with keys being the step number
+          Step could be an epoch, or one split fold 
+          constellation having been processed and validated
+          
         o acts as a list as follows:
 
     '''
@@ -47,15 +50,15 @@ class ResultCollection(dict):
     #-------------------
 
     def tallies(self, 
-                epoch=None, 
+                step=None, 
                 phase=None,
                 newest_first=False):
         '''
         Iterator for tallies, optionally filtering by
-        epoch and/or phase (training vs. validation)
+        step and/or phase (training vs. validation)
         
-        :param epoch: epoch to filter by
-        :type epoch: int
+        :param step: step to filter by
+        :type step: int
         '''
         
         # Make a shallow copy in case 
@@ -79,8 +82,8 @@ class ResultCollection(dict):
         else:
             all_tallies = self._sorted_tallies.copy()
             
-        if epoch is not None:
-            all_tallies = filter(lambda t: t.epoch == epoch, 
+        if step is not None:
+            all_tallies = filter(lambda t: t.step == step, 
                                  all_tallies)
 
         if newest_first:
@@ -98,13 +101,13 @@ class ResultCollection(dict):
         Even though ResultCollection is a dict,
         allow indexing into it, and especially
 
-          my_coll[-1] to get the latest-epoch tally
-          my_col[3:5] get tallies of epoch 3-5
+          my_coll[-1] to get the latest-step tally
+          my_col[3:5] get tallies of steps 3-5
           
-        The latter only if tallies of all epoch's
+        The latter only if tallies of all step's
         are present in this collection. Reality
         of the interface is a list of ResultTally
-        sorted by epoch.
+        sorted by step.
          
         :param item: integer or slice
         :type item: {int | list}
@@ -113,7 +116,7 @@ class ResultCollection(dict):
         :rtype: ResultTally
         '''
         if type(item) == tuple:
-            # A tuple (epoch, LearningPhase).
+            # A tuple (step, LearningPhase).
             # Treat as a dict after
             # making the LearningPhase hashable
             #return super().__getitem__(item)
@@ -125,9 +128,9 @@ class ResultCollection(dict):
     # __setitem__ 
     #-------------------
     
-    def __setitem__(self, epoch, tally):
+    def __setitem__(self, step, tally):
         
-        self.add(tally, epoch=epoch)
+        self.add(tally, step=step)
 
     #------------------------------------
     # __iter__ 
@@ -143,10 +146,10 @@ class ResultCollection(dict):
     # conf_matrix_aggregated 
     #-------------------
     
-    def conf_matrix_aggregated(self, epoch=None): 
+    def conf_matrix_aggregated(self, step=None): 
         
         conf_matrix_sum = torch.zeros((self.num_classes, self.num_classes), dtype=int)
-        for tally in self.tallies(epoch):
+        for tally in self.tallies(step):
             conf_matrix_sum += tally.conf_matrix
         return conf_matrix_sum / len(self)
 
@@ -154,35 +157,35 @@ class ResultCollection(dict):
     # add 
     #-------------------
     
-    def add(self, new_tally_result, epoch=None):
+    def add(self, new_tally_result, step=None):
         '''
         Add new_tally_result instance to this collection:
         update the (self)dict with key being the tally's
-        epoch, and value being the tally.
+        step, and value being the tally.
         
         Then update self._sorted_tallies, the
-        epoch-sorted list of tallies in this collection
+        step-sorted list of tallies in this collection
         
-        If a tally for the given epoch and learning
+        If a tally for the given step and learning
         phase already exists, augment the existing
         tally with the content of the given arg.
         
-        Normally the new result's epoch will be contained
-        in its .epoch attr. But the epoch kwarg allows
-        placing a ResultTally into any epoch key
+        Normally the new result's step will be contained
+        in its .step attr. But the step kwarg allows
+        placing a ResultTally into any step key
         
         :param new_tally_result: the result to add
         :type new_tally_result: ResultTally
         '''
 
-        if epoch is None:
-            key = (new_tally_result.epoch, 
+        if step is None:
+            key = (new_tally_result.step, 
                    str(new_tally_result.phase))
         else:
-            key = (epoch, str(new_tally_result.phase))
+            key = (step, str(new_tally_result.phase))
 
         # Does a result from an earlier batch in the
-        # same epoch already exist?
+        # same step already exist?
         
         try:
             tally = self[key]
@@ -190,7 +193,7 @@ class ResultCollection(dict):
                 # The very tally was already
                 # in this collection 
                 return
-            # Yes, already have a tally for this epoch
+            # Yes, already have a tally for this step
             # and training phase:
             tally.preds.extend(new_tally_result.preds)
             tally.labels.extend(new_tally_result.labels)
@@ -203,19 +206,19 @@ class ResultCollection(dict):
             # of its computed attrs is accessed:
             tally.metrics_stale = True
         except KeyError:
-            # First ResultTally of given epoch in
+            # First ResultTally of given step in
             # this collection:
             super().__setitem__(key, new_tally_result)
 
         self._sort_tallies()
 
     #------------------------------------
-    # epochs 
+    # steps 
     #-------------------
     
-    def epochs(self):
+    def steps(self):
         '''
-        Return a sorted list of epochs
+        Return a sorted list of steps
         that are represented in tallies
         within the collection. 
         '''
@@ -255,13 +258,13 @@ class ResultCollection(dict):
     def _sort_tallies(self):
         '''
         Sorts the result tallies in this 
-        collection by their epoch, and 
+        collection by their step, and 
         creates/updates _sorted_tallies
         '''
         
         unsorted_tallies = list(self.values())
         self._sorted_tallies = sorted(unsorted_tallies, 
-                                      key=lambda tally: tally.epoch)
+                                      key=lambda tally: tally.step)
         self._sorted_train_tallies = filter(lambda tally: tally.phase == LearningPhase.TRAINING,
                                             self._sorted_tallies
                                             )
@@ -332,7 +335,7 @@ class ResultTally:
     #-------------------
 
     def __init__(self,
-                 epoch,
+                 step,
                  phase, 
                  outputs, 
                  labels, 
@@ -364,10 +367,10 @@ class ResultTally:
         Note: the number of target classes cannot be
               gleaned from outputs or labels, b/c some
               classes might not have been involved in this
-              epoch
+              step
         
-        :param epoch: epoch from which produced the results 
-        :type epoch: int
+        :param step: step from which produced the results 
+        :type step: int
         :param phase: the LearningPhase (e.g. LearningPhase.TRAINING)
         :type phase: LearningPhase
         :param outputs: predictions that model produced.
@@ -387,7 +390,7 @@ class ResultTally:
         
         self.created_at     = datetime.datetime.now()
         self.phase          = phase
-        self.epoch          = epoch
+        self.step          = step
         self.num_classes    = num_classes
         self.batch_size     = batch_size
         self.preds          = None
@@ -765,7 +768,7 @@ class ResultTally:
         (cm_num_rows, cm_num_cols) = self.conf_matrix.size()
         cm_dim = f"{cm_num_rows} x {cm_num_cols}"
         learning_phase = str(self.phase)
-        human_readable = (f"<ResultTally epoch {self.epoch} " +
+        human_readable = (f"<ResultTally step {self.step} " +
                           f"phase {learning_phase} " +
                           f"conf_matrix {cm_dim}>")
         return human_readable 

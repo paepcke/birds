@@ -86,7 +86,7 @@ class TensorBoardPlotter:
                                   tally_coll,
                                   writer,
                                   phases,
-                                  epoch
+                                  step
                                   ):
         '''
         Reports standard results from all tallies
@@ -100,30 +100,30 @@ class TensorBoardPlotter:
         :param tally_coll:
         :type tally_coll:
         '''
-        cls.visualize_epoch(tally_coll,
+        cls.visualize_step(tally_coll,
                             writer,
                             phases,
-                            epoch)
+                            step)
     #------------------------------------
-    # visualize_epoch 
+    # visualize_step 
     #-------------------
     
     @classmethod
-    def visualize_epoch(cls,
+    def visualize_step(cls,
                         tally_coll,
                         writer,
                         phases,
-                        epoch,
+                        step,
                         class_names
                         ):
         '''
         Take the ResultTally instances from
-        the same epoch from the tally_coll, 
+        the same step from the tally_coll, 
         and report appropriate aggregates to 
         tensorboard. 
         
         Computes f1 scores, accuracies, etc. for 
-        given epoch.
+        given step.
 
         Separately for train and validation
         results: build one long array 
@@ -140,11 +140,11 @@ class TensorBoardPlotter:
         '''
         
         try:
-            tallies = {str(phase) : tally_coll[(epoch, phase)]
+            tallies = {str(phase) : tally_coll[(step, phase)]
                        for phase in phases
                        }
         except KeyError as e:
-            cls.log.err(f"Epoch: {epoch}, phases: {phases}: {repr(e)}")
+            cls.log.err(f"Step: {step}, phases: {phases}: {repr(e)}")
             return
 
         for phase in phases:
@@ -156,17 +156,17 @@ class TensorBoardPlotter:
             tally = tallies[phase_str]
             writer.add_scalar(f"loss/{phase_str}", 
                                    tally.mean_loss, 
-                                   global_step=epoch
+                                   global_step=step
                                    )
             
             writer.add_scalar(f"balanced_accuracy_score/{phase_str}", 
                                    tally.balanced_acc, 
-                                   global_step=epoch
+                                   global_step=step
                                    )
     
             writer.add_scalar(f"accuracy_score/{phase_str}", 
                                    tally.accuracy, 
-                                   global_step=epoch
+                                   global_step=step
                                    )
 
             # The following are only sent to the
@@ -178,7 +178,7 @@ class TensorBoardPlotter:
                 # Submit the confusion matrix image
                 # to the tensorboard. In the following:
                 # do not provide a separate title, such as
-                #  title=f"Confusion Matrix (Validation): Epoch{epoch}"
+                #  title=f"Confusion Matrix (Validation): Step{step}"
                 # That would put each matrix into its own slot
                 # on tensorboard, rather than having a time slider
 
@@ -186,7 +186,7 @@ class TensorBoardPlotter:
                     writer,
                     tally.conf_matrix,
                     class_names,
-                    epoch=epoch,
+                    step=step,
                     title=f"Confusion Matrix Series"
                     )
 
@@ -194,35 +194,35 @@ class TensorBoardPlotter:
                 
                 writer.add_scalar(f"{phase_str}_f1/macro", 
                                        tally.f1_macro, 
-                                       global_step=epoch)
+                                       global_step=step)
                 writer.add_scalar(f"{phase_str}_f1/micro", 
                                        tally.f1_micro,
-                                       global_step=epoch)
+                                       global_step=step)
                 writer.add_scalar(f"{phase_str}_f1/weighted", 
                                        tally.f1_weighted,
-                                       global_step=epoch)
+                                       global_step=step)
 
                 # Versions of precision/recall:
                 
                 writer.add_scalar(f"{phase_str}_prec/macro", 
                                        tally.prec_macro, 
-                                       global_step=epoch)
+                                       global_step=step)
                 writer.add_scalar(f"{phase_str}_prec/micro", 
                                        tally.prec_micro,
-                                       global_step=epoch)
+                                       global_step=step)
                 writer.add_scalar(f"{phase_str}_prec/weighted", 
                                        tally.prec_weighted,
-                                       global_step=epoch)
+                                       global_step=step)
         
                 writer.add_scalar(f"{phase_str}_recall/macro", 
                                        tally.recall_macro, 
-                                       global_step=epoch)
+                                       global_step=step)
                 writer.add_scalar(f"{phase_str}_recall/micro", 
                                        tally.recall_micro,
-                                       global_step=epoch)
+                                       global_step=step)
                 writer.add_scalar(f"{phase_str}_recall/weighted", 
                                        tally.recall_weighted,
-                                       global_step=epoch)
+                                       global_step=step)
         
         return tally
 
@@ -331,13 +331,13 @@ class TensorBoardPlotter:
                                    writer,
                                    conf_matrix,
                                    class_names,
-                                   epoch=0,
+                                   step=0,
                                    title='Confusion Matrix'
                                    ):
         conf_matrix_fig = cls.fig_from_conf_matrix(conf_matrix, 
                                                    class_names, 
                                                    title)
-        writer.add_figure(title, conf_matrix_fig, global_step=epoch)
+        writer.add_figure(title, conf_matrix_fig, global_step=step)
 
     #------------------------------------
     # class_support_to_tensorboard
@@ -347,7 +347,7 @@ class TensorBoardPlotter:
     def class_support_to_tensorboard(cls,
                                      data_src, 
                                      writer,
-                                     epoch=0,
+                                     step=0,
                                      title='Class Support'):
         '''
         Create a barchart showing number of training samples
@@ -370,8 +370,8 @@ class TensorBoardPlotter:
         :type data_src: {str | {int : int} | torch.utils.data.Dataset}
         :param writer: a tensorboard summary writer
         :type writer: tensorboard.SummaryWriter
-        :param epoch: epoch for which support is shown
-        :type epoch: int
+        :param step: step for which support is shown
+        :type step: int
         :param custom_data: an optional dict {class-id : sample-count} whose
             per-class count is to be bar-charted instead of the entire
             dataset
@@ -435,7 +435,7 @@ class TensorBoardPlotter:
         # Convert matplotlib figure into 
         # an image tensor for tensorboard:
         
-        writer.add_figure(title, fig, epoch)
+        writer.add_figure(title, fig, step)
         
         support_dict = {class_name : num_samples
                         for class_name, num_samples
@@ -470,7 +470,7 @@ class TensorBoardPlotter:
         :type tag: str
         :param img_path: full path to image
         :type img_path: str
-        :param step: epoch
+        :param step: step
         :type step: int
         :param to_grayscale: whether or not to conver
             to grayscale
@@ -1239,16 +1239,16 @@ class TensorBoardPlotter:
            |train| f1_0|f1_1|f1_2|
            |  val| f1_0|f1_1|f1_2|
            
-        for half as many epochs back as there are
+        for half as many steps back as there are
         tallies available in the list of ResultTally
-        instances in epoch_results.
+        instances in step_results.
         
         Assumption: exactly two ResultTallies are provided
         in res_list. One each for train and validation 
         results.
            
         :param res_list: list of ResultTally
-            instances in oldest-epoch-first order
+            instances in oldest-step-first order
         :type res_list: [ResultTally]
         :return: a table
         :rtype: str
@@ -1264,14 +1264,14 @@ class TensorBoardPlotter:
         # Should be an even number of result
         # objs:
         #if res_len % 2 != 0:
-        #    raise ValueError("Must provide two ResultTally instances per epoch")
+        #    raise ValueError("Must provide two ResultTally instances per step")
         
         
-        num_epochs = res_len // 2
+        num_steps = res_len // 2
         
         # First the header:
         header = []
-        for i in range(num_epochs):
+        for i in range(num_steps):
             header.append(f"f1-macro ep{i}")
             
         # The f1 value results for both

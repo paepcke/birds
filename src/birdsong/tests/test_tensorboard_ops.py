@@ -93,7 +93,7 @@ class TensorBoardOpsTester(unittest.TestCase):
             tb_plotter.conf_matrix_to_tensorboard(self.writer1, 
                                                   mat,
                                                   class_names, 
-                                                  epoch=epoch)
+                                                  step=epoch)
         
         user_prompt = "Browser after refreshing: is there a scrollable confusion matrix in the IMAGES tab?"
         if not self.query_yes_no(user_prompt):
@@ -108,7 +108,7 @@ class TensorBoardOpsTester(unittest.TestCase):
             tb_plotter.conf_matrix_to_tensorboard(self.writer2, 
                                                   mat,
                                                   class_names, 
-                                                  epoch=epoch)
+                                                  step=epoch)
         
         user_prompt = "After refreshing, did a second series of matrices apeared in IMAGES tab? "
         if not self.query_yes_no(user_prompt):
