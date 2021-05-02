@@ -317,7 +317,13 @@ class ResultCollection(dict):
         # smallest to largest order: 
         represented_classes = sorted(list(set(labels)), reverse=True)
         for score in scores:
-            scores_list[represented_classes.pop()] = score
+            try:
+                scores_list[represented_classes.pop()] = score
+            except IndexError:
+                # All predicted scores have been
+                # placed in the scores_list. The rest
+                # are left as NaN
+                pass
             
         return scores_list
         
