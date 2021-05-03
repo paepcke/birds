@@ -171,7 +171,14 @@ class BirdsBasicTrainerCV:
         sample_width  = self.config.getint('Training', 'sample_width', 400)
         sample_height = self.config.getint('Training', 'sample_height', 400)
         
-        self.train_loader = self.get_dataloader(sample_width, sample_height)  
+        self.train_loader = self.get_dataloader(sample_width,
+                                                sample_height,
+                                                perc_data_to_use=percentage
+                                                )
+        self.log.info(f"Expecting {len(self.train_loader)} batches per epoch")
+        num_train_samples = len(self.train_loader.dataset)
+        num_classes = len(self.train_loader.dataset.class_names())
+        self.log.info(f"Training set contains {num_train_samples} samples across {num_classes} classes")
         
         self.class_names = self.train_loader.dataset.class_names()
         
@@ -589,8 +596,8 @@ class BirdsBasicTrainerCV:
     #-------------------
     
     def get_dataloader(self, 
-                       sample_width, 
-                       sample_height, 
+                       sample_width,
+                       sample_height,
                        perc_data_to_use=None):
         '''
         Returns a cross validating dataloader. 
