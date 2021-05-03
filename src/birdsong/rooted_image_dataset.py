@@ -418,10 +418,10 @@ class SingleRootImageDataset:
         return (img_tensor, torch.tensor(label))
 
     #------------------------------------
-    # cull_samples 
+    # _cull_samples 
     #-------------------
 
-    def cull_samples(self, 
+    def _cull_samples(self, 
                      sample_id_to_class,
                      sample_id_to_path, 
                      percentage):
