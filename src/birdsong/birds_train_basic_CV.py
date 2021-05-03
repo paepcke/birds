@@ -12,11 +12,17 @@ import os
 import random
 import sys
 
-from logging_service.logging_service import LoggingService
+import numpy as np
+
 from torch import cuda, unsqueeze
 from torch import nn
 from torch import optim
 import torch
+
+from logging_service.logging_service import LoggingService
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from birdsong.cross_validation_dataloader import CrossValidatingDataLoader, \
     EndOfSplit
@@ -30,7 +36,6 @@ from birdsong.utils.model_archive import ModelArchive
 from birdsong.utils.neural_net_config import NeuralNetConfig, ConfigError
 from birdsong.utils.tensorboard_plotter import SummaryWriterPlus, TensorBoardPlotter
 from birdsong.utils.utilities import FileUtils, CSVWriterCloseable  # , Differentiator
-import numpy as np
 
 
 class BirdsBasicTrainerCV:
@@ -55,16 +60,44 @@ class BirdsBasicTrainerCV:
 
     def __init__(self, 
                  config_info, 
+                 device=0,
+                 percentage=None,
                  debugging=False
                  ):
         '''
-        Constructor
+        
+        :param config_info: all path and training parameters
+        :type config_info: NeuralNetConfig
+        :param debugging: output lots of debug info
+        :type debugging: bool
+        :param device: number of GPU to use; default is dev 0
+            if any GPU is available
+        :type device: {None | int}
+        :param percentage: percentage of training data to 
+            use
+        :type percentage: {int | float}
         '''
         
         self.log = LoggingService()
         if debugging:
             self.log.logging_level = DEBUG
-        
+
+        if percentage is not None:
+            # Integrity check:
+            if type(percentage) not in [int, float]:
+                raise TypeError(f"Percentage must be int or float, not {type(percentage)}")
+            if percentage < 1 or percentage > 100:
+                raise ValueError(f"Percentage must be between 1 and 100, not {percentage}")
+
+        if device is None:
+            device = 0
+            torch.cuda.set_device(device)
+        else:
+            available_gpus = torch.cuda.device_count()
+            if device > available_gpus - 1:
+                raise ValueError(f"Asked to operate on device {device}, but only {available_gpus} are available")
+            torch.cuda.set_device(device)
+
         self.curr_dir = os.path.dirname(os.path.abspath(__file__))
 
         try:
@@ -555,13 +588,37 @@ class BirdsBasicTrainerCV:
     # get_dataloader 
     #-------------------
     
-    def get_dataloader(self, sample_width, sample_height):
+    def get_dataloader(self, 
+                       sample_width, 
+                       sample_height, 
+                       perc_data_to_use=None):
         '''
-        Returns a cross validating dataloader
+        Returns a cross validating dataloader. 
+        If perc_data_to_use is None, all samples
+        under self.root_train_test_data will be
+        used for training. Else percentage indicates
+        the percentage of those samples to use. The
+        selection is random.
+        
+        :param sample_width: pixel width of returned images
+        :type sample_width: int
+        :param sample_height: pixel height of returned images
+        :type sample_height: int
+        :param perc_data_to_use: amount of available training
+            data to use.
+        :type perc_data_to_use: {None | int | float}
+        :return: a data loader that serves batches of
+            images and their assiated labels
+        :rtype: CrossValidatingDataLoader
         '''
+
         data_root = self.root_train_test_data
         
-        train_dataset = SingleRootImageDataset(data_root, to_grayscale=True)
+        train_dataset = SingleRootImageDataset(data_root,
+                                               sample_width=sample_width,
+                                               sample_height=sample_height,
+                                               percentage=perc_data_to_use, 
+                                               to_grayscale=True)
         
         sampler = SKFSampler(
             train_dataset,
@@ -1101,18 +1158,33 @@ if __name__ == '__main__':
                                          description="Basic training setup."
                                          )
 
-        parser.add_argument('-d', '--debug',
+        parser.add_argument('-g', '--debug',
                             action='store_true',
                             help='maximally detailed debug message (default False)',
                             default=False
                             )
 
+        parser.add_argument('-d', '--device',
+                            type=int,
+                            help='gpu device to use; integer rooted at 0',
+                            default=0
+                            )
 
+        parser.add_argument('-p', '--percentage',
+                            type=int,
+                            help='percentage of training data to use; default: all',
+                            default=None
+                            )
+        
         parser.add_argument('config',
                             help='fully qualified path to config.cfg file',
                             )
     
         args = parser.parse_args();
         
-        BirdsBasicTrainerCV(args.config, args.debug)
+        BirdsBasicTrainerCV(args.config, 
+                            device=args.device,
+                            percentage=args.percentage,
+                            debugging=args.debug
+                            )
         print('Done')

@@ -62,6 +62,7 @@ in the subclass MultiRootImageDataset.
 from _collections import OrderedDict
 import os
 from pathlib import Path
+import random
 
 import natsort
 import torch
@@ -100,9 +101,17 @@ class SingleRootImageDataset:
                  sample_width=SAMPLE_WIDTH,
                  sample_height=SAMPLE_HEIGHT,
                  to_grayscale=False,
-                 num_folds=10
+                 percentage=None,
+                 unittesting=False
                  ):
         '''
+        If percentage P is provided, only P%
+        of all available samples will be included
+        in the set. Use if more samples are available
+        than are needed. Speeds up training.
+        
+        Samples to include are randomly chosen after
+        shuffling.
         
         :param filepath: path to root of the target
             images, each target being a directory with
@@ -115,16 +124,25 @@ class SingleRootImageDataset:
         :param to_grayscale: do or do not convert images
             to 1-channel grayscale
         :type to_grayscale: bool
+        :param percentage: if provided only a sample of 
+            of all the available training samples is 
+            included in the dataset.
+        :type percentage: {int | float}
         :return: new instance of MultiRootImageDataset
         :rtype MultiRootImageDataset
         :raises ValueError if any of the roots is not a string.
         '''
-        #*******************
-#         self.transform_img = transforms.Compose([
-#                 transforms.Resize((sample_width, sample_height)),  # should actually be 1:3 but broke the system
-#                 transforms.ToTensor(),
-#                 transforms.Grayscale()
-#                 ])
+
+        if unittesting:
+            # Let unittests do things.
+            return
+        
+        if percentage is not None:
+            # Integrity check:
+            if type(percentage) not in [int, float]:
+                raise TypeError(f"Percentage must be int or float, not {type(percentage)}")
+            if percentage < 1 or percentage > 100:
+                raise ValueError(f"Percentage must be between 1 and 100, not {percentage}")
 
         img_transforms = [transforms.Resize((sample_width, sample_height)),  # should actually be 1:3 but broke the system
                           transforms.ToTensor(),
@@ -139,9 +157,15 @@ class SingleRootImageDataset:
         #*******************        
 
         # Build three data structures:
-        #     class_name --> class id int needed for model building
-        #                    No strings allowed for class_to_id
-        #     sample_id  --> sample file path
+        #
+        #    self.class_to_id:
+        #       class_name --> class id int needed for model building
+        #                      No strings allowed for class_to_id
+        #
+        #    self.sample_id_to_path
+        #       sample_id  --> sample file path
+        #
+        #    self.sample_id_to_class
         #     sample_id  --> class id
         #
         # Use OrderedDict for some of the above maps to
@@ -246,7 +270,16 @@ class SingleRootImageDataset:
                 # Update where to start the IDs for the
                 # next folder
                 sample_id_start += len(sample_id_range)
-            
+
+        if percentage is None:
+            # Use all samples
+            return
+        
+        self.sample_id_to_class, self.sample_id_to_path = \
+            self._cull_samples(self.sample_id_to_class, 
+                               self.sample_id_to_path,
+                               percentage
+                               )
 
     #------------------------------------
     # sample_ids
@@ -383,6 +416,79 @@ class SingleRootImageDataset:
         label = self.sample_id_to_class[sample_id]
 
         return (img_tensor, torch.tensor(label))
+
+    #------------------------------------
+    # cull_samples 
+    #-------------------
+
+    def cull_samples(self, 
+                     sample_id_to_class,
+                     sample_id_to_path, 
+                     percentage):
+        '''
+        Given a dict mapping sample ids (sid) to 
+        class ids (cid), and another dict mapping sids
+        to image paths, and a percentage P, return copies
+        of the dicts with random sids removed. Only 
+        P% of the samples in each class will be included.
+
+        Example inputs
+          sample_id_to_class = {100 : 0, 101 : 4, 102: 4, 103 : 0}
+          sample_id_to_path  = {100 : '/foo/img0, 
+                                101 : /foo/img1, 
+                                102 : /foo/img2, 
+                                103 : /foo/img3
+                                }
+
+        :param sample_id_to_class: map sample id to class id
+        :type sample_id_to_class: {int : int}
+        :param sample_id_to_path: map sample id to image path
+        :type sample_id_to_path: {int : str}
+        :param percentage: percentage of samples to retain
+            of each class
+        :type percentage: {int | float}
+        :return: copy of input dir, with (100-P)% of samples
+            removed within each class
+        '''
+        
+        reduced_sample_id_to_class = {}
+        reduced_sample_id_to_path  = {}
+        
+        samples_in_classes = self._sids_by_class(sample_id_to_class)
+        for cid, sids in samples_in_classes.items():
+            random.shuffle(sids)
+            num_sids_wanted = round(percentage * len(sids) / 100)
+            sids_retained = random.sample(sids, num_sids_wanted)
+            for sid in sids_retained:
+                reduced_sample_id_to_class[sid] = cid
+                reduced_sample_id_to_path[sid]  = sample_id_to_path[sid]
+
+        return reduced_sample_id_to_class, reduced_sample_id_to_path
+
+    #------------------------------------
+    # _sids_by_class 
+    #-------------------
+
+    def _sids_by_class(self, sample_id_to_class):
+        '''
+        Given a dict mapping sample ids to class ids, 
+        return a dict mapping class IDs to tuples containing
+        the samples for that class.
+        
+        :param sample_id_to_class: map sample id to class id
+        :type sample_id_to_class: {int : int}
+        :return: map from class to list of sample ids 
+            in that class
+        :rtype: {int : [int]}
+        '''
+        
+        sids_in_classes = OrderedDict({})
+        for sid, cid in sample_id_to_class.items():
+            try:
+                sids_in_classes[cid].append(sid)
+            except KeyError:
+                sids_in_classes[cid] = [sid]
+        return sids_in_classes
 
 # ------------------------- Class MultiRootImageDataset --------
 
