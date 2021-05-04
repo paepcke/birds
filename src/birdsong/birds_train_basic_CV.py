@@ -331,10 +331,10 @@ class BirdsBasicTrainerCV:
         msg = f"Done epoch {epoch}  (epoch duration: {epoch_dur_str}; cumulative: {cum_dur_str})"
         self.log.info(msg)
 
-        self.scheduler.step()
+        #******self.scheduler.step()
 
         # Fresh results tallying 
-        self.results.clear()
+        #self.results.clear()
 
         self.log.info(f"Training complete after {self.train_loader.num_folds} splits")
         
