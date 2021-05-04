@@ -145,31 +145,7 @@ class BirdsBasicTrainerCV:
         self.device = self.fastest_device
         self.num_classes = self.find_num_classes(self.root_train_test_data)
 
-        self.model    = NetUtils.get_net(self.net_name,
-                                         num_classes=self.num_classes,
-                                         pretrained=self.pretrained,
-                                         freeze=self.freeze,
-                                         to_grayscale=self.to_grayscale
-                                         )
-        self.log.debug(f"Before any gpu push: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
-        
-        FileUtils.to_device(self.model, 'gpu')
-        
-        self.log.debug(f"Before after model push: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
-        
-        # No cross validation:
-        self.folds    = 0
-        self.opt_name =  self.config.Training.get('optimizer', 
-                                             'Adam') # Default
-        self.optimizer = self.get_optimizer(
-            self.opt_name, 
-            self.model, 
-            self.lr)
-        
-        self.loss_fn = nn.CrossEntropyLoss()
-        self.scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, 
-                                                              self.min_epochs
-                                                              )
+        self.initialize_model()
         
         sample_width  = self.config.getint('Training', 'sample_width', 400)
         sample_height = self.config.getint('Training', 'sample_height', 400)
@@ -220,39 +196,42 @@ class BirdsBasicTrainerCV:
         # Just for sanity: keep track 
         # of number of batches...
         total_batch_num = 0
+        
+        # Note: since we are cross validating, the
+        # data loader's set_epoch() method is only
+        # called once (automatically) during instantiation
+        # of the associated sampler. Moving from split
+        # to split includes shuffling if the caller
+        # specified that. 
 
-        for epoch in range(self.max_epochs):
-            
-            # Tell dataloader and its sampler that we
-            # are starting a new epoch:
-            
-            self.train_loader.set_epoch(epoch)
-            self.log.info(f"Starting epoch {epoch} training")
-            epoch_start_time = datetime.datetime.now()
-            
-            # Sanity check record: will record
-            # how many samples from each class were
-            # used:
-            self.class_coverage = {}
-            
+        # Training
+        for split_num in range(self.train_loader.num_folds):
+
+            split_start_time = datetime.datetime.now()
+            self.initialize_model()
             # Set model to train mode:
             self.model.train()
-            
-            # Training
-            for split_num in range(self.train_loader.num_folds):
-                split_start_time = datetime.datetime.now()
-                self.log.info(f"Train epoch {epoch}/{self.max_epochs} split {split_num}/{self.train_loader.num_folds}")
 
+            for epoch in range(self.max_epochs):
+        
+                epoch_start_time = datetime.datetime.now()
+        
+                self.log.info(f"Starting epoch {epoch} training")
+                        
+                # Sanity check record: will record
+                # how many samples from each class were
+                # used:
+                self.class_coverage = {}
+    
                 # Sanity records: will record number
-                # of samples of each class are used
+                # of samples of each class that are used
                 # during training and validation: 
                 label_distrib = {}
                 batch_num = 0
-
+    
+                self.log.info(f"Train epoch {epoch}/{self.max_epochs} split {split_num}/{self.train_loader.num_folds}")
                 try:
                     for batch, targets in self.train_loader:
-
-
                         # Update the sanity check
                         # num of batches seen, and distribution
                         # of samples across classes: 
@@ -270,7 +249,7 @@ class BirdsBasicTrainerCV:
                                 self.class_coverage[lbl]['train'] += 1
                             except KeyError:
                                 self.class_coverage[lbl] = {'train' : 1, 'val' : 0}
-
+    
                         self.log.debug(f"Top of training loop: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
                         
                         images = FileUtils.to_device(batch, 'gpu')
@@ -294,14 +273,14 @@ class BirdsBasicTrainerCV:
                                               labels,
                                               loss
                                               )
-
+    
                         self.log.debug(f"Just before clearing gpu: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
                         
                         images  = FileUtils.to_device(images, 'cpu')
                         outputs = FileUtils.to_device(outputs, 'cpu')
                         labels  = FileUtils.to_device(labels, 'cpu')
                         loss    = FileUtils.to_device(loss, 'cpu')
-
+    
                         del images
                         del outputs
                         del labels
@@ -312,44 +291,52 @@ class BirdsBasicTrainerCV:
                 except EndOfSplit:
                     
                     end_time = datetime.datetime.now()
-                    train_time_duration = end_time - split_start_time
+                    train_time_duration = end_time - epoch_start_time
                     # A human readable duration st down to minutes:
                     duration_str = self.time_delta_str(train_time_duration, granularity=4)
                     
-                    self.log.info(f"Done training split {split_num} of epoch {epoch} (duration: {duration_str})")
-
+                    self.log.info(f"Done training epoch {epoch} of split {split_num} (duration: {duration_str})")
+    
                     #***********
                     #print(f"****** num_batches in split: {batch_num}" )
                     #print(f"****** LblDist: {label_distrib}")
                     #***********
                     self.validate_split(step_num)
                     self.visualize_step(step_num)
-
+                    # Save model, keeping self.model_archive_size models: 
+                    self.model_archive.save_model(self.model, epoch)
+    
                     self.log.debug(f"After eval: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
+                    
+                    # Next Epoch
+                    continue 
+                
+            end_time = datetime.datetime.now()
+            train_time_duration = end_time - split_start_time
+            # A human readable duration st down to minutes:
+            duration_str = self.time_delta_str(train_time_duration, granularity=4)
             
-            end_time       = datetime.datetime.now()
-            epoch_duration = end_time - epoch_start_time
-            epoch_dur_str  = self.time_delta_str(epoch_duration, granularity=4)
+            self.log.info(f"Done training split {split_num} (duration: {duration_str})")
             
-            cumulative_dur = end_time - overall_start_time
-            cum_dur_str    = self.time_delta_str(cumulative_dur, granularity=4)
-            
-            msg = f"Done epoch {epoch}  (epoch duration: {epoch_dur_str}; cumulative: {cum_dur_str})"
-            self.log.info(msg)
-
-            # Save model, keeping self.model_archive_size models: 
-            self.model_archive.save_model(self.model, epoch)
-
-            self.scheduler.step()
-
-            # Fresh results tallying 
-            self.results.clear()
-
-            # Back around to next epoch; the StopIteration
-            # of the "for epoch..." will get us out:
+            # Next split
             continue
+            
+        end_time       = datetime.datetime.now()
+        epoch_duration = end_time - epoch_start_time
+        epoch_dur_str  = self.time_delta_str(epoch_duration, granularity=4)
+        
+        cumulative_dur = end_time - overall_start_time
+        cum_dur_str    = self.time_delta_str(cumulative_dur, granularity=4)
+        
+        msg = f"Done epoch {epoch}  (epoch duration: {epoch_dur_str}; cumulative: {cum_dur_str})"
+        self.log.info(msg)
 
-        self.log.info(f"Training complete after {epoch + 1} epochs")
+        self.scheduler.step()
+
+        # Fresh results tallying 
+        self.results.clear()
+
+        self.log.info(f"Training complete after {self.train_loader.num_folds} splits")
         
         # Report the sanity checks:
         self.log.info(f"Total batches processed: {total_batch_num}")
@@ -697,6 +684,36 @@ class BirdsBasicTrainerCV:
                                                  num_folds=self.num_folds 
                                                  )
         return train_loader
+    
+    #------------------------------------
+    # initialize_model 
+    #-------------------
+    
+    def initialize_model(self):
+        self.model    = NetUtils.get_net(self.net_name,
+                                         num_classes=self.num_classes,
+                                         pretrained=self.pretrained,
+                                         freeze=self.freeze,
+                                         to_grayscale=self.to_grayscale
+                                         )
+        self.log.debug(f"Before any gpu push: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
+        
+        FileUtils.to_device(self.model, 'gpu')
+        
+        self.log.debug(f"Before after model push: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
+        
+        self.opt_name =  self.config.Training.get('optimizer', 
+                                             'Adam') # Default
+        self.optimizer = self.get_optimizer(
+            self.opt_name, 
+            self.model, 
+            self.lr)
+        
+        self.loss_fn = nn.CrossEntropyLoss()
+        self.scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, 
+                                                              self.min_epochs
+                                                              )
+
 
     #------------------------------------
     # find_num_classes 
