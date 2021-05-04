@@ -209,11 +209,11 @@ class BirdsBasicTrainerCV:
 
             split_start_time = datetime.datetime.now()
             self.initialize_model()
-            # Set model to train mode:
-            self.model.train()
-
             for epoch in range(self.max_epochs):
-        
+
+                # Set model to train mode:
+                self.model.train()
+
                 epoch_start_time = datetime.datetime.now()
         
                 self.log.info(f"Starting epoch {epoch} training")
