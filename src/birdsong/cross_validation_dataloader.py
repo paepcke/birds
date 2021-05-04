@@ -262,8 +262,8 @@ class CrossValidatingDataLoader(DataLoader):
             o 12 samples total
             o  3 folds
             o  2 batch size
-            o  4 samples in each fold (12/3)
-            o  2 batches per fold (samples-each-fold / batch-size)
+            o  4 samples in each split (12/3)
+            o  2 batches per split (samples-each-split / batch-size)
             o  3 number of trips through folds
             o  2 number of folds in each of the 3
                  trips (num-folds - hold-out-fold)
@@ -344,7 +344,7 @@ class CrossValidatingDataLoader(DataLoader):
         # each split, i.e. when client is to validate.
         # When all splits are exhausted, raise StopIteration.
 
-        for split_train_ids, split_test_ids in self.sampler:
+        for split_train_idxs, split_test_idxs in self.sampler:
             
             # Keep track of which split we are working
             # on. Needed only as info for client; not
@@ -352,22 +352,26 @@ class CrossValidatingDataLoader(DataLoader):
             
             self.curr_split_idx += 1
             
-            # split_train_ids has all sample IDs
+            # split_train_idxs has all sample IDs
             # to use for training in this split. 
-            # The split_test_ids holds the left-out
+            # The split_test_idxs holds the left-out
             # sample IDs to use for testing once 
-            # the split_train_ids have been served out
+            # the split_train_idxs have been served out
             # one batch at a time.
             
-            # Set this split's test ids aside for client
+            # Set this split's test sample ids aside for client
             # to retrieve later via: get_split_test_sample_ids()
             # once they pulled all the batches of this
             # split:
-            self.curr_test_sample_ids = split_test_ids
+            self.curr_test_sample_ids = []
+            for sample_idx in split_test_idxs:
+                self.curr_test_sample_ids.append(
+                    self.dataset.sample_id_by_sample_idx(sample_idx)
+                    )
             
             # Create one batch:
             
-            num_train_sample_ids = len(split_train_ids)
+            num_train_sample_ids = len(split_train_idxs)
             num_batches = num_train_sample_ids // self.batch_size
             num_remainder_samples = num_train_sample_ids % self.batch_size
             batch_start_idx = 0
@@ -384,10 +388,13 @@ class CrossValidatingDataLoader(DataLoader):
                 batch_end_idx    = batch_start_idx + self.batch_size
                 curr_batch_range = range(batch_start_idx, batch_end_idx)
                 
-                for sample_id in curr_batch_range:
+                for train_sample_idx in curr_batch_range:
                     
+                    # Index into the current split's list
+                    # of training sample ids:
+                    sample_idx = split_train_idxs[train_sample_idx]
                     # Get one pair: <img-tensor>, class_id_int:
-                    (img_tensor, label) = self.dataset[sample_id]
+                    (img_tensor, label) = self.dataset.sample_by_idx(sample_idx)
                     expanded_img_tensor = unsqueeze(img_tensor, dim=0)
                     batch = (cat((batch, expanded_img_tensor), dim=0)
                               if batch is not None

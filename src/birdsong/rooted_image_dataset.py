@@ -418,6 +418,70 @@ class SingleRootImageDataset:
         return (img_tensor, torch.tensor(label))
 
     #------------------------------------
+    # sample_by_idx 
+    #-------------------
+    
+    def sample_by_idx(self, idx_to_sample):
+        '''
+        Retrieve a sample by a list API.
+        Samples IDs are stored in this dataset 
+        in a fixed order. The idx_to_sample arg
+        indexes into this conceptual list, and
+        retrieves the corresponding sample.
+        
+        In the implementation, samples are stored as accessed
+        through ordered dicts by the sample ids.
+        
+        :param idx_to_sample: index into the conceptual
+            list of sample ids
+        :type idx_to_sample: int
+        :return: (sample, label) pair
+        :rtype: (torch.Tensor, torch.Tensor)
+        '''
+        
+        sample_id = self.sample_id_by_sample_idx(idx_to_sample)
+        return self[sample_id]
+
+    #------------------------------------
+    # sample_id_by_sample_idx 
+    #-------------------
+    
+    def sample_id_by_sample_idx(self, idx_to_sample):
+        '''
+        Retrieve a sample ID by a list API.
+        Samples IDs are stored in this dataset 
+        in a fixed order. The idx_to_sample arg
+        indexes into this conceptual list, and
+        retrieves the sample ID at that place in
+        the list.
+        
+        In the implementation, samples are stored as accessed
+        through ordered dicts by the sample ids.
+        
+        :param idx_to_sample: index into the conceptual
+            list of sample ids
+        :type idx_to_sample: int
+        :return: sample ID
+        :rtype: int
+        '''
+        
+        # Only materialize the list of keys from 
+        # self.sample_id_to_class.keys() once:
+        cache_hit = False
+        while not cache_hit:
+            try:
+                sample_id = self._sample_id_list[idx_to_sample]
+                cache_hit = True
+            except IndexError as e:
+                raise IndexError(f"Index {idx_to_sample} is larger than the number of samples in the dataset ({len(self._sample_id_list)})") from e
+            except AttributeError:
+                # List has never been accessed; materialize it:
+                self._sample_id_list = list(self.sample_id_to_class.keys())
+                continue
+
+        return sample_id
+
+    #------------------------------------
     # _cull_samples 
     #-------------------
 

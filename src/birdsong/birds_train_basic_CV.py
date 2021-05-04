@@ -94,9 +94,12 @@ class BirdsBasicTrainerCV:
             torch.cuda.set_device(device)
         else:
             available_gpus = torch.cuda.device_count()
-            if device > available_gpus - 1:
-                raise ValueError(f"Asked to operate on device {device}, but only {available_gpus} are available")
-            torch.cuda.set_device(device)
+            if available_gpus == 0:
+                self.log.info("No GPU available; running on CPU")
+            else:
+                if device > available_gpus - 1:
+                    raise ValueError(f"Asked to operate on device {device}, but only {available_gpus} are available")
+                torch.cuda.set_device(device)
 
         self.curr_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -214,6 +217,10 @@ class BirdsBasicTrainerCV:
     def train(self): 
         
         overall_start_time = datetime.datetime.now()
+        # Just for sanity: keep track 
+        # of number of batches...
+        total_batch_num = 0
+
         for epoch in range(self.max_epochs):
             
             # Tell dataloader and its sampler that we
@@ -221,17 +228,49 @@ class BirdsBasicTrainerCV:
             
             self.train_loader.set_epoch(epoch)
             self.log.info(f"Starting epoch {epoch} training")
-            start_time = datetime.datetime.now()
+            epoch_start_time = datetime.datetime.now()
+            
+            # Sanity check record: will record
+            # how many samples from each class were
+            # used:
+            self.class_coverage = {}
             
             # Set model to train mode:
             self.model.train()
             
             # Training
             for split_num in range(self.train_loader.num_folds):
-                self.log.info(f"Train epoch {epoch} split {split_num}/{self.train_loader.num_folds}")
+                split_start_time = datetime.datetime.now()
+                self.log.info(f"Train epoch {epoch}/{self.max_epochs} split {split_num}/{self.train_loader.num_folds}")
+
+                # Sanity records: will record number
+                # of samples of each class are used
+                # during training and validation: 
+                label_distrib = {}
+                batch_num = 0
+
                 try:
                     for batch, targets in self.train_loader:
-        
+
+
+                        # Update the sanity check
+                        # num of batches seen, and distribution
+                        # of samples across classes: 
+                        batch_num += 1
+                        total_batch_num += 1
+                        
+                        # Update sanity check records:
+                        for lbl in targets:
+                            lbl = int(lbl)
+                            try:
+                                label_distrib[lbl] += 1
+                            except KeyError:
+                                label_distrib[lbl] = 1
+                            try:
+                                self.class_coverage[lbl]['train'] += 1
+                            except KeyError:
+                                self.class_coverage[lbl] = {'train' : 1, 'val' : 0}
+
                         self.log.debug(f"Top of training loop: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
                         
                         images = FileUtils.to_device(batch, 'gpu')
@@ -273,18 +312,23 @@ class BirdsBasicTrainerCV:
                 except EndOfSplit:
                     
                     end_time = datetime.datetime.now()
-                    train_time_duration = end_time - start_time
+                    train_time_duration = end_time - split_start_time
                     # A human readable duration st down to minutes:
                     duration_str = self.time_delta_str(train_time_duration, granularity=4)
                     
                     self.log.info(f"Done training split {split_num} of epoch {epoch} (duration: {duration_str})")
 
-                    val_time_duration = self.validate_split(step_num)
+                    #***********
+                    #print(f"****** num_batches in split: {batch_num}" )
+                    #print(f"****** LblDist: {label_distrib}")
+                    #***********
+                    self.validate_split(step_num)
                     self.visualize_step(step_num)
 
                     self.log.debug(f"After eval: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
             
-            epoch_duration = train_time_duration + val_time_duration
+            end_time       = datetime.datetime.now()
+            epoch_duration = end_time - epoch_start_time
             epoch_dur_str  = self.time_delta_str(epoch_duration, granularity=4)
             
             cumulative_dur = end_time - overall_start_time
@@ -306,6 +350,12 @@ class BirdsBasicTrainerCV:
             continue
 
         self.log.info(f"Training complete after {epoch + 1} epochs")
+        
+        # Report the sanity checks:
+        self.log.info(f"Total batches processed: {total_batch_num}")
+        for cid in self.class_coverage.keys(): 
+            train_use, val_use = self.class_coverage[cid].items()
+            self.log.info(f"{self.class_names[cid]} Training: {train_use}, Validation: {val_use}")
         
         # All seems to have gone well. Report the 
         # overall result of the final epoch for the 
@@ -341,29 +391,33 @@ class BirdsBasicTrainerCV:
         
         self.model.eval()
         with torch.no_grad():
-            for img_tensor, targets in self.train_loader.validation_samples():
+            for img_tensor, target in self.train_loader.validation_samples():
                 expanded_img_tensor = unsqueeze(img_tensor, dim=0)
-                expanded_targets    = unsqueeze(targets, dim=0)
+                expanded_target    = unsqueeze(target, dim=0)
+
+                # Update sanity record:
+                self.class_coverage[int(target)]['val'] += 1
+                
                 images = FileUtils.to_device(expanded_img_tensor, 'gpu')
-                labels = FileUtils.to_device(expanded_targets, 'gpu')
+                label = FileUtils.to_device(expanded_target, 'gpu')
                 
                 outputs = self.model(images)
-                loss = self.loss_fn(outputs, labels)
+                loss = self.loss_fn(outputs, label)
                 
                 images  = FileUtils.to_device(images, 'cpu')
                 outputs = FileUtils.to_device(outputs, 'cpu')
-                labels  = FileUtils.to_device(labels, 'cpu')
+                label   = FileUtils.to_device(label, 'cpu')
                 loss    = FileUtils.to_device(loss, 'cpu')
                 
                 self.remember_results(LearningPhase.VALIDATING,
                                       step,
                                       outputs,
-                                      labels,
+                                      label,
                                       loss
                                       )
                 del images
                 del outputs
-                del labels
+                del label
                 del loss
                 torch.cuda.empty_cache()
 

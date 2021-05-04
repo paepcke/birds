@@ -284,9 +284,20 @@ class SKFSampler(StratifiedKFold):
         # the outside:
          
         self.my_indices = indices[self.rank:self.total_size:self.num_replicas]
-        self.my_classes = [self.dataset.sample_id_to_class[int(sample_id)] 
-                              for sample_id 
-                               in self.my_indices]
+        # Sample IDs in dataset (potentially) after 
+        # some percentage were removed during the dataloader
+        # creation (b/c 'percentage' < 100 was passed to the 
+        # training script from the command line:
+        
+        sample_ids_in_ds= list(self.dataset.sample_id_to_class.keys())
+        self.my_classes = []
+        for my_idx in self.my_indices:
+            # Get the class of this node's samples
+            # by the *index* of the sampling process.
+            # I.e. my_indices are NOT sample ids, but
+            # indices into the sample_ids_in_ds list of
+            # sample_ids:
+            self.my_classes.append(self.dataset.sample_id_to_class[sample_ids_in_ds[my_idx]])
         
         self.fold_generator = self.split(np.zeros(len(self.dataset)), 
                                          self.my_classes
