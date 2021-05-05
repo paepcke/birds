@@ -23,7 +23,6 @@ EPOCHS = 60
 SEED = 42
 BATCH_SIZE = 32
 KERNEL_SIZE = 7
-NET_NAME = 'BasicNet'
 GPU = 0
 # TODO: Below are params that we want to be able to change from command line
 NET_NAME = 'Resnet18'
@@ -88,7 +87,7 @@ class Training:
                                       freeze=self.freeze,
                                       to_grayscale=True
                                       )
-        self.optimizer = optim.SGD(self.model.parameters(), lr=0.001, momentum=0.9)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=0.001, momentum=0.9)
         self.loss_func = nn.CrossEntropyLoss()
 
     def get_net(self, net_name, batch_size, kernel_size, gpu):
