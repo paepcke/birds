@@ -11,7 +11,7 @@ from torchvision import datasets
 import torch.optim as optim
 import torch.multiprocessing
 from datetime import datetime
-from nets import BasicNet
+from andreas-nets import NetUtils
 from evaluations import Evaluations as eval
 import json
 import sys
@@ -25,40 +25,11 @@ BATCH_SIZE = 32
 KERNEL_SIZE = 7
 NET_NAME = 'BasicNet'
 GPU = 0
-
-
-class ImageFolderWithPaths(datasets.ImageFolder):
-    """Custom dataset that includes image file paths. Extends
-    torchvision.datasets.ImageFolder
-    :param root: the filepath of a folder containing the images.
-    :type root: str
-    :param root: A transformation to perform on each image.
-    :type root: method
-    """
-
-    def __init__(self, root, transform=None, target_transform=None,
-                 loader=datasets.folder.default_loader, is_valid_file=None):
-        """Constructor method
-        """
-        super(datasets.ImageFolder, self).__init__(root, loader, IMG_EXTENSIONS if is_valid_file is None else None,
-                                                   transform=transform, target_transform=target_transform,
-                                                   is_valid_file=is_valid_file)
-
-        self.imgs = self.samples
-
-    def __getitem__(self, index):
-        """override the __getitem__ method. this is the method that dataloader calls
-        :param index: the index of the image
-        :type index: int
-        :returns: the path to the file the data originates from
-        """
-        # this is what ImageFolder normally returns
-        original_tuple = super(ImageFolderWithPaths, self).__getitem__(index)
-        # the image file path
-        path = self.imgs[index][0]
-        # make a new tuple that includes original and the path
-        tuple_with_path = (original_tuple + (path,))
-        return tuple_with_path
+# TODO: Below are params that we want to be able to change from command line
+NET_NAME = 'Resnet18'
+PRETRAINED = True
+FREEZE_LAYERS = 0
+INPUT_DIMS = (64, 64) # to match resnet18 input layer
 
 
 class Training:
@@ -208,24 +179,49 @@ class Training:
                 self.optimizer.step()
             # Testing after each epoch
             print(f"Finished epoch {self.epoch} -- Testing accuracies..." )
+            # Compute predictions over training set
+            train_labels, train_preds = self.predict(self.train_data_loader)
+            # Compute predictions over validation set
+            val_labels, val_preds = self.predict(self.val_data_loader)
             # tests if the training results match the labels in the DataLoader
-            self.model.eval()
             # Training Accuracy
-            training_accuracy = self.test(self.train_data_loader)
+            training_accuracy = eval.accuracy(train_labels, train_preds)
             print(f"Epoch {self.epoch}: train_acc = {training_accuracy}")
             self.writer.add_scalar("accuracy/train", training_accuracy, self.epoch)
             # Validation Accuracy
-            validation_accuracy = self.test(self.val_data_loader)
+            validation_accuracy = eval.accuracy(val_labels, val_preds)
             print(f"Epoch {self.epoch}: val_acc = {validation_accuracy}")
             self.writer.add_scalar("accuracy/validation", validation_accuracy, self.epoch)
 
-            # get data analysis info and save it to a .jsonl file
-            confusion_matrix, cm_figure, precision, recall = eval.compute_cm(self.model, self.val_data_loader)
-            self.writer.add_figure("Confusion matrix", cm_figure, epoch=self.epoch)
+            # Compute confusion matrix
+            class_names = dataloader.class_to_idx.keys()
+            confusion_matrix, cm_figure, precision, recall = eval.compute_cm(val_labels, val_preds, class_names)
+            self.writer.add_figure("Confusion Matrix (validation)", cm_figure, epoch=self.epoch)
 
         # Finished with training, so stop writing to tensorboard
         self.writer.flush()
         self.writer.close()
+
+    def predict(self, data_loader):
+        """
+        Computes predictions on data over all batches. Returns test_labels and test_predictions
+        :param data_loader: the DataLoader to examine
+        :type data_loader: DataLoader
+        :return: Python list of labels and predictions
+        """
+        self.model.eval()
+        test_labels = []
+        test_predictions = []
+        # finds the number of correctly labelled
+        with torch.no_grad():
+            for batch_images, batch_labels in data_loader:
+                outputs = self.model(batch_images)
+                _, predictions = torch.max(outputs.data, 1)
+                # Add batch labels and predictions to total list
+                test_labels.extend(list(np.numpy(batch_labels)))
+                test_predictions.extend(list(np.numpy(predictions)))
+        return test_labels, test_predictions
+
     # return percent accuracy
     def test(self, data_loader):
         """
@@ -257,15 +253,6 @@ class Training:
                     correct += sum(predictions == batch_labels).item()  # convert from tensor to int
         # calculate and return percent accuracy
         return 100 * correct / total
-
-
-    def configure_log(self):
-        """
-        Configures a .jsonl file with the correct column headers.
-        """
-        with open(self.log_filepath, 'w') as f:
-            f.write(json.dumps(['epoch', 'loss', 'training_accuracy', 'testing_accuracy', 'precision', 'recall', 'incorrect_paths', 'confusion_matrix']) + "\n")
-
 
 if __name__ == '__main__':
     """
