@@ -15,6 +15,8 @@ from birdsong.nets import NetUtils
 from evaluations import Evaluations as eval
 import json
 import sys
+from torch.utils.tensorboard import SummaryWriter
+
 
 
 IMG_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif', '.tiff', '.webp')
