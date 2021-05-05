@@ -11,7 +11,7 @@ from torchvision import datasets
 import torch.optim as optim
 import torch.multiprocessing
 from datetime import datetime
-from andreas-nets import NetUtils
+from birdsong.nets import NetUtils
 from evaluations import Evaluations as eval
 import json
 import sys
