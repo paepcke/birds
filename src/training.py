@@ -201,6 +201,9 @@ class Training:
         self.writer.flush()
         self.writer.close()
 
+        # Save model
+        self.model.save()
+
     def predict(self, data_loader):
         """
         Computes predictions on data over all batches. Returns test_labels and test_predictions
