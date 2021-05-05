@@ -12,8 +12,10 @@ import torch.optim as optim
 import torch.multiprocessing
 from datetime import datetime
 from nets import BasicNet
+from evaluations import Evaluations as eval
 import json
 import sys
+
 
 IMG_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif', '.tiff', '.webp')
 FILEPATH = "/home/data/birds/NEW_BIRDSONG/"
@@ -58,7 +60,7 @@ class ImageFolderWithPaths(datasets.ImageFolder):
         tuple_with_path = (original_tuple + (path,))
         return tuple_with_path
 
-    
+
 class Training:
     """Creates and instance of the model and can train that model with specified parameter and log the results.
     :param file_path: the parent directory of the labelled samples.
@@ -79,6 +81,9 @@ class Training:
     def __init__(self, file_path, epochs, batch_size, kernel_size, seed=42, net_name='BasicNet', gpu=0):
         """Constructor method
         """
+
+        # Set cwd
+        self.curr_dir = os.path.dirname(os.path.abspath(__file__))
         # handle seed
         if seed is not None:
             self.set_seed(seed)
@@ -91,18 +96,27 @@ class Training:
         self.EPOCHS = epochs
         self.epoch = 0
         self.BATCH_SIZE = batch_size
-        self.KERNEL_SIZE = kernel_size
+        # self.KERNEL_SIZE = kernel_size
         self.filepath = file_path
 
-        # configure log file
-        now = datetime.now()
-        self.log_filepath = now.strftime("%d-%m-%Y") + '_' + now.strftime("%H-%M") + "_K" + str(
-            self.KERNEL_SIZE) + '_B' + str(self.BATCH_SIZE) + '.jsonl'
-        self.configure_log()
+        # Variables set in-file: TODO: change this so that we can change this from command line
+        self.net_name = NET_NAME
+        self.pre_trained = PRETRAINED
+        self.freeze = FREEZE_LAYERS
+
+        # Initialize Tensorboard Writer
+        self.writer = SummaryWriter()
 
         # configure net
-        self.train_data_loader, self.test_data_loader, self.num_classes = self.import_data()
-        self.model = self.get_net(net_name, self.num_classes, self.BATCH_SIZE, self.KERNEL_SIZE, GPU)
+        self.train_data_loader, self.val_data_loader, self.num_classes = self.import_data()
+        # self.model = self.get_net(net_name, self.BATCH_SIZE, self.KERNEL_SIZE, GPU)
+        # Below from Andreas' branch
+        self.model = NetUtils.get_net(NET_NAME,
+                                      num_classes=self.num_classes,
+                                      pretrained=self.pre_trained,
+                                      freeze=self.freeze,
+                                      to_grayscale=True
+                                      )
         self.optimizer = optim.SGD(self.model.parameters(), lr=0.001, momentum=0.9)
         self.loss_func = nn.CrossEntropyLoss()
 
@@ -140,32 +154,35 @@ class Training:
 
     # access data
     def import_data(self):
-        """ imports the spectrograms using DataLoaders and transforms each image into a tensor.
+        """ Imports the spectrograms using DataLoaders and transforms each image into a tensor.
         :return: a DataLoader containing the training data
         """
 
         # define the transform to be done on all images
         transform_img = transforms.Compose([
-            transforms.Resize((400, 400)),  # should actually be 1:3 but broke the system
-            transforms.ToTensor()])
+            transforms.Resize(INPUT_DIMS),  # should actually be 1:3 but broke the system
+            transforms.ToTensor(),
+            transforms.Grayscale()])
 
         # create the training DataLoader
         print(os.listdir(self.filepath+"train/"))
-        train_data = ImageFolderWithPaths(root=self.filepath + "train/", transform=transform_img)
+        # train_data = ImageFolderWithPaths(root=self.filepath + "train/", transform=transform_img)
+        train_data = datasets.folder.ImageFolder(root=os.path.join(self.filepath, "train/"), transform=transform_img)
         train_data_loader = data.DataLoader(train_data, batch_size=self.BATCH_SIZE, shuffle=True, num_workers=0,
                                             pin_memory=True)
         # create the testing DataLoader
-        test_data = ImageFolderWithPaths(root=self.filepath + "validation/", transform=transform_img)
-        test_data_loader = data.DataLoader(test_data, batch_size=self.BATCH_SIZE, shuffle=True, num_workers=0,
+        # val_data = ImageFolderWithPaths(root=self.filepath + "validation/", transform=transform_img)
+        val_data = datasets.folder.ImageFolder(root=os.path.join(self.filepath, "validation/"), transform=transform_img)
+        val_data_loader = data.DataLoader(val_data, batch_size=self.BATCH_SIZE, shuffle=True, num_workers=0,
                                            pin_memory=True)
 
         # print useful information about the data
         print("Number of train samples: ", len(train_data))
-        print("Number of test samples: ", len(test_data))
+        print("Number of test samples: ", len(val_data))
         print("Detected Classes are: ", train_data.class_to_idx)
 
         num_classes = len(train_data.class_to_idx)
-        return train_data_loader, test_data_loader, num_classes
+        return train_data_loader, val_data_loader, num_classes
 
     def train(self):
         """
@@ -173,44 +190,42 @@ class Training:
         number of epochs to train has been reached. Logs the results of the training after each epoch.
         """
         # Training
-        accuracy = []
         self.epoch = 0
-        diff_avg = 100
         loss = 0
         # while the accuracy is decreasing or the number of epochs is <15, and while the number of epochs <= 100
         while (diff_avg >= 0.05 or self.epoch <= 15) and self.epoch <= 100:
             self.epoch += 1
             loss_out = 0
-            # runs everything in the training DataLoader through the model
-            for i, (image, label, path) in enumerate(self.train_data_loader):
+            # Runs batches in the training DataLoader through the model
+            print("Starting epoch ", self.epoch)
+            self.model.train() # prepare for training
+            for batch_images, batch_labels in self.train_data_loader:
                 self.optimizer.zero_grad()
-                outputs = self.model(image)
-                loss = self.loss_func(outputs, label)
-                loss_out += loss
+                outputs = self.model(batch_images)
+                loss = self.loss_func(outputs, batch_labels)
+                # loss_out += loss
                 loss.backward()
                 self.optimizer.step()
-
+            # Testing after each epoch
+            print(f"Finished epoch {self.epoch} -- Testing accuracies..." )
             # tests if the training results match the labels in the DataLoader
+            self.model.eval()
+            # Training Accuracy
             training_accuracy = self.test(self.train_data_loader)
-            testing_accuracy = self.test(self.test_data_loader)
+            print(f"Epoch {self.epoch}: train_acc = {training_accuracy}")
+            self.writer.add_scalar("accuracy/train", training_accuracy, self.epoch)
+            # Validation Accuracy
+            validation_accuracy = self.test(self.val_data_loader)
+            print(f"Epoch {self.epoch}: val_acc = {validation_accuracy}")
+            self.writer.add_scalar("accuracy/validation", validation_accuracy, self.epoch)
+
             # get data analysis info and save it to a .jsonl file
-            confusion_matrix, precision, recall, incorrect_paths = self.cf_matrix(self.test_data_loader)
-            with open(self.log_filepath, 'a') as f:
-                print("epoch", self.epoch)
-                f.write(json.dumps(
-                    [self.epoch, loss.item(), training_accuracy, testing_accuracy, precision, recall, incorrect_paths, confusion_matrix.tolist()]) + "\n")
+            confusion_matrix, cm_figure, precision, recall = eval.compute_cm(self.model, self.val_data_loader)
+            self.writer.add_figure("Confusion matrix", cm_figure, epoch=self.epoch)
 
-                # Calculate the average increase in accuracy over the last 5 epochs to determine if training
-                # should continue.
-                if len(accuracy) == 5:
-                    accuracy.pop(0)
-                accuracy.append(loss.item())
-                if len(accuracy) >= 2:
-                    diff_sum = 0
-                    for i in range(1, len(accuracy)):
-                        diff_sum += abs(accuracy[i] - accuracy[i - 1])
-                    diff_avg = abs(diff_sum / (len(accuracy) - 1))
-
+        # Finished with training, so stop writing to tensorboard
+        self.writer.flush()
+        self.writer.close()
     # return percent accuracy
     def test(self, data_loader):
         """
@@ -234,59 +249,15 @@ class Training:
                     correct += (predicted == labels).sum().item()
             else:
                 # finds the number of correctly labelled samples
-                for test_step, data in enumerate(data_loader):
-                    test_images, labels, path = data
-                    outputs = self.model(test_images)
-                    _, predicted = torch.max(outputs.data, 1)
-                    total += labels.size(0)
-                    correct += (predicted == labels).sum().item()
+                for batch_images, batch_labels in data_loader:
+                    # test_images, labels, path = data
+                    outputs = self.model(batch_images)
+                    _, predictions = torch.max(outputs.data, 1)
+                    total += len(batch_labels)
+                    correct += sum(predictions == batch_labels).item()  # convert from tensor to int
         # calculate and return percent accuracy
         return 100 * correct / total
 
-    # return the confusion matrix, followed by precision and recall
-    def cf_matrix(self, data_loader):
-        """
-        Performs preliminary data analysis of the testing DataLoader.
-        :param data_loader: the test_data_loader to gather information from
-        :type data_loader: DataLoader
-        :returns: a confusion matrix, precision and recall values, and the paths of misclassified samples
-        """
-        list_predicted = []
-        list_labels = []
-        incorrect_paths = [[[] for i in range(20)] for j in range(20)]
-        
-        precision = []
-        recall = []
-        
-        with torch.no_grad():
-            for test_step, data in enumerate(data_loader):
-                # gather data from the DataLoader
-                test_images, labels, path = data
-                model_output = self.model(test_images)
-                _, predicted = torch.max(model_output.data, 1)
-                list_predicted.extend(list(predicted.numpy()))
-                list_labels.extend(list(labels.numpy()))
-                is_correct = (predicted == labels).sum().item()
-                # add misclassified sample paths to a list
-                for x in range(len(labels) - 1):
-                    if predicted[x] != labels[x]:
-                        path[x] = path[x].split('/')[len(path[x].split('/')) - 1]
-                        incorrect_paths[predicted[x]][labels[x]].append(path[x])
-
-        # create a confusion matrix
-        confusion = np.zeros((self.model.num_class, self.model.num_class))
-        for pred, truth in zip(list_predicted, list_labels):
-            confusion[pred][truth] += 1
-
-        # calculate precision and recall
-        for i in range (0, len(confusion)):
-            if sum(confusion[i]) != 0:
-                precision.append(confusion[i][i] / sum(confusion[i]))
-            else:
-                precision.append(0.0)
-            recall.append(confusion[i][i] / sum(confusion[:,i]))
-        
-        return confusion, precision, recall, incorrect_paths
 
     def configure_log(self):
         """
