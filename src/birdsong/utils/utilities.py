@@ -554,26 +554,49 @@ class FileUtils:
     #-------------------
 
     @classmethod
-    def to_device(cls, item, device):
+    def to_device(cls, item, device, gpu_id):
         '''
         Moves item to the specified device.
         device may be 'cpu', or 'gpu'
         
+        :param cls:
+        :type cls:
         :param item: tensor to move to device
         :type item: pytorch.Tensor
         :param device: one of 'cpu', or 'gpu'
         :type device: str
+        :param gpu_id: if device is 'gpu', then 
+            gpu_id is the ID of the GPU to use,
+            zero-origin.
+        :type gpu_id: int
         :return: the moved item
         :rtype: pytorch.Tensor
         '''
+        
         fastest_device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        if device == 'cpu':
+        if device == 'cpu' or fastest_device == 'cpu':
             return item.to('cpu')
-        elif device == 'gpu':
-            # May still be CPU if no gpu available:
-            return item.to(fastest_device)
-        else:
+
+        elif device != 'gpu':
             raise ValueError(f"Device must be 'cpu' or 'gpu'")
+
+        # Will use a GPU; was a particular one specified?
+        if gpu_id is None:
+            gpu_id = 0
+            torch.cuda.set_device(gpu_id)
+        else:
+            # Check device number:
+            if type(gpu_id) != int:
+                raise TypeError(f"GPU ID must be an int, not {gpu_id}")
+            
+            available_gpus = torch.cuda.device_count()
+            if gpu_id > available_gpus - 1:
+                raise ValueError(f"Asked to operate on GPU {gpu_id}, but only {available_gpus} are available")
+
+        torch.cuda.set_device(gpu_id)
+        return item.to(fastest_device)
+
+        
 
 
     #------------------------------------
