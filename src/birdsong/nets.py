@@ -18,24 +18,24 @@ class NetUtils:
     BasicNet, or a version of resnet (18, 34, 50).
     When requesting resnets, caller can specify a nunmber
     of layers to have pretrained. Thus a fully, or
-    partially pretrained resnet model can be obtained. 
-    
+    partially pretrained resnet model can be obtained.
+
     '''
-    
+
     # Regex pattern to separate 'resnet18' into ('resnet', '18'),
     # or 'resnet' without version into ('resnet', ''):
-     
+
     net_name_separation_pat = re.compile(r'([a-zA-Z]*)([0-9]*)$')
-    
+
     resnet_pattern = re.compile(r'resnet([0-9]*)$')
-    
+
     #------------------------------------
     # get_net
     #-------------------
-    
+
     @classmethod
     def get_net(cls, net_name, **kwargs):
-        
+
         if net_name == 'basicnet':
             return BasicNet(**kwargs)
 
@@ -51,119 +51,127 @@ class NetUtils:
             raise NotImplementedError(f"Network {net_name} unavailable")
 
     #------------------------------------
-    # _get_resnet_partially_trained 
+    # _get_resnet_partially_trained
     #-------------------
 
     @classmethod
-    def _get_resnet_partially_trained(cls, 
-                                     num_classes=None, 
-                                     num_layers_to_retain=6,
+    def _get_resnet_partially_trained(cls,
+                                     num_classes=None,
+                                     pretrained=True,
+                                     freeze=6,
                                      net_version=18,
                                      to_grayscale=False
-                                     ): 
+                                     ):
 
         '''
         Obtains the pretrained resnet18 model from the Web
         if not cached. Then:
-           o Freezes the leftmost num_layers_to_retain layers
+           o Freezes the leftmost freeze layers
              so that they are unaffected by subsequent training.
-             
+
            o Modifies the number of output classes from resnet's
              defaulat 1000 to num_classes.
-             
+
            o Modifies the input layer to expect grayscale,
              i.e. only one channel, instead of three. The
              weights are retained from the pretrained model.
-              
-        If num_layers_to_retain is zero, the untrained version 
-        is used.
-        
-        If running under Distributed Data Processing (DDP) 
+
+        If freeze is zero, all layers of the pretrained model
+        are allowed to change during training.
+
+        If running under Distributed Data Processing (DDP)
         protocol, only the master node will download, and
         then share with the others.
-        
-        @param num_classes: number of target classes
-        @type num_classes: int
-        @param num_layers_to_retain: how many layers to
+
+        :param num_classes: number of target classes
+        :type num_classes: int
+        :param pretrained: if true, the pre-trained version
+            is obtained. Else initial weights are undefined
+        :type pretrained: bool
+        :param freeze: how many layers to
             freeze, protecting them from training.
-        @type num_layers_to_retain: int
-        @param net_version: which Resnet to return: 18 or 50
-        @type net_version: int
-        @return: a fresh model
-        @rtype: pytorch.nn 
+        :type freeze: int
+        :param net_version: which Resnet to return: 18 or 50
+        :type net_version: int
+        :return: a fresh model
+        :rtype: pytorch.nn
         '''
 
-        
+
         if num_classes is None:
             raise ValueError("Num_classes argument is required")
-        
+
         net_name = 'resnet'
         available_versions = (18,34,50)
-        
+
         if net_version not in available_versions:
             raise ValueError(f"{net_name} version must be one of {available_versions}")
-        
-        model = hub.load('pytorch/vision:v0.6.0', 
+
+        model = hub.load('pytorch/vision:v0.6.0',
                          f'{net_name}{net_version}',
-                         pretrained=True if num_layers_to_retain > 0 else False
+                         pretrained=pretrained
                          )
 
         if to_grayscale:
             model = cls._first_layer_to_in_channel1(model, net_name)
 
-        cls.freeze_model_layers(model, num_layers_to_retain)
+        # Keep as many layers as requested
+        # in the config file protected against
+        # further learning:
+        cls.freeze_model_layers(model, freeze)
 
         num_in_features = model.fc.in_features
-        
+
         model.fc = nn.Linear(num_in_features, num_classes)
-        
-        # Create a property on the model that 
+
+        # Create a property on the model that
         # returns the number of output classes:
         model.num_classes = model.fc.out_features
         return model
-    
+
     #------------------------------------
-    # _get_densenet_partially_trained 
+    # _get_densenet_partially_trained
     #-------------------
 
     @classmethod
     def _get_densenet_partially_trained(cls,
-                                        num_classes=None, 
-                                        num_layers_to_retain=6,
+                                        num_classes=None,
+                                        pretrained=True,
+                                        freeze=6,
                                         net_version=161,
                                         to_grayscale=False
                                         ):
 
         if num_classes is None:
             raise ValueError("Num_classes argument is required")
-        
+
         net_name = 'densenet'
         available_versions = (121,161,169,201)
-        
+
         if net_version not in available_versions:
             raise ValueError(f"{net_name} version must be one of {available_versions}")
-        
-        model = hub.load('pytorch/vision:v0.6.0', 
+
+        model = hub.load('pytorch/vision:v0.6.0',
                          f'{net_name}{net_version}',
-                         pretrained=True if num_layers_to_retain > 0 else False
+                         pretrained=pretrained
                          )
 
         if to_grayscale:
             model = cls._first_layer_to_in_channel1(model, net_name)
 
-        cls.freeze_model_layers(model, num_layers_to_retain)
+        cls.freeze_model_layers(model, freeze)
 
         # Reduce from 1000 to num_classes targets:
-        model = cls._mod_classifier_num_classes(model, 
-                                                net_name, 
+        model = cls._mod_classifier_num_classes(model,
+                                                net_name,
                                                 num_classes)
-        
-        # Create a property on the model that 
+
+        # Create a property on the model that
         # returns the number of output classes:
         model.num_classes = num_classes
         return model
 
-    
+
     #------------------------------------
     # _first_layer_to_in_channel1
     #-------------------
@@ -173,19 +181,19 @@ class NetUtils:
         '''
         Replace input layer with an equivalent
         layer that expects only one channel
-        (grayscale), rather than the default 
+        (grayscale), rather than the default
         three (RGB). There are differences in how
         the network families call their layers.
         So, need to distinguish:
-                
-        @param cls:
-        @type cls:
-        @param model:
-        @type model:
-        @param net_name:
-        @type net_name:
+
+        :param cls:
+        :type cls:
+        :param model:
+        :type model:
+        :param net_name:
+        :type net_name:
         '''
-        
+
         if net_name == 'resnet':
             return cls._resnet_replace_first_layer(model)
         elif net_name == 'densenet':
@@ -194,27 +202,27 @@ class NetUtils:
             raise NotImplementedError(f"Network {net_name} not supported")
 
     #------------------------------------
-    # _densenet_replace_first_layer 
+    # _densenet_replace_first_layer
     #-------------------
-    
+
     @classmethod
     def _densenet_replace_first_layer(cls, model):
-        
-        
+
+
         # Get the input layer module, which
         # is a torch.Conv2d instance:
-        
+
         l_in = model.features.conv0
-        
+
         # l_in.weight.shape is: torch.Size([96, 3, 7, 7])
         # Get the sum of the RGB planes (the dim that has 3):
         grayscale_weight = torch.sum(l_in.weight,
-                                     dim=1, 
+                                     dim=1,
                                      keepdim=True)
 
-        # Now: grayscale_weight.shape: 
+        # Now: grayscale_weight.shape:
         #    torch.Size([96, 1, 7, 7])
-        
+
         # Make a new input layer with the
         # same parameters as the current one:
         l_in_new = nn.Conv2d(
@@ -229,7 +237,7 @@ class NetUtils:
                 padding_mode=l_in.padding_mode
                 )
 
-        
+
         # Suppress tracking of the dimension
         # change by the layer; therefore the
         # no_grad():
@@ -238,19 +246,19 @@ class NetUtils:
             l_in_new.weight = nn.Parameter(grayscale_weight)
 
         model.features.conv0 = l_in_new
-        
+
         return model
-    
+
     #------------------------------------
-    # _resnet_replace_first_layer 
+    # _resnet_replace_first_layer
     #-------------------
-    
+
     @classmethod
     def _resnet_replace_first_layer(cls, model):
         '''
         For resnet18, the first layer has
         two blocks:
-        
+
         model.layer1
         Sequential(
           (0): BasicBlock(
@@ -268,22 +276,22 @@ class NetUtils:
             (bn2): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
           )
         )
-        
-        @param model:
-        @type model:
+
+        :param model:
+        :type model:
         '''
         # Get input layer whose weight attr is torch.Size([64, 3, 7, 7])
         l_in = model.conv1
-        
+
         # Weights are: l_in.weight.shape
         # torch.Size([64, 3, 7, 7])
         # Get the sum of the RGB planes (the dim that has 3):
         grayscale_weight = torch.sum(l_in.weight,
-                                     dim=1, 
+                                     dim=1,
                                      keepdim=True)
-        # Now: grayscale_weight.shape: 
+        # Now: grayscale_weight.shape:
         #    torch.Size([64, 1, 7, 7])
-        
+
         # Make a new input layer with the
         # same parameters as the current one:
         l_in_new = nn.Conv2d(
@@ -297,9 +305,9 @@ class NetUtils:
                 bias=l_in.bias,
                 padding_mode=l_in.padding_mode
                 )
-        
-        # l_in_new.weight.shape: 
-        # torch.Size([64, 1, 7, 7])        
+
+        # l_in_new.weight.shape:
+        # torch.Size([64, 1, 7, 7])
 
         # Suppress tracking of the dimension
         # change by the layer; therefore the
@@ -309,13 +317,13 @@ class NetUtils:
             l_in_new.weight = nn.Parameter(grayscale_weight)
 
         model.conv1 = l_in_new
-        
+
         return model
 
     #------------------------------------
-    # _mod_classifier_num_classes 
+    # _mod_classifier_num_classes
     #-------------------
-    
+
     @classmethod
     def _mod_classifier_num_classes(cls, model, net_name, new_num_classes):
         '''
@@ -323,18 +331,18 @@ class NetUtils:
         it outputs only as many class logits
         as we have classes. Models pretrained
         on ImageNet come with 1000 class outputs.
-        
-        @param model: model instance to modify
-        @type model: torchvision.model
-        @param net_name: resnet or densenet
-        @type net_name: str
-        @param new_num_classes: desired number of 
+
+        :param model: model instance to modify
+        :type model: torchvision.model
+        :param net_name: resnet or densenet
+        :type net_name: str
+        :param new_num_classes: desired number of
             output classes
-        @type new_num_classes: int
-        @return: modified model instance
-        @rtype: torchvision.model
+        :type new_num_classes: int
+        :return: modified model instance
+        :rtype: torchvision.model
         '''
-        
+
         if net_name == 'resnet':
             num_in_features = model.fc.in_features
             model.fc = nn.Linear(num_in_features, new_num_classes)
@@ -345,32 +353,41 @@ class NetUtils:
             raise NotImplementedError(f"Model {net_name} not supported")
 
         return model
-    
+
     #------------------------------------
-    # get_model_ddp 
+    # get_model_ddp
     #-------------------
 
     @classmethod
-    def get_model_ddp(cls, 
-                      rank, 
-                      local_leader_rank, 
+    def get_model_ddp(cls,
+                      rank,
+                      local_leader_rank,
                       log,
                       net_version,
-                      num_layers_to_retain
+                      pretrained,
+                      freeze,
                       ):  # @DontTrace
         '''
         Determine whether this process is the
         master node. If so, obtain the pretrained
         resnet18 model. Then distributed the model
-        to the other nodes. 
-        
-        @param rank: this process' rank
+        to the other nodes.
+
+        :param rank: this process' rank
             in the distributed data processing sense
-        @type rank: int
-        @param local_leader_rank: the lowest rank on this machine
-        @type local_leader_rank: int
-        @param log: logging service to log to
-        @type log: LoggingService
+        :type rank: int
+        :param local_leader_rank: the lowest rank on this machine
+        :type local_leader_rank: int
+        :param log: logging service to log to
+        :type log: LoggingService
+        :param net_version: which resnet version to obtain
+        :type net_version: int
+        :param pretrained: if true, the pre-trained version
+            is obtained. Else initial weights are undefined
+        :type pretrained: bool
+        :param freeze: how many layers to
+            freeze, protecting them from training.
+        :type freeze: int
         '''
 
         if net_version not in (18,50):
@@ -381,27 +398,27 @@ class NetUtils:
         # the model from the Internet,
         # in case it is not already cached
         # locally:
-        
+
         # Case 1: not on a GPU machine:
         device = device('cuda' if cuda.is_available() else 'cpu')
         if device == device('cpu'):
-            model = hub.load('pytorch/vision:v0.6.0', 
-                             'resnet18' if net_version == 18 else 'resnet50', 
-                             pretrained=True if num_layers_to_retain > 0 else False
+            model = hub.load('pytorch/vision:v0.6.0',
+                             'resnet18' if net_version == 18 else 'resnet50',
+                             pretrained=pretrained
                              )
-            
-        # Case2a: GPU machine, and this is this machine's 
+
+        # Case2a: GPU machine, and this is this machine's
         #         leader process. So it is reponsible for
         #         downloading the model if it is not cached:
         elif rank == local_leader_rank:
             log.info(f"Procss with rank {rank} on {hostname} loading model")
-            model = hub.load('pytorch/vision:v0.6.0', 
-                             'resnet18' if net_version == 18 else 'resnet50', 
-                             pretrained=True if num_layers_to_retain > 0 else False
+            model = hub.load('pytorch/vision:v0.6.0',
+                             'resnet18' if net_version == 18 else 'resnet50',
+                             pretrained=pretrained
                              )
 
             # Allow the others on this machine
-            # to load the model (guaranteed to 
+            # to load the model (guaranteed to
             # be locally cached now):
             log.info(f"Procss with rank {rank} on {hostname} waiting for others to laod model")
             dist.barrier()
@@ -414,70 +431,68 @@ class NetUtils:
             dist.barrier()
             # Get the cached version:
             log.info(f"Procss with rank {rank} on {hostname} laoding model")
-            model = hub.load('pytorch/vision:v0.6.0', 
-                             'resnet18' if net_version == 18 else 'resnet50', 
-                             pretrained=True if num_layers_to_retain > 0 else False
+            model = hub.load('pytorch/vision:v0.6.0',
+                             'resnet18' if net_version == 18 else 'resnet50',
+                             pretrained=pretrained
                              )
 
-        model = cls.freeze_model_layers(model, num_layers_to_retain)
+        model = cls.freeze_model_layers(model, freeze)
 
         return model
-    
+
     #------------------------------------
-    # freeze_model_layers 
+    # freeze_model_layers
     #-------------------
-    
+
     @classmethod
-    def freeze_model_layers(cls, model, num_layers_to_retain):
+    def freeze_model_layers(cls, model, num_to_freeze):
         '''
-        Given a model, freeze as num_layers_to_retain layers,
+        Given a model, freeze as num_to_freeze layers,
         and return the model. Freezing a layer sets the required_grad
         attribute of the layer's weight tensors to False
-        
-        @param cls:
-        @type cls:
-        @param model: model to partially freeze
-        @type model: pytorch.nn
-        @param num_layers_to_retain: how many layers to freeze
-        @type num_layers_to_retain: int
-        @requires: modified model
-        @rtype: pytorch.nn
+
+        :param model: model to partially freeze
+        :type model: pytorch.nn
+        :param num_to_freeze: how many layers to freeze
+        :type num_to_freeze: int
+        :returns: modified model
+        :rtype: pytorch.nn
         '''
 
-        if num_layers_to_retain == 0:
+        if num_to_freeze == 0:
             return model
-        
+
         layers_frozen = 0
-        while layers_frozen < num_layers_to_retain:
-            # Freeze the bottom num_layers_to_retain layers:
+        while layers_frozen < num_to_freeze:
+            # Freeze the bottom num_to_freeze layers:
             for child in model.children():
                 for param in child.parameters():
                     param.requires_grad = False
             layers_frozen += 1
         return model
-        
+
     #------------------------------------
-    # name_and_version_from_net_name 
+    # name_and_version_from_net_name
     #-------------------
-    
+
     @classmethod
     def name_and_version_from_net_name(cls, net_name_and_version):
         '''
-        Given a network name with or without version, 
+        Given a network name with or without version,
         return:
            o (<network_name>, <network_version>)
            o None if name cannot possibly be a traditionally
              formatted network name (e.g. starts with a digit)
            o (<network_name>, None) if network name had no
              version.
-             
+
         Ex: returns ('resnet', 18) for input 'resnet18'
             returns ('resnet', None) for input 'resnet'
-             
-        @param net_name_and_version: name of network, such as 'resnet18'
-        @type net_name_and_version: str
-        @return: tuple of network name, and version
-        @rtype:  {None | (str, {None | int}}
+
+        :param net_name_and_version: name of network, such as 'resnet18'
+        :type net_name_and_version: str
+        :return: tuple of network name, and version
+        :rtype:  {None | (str, {None | int}}
         '''
 
         match = cls.net_name_separation_pat.match(net_name_and_version)
@@ -495,16 +510,16 @@ class NetUtils:
 # ---------------------- BasicNet --------------
 
 class BasicNet(nn.Module):
-    def __init__(self, 
-                 num_classes=None, 
-                 batch_size=32, 
+    def __init__(self,
+                 num_classes=None,
+                 batch_size=32,
                  kernel_size=5
                  ):
                 #processor=None):
-        
+
         if num_classes is None:
             raise ValueError("Resnetxx requires a num_classes argument")
-        
+
         super(BasicNet, self).__init__()
         #self.gpu = processor
         self.bs = batch_size
