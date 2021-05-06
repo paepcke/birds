@@ -165,7 +165,7 @@ class Training:
         self.epoch = 0
         loss = 0
         # while the accuracy is decreasing or the number of epochs is <15, and while the number of epochs <= 100
-        while (diff_avg >= 0.05 or self.epoch <= 15) and self.epoch <= 100:
+        while self.epoch <= 50: #(diff_avg >= 0.05 or self.epoch <= 15) and 
             self.epoch += 1
             loss_out = 0
             # Runs batches in the training DataLoader through the model
