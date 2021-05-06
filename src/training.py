@@ -89,7 +89,7 @@ class Training:
                                       freeze=self.freeze,
                                       to_grayscale=True
                                       )
-        self.optimizer = optim.Adam(self.model.parameters(), lr=0.001, momentum=0.9)
+        self.optimizer = optim.SGD(self.model.parameters(), lr=0.001, momentum=0.9)
         self.loss_func = nn.CrossEntropyLoss()
 
     def get_net(self, net_name, batch_size, kernel_size, gpu):
