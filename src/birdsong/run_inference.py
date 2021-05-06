@@ -41,7 +41,8 @@ class Inferencer:
                  model_path, 
                  samples_path,
                  batch_size=1, 
-                 labels_path=None
+                 labels_path=None,
+                 gpu_id=0
                  ):
         '''
         Given the path to a trained model,
@@ -70,11 +71,15 @@ class Inferencer:
         :type batch_size:
         :param labels_path:
         :type labels_path:
+        :param gpu_id: Device number of GPU, in case 
+            one is available
+        :type gpu_id: int
         '''
 
         self.model_path = model_path
         self.samples_path = samples_path
         self.labels_path = labels_path
+        self.gpu_id = gpu_id
         
         self.IMG_EXTENSIONS = FileUtils.IMG_EXTENSIONS
         
@@ -165,6 +170,7 @@ class Inferencer:
             try:
                 if torch.cuda.is_available():
                     self.model.load_state_dict(torch.load(self.model_path))
+                    FileUtils.to_device(self.model, 'gpu', self.gpu_id)
                 else:
                     self.model.load_state_dict(torch.load(
                         self.model_path,
