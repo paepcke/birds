@@ -356,10 +356,10 @@ class SpectrogramChopper:
             spectro_done = os.path.exists(snippet_path)
 
             if spectro_done:
-                if self.WhenAlreadyDone.SKIP:
+                if WhenAlreadyDone.SKIP:
                     # Next snippet:
                     continue
-                elif self.WhenAlreadyDone.ASK:
+                elif WhenAlreadyDone.ASK:
                     if not Utils.user_confirm(f"Snippet {Path(snippet_path).stem} exists, overwrite?", default='N'):
                         continue
 

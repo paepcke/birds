@@ -9,8 +9,8 @@ import unittest
 from birdsong.run_inference import Inferencer
 
 
-#******8TEST_ALL = True
-TEST_ALL = False
+TEST_ALL = True
+#TEST_ALL = False
 
 
 class InferenceTester(unittest.TestCase):
@@ -92,7 +92,7 @@ class InferenceTester(unittest.TestCase):
     # test__report_charted_results
     #-------------------
     
-    #****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test__report_charted_results(self):
         inferencer = Inferencer(
             self.saved_model,
