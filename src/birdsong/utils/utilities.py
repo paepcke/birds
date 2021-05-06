@@ -554,7 +554,7 @@ class FileUtils:
     #-------------------
 
     @classmethod
-    def to_device(cls, item, device, gpu_id):
+    def to_device(cls, item, device, gpu_id=None):
         '''
         Moves item to the specified device.
         device may be 'cpu', or 'gpu'

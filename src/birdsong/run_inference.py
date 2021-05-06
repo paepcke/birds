@@ -251,7 +251,12 @@ class Inferencer:
             #   tensor([pred_cl0, pred_cl1, pred_cl<num_classes - 1>], # For sample1
             #                     ...
             #   ]
-            # Make into one tensor: (num_batches, batch_size, num_classes):
+            # Make into one tensor: (num_batches, batch_size, num_classes),
+            # unless an exception was raised at some point,
+            # throwing us into this finally clause:
+            if len(all_outputs) == 0:
+                self.log.info(f"No outputs were produced; thus no results to report")
+                return None
             
             self.all_outputs_tn = torch.stack(all_outputs)
             # Be afraid...be very afraid:
