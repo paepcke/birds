@@ -6,6 +6,8 @@ Created on Mar 16, 2021
 import os
 import unittest
 
+import torch
+
 from birdsong.run_inference import Inferencer
 
 
@@ -20,41 +22,48 @@ class InferenceTester(unittest.TestCase):
         super(InferenceTester, cls).setUpClass()
         
         cls.curr_dir = os.path.dirname(__file__)
-        data_dir = os.path.join(cls.curr_dir, 'data_other')
         
+        # Training data: root of species subdirectories:
+        cls.samples_path = os.path.join(cls.curr_dir, 'data_other/TestSnippets')
+        
+        # Where to put the raw prediction/label results
+        # as .csv:
         cls.runs_raw_results = os.path.join(
-            data_dir,
+            cls.curr_dir,
             'runs_raw_results'
             )
-        cls.runs_models = os.path.join(
-            data_dir,
-            'runs_models'
-            )
-        cls.saved_model_path = os.path.join(
-            data_dir,
-            'saved_model'
-            )
+
+        # Dir of models to test:
+        cls.saved_model_dir = os.path.join(
+            cls.curr_dir,'models')
+
+        # Assume there is only one model in
+        # saved_model_path; a bit of an unsafe
+        # assumption...but can get pickier if
+        # more than one model will be involved
+        # in inference testing:
+        
         cls.saved_model = os.path.join(
-            cls.saved_model_path,
-            'mod_2021-03-16T18_45_47_net_resnet18_ini_0_lr_0.01_opt_SGD_bs_64_ks_7_folds_0_gray_False_classes_10_ep10.pth'
+            cls.saved_model_dir,
+            os.listdir(cls.saved_model_dir)[0]
             )
 
-        cls.samples_path = os.path.join(
-            data_dir,
-            'inference_data'
-            )
         cls.preds_path = os.path.join(
             cls.runs_raw_results,
-            'pred_2021-03-11T10_59_02_net_resnet18_pretrain_0_lr_0.01_opt_SGD_bs_64_ks_7_folds_0_classes_10.csv'
+            'preds_inference.csv'
             )
         cls.labels_path = os.path.join(
             cls.runs_raw_results,
-            'labels_2021-03-11T10_59_02_net_resnet18_pretrain_0_lr_0.01_opt_SGD_bs_64_ks_7_folds_0_classes_10.csv'
+            'labels_inference.csv'
             )
+
+        cls.num_samples = 0
+        cls.num_species = len(os.listdir(cls.samples_path))
+        for _dirName, _subdirList, fileList in os.walk(cls.samples_path):
+            cls.num_samples += len(fileList)
 
     def setUp(self):
         pass
-
 
     def tearDown(self):
         pass
@@ -70,23 +79,30 @@ class InferenceTester(unittest.TestCase):
         # of 64 returns nothing. Use 16
         # to get several batches:
         
+        batch_size = 16
+        
         inferencer = Inferencer(
             self.saved_model,
             self.samples_path,
-            batch_size=16,
+            batch_size=batch_size,
             labels_path=self.labels_path
             )
         print('Running inference...')
         tally_coll = inferencer.run_inference()
         print('Done running inference.')
 
-        # Should have 60 // 16 == 3 tallies:
-        self.assertEqual(len(tally_coll), 3)
+        # Should have num_samples // batch_size
+        expected_num_tallies = self.num_samples // batch_size
+        self.assertEqual(len(tally_coll), expected_num_tallies)
+
         self.assertEqual(list(tally_coll.keys()),
-                         [(0, 'TESTING'), (1, 'TESTING'), (2, 'TESTING')]
+                         [(0, 'TESTING')]
                          )
         tally0 = tally_coll[(0, 'TESTING')]
-        self.assertEqual(tally0.batch_size, 16)
+        self.assertEqual(tally0.batch_size, batch_size)
+        self.assertEqual(tally0.conf_matrix.shape,
+                         torch.Size([self.num_species, self.num_species])
+                         )
 
     #------------------------------------
     # test__report_charted_results

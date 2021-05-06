@@ -105,7 +105,8 @@ class Inferencer:
         tensorboard_dest = os.path.join(curr_dir, 'runs_inferences')
         self.writer = SummaryWriterPlus(log_dir=tensorboard_dest)
         
-        transformations = FileUtils.get_image_transforms()
+        transformations = FileUtils.get_image_transforms(
+            to_grayscale=self.model_props['to_grayscale'])
         dataset = ImageFolder(self.samples_path,
                               transformations,
                               is_valid_file=lambda file: Path(file).suffix \
@@ -130,7 +131,7 @@ class Inferencer:
             pretrained=False,
             freeze=0,
             to_grayscale=self.model_props['to_grayscale']
-            )        
+            )
         
     #------------------------------------
     # run_inferencer 
@@ -216,7 +217,7 @@ class Inferencer:
                                         loss,
                                         self.num_classes,
                                         self.batch_size)
-                    result_coll.add(tally, epoch=None)
+                    result_coll.add(tally, step=None)
                     
                     all_outputs.append(outputs)
                     all_labels.append(labels)

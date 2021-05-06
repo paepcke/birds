@@ -304,7 +304,7 @@ class ModelArchive:
                 fname_els_dict[el_name] = section_dict.getboolean(el_name)
             elif callable(el_type):
                 # A lambda or func. Apply it:
-                fname_els_dict[el_name] = el_type(el_name)
+                fname_els_dict[el_name] = el_type(section_dict[el_name])
 
         fname_els_dict['num_classes'] = num_classes
 
