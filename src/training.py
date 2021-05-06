@@ -165,7 +165,7 @@ class Training:
         self.epoch = 0
         loss = 0
         # while the accuracy is decreasing or the number of epochs is <15, and while the number of epochs <= 100
-        while self.epoch <= 50: #(diff_avg >= 0.05 or self.epoch <= 15) and 
+        while self.epoch <= 50: #(diff_avg >= 0.05 or self.epoch <= 15) and
             self.epoch += 1
             loss_out = 0
             # Runs batches in the training DataLoader through the model
@@ -222,8 +222,8 @@ class Training:
                 outputs = self.model(batch_images)
                 _, predictions = torch.max(outputs.data, 1)
                 # Add batch labels and predictions to total list
-                test_labels.extend(list(np.numpy(batch_labels)))
-                test_predictions.extend(list(np.numpy(predictions)))
+                test_labels.extend(list(np.array(batch_labels)))
+                test_predictions.extend(list(np.array(predictions)))
         return test_labels, test_predictions
 
     # return percent accuracy
