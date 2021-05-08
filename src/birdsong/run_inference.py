@@ -6,6 +6,7 @@ Created on Mar 12, 2021
 '''
 from _collections import OrderedDict
 import argparse
+import datetime
 import os
 from pathlib import Path
 import sys
@@ -195,8 +196,14 @@ class Inferencer:
             all_outputs = []
             all_labels  = []
 
-            self.log.info("Begin inference...")
             self.model.eval()
+            num_test_samples  = len(self.loader.dataset)
+            self.log.info(f"Begin inference ({num_test_samples} test samples)...")
+
+            samples_processed = 0
+            
+            overall_start_time = datetime.datetime.now()
+            loop_start_time    = overall_start_time
             with torch.no_grad():
                 
                 for batch_num, (batch, targets) in enumerate(self.loader):
@@ -230,14 +237,27 @@ class Inferencer:
                     all_outputs.append(outputs)
                     all_labels.append(labels)
                     
+                    samples_processed += len(labels)
+                    
                     del images
                     del outputs
                     del labels
                     del loss
+
                     torch.cuda.empty_cache()
+                    
+                    time_now = datetime.datetime.now()
+                    # Sign of life every 6 seconds:
+                    if (time_now - loop_start_time).seconds >= 6:
+                        self.log.info(f"Processed {samples_processed}/{num_test_samples} samples")
+                        loop_start_time = time_now 
         finally:
             
-            self.log.info("Done with inference.")
+            time_now = datetime.datetime.now()
+            test_time_duration = overall_start_time - time_now
+            # A human readable duration st down to minutes:
+            duration_str = self.time_delta_str(test_time_duration, granularity=4)
+            self.log.info(f"Done with inference: {samples_processed} test samples; {duration_str}")
             # Total number of batches we ran:
             num_batches = 1 + batch_num # b/c of zero-base
             
@@ -492,9 +512,10 @@ class Inferencer:
                              }
         
         accuracy_skel = {'col_header' : ['accuracy', 'balanced_accuracy'],
-                         'row_labels' : [''],
-                         'rows'       : [res['accuracy'], res['balanced_accuracy']]
+                         'row_labels' : ['Overall'],
+                         'rows'       : [[res['accuracy'], res['balanced_accuracy']]]
                          }
+
         ir_measures_tbl  = GithubTableMaker.make_table(ir_measures_skel)
         ir_by_class_tbl  = GithubTableMaker.make_table(ir_by_class_skel)
         accuracy_tbl     = GithubTableMaker.make_table(accuracy_skel)
