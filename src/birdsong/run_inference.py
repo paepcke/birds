@@ -4,6 +4,7 @@ Created on Mar 12, 2021
 
 @author: paepcke
 '''
+from _collections import OrderedDict
 import argparse
 import os
 from pathlib import Path
@@ -26,6 +27,7 @@ from birdsong.utils.learning_phase import LearningPhase
 from birdsong.utils.tensorboard_plotter import SummaryWriterPlus, \
     TensorBoardPlotter
 from birdsong.utils.utilities import FileUtils, CSVWriterCloseable
+import pandas as pd
 
 
 class Inferencer:
@@ -97,13 +99,13 @@ class Inferencer:
         else:
             self.batch_size = self.model_props['batch_size']
 
-        csv_dir = os.path.join(curr_dir, 'runs_raw_inferences')
+        self.csv_dir = os.path.join(curr_dir, 'runs_raw_inferences')
         csv_file_nm = FileUtils.construct_filename(
             self.model_props,
             prefix='inf',
             suffix='.csv', 
             incl_date=True)
-        csv_path = os.path.join(csv_dir, csv_file_nm)
+        csv_path = os.path.join(self.csv_dir, csv_file_nm)
         
         self.csv_writer = CSVWriterCloseable(csv_path)
         
@@ -293,7 +295,7 @@ class Inferencer:
     #-------------------
     
     def report_results(self, tally_coll):
-        self._report_textual_results(tally_coll)
+        self._report_textual_results(tally_coll, self.csv_dir)
         self._report_charted_results()
 
     #------------------------------------
@@ -350,6 +352,163 @@ class Inferencer:
         fig.show()
 
     #------------------------------------
+    # _report_textual_results 
+    #-------------------
+    
+    def _report_textual_results(self, tally_coll, res_dir):
+        '''
+        Give a sequence of tallies with results
+        from a series of batches, create long
+        outputs, and inputs lists from all tallies
+        Then write a CSV file, and create a text
+        table with the results. Report the table 
+        to tensorboard if possible, and return the
+        table text.
+        
+        :param tally_coll: collect of tallies from batches
+        :type tally_coll: ResultCollection
+        :param res_dir: directory where all .csv and other 
+            result files are to be written
+        :type res_dir: str
+        :return table of results
+        :rtype: str
+        '''
+        
+        all_preds   = []
+        all_labels  = []
+        
+        for tally in tally_coll.tallies(phase=LearningPhase.TESTING):
+            all_preds.extend(tally.preds)
+            all_labels.extend(tally.labels)
+        
+        res = OrderedDict({})
+        res['prec_macro']       = precision_score(all_labels, 
+                                           all_preds, 
+                                           average='macro',
+                                           zero_division=0)
+        res['prec_micro']       = precision_score(all_labels, 
+                                           all_preds, 
+                                           average='micro',
+                                           zero_division=0)
+        res['prec_weighted']    = precision_score(all_labels, 
+                                           all_preds, 
+                                           average='weighted',
+                                           zero_division=0)
+        res['prec_by_class']    = precision_score(all_labels, 
+                                           all_preds, 
+                                           average=None,
+                                           zero_division=0)
+        
+        res['recall_macro']     = recall_score(all_labels, 
+                                        all_preds, 
+                                        average='macro',
+                                        zero_division=0)
+        res['recall_micro']     = recall_score(all_labels, 
+                                        all_preds, 
+                                        average='micro',
+                                        zero_division=0)
+        res['recall_weighted'] = recall_score(all_labels, 
+                                       all_preds, 
+                                       average='weighted',
+                                       zero_division=0)
+        res['recall_by_class']  = recall_score(all_labels, 
+                                        all_preds, 
+                                        average=None,
+                                        zero_division=0)
+
+        res['f1_macro']         = f1_score(all_labels, 
+                                    all_preds, 
+                                    average='macro',
+                                    zero_division=0)
+        res['f1_micro']         = f1_score(all_labels, 
+                                    all_preds, 
+                                    average='micro',
+                                    zero_division=0)
+        res['f1_weighted']      = f1_score(all_labels, 
+                                    all_preds, 
+                                    average='weighted',
+                                    zero_division=0)
+        res['f1_by_class']      = f1_score(all_labels, 
+                                    all_preds, 
+                                    average=None,
+                                    zero_division=0)
+
+        res['accuracy']          = accuracy_score(all_labels, all_preds)
+        res['balanced_accuracy'] = balanced_accuracy_score(all_labels, all_preds)
+        
+        res_series = pd.Series(list(res.values()),
+                           index=list(res.keys())
+                           )
+        
+        # Write information retrieval type results
+        # to a one-line .csv file, using pandas Series
+        # as convenient intermediary:
+        res_csv_path = os.path.join(res_dir, 'ir_results.csv')
+        res_series.to_csv(res_csv_path)
+        
+        # Get confusion matrix as a tensor,
+        # with fields normalized to 1 (i.e. percentages).
+        conf_matrix = TensorBoardPlotter.compute_confusion_matrix(
+            all_labels,
+            all_preds,
+            self.num_classes,
+            normalize=True
+            )
+        
+        # Write confusion matrix to CSV, 
+        # using dataframe as convenient intermediary:
+        conf_matrix_df = pd.DataFrame(conf_matrix.numpy(),
+                                      index=self.class_names,
+                                      columns=self.class_names
+                                      )
+        cm_csv_path = os.path.join(res_dir, 'conf_matrix_results.csv')
+        conf_matrix_df.to_csv(cm_csv_path)
+        
+        # Post to tensorboard as an image:
+        TensorBoardPlotter.conf_matrix_to_tensorboard(
+            self.writer,
+            conf_matrix,
+            self.class_names
+            )
+        
+        # Make textual tables using Github flavored
+        # markup: Results: one column with the model 
+        # properties:
+        ir_measures_skel = {'col_header' : ['precision', 'recall', 'f1'], 
+                            'row_labels' : ['macro','micro','weighted'],
+                            'rows'       : [[res['prec_macro'],    res['recall_macro'],    res['f1_macro']],
+                                            [res['prec_micro'],    res['recall_micro'],    res['f1_micro']],
+                                            [res['prec_weighted'], res['recall_weighted'], res['f1_weighted']]
+                                           ]  
+                           }
+        
+        ir_per_class_rows = [[prec_class, recall_class, f1_class]
+                            for prec_class, recall_class, f1_class
+                            in zip(res['prec_by_class'], res['recall_by_class'], res['f1_by_class'])
+                            ]
+        ir_by_class_skel =  {'col_header' : ['precision','recall', 'f1'],
+                             'row_labels' : self.class_names,
+                             'rows'       : ir_per_class_rows
+                             }
+        
+        accuracy_skel = {'col_header' : ['accuracy', 'balanced_accuracy'],
+                         'row_labels' : [''],
+                         'rows'       : [res['accuracy'], res['balanced_accuracy']]
+                         }
+        ir_measures_tbl  = GithubTableMaker.make_table(ir_measures_skel)
+        ir_by_class_tbl  = GithubTableMaker.make_table(ir_by_class_skel)
+        accuracy_tbl     = GithubTableMaker.make_table(accuracy_skel)
+        
+        # Write the markup tables to Tensorboard:
+        self.writer.add_text('Information retrieval measures', ir_measures_tbl, global_step=0)
+        self.writer.add_text('Per class measures', ir_by_class_tbl, global_step=0)
+        self.writer.add_text('Accuracy', accuracy_tbl, global_step=0)
+        
+        return{'info_retrieval_res' : res_series,
+               'confusion_matrx'    : conf_matrix_df 
+               }
+
+    #------------------------------------
     # close 
     #-------------------
     
@@ -363,129 +522,6 @@ class Inferencer:
         except Exception as e:
             self.log.err(f"Could not close CSV writer: {repr(e)}")
 
-    #------------------------------------
-    # _report_textual_results 
-    #-------------------
-    
-    def _report_textual_results(self, tally_coll):
-        '''
-        Give a sequence of tallies with results
-        from a series of batches, create long
-        outputs, and inputs lists from all tallies
-        Then write a CSV file, and create a text
-        table with the results. Report the table 
-        to tensorboard if possible, and return the
-        table text.
-        
-        :param tally_coll: collect of tallies from batches
-        :type tally_coll: ResultCollection
-        :return table of results
-        :rtype: str
-        '''
-        
-        all_preds   = []
-        all_labels  = []
-        
-        for tally in tally_coll.tallies(phase=LearningPhase.TESTING):
-            all_preds.extend(tally.preds)
-            all_labels.extend(tally.labels)
-        
-        prec_macro       = precision_score(all_labels, 
-                                           all_preds, 
-                                           average='macro',
-                                           zero_division=0)
-        prec_micro       = precision_score(all_labels, 
-                                           all_preds, 
-                                           average='micro',
-                                           zero_division=0)
-        prec_weighted    = precision_score(all_labels, 
-                                           all_preds, 
-                                           average='weighted',
-                                           zero_division=0)
-        prec_by_class    = precision_score(all_labels, 
-                                           all_preds, 
-                                           average=None,
-                                           zero_division=0)
-        
-        recall_macro     = recall_score(all_labels, 
-                                        all_preds, 
-                                        average='macro',
-                                        zero_division=0)
-        recall_micro     = recall_score(all_labels, 
-                                        all_preds, 
-                                        average='micro',
-                                        zero_division=0)
-        recall_weighted = recall_score(all_labels, 
-                                       all_preds, 
-                                       average='weighted',
-                                       zero_division=0)
-        recall_by_class  = recall_score(all_labels, 
-                                        all_preds, 
-                                        average=None,
-                                        zero_division=0)
-
-        f1_macro         = f1_score(all_labels, 
-                                    all_preds, 
-                                    average='macro',
-                                    zero_division=0)
-        f1_micro         = f1_score(all_labels, 
-                                    all_preds, 
-                                    average='micro',
-                                    zero_division=0)
-        f1_weighted      = f1_score(all_labels, 
-                                    all_preds, 
-                                    average='weighted',
-                                    zero_division=0)
-        f1_by_class      = f1_score(all_labels, 
-                                    all_preds, 
-                                    average=None,
-                                    zero_division=0)
-
-        accuracy          = accuracy_score(all_labels, all_preds)
-        balanced_accuracy = balanced_accuracy_score(all_labels, all_preds)
-        
-        conf_matrix = TensorBoardPlotter.compute_confusion_matrix(
-            all_labels,
-            all_preds,
-            self.num_classes,
-            normalize=True
-            )
-        TensorBoardPlotter.conf_matrix_to_tensorboard(
-            self.writer,
-            conf_matrix,
-            self.class_names
-            )
-        
-        # Make table with results: one column
-        # with the model properties:
-        ir_measures_skel = {'col_header' : ['precision', 'recall', 'f1'], 
-                            'row_labels' : ['macro','micro','weighted'],
-                            'rows'       : [[prec_macro, recall_macro, f1_macro],
-                                           [prec_micro, recall_micro, f1_micro],
-                                           [prec_weighted, recall_weighted, f1_weighted]
-                                           ]  
-                           }
-        
-        ir_per_class_rows = [[prec_class, recall_class, f1_class]
-                            for prec_class, recall_class, f1_class
-                            in zip(prec_by_class, recall_by_class, f1_by_class)
-                            ]
-        ir_by_class_skel =  {'col_header' : ['precision','recall', 'f1'],
-                             'row_labels' : self.class_names,
-                             'rows'       : ir_per_class_rows
-                             }
-        
-        accuracy_skel = {'col_header' : ['accuracy', 'balanced_accuracy'],
-                         'row_labels' : [],
-                         'rows'       : [accuracy, balanced_accuracy]
-                         }
-        ir_measures_tbl  = GithubTableMaker.make_table(ir_measures_skel)
-        ir_by_class_tbl  = GithubTableMaker.make_table(ir_by_class_skel)
-        accuracy_tbl     = GithubTableMaker.make_table(accuracy_skel)
-        
-        self.writer.add_text('Information retrieval measures', ir_measures_tbl, global_step=0)
-        self.writer.add_text('Per class measures', ir_by_class_tbl, global_step=0)
-        self.writer.add_text('Accuracy', accuracy_tbl, global_step=0)
 
 # ------------------------ Main ------------
 if __name__ == '__main__':
@@ -502,6 +538,11 @@ if __name__ == '__main__':
                         help='batch size to use; default: 1',
                         default=1
                         )
+    parser.add_argument('-d', '--device',
+                        help='device number of GPU (zero-origin); only used if GPU available; defaults to 0',
+                        default=0
+                        )
+
     parser.add_argument('model_path',
                         help='path to the saved Pytorch model',
                         default=None)
@@ -516,6 +557,7 @@ if __name__ == '__main__':
                     args.samples_path,
                     batch_size=args.batch_size, 
                     labels_path=args.labels_path,
+                    gpu_id=args.device
                     )
     res_coll = inferencer.run_inference()
     if res_coll is None:
