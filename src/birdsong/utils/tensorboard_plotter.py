@@ -9,7 +9,6 @@ import random
 from PIL import Image, ImageDraw, ImageFont
 from logging_service.logging_service import LoggingService
 from matplotlib import pyplot as plt
-#from sklearn.exceptions import UndefinedMetricWarning
 import torch
 from torch.utils.tensorboard.summary import hparams
 from torch.utils.tensorboard.writer import SummaryWriter
@@ -22,7 +21,10 @@ from birdsong.utils.github_table_maker import GithubTableMaker
 from birdsong.utils.learning_phase import LearningPhase
 import numpy as np
 import pandas as pd
+from result_analysis.charting import Charter
 
+
+#from sklearn.exceptions import UndefinedMetricWarning
 class TensorBoardPlotter:
     '''
     Support functionality for creating custom 
@@ -207,7 +209,7 @@ class TensorBoardPlotter:
                              columns=class_names,
                              index=class_names
                              )
-        conf_matrix_fig = cls.fig_from_conf_matrix(cm_df, title=title)
+        conf_matrix_fig = Charter.fig_from_conf_matrix(cm_df, title=title)
         writer.add_figure(title, conf_matrix_fig, global_step=step)
 
     #------------------------------------

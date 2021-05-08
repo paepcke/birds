@@ -31,7 +31,7 @@ class Test(unittest.TestCase):
             cls.class_names = fd.readline()
 
     def setUp(self):
-        self.cm = Charter({})
+        self.cm = Charter()
         
         self.cm_df = pd.read_csv(self.conf_matrix_path, index_col=0)
         self.cm_np = self.cm_df.to_numpy()

@@ -29,6 +29,7 @@ from birdsong.utils.tensorboard_plotter import SummaryWriterPlus, \
     TensorBoardPlotter
 from birdsong.utils.utilities import FileUtils, CSVWriterCloseable
 import pandas as pd
+from result_analysis.charting import Charter
 
 
 class Inferencer:
@@ -248,7 +249,7 @@ class Inferencer:
                     
                     time_now = datetime.datetime.now()
                     # Sign of life every 6 seconds:
-                    if (time_now - loop_start_time).seconds >= 6:
+                    if (time_now - loop_start_time).seconds >= 5:
                         self.log.info(f"Processed {samples_processed}/{num_test_samples} samples")
                         loop_start_time = time_now 
         finally:
@@ -256,7 +257,7 @@ class Inferencer:
             time_now = datetime.datetime.now()
             test_time_duration = overall_start_time - time_now
             # A human readable duration st down to minutes:
-            duration_str = self.time_delta_str(test_time_duration, granularity=4)
+            duration_str = FileUtils.time_delta_str(test_time_duration, granularity=4)
             self.log.info(f"Done with inference: {samples_processed} test samples; {duration_str}")
             # Total number of batches we ran:
             num_batches = 1 + batch_num # b/c of zero-base
@@ -340,7 +341,7 @@ class Inferencer:
         # by class ID:
 
         (all_curves_info, mAP) = \
-          TensorBoardPlotter.compute_multiclass_pr_curves(
+          Charter.compute_multiclass_pr_curves(
               self.all_labels_tn,
               self.all_outputs_tn,
               thresholds
@@ -468,7 +469,7 @@ class Inferencer:
         
         # Get confusion matrix as a tensor,
         # with fields normalized to 1 (i.e. percentages).
-        conf_matrix = TensorBoardPlotter.compute_confusion_matrix(
+        conf_matrix = Charter.compute_confusion_matrix(
             all_labels,
             all_preds,
             self.num_classes,

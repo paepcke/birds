@@ -293,7 +293,7 @@ class BirdsBasicTrainerCV:
                     end_time = datetime.datetime.now()
                     train_time_duration = end_time - epoch_start_time
                     # A human readable duration st down to minutes:
-                    duration_str = self.time_delta_str(train_time_duration, granularity=4)
+                    duration_str = FileUtils.time_delta_str(train_time_duration, granularity=4)
                     
                     self.log.info(f"Done training epoch {epoch} of split {split_num} (duration: {duration_str})")
     
@@ -314,7 +314,7 @@ class BirdsBasicTrainerCV:
             end_time = datetime.datetime.now()
             train_time_duration = end_time - split_start_time
             # A human readable duration st down to minutes:
-            duration_str = self.time_delta_str(train_time_duration, granularity=4)
+            duration_str = FileUtils.time_delta_str(train_time_duration, granularity=4)
             
             self.log.info(f"Done training split {split_num} (duration: {duration_str})")
             
@@ -323,10 +323,10 @@ class BirdsBasicTrainerCV:
             
         end_time       = datetime.datetime.now()
         epoch_duration = end_time - epoch_start_time
-        epoch_dur_str  = self.time_delta_str(epoch_duration, granularity=4)
+        epoch_dur_str  = FileUtils.time_delta_str(epoch_duration, granularity=4)
         
         cumulative_dur = end_time - overall_start_time
-        cum_dur_str    = self.time_delta_str(cumulative_dur, granularity=4)
+        cum_dur_str    = FileUtils.time_delta_str(cumulative_dur, granularity=4)
         
         msg = f"Done epoch {epoch}  (epoch duration: {epoch_dur_str}; cumulative: {cum_dur_str})"
         self.log.info(msg)
@@ -411,7 +411,7 @@ class BirdsBasicTrainerCV:
         end_time = datetime.datetime.now()
         val_time_duration = end_time - start_time
         # A human readable duration st down to minues:
-        duration_str = self.time_delta_str(val_time_duration, granularity=4)
+        duration_str = FileUtils.time_delta_str(val_time_duration, granularity=4)
         self.log.info(f"Done validation (duration: {duration_str})")
 
         return val_time_duration

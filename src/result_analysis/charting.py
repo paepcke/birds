@@ -4,42 +4,41 @@ Created on May 6, 2021
 @author: paepcke
 '''
 import argparse
+import copy
 import os
 import sys
 import warnings
 
+from logging_service.logging_service import LoggingService
+from matplotlib import cm as col_map
+from matplotlib import pyplot as plt
 import sklearn
+from sklearn.metrics import confusion_matrix
 from sklearn.metrics._classification import precision_score, recall_score
 from sklearn.metrics._ranking import average_precision_score
 from sklearn.preprocessing._label import label_binarize
-from sklearn.metrics import confusion_matrix
-
 import torch
 
+import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
-
-from matplotlib import pyplot as plt
-from matplotlib import cm as col_map
-import matplotlib.ticker as mticker
-
 import seaborn as sns
+
 
 class Charter:
     
     # Value to assign to precision,
     # recall, or f1 when divide by 0
     DIV_BY_ZERO = 0
+    
+    log = LoggingService()
 
     #------------------------------------
-    # Constructor 
+    # visualize_testing_result
     #-------------------
-    
-    def __init__(self, actions):
-        pass
 
-
-    def visualize_testing_result(self,
+    @classmethod
+    def visualize_testing_result(cls,
                                  truth_labels, 
                                  pred_class_ids
                                  ):
@@ -101,9 +100,9 @@ class Charter:
             # Get precision and recall at each
             # of the default thresholds:
             precs, recs = \
-                self.compute_binary_pr_curve(bin_labels_arr,
-                                     preds_arr
-                                     )
+                cls.compute_binary_pr_curve(bin_labels_arr,
+                                            preds_arr
+                                            )
             precisions[i] = precs
             recalls[i]    = recs
             
@@ -135,7 +134,8 @@ class Charter:
     # compute_binary_pr_curve 
     #-------------------
 
-    def compute_binary_pr_curve(self, 
+    @classmethod
+    def compute_binary_pr_curve(cls, 
                                 labels, 
                                 preds,
                                 class_id,
@@ -274,7 +274,7 @@ class Charter:
         # the class list of known classes,
         # and log a warning:
         if len(class_list) == 1:
-            self.log.warn(f"Only label {class_list[0]} occurs; always guessing that value.")
+            cls.log.warn(f"Only label {class_list[0]} occurs; always guessing that value.")
         class_list.append(class_list[0])
         
         # So far, no undefined recall or precision
@@ -396,7 +396,8 @@ class Charter:
     # compute_confusion_matrix
     #-------------------
     
-    def compute_confusion_matrix(self, 
+    @classmethod
+    def compute_confusion_matrix(cls, 
                                  truth_labels, 
                                  predicted_class_ids,
                                  num_classes,
@@ -421,7 +422,7 @@ class Charter:
             ))
 
         if normalize:
-            conf_matrix = self.calc_conf_matrix_norm(conf_matrix)
+            conf_matrix = cls.calc_conf_matrix_norm(conf_matrix)
              
         return conf_matrix
 
@@ -429,7 +430,8 @@ class Charter:
     # calc_conf_matrix_norm
     #-------------------
 
-    def calc_conf_matrix_norm(self, conf_matrix):
+    @classmethod
+    def calc_conf_matrix_norm(cls, conf_matrix):
         '''
         Calculates a normalized confusion matrix.
         Normalizes by the number of samples that each 
@@ -478,7 +480,8 @@ class Charter:
     # compute_multiclass_pr_curves 
     #-------------------
     
-    def compute_multiclass_pr_curves(self,
+    @classmethod
+    def compute_multiclass_pr_curves(cls,
                                     truth_labels, 
                                     raw_preds,
                                     thresholds=[0.2, 0.4, 0.6, 0.8]
@@ -655,11 +658,11 @@ class Charter:
             # Obtain the information needed to 
             # draw one PR curve: a CurveSpecification
             # instance:
-            one_class_curve = self.compute_binary_pr_curve(bin_label_col,
-                                                           preds_col,
-                                                           col_idx,   # class_id
-                                                           thresholds
-                                                           )
+            one_class_curve = cls.compute_binary_pr_curve(bin_label_col,
+                                                          preds_col,
+                                                          col_idx,   # class_id
+                                                          thresholds
+                                                          )
 
             # Accumulate the curve indices 
             # in a dict, keyed by class ID:
@@ -680,7 +683,8 @@ class Charter:
     # fig_from_conf_matrix 
     #-------------------
     
-    def fig_from_conf_matrix(self, 
+    @classmethod
+    def fig_from_conf_matrix(cls, 
                              conf_matrix,
                              title='Confusion Matrix',
                              write_in_fields=5
@@ -714,7 +718,9 @@ class Charter:
         # is in position 1 (1-based):
         # Need figsize=(10, 5) somewhere
         fig, ax = plt.subplots()
-        cmap = col_map.Blues
+        # Make a copy of the cmap, so
+        # we can modify it:
+        cmap = copy.copy(col_map.Blues)
 
         fig.set_tight_layout(True)
         fig.suptitle(title)
@@ -735,15 +741,19 @@ class Charter:
         ax.yaxis.set_major_locator(mticker.FixedLocator(ticks_loc))
         ax.set_yticklabels([class_name for class_name in ticks_loc])
 
-        cm_normed = self.calc_conf_matrix_norm(conf_matrix)
+        cm_normed = cls.calc_conf_matrix_norm(conf_matrix)
+        # Turn the tensor-typed dataframe elements into
+        # floats:
+        cm_normed_floats = cm_normed.astype(float)
         
         if type(write_in_fields) == int:
             annot = True if len(class_names) <= write_in_fields else False
         else:
             annot = write_in_fields 
-        
+
+        cmap.set_bad('black')
         heatmap_ax = sns.heatmap(
-            cm_normed,
+            cm_normed_floats,
             #*****vmin=0.0, vmax=1.0,
             cmap=cmap,
             annot=annot,  # Do write percentages into cells
@@ -753,7 +763,7 @@ class Charter:
             xticklabels=class_names,
             yticklabels=class_names,
             linewidths=1,# Pixel,
-            linecolor='black'
+            linecolor='gray'
             )
         heatmap_ax.set_xticklabels(heatmap_ax.get_xticklabels(), 
                                    rotation = 45 
