@@ -255,7 +255,7 @@ class Inferencer:
         finally:
             
             time_now = datetime.datetime.now()
-            test_time_duration = overall_start_time - time_now
+            test_time_duration = time_now - overall_start_time
             # A human readable duration st down to minutes:
             duration_str = FileUtils.time_delta_str(test_time_duration, granularity=4)
             self.log.info(f"Done with inference: {samples_processed} test samples; {duration_str}")
@@ -585,4 +585,7 @@ if __name__ == '__main__':
     if res_coll is None:
         # Something went wrong (and was reported earlier)
         sys.exit(1)
-    FileUtils.user_confirm("Hit any key to close images and end...")
+        
+    # This module no longer generates images;
+    # Instead, information is left in <proj-root>/src/birdsong/runs_raw_inference 
+    # FileUtils.user_confirm("Hit any key to close images and end...")
