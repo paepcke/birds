@@ -12,7 +12,7 @@ import pandas as pd
 from result_analysis.charting import Charter
 
 
-#*******TEST_ALL = True
+#********TEST_ALL = True
 TEST_ALL = False
 
 
@@ -80,6 +80,7 @@ class Test(unittest.TestCase):
     def test_conf_matrix(self):
 
         fig = self.cm.fig_from_conf_matrix(self.cm_df)
+        #******** FIND WAY TO TEST FIG DATA WITHOUT SHOWING
         print(self.cm)
 
 # ---------------------- Main --------------------

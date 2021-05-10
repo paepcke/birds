@@ -352,6 +352,10 @@ class Charter:
                                         #category=UndefinedMetricWarning
                                         category=UserWarning
                                         )
+                warnings.filterwarnings("true_divide",
+                                        #category=UndefinedMetricWarning
+                                        category=RuntimeWarning
+                                        )
                 f1_scores = 2 * (precs_np * recs_np) / (precs_np + recs_np)
             except Exception as _e:
                 # Was it a div by zero from the prec calc?
@@ -691,7 +695,7 @@ class Charter:
                              ):
         '''
         Given a confusion matrix, return a 
-        matplotlib.pyplot axes with a heatmap of the matrix.
+        matplotlib.pyplot Figure with a heatmap of the matrix.
         
         The write_in_fields arg controls whether or not
         each cell is filled with a label indicating its
@@ -751,7 +755,7 @@ class Charter:
         else:
             annot = write_in_fields 
 
-        cmap.set_bad('black')
+        cmap.set_bad('gray')
         heatmap_ax = sns.heatmap(
             cm_normed_floats,
             #*****vmin=0.0, vmax=1.0,
