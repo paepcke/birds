@@ -7,6 +7,7 @@ Created on Jan 21, 2021
 from _collections import OrderedDict
 import csv
 import datetime
+import glob
 import os
 from pathlib import Path
 import re
@@ -364,6 +365,38 @@ class FileUtils:
             prop_dict['timestamp'] = match[2]
         
         return prop_dict
+
+
+    #------------------------------------
+    # expand_filename 
+    #-------------------
+    
+    @classmethod
+    def expand_filename(cls, fname, expand_dir=False):
+        '''
+        Resolves Unix filenames with tilde, environment vars,
+        and/or wildcards, such as
+          
+                ~/tmp/foo.*
+                $HOME/tmp/*
+
+        :param fname: file name with Unix-like name features
+        :type fname: str
+        :param expand_dir: If true, and the fully expanded
+            fname is a directory, return a list of that directory's
+            content (non-recursively)
+        :type expand_dir: bool
+        :return: expanded file name(s), with tilde, env vars, and
+            wildcards expanded.
+        :rtype [str]
+        '''
+        
+        full_fname = glob.glob(os.path.expanduser(os.path.expandvars(fname)))
+        for expanded_fname in full_fname:
+            if os.path.isdir(expanded_fname) and expand_dir:
+                full_fname.append(glob.glob(f"expanded_fname/*"))
+        return full_fname
+
 
     #------------------------------------
     # user_confirm
