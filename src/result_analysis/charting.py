@@ -5,6 +5,7 @@ Created on May 6, 2021
 '''
 import argparse
 import copy
+from enum import Enum
 import os
 import sys
 import warnings
@@ -25,6 +26,14 @@ import pandas as pd
 import seaborn as sns
 
 
+class CELL_LABELING(Enum):
+    ALWAYS = 0
+    NEVER  = 1
+    DIAGONAL = 2
+    AUTO = 5           # If dimension > 5
+
+# ----------------------- Class Charter --------------
+
 class Charter:
     
     # Value to assign to precision,
@@ -32,6 +41,28 @@ class Charter:
     DIV_BY_ZERO = 0
     
     log = LoggingService()
+
+
+    #------------------------------------
+    # Constructor 
+    #-------------------
+    
+    def __init__(self, actions=None):
+        
+        if actions is None:
+            return
+        
+        for action in actions.keys():
+            try:
+                if action == 'conf_matrix':
+                    cm_path = actions['conf_matrix']
+                    cm = Charter.read_conf_matrix_from_file(cm_path)
+                    fig = self.fig_from_conf_matrix(cm, title='Confusion Matrix')
+                    fig.show()
+                elif action == 'pr_curves':
+                    data = 0 #********************
+            except Exception as e:
+                pass
 
     #------------------------------------
     # visualize_testing_result
@@ -690,8 +721,9 @@ class Charter:
     @classmethod
     def fig_from_conf_matrix(cls, 
                              conf_matrix,
-                             title='Confusion Matrix',
-                             write_in_fields=5
+                             supertitle='Confusion Matrix\n',
+                             subtitle='',
+                             write_in_fields=CELL_LABELING.DIAGONAL
                              ):
         '''
         Given a confusion matrix, return a 
@@ -699,23 +731,40 @@ class Charter:
         
         The write_in_fields arg controls whether or not
         each cell is filled with a label indicating its
-        percentage. If:
+        value. If:
         
-            o True : always write the labels
-            o False: never write the labels
-            o int  : only write labels if number of classes
-                is <= to int.
+            o CELL_LABELING.ALWAYS    : always write the labels
+            o CELL_LABELING.NEVER     : never write the labels
+            o CELL_LABELING.DIAGONAL  : only label the diagonals
+            o CELL_LABELING.AUTO      : only write labels if number of classes
+                                        is <= CELL_LABELING.AUTO.value
+                
+        Result form:
+        	             C_1-pred, C_2-pred, C_3-pred
+        	 C_1-true        3         1        0
+        	 C_2-true        2         6        1
+        	 C_3-true        0         0        3
+        	         
         
         :param conf_matrix: nxn confusion matrix representing
             rows:truth, cols:predicted for n classes
         :type conf_matrix: pd.DataFrame
-        :param title: title at top of figure
-        :type title: str
+        :param supertitle: main title at top of figure
+        :type supertitle: str
+        :param subtitle: title for the confusion matrix
+            only. Ex: "data normalized to percentages"
+        :type subtitle: str
+        :param write_in_fields: how many cells, if any should 
+            contain labels with the cell values. 
+        :type write_in_fields: CELL_LABELING
         :return: matplotlib figure with confusion
             matrix heatmap.
         :rtype: pyplot.Figure
         '''
 
+        if type(write_in_fields) != CELL_LABELING:
+            raise TypeError(f"Arg write_in_fields must be a CELL_LABELING enum member, not {write_in_fields}")
+        
         class_names = conf_matrix.columns
         # Subplot 111: array of subplots has
         # 1 row, 1 col, and the requested axes
@@ -727,9 +776,7 @@ class Charter:
         cmap = copy.copy(col_map.Blues)
 
         fig.set_tight_layout(True)
-        fig.suptitle(title)
-        ax.set_xlabel('Actual species')
-        ax.set_ylabel('Predicted species')
+        fig.suptitle(supertitle, fontsize='large', fontweight='extra bold')
 
         # Later matplotlib versions want us
         # to use the mticker axis tick locator
@@ -745,36 +792,110 @@ class Charter:
         ax.yaxis.set_major_locator(mticker.FixedLocator(ticks_loc))
         ax.set_yticklabels([class_name for class_name in ticks_loc])
 
-        cm_normed = cls.calc_conf_matrix_norm(conf_matrix)
-        # Turn the tensor-typed dataframe elements into
-        # floats:
-        cm_normed_floats = cm_normed.astype(float)
-        
-        if type(write_in_fields) == int:
-            annot = True if len(class_names) <= write_in_fields else False
+        # Add cell labels if requested:
+        if write_in_fields == CELL_LABELING.ALWAYS or \
+                              (CELL_LABELING.AUTO and len(class_names) <= CELL_LABELING.AUTO.value):
+            annot = conf_matrix.copy()
+        elif write_in_fields == CELL_LABELING.DIAGONAL:
+            # Fill with a copy of conf matrix with strings, 
+            # but room for up to 3 chars:
+            #**************
+            annot = np.full_like(conf_matrix, '', dtype='U3')
+            np.fill_diagonal(annot, np.diag(conf_matrix).astype(str))
+            #annot = np.empty_like(conf_matrix)
+            #np.fill_diagonal(annot, np.diag(conf_matrix).astype(str))
+            #**************
         else:
-            annot = write_in_fields 
+            annot = None
 
         cmap.set_bad('gray')
         heatmap_ax = sns.heatmap(
-            cm_normed_floats,
-            #*****vmin=0.0, vmax=1.0,
+            #cm_normed_floats,
+            conf_matrix,
             cmap=cmap,
-            annot=annot,  # Do write percentages into cells
-            fmt='g',      # Avoid scientific notation
+            annot=annot,  # Cell labels
+            #****fmt='g',      # Avoid scientific notation
+            fmt='s',      # Avoid scientific notation
             cbar=True,    # Do draw color bar legend
             ax=ax,
             xticklabels=class_names,
             yticklabels=class_names,
             linewidths=1,# Pixel,
-            linecolor='gray'
+            linecolor='gray',
+            robust=True   # Compute colors from quantiles instead of 
+                          # most extreme values
             )
         heatmap_ax.set_xticklabels(heatmap_ax.get_xticklabels(), 
                                    rotation = 45 
                                    )
+        
+        heatmap_ax.set_title(subtitle,
+                             fontdict={'fontsize'   : 'medium',
+                                       'fontweight' : 'bold',
+                                 },
+                             pad=12 # Distance above matrix in pt
+                             )
+        
+        # Label x and y to clarify what's predicted,
+        # and what's truth; also: have the x-axis label
+        # at the top:
+        
+        heatmap_ax.set_xlabel('True Classes', fontweight='bold')
+        heatmap_ax.xaxis.set_label_position('top')
+        heatmap_ax.set_ylabel('Predicted Classes', fontweight='bold')
+
+        fig = heatmap_ax.get_figure()
+        fig.suptitle(supertitle, fontsize='large', fontweight='extra bold')
+        
         return fig
     
-    
+# -------------------- Utilities for Charter Class --------------
+
+    @classmethod
+    def read_conf_matrix_from_file(cls, cm_path):
+        '''
+        Read a previously computed confusion matrix from
+        file. Return a dataframe containing the cm. 
+        
+        Depending on the original dataframe/tensor,np_array
+        from which which the .csv was created, the first line
+        has a leading comma. This results in:
+        
+              Unnamed: 0  foo  bar  fum
+            0        foo    1    2    3
+            1        bar    4    5    6
+            2        fum    7    8    9        
+        
+        Rather than the correct:
+        
+                 foo  bar  fum
+            foo    1    2    3
+            bar    4    5    6
+            fum    7    8    9
+
+        Since conf matrices are square, we can check
+        and correct for that.
+        
+        NOTE: if arrays of predicted and truth classes are
+               available, rather than an already computed confusion
+               matrix saved to file, see compute_confusion_matrix(). 
+        
+        :param cm_path: path to confusion matrix in csv format
+        :type cm_path: str
+        :return: confusion matrix as dataframe; no processing on numbers
+        :rtype: pd.DataFrame
+        '''
+        
+        df = pd.read_csv(cm_path)
+        # If comma was missing, we have one fewer
+        # col names than row names:
+        if len(df.columns) != len(df.index):
+            df_good = df.iloc[:, 1:]
+            df_good.index = df.columns[1:]
+        else:
+            df_good = df
+
+        return df_good
 
 
 # ------------------ Class Best Operating Point -----------

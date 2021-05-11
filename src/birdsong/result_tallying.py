@@ -17,7 +17,7 @@ from sklearn.metrics import recall_score
 import torch
 
 from birdsong.utils.learning_phase import LearningPhase
-from birdsong.utils.tensorboard_plotter import TensorBoardPlotter
+from result_analysis.charting import Charter
 
 
 packet_root = os.path.abspath(__file__.split('/')[0])
@@ -556,11 +556,11 @@ class ResultTally:
         # of all samples in a row the classifier
         # got rigth:
         
-        self.conf_matrix = TensorBoardPlotter\
-            .compute_confusion_matrix(labels,
-                                      preds,
-                                      self.num_classes,
-                                      normalize=True)
+        self.conf_matrix = Charter.compute_confusion_matrix(
+            labels,
+            preds,
+            self.num_classes,
+            normalize=True)
             
         self.mean_loss = torch.mean(self.losses)
 
@@ -630,30 +630,6 @@ class ResultTally:
         pred_tensor = torch.argmax(pred_probs, dim=1)
         self.preds = pred_tensor.tolist()
 
-    #------------------------------------
-    # compute_confusion_matrix
-    #-------------------
-    
-    def compute_confusion_matrix(self, truth_labels, predicted_class_ids):
-        # Example Confustion matrix for 16 samples,
-        # in 3 classes:
-        # 
-        #              C_1-pred, C_2-pred, C_3-pred
-        #  C_1-true        3         1        0
-        #  C_2-true        2         6        1
-        #  C_3-true        0         0        3
-        
-        # The class IDs (labels kwarg) is needed for
-        # sklearn to know about classes that were not
-        # encountered:
-        
-        conf_matrix = torch.tensor(confusion_matrix(
-            truth_labels,          # Truth
-            predicted_class_ids,   # Prediction
-            labels=list(range(self.num_classes)) # Class labels
-            ))
-
-        return conf_matrix
 
 # *************** REMOVE
 #     #------------------------------------
