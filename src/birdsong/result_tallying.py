@@ -396,7 +396,7 @@ class ResultTally:
         
         self.created_at     = datetime.datetime.now()
         self.phase          = phase
-        self.step          = step
+        self.step           = step
         self.num_classes    = num_classes
         self.batch_size     = batch_size
         self.preds          = None

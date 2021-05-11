@@ -47,21 +47,27 @@ class Charter:
     # Constructor 
     #-------------------
     
-    def __init__(self, actions=None):
+    def __init__(self,
+                 actions=None
+                 ):
         
         if actions is None:
             return
         
-        for action in actions.keys():
+        for action in actions:
             try:
-                if action == 'conf_matrix':
-                    cm_path = actions['conf_matrix']
-                    cm = Charter.read_conf_matrix_from_file(cm_path)
-                    fig = self.fig_from_conf_matrix(cm, title='Confusion Matrix')
+                if type(action) == VizConfMatrixReq:
+                    cm = Charter.read_conf_matrix_from_file(action.path)
+                    fig = self.fig_from_conf_matrix(cm,
+                                                    supertitle=action.supertitle,
+                                                    title=action.title,
+                                                    write_in_fields=action.write_in_fields
+                                                    )
                     fig.show()
+                    
                 elif action == 'pr_curves':
-                    data = 0 #********************
-            except Exception as e:
+                    pass #data = 0 #********************
+            except Exception as _e:
                 pass
 
     #------------------------------------
@@ -1051,6 +1057,43 @@ class CurveSpecification(dict):
         return repr(self)
 
 
+# ---------------------- Classes to Specify Visualization Requests ------
+
+# The following (sub)classes are just information holders
+# that are passed to the __init__() method of Charter to 
+# keep args for different visualizations tidy:
+
+class VizRequest:
+    
+    def __init__(self, path):
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"File {path} does not exist")
+        
+        self.path = path
+        
+class VizConfMatrixReq(VizRequest):
+    
+    def __init__(self, 
+                 path, 
+                 write_in_fields=CELL_LABELING.DIAGONAL, 
+                 supertitle='Confusion Matrix', 
+                 title=''):
+        
+        super().__init__(path)
+        
+        if type(write_in_fields) != CELL_LABELING:
+            raise TypeError(f"Confusion matrix cell label handling specification must be a CELL_LABELING, not {type(write_in_fields)}")
+        self.write_in_fields = write_in_fields
+        
+        self.supertitle = str(supertitle)
+        self.title = str(title)
+        
+class VizPRCurvesReq(VizRequest):
+    def __init__(self, 
+                 path
+                 ): 
+        super().__init__(path)
+
 # --------------- Main -------------
 
 if __name__ == '__main__':
@@ -1072,10 +1115,19 @@ if __name__ == '__main__':
                         # type=int,
                         # nargs='+',
                         # help='Repeatable: integers. Will show as list in my_integers')
-    
+
+    parser.add_argument('--supertitle',
+                        help='title above the figure',
+                        default=None
+                        )
+
+    parser.add_argument('--title',
+                        help='title just above the main chart of the figure',
+                        default=None
+                        )
     
     parser.add_argument('--conf_matrix',
-                        help='create confusion matrix; value: path to csv file',
+                        help='heatmap confusion matrix; value: path to csv file',
                         default=None
                         )
     parser.add_argument('--pr_curves',
@@ -1085,10 +1137,14 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     
-    actions = {}
+    actions = []
     if args.conf_matrix is not None:
-        actions['conf_matrix'] = args.conf_matrix
+        actions.append(VizConfMatrixReq(path=args.conf_matrix,
+                                        supertitle=args.supertitle,
+                                        title=args.title,
+                                        write_in_fields=CELL_LABELING.DIAGONAL
+                                        ))
     if args.pr_curves is not None:
-        actions['pr_curves'] = args.pr_curves
+        actions.append(VizPRCurvesReq(path=args.pr_curves))
         
     Charter(actions)

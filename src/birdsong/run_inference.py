@@ -7,6 +7,7 @@ Created on Mar 12, 2021
 from _collections import OrderedDict
 import argparse
 import datetime
+from multiprocessing import Pool
 import os
 from pathlib import Path
 import sys
@@ -29,7 +30,7 @@ from birdsong.utils.tensorboard_plotter import SummaryWriterPlus, \
     TensorBoardPlotter
 from birdsong.utils.utilities import FileUtils, CSVWriterCloseable
 import pandas as pd
-from result_analysis.charting import Charter
+from result_analysis.charting import Charter, CELL_LABELING
 
 
 class Inferencer:
@@ -317,7 +318,38 @@ class Inferencer:
     
     def report_results(self, tally_coll):
         self._report_textual_results(tally_coll, self.csv_dir)
+        self._report_conf_matrix(tally_coll)
         self._report_charted_results()
+
+    #------------------------------------
+    # _report_conf_matrix 
+    #-------------------
+    
+    def _report_conf_matrix(self, tally_coll, show=True):
+
+        all_preds   = []
+        all_labels  = []
+        class_names = set()
+        
+        for tally in tally_coll.tallies(phase=LearningPhase.TESTING):
+            all_preds.extend(tally.preds)
+            all_labels.extend(tally.labels)
+            class_names.add(tally.labels)
+        
+        conf_matrix = Charter.compute_confusion_matrix(all_labels,
+                                                       all_preds,
+                                                       class_names,
+                                                       normalize=True
+                                                       )
+        fig = Charter.fig_from_conf_matrix(conf_matrix,
+                                           supertitle='Confusion Matrix\n',
+                                           subtitle='Normalized to percentages',
+                                           write_in_fields=CELL_LABELING.DIAGONAL
+                                           )
+        if show:
+            fig.show()
+        return fig
+        
 
     #------------------------------------
     # _report_charted_results 
@@ -552,7 +584,7 @@ if __name__ == '__main__':
                                      formatter_class=argparse.RawTextHelpFormatter,
                                      description="Run inference on given model"
                                      )
-
+    
     parser.add_argument('-l', '--labels_path',
                         help='optional path to labels for use in measures calcs; default: no measures',
                         default=None)
@@ -561,31 +593,61 @@ if __name__ == '__main__':
                         default=1
                         )
     parser.add_argument('-d', '--device',
-                        help='device number of GPU (zero-origin); only used if GPU available; defaults to 0',
+                        type=int,
+                        nargs='+',
+                        help='device number of GPU(s) (zero-origin); repeatable; only used if GPU available; defaults to ID 0',
                         default=0
                         )
 
-    parser.add_argument('model_path',
-                        help='path to the saved Pytorch model',
+    parser.add_argument('--model_paths',
+                        nargs='+',
+                        help='path(s) to the saved Pytorch model(s); repeatable, if more than one, composites of results from all models. ',
                         default=None)
-    parser.add_argument('samples_path',
+    parser.add_argument('--samples_path',
                         help='path to samples to run through model',
                         default=None)
 
     args = parser.parse_args();
 
-    inferencer = Inferencer(
-                    args.model_path, 
-                    args.samples_path,
-                    batch_size=args.batch_size, 
-                    labels_path=args.labels_path,
-                    gpu_id=args.device
-                    )
-    res_coll = inferencer.run_inference()
-    if res_coll is None:
-        # Something went wrong (and was reported earlier)
-        sys.exit(1)
+    if type(args.device) != list:
+        args.device = [args.device]
+    
+    # Expand Unix wildcards, tilde, and env 
+    # vars in the model paths:
+    if type(args.model_paths) != list:
+        model_paths_raw = [args.model_paths]
+    else:
+        model_paths_raw = args.model_paths
         
-    # This module no longer generates images;
-    # Instead, information is left in <proj-root>/src/birdsong/runs_raw_inference 
-    # FileUtils.user_confirm("Hit any key to close images and end...")
+    # Resolve tilde, environment variables, 
+    # and wildcards in the model path(s):
+    
+    model_paths = [FileUtils.expand_filename(fname)
+                   for fname 
+                   in model_paths_raw
+                   ][0]
+    
+    devices_to_use = args.device.copy()
+    inferencers = []
+    res_collections = []
+    for model_path in model_paths:
+        try:
+            dev = devices_to_use.pop()
+        except IndexError:
+            # No more new GPUs: round-robin them:
+            devices_to_use = args.device.copy() 
+            dev = devices_to_use.pop()
+        inferencers.append(
+            Inferencer(
+                model_path, 
+                args.samples_path,
+                batch_size=args.batch_size, 
+                labels_path=args.labels_path,
+                gpu_id=dev
+                ))
+    # Run the inferences in parallel on
+    # as many GPUs as possible:
+        # assigned to GPUs so far:
+    with Pool(len(args.device)) as inferencing_pool:
+        inferencing_pool.imap(Inferencer.run_inference, inferencers, chunksize=len(args.device))
+
