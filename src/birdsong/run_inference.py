@@ -11,6 +11,10 @@ from multiprocessing import Pool
 import os
 from pathlib import Path
 import sys
+import tempfile
+
+import pandas as pd
+import numpy as np
 
 from logging_service.logging_service import LoggingService
 from sklearn.metrics import accuracy_score, balanced_accuracy_score
@@ -21,6 +25,10 @@ import torch
 from torch.utils.data.dataloader import DataLoader
 from torchvision.datasets.folder import ImageFolder
 
+sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+
 from birdsong.ml_plotting.classification_charts import ClassificationPlotter
 from birdsong.nets import NetUtils
 from birdsong.result_tallying import ResultTally, ResultCollection
@@ -29,7 +37,6 @@ from birdsong.utils.learning_phase import LearningPhase
 from birdsong.utils.tensorboard_plotter import SummaryWriterPlus, \
     TensorBoardPlotter
 from birdsong.utils.utilities import FileUtils, CSVWriterCloseable
-import pandas as pd
 from result_analysis.charting import Charter, CELL_LABELING
 
 
@@ -43,7 +50,7 @@ class Inferencer:
     #-------------------
 
     def __init__(self, 
-                 model_path, 
+                 model_paths, 
                  samples_path,
                  batch_size=1, 
                  labels_path=None,
@@ -68,8 +75,8 @@ class Inferencer:
         not inferencing on up to batch_size - 1 
         samples is OK
         
-        :param model_path:
-        :type model_path:
+        :param model_paths:
+        :type model_paths:
         :param samples_path:
         :type samples_path:
         :param batch_size:
@@ -81,38 +88,51 @@ class Inferencer:
         :type gpu_ids: {int | [int]} 
         '''
 
-        self.model_path = model_path
+        self.model_paths  = model_paths
         self.samples_path = samples_path
-        self.labels_path = labels_path
-        self.gpu_ids = gpu_ids if type(gpu_ids) == list else [gpu_ids]
+        self.labels_path  = labels_path
+        self.gpu_ids      = gpu_ids if type(gpu_ids) == list else [gpu_ids]
+        if batch_size is not None:
+            self.batch_size = batch_size
+        else:
+            self.batch_size = 1
         
         self.IMG_EXTENSIONS = FileUtils.IMG_EXTENSIONS
+        self.log      = LoggingService()
+        self.curr_dir = os.path.dirname(__file__)
         
-        self.log = LoggingService()
+    #------------------------------------
+    # prep_model_inference 
+    #-------------------
+
+    def prep_model_inference(self, model_path):
         
-        curr_dir          = os.path.dirname(__file__)
         model_fname       = os.path.basename(model_path)
         
         # Extract model properties
         # from the model filename:
         self.model_props  = FileUtils.parse_filename(model_fname)
         
-        if batch_size is not None:
-            self.batch_size = batch_size
-        else:
-            self.batch_size = self.model_props['batch_size']
-
-        self.csv_dir = os.path.join(curr_dir, 'runs_raw_inferences')
-        csv_file_nm = FileUtils.construct_filename(
-            self.model_props,
-            prefix='inf',
-            suffix='.csv', 
-            incl_date=True)
-        csv_path = os.path.join(self.csv_dir, csv_file_nm)
+        # self.csv_dir = os.path.join(self.curr_dir, 'runs_raw_inferences')
+        # csv_results_root = os.path.join(self.curr_dir, 'runs_inferences')
+        # csv_results_dest = tempfile.NamedDirectory(dir=csv_results_root,
+        #                                            prefix='inf_csv_results'
+        #                                           ).name
+        #                                                    
+        # csv_file_nm = FileUtils.construct_filename(
+            # self.model_props,
+            # prefix='inf',
+            # suffix='.csv', 
+            # incl_date=True)
+        # csv_path = os.path.join(self.csv_dir, csv_file_nm)
+        #
+        # self.csv_writer = CSVWriterCloseable(csv_path)
         
-        self.csv_writer = CSVWriterCloseable(csv_path)
+        tensorboard_root = os.path.join(self.curr_dir, 'runs_inferences')
+        tensorboard_dest = tempfile.TemporaryDirectory(dir=tensorboard_root,
+                                                       prefix='inf_results'
+                                                       ).name
         
-        tensorboard_dest = os.path.join(curr_dir, 'runs_inferences')
         self.writer = SummaryWriterPlus(log_dir=tensorboard_dest)
         
         transformations = FileUtils.get_image_transforms(
@@ -142,12 +162,14 @@ class Inferencer:
             freeze=0,
             to_grayscale=self.model_props['to_grayscale']
             )
-        
+
     #------------------------------------
     # __call__ 
     #-------------------
     
-    def __call__(self, gpu_id):
+    def __call__(self, gpu_id_model_path_pair):
+        gpu_id, self.model_path = gpu_id_model_path_pair
+        self.prep_model_inference(self.model_path)
         return self.run_inference(gpu_to_use=gpu_id)
 
     #------------------------------------
@@ -155,9 +177,23 @@ class Inferencer:
     #-------------------
 
     def go(self):
+        # Pair models to GPUs; example for 
+        # self.gpu_ids == [0,4], and three models:
+        #    [(gpu0, model0) (gpu4, model1), (gpu0, model3)]
+        
+        repeats = int(np.ceil(len(self.model_paths) / len(self.gpu_ids)))
+        gpu_model_pairings = list(zip(self.gpu_ids*repeats, self.model_paths))
+        
         with Pool(len(self.gpu_ids)) as inf_pool:
-            results = inf_pool(self, self.gpu_ids)
+            # Run as many inferences in parallel as
+            # there are models to try:
+            result_it = inf_pool.imap(self, 
+                                      gpu_model_pairings,
+                                      chunksize=len(self.gpu_ids)
+                                      )
+            results = [res.get() for res in result_it]
             print(f"******Results: {results}")
+
 
     #------------------------------------
     # run_inferencer 
@@ -188,6 +224,7 @@ class Inferencer:
         '''
         # Just in case the loop never runs:
         batch_num   = -1
+        overall_start_time = datetime.datetime.now()
 
         try:
             try:
@@ -222,7 +259,6 @@ class Inferencer:
 
             samples_processed = 0
             
-            overall_start_time = datetime.datetime.now()
             loop_start_time    = overall_start_time
             with torch.no_grad():
                 
@@ -269,7 +305,7 @@ class Inferencer:
                     time_now = datetime.datetime.now()
                     # Sign of life every 6 seconds:
                     if (time_now - loop_start_time).seconds >= 5:
-                        self.log.info(f"Processed {samples_processed}/{num_test_samples} samples")
+                        self.log.info(f"GPU{gpu_to_use} processed {samples_processed}/{num_test_samples} samples")
                         loop_start_time = time_now 
         finally:
             
@@ -589,10 +625,10 @@ class Inferencer:
             self.writer.close()
         except Exception as e:
             self.log.err(f"Could not close tensorboard writer: {repr(e)}")
-        try:
-            self.csv_writer.close()
-        except Exception as e:
-            self.log.err(f"Could not close CSV writer: {repr(e)}")
+        #try:
+        #    self.csv_writer.close()
+        #except Exception as e:
+        #    self.log.err(f"Could not close CSV writer: {repr(e)}")
 
 
 # ------------------------ Main ------------
@@ -648,7 +684,7 @@ if __name__ == '__main__':
     inferencer = Inferencer(model_paths,
                             args.samples_path,
                             labels_path=None,
-                            gpu_id=args.device if type(args.device) == list else [args.device]
+                            gpu_ids=args.device if type(args.device) == list else [args.device]
                             )
     inferencer.go()
 
