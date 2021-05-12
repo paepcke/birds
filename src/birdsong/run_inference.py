@@ -47,7 +47,7 @@ class Inferencer:
                  samples_path,
                  batch_size=1, 
                  labels_path=None,
-                 gpu_id=0
+                 gpu_ids=0
                  ):
         '''
         Given the path to a trained model,
@@ -76,15 +76,15 @@ class Inferencer:
         :type batch_size:
         :param labels_path:
         :type labels_path:
-        :param gpu_id: Device number of GPU, in case 
+        :param gpu_ids: Device number of GPU, in case 
             one is available
-        :type gpu_id: int
+        :type gpu_ids: {int | [int]} 
         '''
 
         self.model_path = model_path
         self.samples_path = samples_path
         self.labels_path = labels_path
-        self.gpu_id = gpu_id
+        self.gpu_ids = gpu_ids if type(gpu_ids) == list else [gpu_ids]
         
         self.IMG_EXTENSIONS = FileUtils.IMG_EXTENSIONS
         
@@ -144,10 +144,26 @@ class Inferencer:
             )
         
     #------------------------------------
+    # __call__ 
+    #-------------------
+    
+    def __call__(self, gpu_id):
+        return self.run_inference(gpu_to_use=gpu_id)
+
+    #------------------------------------
+    # go 
+    #-------------------
+
+    def go(self):
+        with Pool(len(self.gpu_ids)) as inf_pool:
+            results = inf_pool(self, self.gpu_ids)
+            print(f"******Results: {results}")
+
+    #------------------------------------
     # run_inferencer 
     #-------------------
     
-    def run_inference(self):
+    def run_inference(self, gpu_to_use=0):
         '''
         Runs model over dataloader. Along
         the way: creates ResultTally for each
@@ -163,7 +179,9 @@ class Inferencer:
         
         Returns a ResultCollection with the
         ResultTally instances of each batch.
-        
+
+        :param gpu_to_use: which GPU to deploy to (if it is available)
+        :type gpu_to_use: int
         :return: collection of tallies, one for each batch,
             or None if something went wrong.
         :rtype: {None | ResultCollection}
@@ -175,7 +193,7 @@ class Inferencer:
             try:
                 if torch.cuda.is_available():
                     self.model.load_state_dict(torch.load(self.model_path))
-                    FileUtils.to_device(self.model, 'gpu', self.gpu_id)
+                    FileUtils.to_device(self.model, 'gpu', gpu_to_use)
                 else:
                     self.model.load_state_dict(torch.load(
                         self.model_path,
@@ -626,28 +644,11 @@ if __name__ == '__main__':
                    for fname 
                    in model_paths_raw
                    ][0]
-    
-    devices_to_use = args.device.copy()
-    inferencers = []
-    res_collections = []
-    for model_path in model_paths:
-        try:
-            dev = devices_to_use.pop()
-        except IndexError:
-            # No more new GPUs: round-robin them:
-            devices_to_use = args.device.copy() 
-            dev = devices_to_use.pop()
-        inferencers.append(
-            Inferencer(
-                model_path, 
-                args.samples_path,
-                batch_size=args.batch_size, 
-                labels_path=args.labels_path,
-                gpu_id=dev
-                ))
-    # Run the inferences in parallel on
-    # as many GPUs as possible:
-        # assigned to GPUs so far:
-    with Pool(len(args.device)) as inferencing_pool:
-        inferencing_pool.imap(Inferencer.run_inference, inferencers, chunksize=len(args.device))
+
+    inferencer = Inferencer(model_paths,
+                            args.samples_path,
+                            labels_path=None,
+                            gpu_id=args.device if type(args.device) == list else [args.device]
+                            )
+    inferencer.go()
 
