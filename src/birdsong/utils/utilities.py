@@ -391,11 +391,22 @@ class FileUtils:
         :rtype [str]
         '''
         
-        full_fname = glob.glob(os.path.expanduser(os.path.expandvars(fname)))
-        for expanded_fname in full_fname:
-            if os.path.isdir(expanded_fname) and expand_dir:
-                full_fname.append(glob.glob(f"expanded_fname/*"))
-        return full_fname
+        # First, expand env vars and tilde. If 
+        # fname includes a wildcard, it will still be there:
+        #     e.g. ~/tmp/* ===> /home/johndow/*
+        expanded_fname = os.path.expanduser(os.path.expandvars(fname))
+        # Resolve any wildcards:
+        globbed_names = glob.glob(expanded_fname)
+        # If name had no wildcard, glob returned empty
+        # list; in that case, insert the non-globbed name as
+        # the 'collection' of name expansion results: 
+        all_fnames = globbed_names if len(globbed_names) > 0 else [expanded_fname]
+
+        # Do the one-level subdirectory processing:
+        for maybe_dir in all_fnames.copy():
+            if os.path.isdir(maybe_dir) and expand_dir:
+                all_fnames.extend(glob.glob(f"{maybe_dir}/*"))
+        return all_fnames
 
 
     #------------------------------------

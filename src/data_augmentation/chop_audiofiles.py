@@ -96,7 +96,7 @@ class SpectrogramChopper:
     #-------------------
     
     def __init__(self, 
-                 input_dir, 
+                 in_dir_or_spectro_file, 
                  output_dir, 
                  specific_species=None,
                  overwrite_policy=WhenAlreadyDone.ASK,
@@ -120,8 +120,8 @@ class SpectrogramChopper:
         before a spectrogram is created.
           
         
-        @param input_dir: location of soundfile root
-        @type input_dir: str
+        @param in_dir_or_spectro_file: location of soundfile root
+        @type in_dir_or_spectro_file: str
         @param output_dir: root of spectrograms/wav_files to create
         @type output_dir: src
         @param specific_species: process only a spectific list of species
@@ -130,7 +130,7 @@ class SpectrogramChopper:
         @type overwrite_policy: WhenAlreadyDone
         '''
 
-        self.in_dir         	= input_dir
+        self.in_dir         	= in_dir_or_spectro_file
         self.out_dir        	= output_dir
         self.specific_species   = specific_species
         self.overwrite_policy   = overwrite_policy
@@ -348,7 +348,7 @@ class SpectrogramChopper:
                                       offset=start_time, duration=window_len)
 
             if not spectro_done or (spectro_done and self.overwrite_policy != WhenAlreadyDone.SKIP):
-                SoundProcessor.create_spectrogram(window_audio,sr,outfile_spectro)
+                SoundProcessor.create_spectrograms(window_audio,sr,outfile_spectro)
             
 
             if self.generate_wav_files:
@@ -567,7 +567,7 @@ class SpectrogramChopper:
         :type args: {str : Any}
         '''
         
-        in_dir = args.input_dir
+        in_dir = args.input
     
         # Get a list of lists of species names
         # to process. The list is computed such
@@ -676,7 +676,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='List the content of a folder')
 
     # Add the arguments
-    parser.add_argument('input_dir',
+    parser.add_argument('input',
                         type=str,
                         help='the path to original directory with .wav files')
     parser.add_argument('output_dir',
@@ -698,7 +698,7 @@ if __name__ == '__main__':
     # Execute the parse_args() method
     args = parser.parse_args()
 
-    in_dir = args.input_dir
+    in_dir = args.input
     # Input makes sense?
     if not os.path.exists(in_dir) or not os.path.isdir(in_dir):
         print(f"In directory {in_dir} does not exist, or is not a directory")

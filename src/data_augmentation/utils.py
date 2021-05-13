@@ -595,7 +595,7 @@ class Utils:
         :return True if extension is .wav or .mp3, else False
         :rtype bool
         '''
-        return Path(fpath).suffix in ('.wav', '.mp3')
+        return Path(fpath).suffix in ('.wav', '.mp3', '.ogg')
     
     #------------------------------------
     # user_confirm

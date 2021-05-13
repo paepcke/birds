@@ -29,7 +29,7 @@ class SpectrogramChopper:
 
     Assumes:
 
-                        self.in_dir
+                        self.input
                         
           Species1        Species2   ...     Speciesn
         spectro1_1.png     spectro2_1.png     spectro_n_1.png
@@ -85,13 +85,16 @@ class SpectrogramChopper:
     # be nice:
     
     MAX_PERC_OF_CORES_TO_USE = 50
+    
+    # Common logger for all workers:
+    log = LoggingService()
 
     #------------------------------------
     # Constructor 
     #-------------------
     
     def __init__(self, 
-                 input_dir, 
+                 in_dir_or_spectro_file, 
                  output_dir, 
                  specific_species=None,
                  overwrite_policy=WhenAlreadyDone.ASK
@@ -105,8 +108,8 @@ class SpectrogramChopper:
         whose destination spectrogram exists is not processed
         again.
         
-        @param input_dir: location of soundfile root
-        @type input_dir: str
+        @param in_dir_or_spectro_file: location of spectrogram root
+        @type in_dir_or_spectro_file: str
         @param output_dir: root of spectrograms to create
         @type output_dir: src
         @param specific_species: process only a spectific list of species
@@ -118,24 +121,35 @@ class SpectrogramChopper:
         # Ensure the outdir and all its intermediate dirs exist:
         os.makedirs(output_dir, exist_ok=True)
 
-        self.in_dir         	= input_dir
+        self.in_dir = in_dir_or_spectro_file if os.path.isdir(in_dir_or_spectro_file) else None
         self.out_dir        	= output_dir
         self.specific_species   = specific_species
         self.overwrite_policy   = overwrite_policy
         
-        self.log = LoggingService()
-        
         self.num_chopped = 0
 
-        if self.specific_species is None:
-            self.species_list = os.listdir(self.in_dir)
+        # The following used to be less convoluted until
+        # the option to chop just a single spectro, rather
+        # than a list of subdirectories with spectros 
+        # in them. Sorry! :-(
+         
+        if self.in_dir is not None:
+            # We are to process entire directory tree,
+            # not just a single file:
+            if self.specific_species is None:
+                # Process all (species) subdirectories:
+                self.species_list = os.listdir(self.in_dir)
+            else:
+                # Only process certain species:
+                self.species_list = self.specific_species
+            # Create destination directories for new spectrogram 
+            # snippets, so that the dest tree will mirror the in tree:
+            self.spectrogram_dir_path = self.create_dest_dirs(self.species_list)
         else:
-            self.species_list = self.specific_species
-        
-        # Create directories for new spectrogram snippets
-        
-        self.spectrogram_dir_path = self.create_dest_dirs(self.species_list)
-        
+            # Just do a single spectro, no need for destination
+            # subdirs:
+            self.spectrogram_dir_path = output_dir
+
         # Allow others outside the instance to find the spectros: 
         SpectrogramChopper.spectrogram_dir_path = self.spectrogram_dir_path
 
@@ -145,7 +159,7 @@ class SpectrogramChopper:
 
     def chop_all(self):
         '''
-        Workhorse: Assuming self.in_dir is root of all
+        Workhorse: Assuming self.input is root of all
         species spectrograms
 
         Chops each .png file into window_len snippets.
@@ -282,7 +296,7 @@ class SpectrogramChopper:
         can instead supply original_duration in fractional seconds.
         
         For now, if neither the embedded metadata, nor the original_duration
-        is supplied, an ValueError is raised. 
+        is supplied, a ValueError is raised. 
     
         :param spectro_fname: full path to spectrogram file to chop
         :type spectro_fname: str
@@ -343,31 +357,35 @@ class SpectrogramChopper:
 
         assert(samples_upper_bound <= time_slices)
         
-        for snip_num, samples_start_time in enumerate(range(0, 
+        for _snip_num, samples_start_idx in enumerate(range(0, 
                                                             samples_upper_bound, 
                                                             samples_skip_size)):
 
-            # Create a name for the snippet file:
-            wall_start_time   = snip_num * skip_size
+            # Absolute start time of this snippet
+            # within the entire spectrogram:
+            wall_start_time   = samples_start_idx * twidth
+            # Create a name for the snippet file: 
             snippet_path = self.create_snippet_fpath(spectro_fname,
-                                                     wall_start_time, 
+                                                     round(wall_start_time), 
                                                      out_dir)
             
             spectro_done = os.path.exists(snippet_path)
 
             if spectro_done:
-                if WhenAlreadyDone.SKIP:
+                if self.overwrite_policy == WhenAlreadyDone.SKIP:
                     # Next snippet:
                     continue
-                elif WhenAlreadyDone.ASK:
+                elif self.overwrite_policy == WhenAlreadyDone.ASK:
                     if not Utils.user_confirm(f"Snippet {Path(snippet_path).stem} exists, overwrite?", default='N'):
                         continue
 
-            # Now know that whether or not snippet
-            # exists, we can (re)-create that file: 
-            snippet_data = spectro_arr[:,samples_start_time : samples_start_time + samples_win_len]
+            # Chop 
+            snippet_data = spectro_arr[:,samples_start_idx : samples_start_idx + samples_win_len]
             snippet_info = metadata.copy()
-            snippet_info['duration'] = window_len
+            # Add the 
+            snippet_info['duration(secs)']   = samples_win_len * twidth
+            snippet_info['start_time(secs)'] = wall_start_time
+            snippet_info['end_time(secs)'] = wall_start_time + (samples_win_len * twidth)
             SoundProcessor.save_image(snippet_data, snippet_path, snippet_info)
 
     #------------------------------------
@@ -458,18 +476,18 @@ class SpectrogramChopper:
         '''
         Given the root directory of a set of
         directories whose names are species,
-        and which contain recordings by species,
+        and which contain spectrograms by species,
         return a multi processing worker assignment.
         
         Expected:
                          in_dir
 
           Species1        Species2   ...     Speciesn
-           smpl1_1.mp3      smpl2_1.mp3         smpln_1.mp3
-           smpl1_2.mp3      smpl2_2.mp3         smpln_2mp3
+           smpl1_1.png      smpl2_1.png         smpln_1.png
+           smpl1_2.png      smpl2_2.png         smpln_2.png
                             ...
         
-        Collects number of recordings available for
+        Collects number of spectrograms available for
         each species. Creates a list of species name
         buckets such that all workers asked to process
         one of the buckets, will have roughly equal
@@ -520,6 +538,10 @@ class SpectrogramChopper:
                 species_file_pairs = list(zip([species_name]*len(rec_paths), rec_paths))
                 species_file_tuples.extend(species_file_pairs)
             break 
+        
+        # If no subdirectories with spectrograms were
+        # found, warn:
+        cls.log.warn(f"No subdirectories were found in {in_dir}. Did you mean to chop an individual file, rather than a set of species subdirectories?")
         
         num_cores = mp.cpu_count()
         # Use 80% of the cores:
@@ -606,8 +628,6 @@ class SpectrogramChopper:
         :type args: {str : Any}
         '''
         
-        in_dir = args.input_dir
-    
         # Get a list of lists of species names
         # to process. The list is computed such
         # that each worker has roughly the same
@@ -616,7 +636,7 @@ class SpectrogramChopper:
         # by using 80% of the available cores. 
         
         (worker_assignments, num_workers) = SpectrogramChopper.compute_worker_assignments(
-            in_dir,
+            args.input,
             num_workers=args.workers)
     
         print(f"Distributing workload across {num_workers} workers.")
@@ -624,7 +644,7 @@ class SpectrogramChopper:
         
         chopping_jobs = []
         for ass_num, assignment in enumerate(worker_assignments):
-            chopper = SpectrogramChopper(in_dir, 
+            chopper = SpectrogramChopper(args.input, 
                                    args.output_dir,
                                    overwrite_policy=overwrite_policy
                                    )
@@ -715,9 +735,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='List the content of a folder')
 
     # Add the arguments
-    parser.add_argument('input_dir',
+    parser.add_argument('input',
                         type=str,
-                        help='the path to original directory with .png files')
+                        help='the path to directory with .png files, or to a single .png file to chop')
     parser.add_argument('output_dir',
                         type=str,
                         help='the path to output directory to write new .png files')
@@ -737,10 +757,9 @@ if __name__ == '__main__':
     # Execute the parse_args() method
     args = parser.parse_args()
 
-    in_dir = args.input_dir
     # Input makes sense?
-    if not os.path.exists(in_dir) or not os.path.isdir(in_dir):
-        print(f"In directory {in_dir} does not exist, or is not a directory")
+    if not os.path.exists(args.input):
+        print(f"Input {args.input} does not exist")
         sys.exit(1)
 
     # Can't have both -y and -r:
@@ -755,12 +774,22 @@ if __name__ == '__main__':
     else:
         overwrite_policy = WhenAlreadyDone.ASK
 
-    if args.workers == 1:
-        chopper = SpectrogramChopper(in_dir, 
-                               args.output_dir,
-                               overwrite_policy=overwrite_policy
-                               )
-        chopper.chop_all()
+    # Don't use multiprocessing if either the 
+    # number of workers was explicitly set to 1 by
+    # the caller, or only a single spectrogram is 
+    # to be processed:
+    if args.workers == 1 or os.path.isfile(args.input):
+        chopper = SpectrogramChopper(args.input, 
+                                     args.output_dir,
+                                     overwrite_policy=overwrite_policy
+                                     )
+        if os.path.isfile(args.input):
+            # Just chop an individual spectro:
+            chopper.chop_one_spectro_file(args.input, args.output_dir)
+        else:
+            # Scenario is subdirectories, each containing
+            # spectrograms of one species:
+            chopper.chop_all()
     else:
         # Use SKIP overwrite policy to ensure
         # workers don't step on each others' toes:

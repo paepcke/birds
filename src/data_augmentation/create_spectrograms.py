@@ -27,8 +27,12 @@ class SpectrogramCreator:
 
     log = LoggingService()
 
+    #------------------------------------
+    # create_spectrograms 
+    #-------------------
+
     @classmethod
-    def create_spectrogram(cls, 
+    def create_spectrograms(cls, 
                             in_dir, 
                             out_dir, 
                             num=None,
@@ -43,6 +47,7 @@ class SpectrogramCreator:
         
         # Is in_dir the root of subdirectories, each holding
         # audio files of one species? Or does in_dir hold the
+        # audio files directly?
         
         dir_content = Utils.listdir_abs(in_dir)
         dirs_to_do = [candidate
@@ -90,28 +95,44 @@ class SpectrogramCreator:
                 #cls.log.info(f"Creating spectros for audio in {one_dir}")
                 if not Utils.is_audio_file(aud_file):
                     continue
-                sound, sr = SoundProcessor.load_audio(aud_file)
-                # Get parts of the file: root, fname, suffix
-                path_el_dict  = Utils.path_elements(aud_file)
-                new_fname = path_el_dict['fname'] + '.png'
+
+                cls.create_one_spectrogram(aud_file, dst_dir, overwrite_policy, species_name)
                 
-                dst_path = os.path.join(dst_dir, new_fname)
-                # If dst exists, ask whether to overwrite;
-                # skip file if not:
-                if os.path.exists(dst_path) and overwrite_policy == WhenAlreadyDone.ASK:
-                    if not Utils.user_confirm(f"Overwrite {dst_path}?", False):
-                        # Not allowed to overwrite
-                        continue
-                    else:
-                        os.remove(dst_path)
-                
-                #cls.log.info(f"Creating spectrogram for {os.path.basename(dst_path)}")
-                SoundProcessor.create_spectrogram(sound, sr, dst_path, info={'species' : species_name})
                 if num is not None and i >= num-1:
                     break
             dirs_filled.append(dst_dir)
         
         return dirs_filled 
+
+    #------------------------------------
+    # create_one_spectrogram 
+    #-------------------
+    
+    @classmethod
+    def create_one_spectrogram(cls, 
+                               aud_file, 
+                               dst_dir,
+                               overwrite_policy=WhenAlreadyDone.ASK, 
+                               species_name='Unknown'):
+
+        sound, sr = SoundProcessor.load_audio(aud_file)
+        # Get parts of the file: root, fname, suffix
+        path_el_dict  = Utils.path_elements(aud_file)
+        new_fname = path_el_dict['fname'] + '.png'
+        
+        dst_path = os.path.join(dst_dir, new_fname)
+        # If dst exists, ask whether to overwrite;
+        # skip file if not:
+        if os.path.exists(dst_path) and overwrite_policy == WhenAlreadyDone.ASK:
+            if not Utils.user_confirm(f"Overwrite {dst_path}?", False):
+                # Not allowed to overwrite
+                return
+            else:
+                os.remove(dst_path)
+        
+        #cls.log.info(f"Creating spectrogram for {os.path.basename(dst_path)}")
+        SoundProcessor.create_spectrograms(sound, sr, dst_path, info={'species' : species_name})
+
 
 # ------------------------ Main ------------
 if __name__ == '__main__':
@@ -131,9 +152,13 @@ if __name__ == '__main__':
                     action='store_true',
                     default=False
                     )
+    
+    parser.add_argument('-', '--species',
+                        help="if input is an individual audio file, the species name; default: 'Unknown'",
+                        default="Unknown")
 
-    parser.add_argument('indir',
-                        help='directories of audio files whose spectrograms to create',
+    parser.add_argument('input',
+                        help='directories of audio files whose spectrograms to create, or path to a single audio file',
                         default=None)
     parser.add_argument('outdir',
                         help='destination of spectrogram files',
@@ -148,9 +173,26 @@ if __name__ == '__main__':
     else:
         overwrite_policy = WhenAlreadyDone.ASK
         
-    SpectrogramCreator.create_spectrogram(args.indir, 
-                                           args.outdir,
-                                           num=args.num,
-                                           overwrite_policy=overwrite_policy
-                                           )
+
+    if not os.path.exists(args.input):
+        raise FileNotFoundError(f"Input {args.input} does not exist")
+
+    # If input is a single audio file, just create 
+    # a spectro for it:
+    if Utils.is_audio_file(args.input):
+        SpectrogramCreator.create_one_spectrogram(
+            args.input, 
+            args.outdir, 
+            overwrite_policy=args.overwrite_policy, 
+            species_name=args.species)
+
+    else:
+        # Spectrograms for a directory tree
+        if not os.path.isdir(args.input):
+            raise ValueError(f"Input must either be a sound file, or a directory, not {args.input}")
+        SpectrogramCreator.create_spectrograms(args.input, 
+                                               args.outdir,
+                                               num=args.num,
+                                               overwrite_policy=overwrite_policy
+                                               )
         

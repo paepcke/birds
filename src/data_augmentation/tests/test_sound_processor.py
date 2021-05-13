@@ -44,7 +44,7 @@ class TestSoundProcessor(unittest.TestCase):
         audio_path = os.path.join(self.cur_dir, 'audio_aug_tst_data/DYSMEN_S/dys1.mp3')
         (aud, sr) = SoundProcessor.load_audio(audio_path)
         with tempfile.NamedTemporaryFile(suffix='.png', prefix='spectro', dir='/tmp', delete=True) as fd:
-            SoundProcessor.create_spectrogram(aud, 
+            SoundProcessor.create_spectrograms(aud, 
                                               sr,
                                               fd.name, 
                                               info={'species' : 'DYSMEN_C'})

@@ -113,20 +113,20 @@ class Inferencer:
         # from the model filename:
         self.model_props  = FileUtils.parse_filename(model_fname)
         
-        # self.csv_dir = os.path.join(self.curr_dir, 'runs_raw_inferences')
-        # csv_results_root = os.path.join(self.curr_dir, 'runs_inferences')
-        # csv_results_dest = tempfile.NamedDirectory(dir=csv_results_root,
-        #                                            prefix='inf_csv_results'
-        #                                           ).name
-        #                                                    
-        # csv_file_nm = FileUtils.construct_filename(
-            # self.model_props,
-            # prefix='inf',
-            # suffix='.csv', 
-            # incl_date=True)
-        # csv_path = os.path.join(self.csv_dir, csv_file_nm)
-        #
-        # self.csv_writer = CSVWriterCloseable(csv_path)
+        self.csv_dir = os.path.join(self.curr_dir, 'runs_raw_inferences')
+        csv_results_root = os.path.join(self.curr_dir, 'runs_raw_inferences')
+        self.csv_dir = tempfile.TemporaryDirectory(dir=csv_results_root,
+                                                   prefix='inf_csv_results_'
+                                                   ).name
+
+        csv_file_nm = FileUtils.construct_filename(
+            self.model_props,
+            prefix='inf',
+            suffix='.csv', 
+            incl_date=True)
+        csv_path = os.path.join(self.csv_dir, csv_file_nm)
+        
+        self.csv_writer = CSVWriterCloseable(csv_path)
         
         tensorboard_root = os.path.join(self.curr_dir, 'runs_inferences')
         tensorboard_dest = tempfile.TemporaryDirectory(dir=tensorboard_root,
@@ -170,6 +170,7 @@ class Inferencer:
     def __call__(self, gpu_id_model_path_pair):
         gpu_id, self.model_path = gpu_id_model_path_pair
         self.prep_model_inference(self.model_path)
+        self.log.info(f"Being inference with model {FileUtils.ellipsed_file_path(self.model_path)} on gpu_id {gpu_id}")
         return self.run_inference(gpu_to_use=gpu_id)
 
     #------------------------------------
@@ -673,16 +674,50 @@ if __name__ == '__main__':
     else:
         model_paths_raw = args.model_paths
         
-    # Resolve tilde, environment variables, 
-    # and wildcards in the model path(s):
+    model_paths = []
+    for fname in model_paths_raw:
+        model_paths.extend(FileUtils.expand_filename(fname))
+
+    # Same for samples path, though we only allow
+    # one of those paths. 
+    samples_path = FileUtils.expand_filename(args.samples_path)[0]
     
-    model_paths = [FileUtils.expand_filename(fname)
-                   for fname 
-                   in model_paths_raw
-                   ][0]
+    # Ensure that the file arrangements are as required by
+    # the ImageFolder class: 
+    #                        <root_dir>
+    #        img_folder_1   img_folder_2     ...   img_folder_n
+    #         img_file        img_file                  img_file
+    #         img_file        img_file                  img_file
+    #                   ...                  ...
+    
+    
+    dir_struct_desc = f"Samples must be in *sub*directories with image files under {samples_path}"
+    for root, dirs, _files in os.walk(samples_path):
+        if len(dirs) == 0:
+            # No subdirectories:
+            print(dir_struct_desc)
+            sys.exit(1)
+        # Go one level deeper to ensure
+        # there are image files in the first-tier subdirs:
+        for subdir in dirs:
+            full_subdir_path = os.path.join(root, subdir)
+            files = os.listdir(full_subdir_path)
+            # Find at least one image file to be
+            # satisfied:
+            found_at_least_one_img = False
+            for maybe_img_fname in files:
+                if Path(maybe_img_fname).suffix in FileUtils.IMG_EXTENSIONS:
+                    found_at_least_one_img = True
+                    break
+            if not found_at_least_one_img:
+                print(f"Subdirectory {subdir} does not include any image files.")
+                print(dir_struct_desc)
+                sys.exit(1)
+        # No need to walk deeper:
+        break
 
     inferencer = Inferencer(model_paths,
-                            args.samples_path,
+                            samples_path,
                             labels_path=None,
                             gpu_ids=args.device if type(args.device) == list else [args.device]
                             )
