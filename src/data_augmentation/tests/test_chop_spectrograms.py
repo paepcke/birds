@@ -9,7 +9,7 @@ import tempfile
 import unittest
 
 from data_augmentation.chop_spectrograms import SpectrogramChopper
-from data_augmentation.list_png_metadata import PNGMetadataLister
+from data_augmentation.list_png_metadata import PNGMetadataManipulator
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import WhenAlreadyDone, Utils
 

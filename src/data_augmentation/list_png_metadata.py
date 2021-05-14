@@ -16,7 +16,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from data_augmentation.sound_processor import SoundProcessor
 
-class PNGMetadataLister(object):
+class PNGMetadataManipulator(object):
     '''
     classdocs
     '''
@@ -54,11 +54,11 @@ class PNGMetadataLister(object):
         return metadata
         
     #------------------------------------
-    # add_metadata
+    # set_metadata
     #-------------------
 
     @classmethod
-    def add_metadata(self, png_fpath, info, outfile=None):
+    def set_metadata(self, png_fpath, info, outfile=None):
         
         if type(info) != dict:
             raise TypeError(f"info must be a dict, not {type(dict)}")
@@ -88,7 +88,7 @@ if __name__ == '__main__':
                         default=True
                         )
 
-    parser.add_argument('--info',
+    parser.add_argument('--set_info',
                         type=str,
                         nargs='+',
                         help='set metadata; repeatable: key and value; ex.: --info foo 10 bar 20',
@@ -107,7 +107,7 @@ if __name__ == '__main__':
         sys.exit(1)
 
     # User wants to set metadata in image file?
-    info = args.info
+    info = args.set_info
     if info is not None and len(info) % 2 != 0:
         print("Info entries must be pairs of keys and values; this entry's length is odd numbered")
         sys.exit(1)
@@ -115,7 +115,7 @@ if __name__ == '__main__':
     if info is not None and args.printout:
         print("Metadata before:")
 
-    PNGMetadataLister.extract_metadata(args.fname, show=args.show, printout=args.printout)
+    PNGMetadataManipulator.extract_metadata(args.fname, show=args.show, printout=args.printout)
 
     if info is None:
         # All done:
@@ -129,11 +129,11 @@ if __name__ == '__main__':
     else:
         outfile = args.outfile
 
-    PNGMetadataLister.add_metadata(args.fname, info, outfile)
+    PNGMetadataManipulator.set_metadata(args.fname, info, outfile)
 
     # If printing to console, show metadata 
     # after this update:
     
     if args.printout:
-        PNGMetadataLister.extract_metadata(args.fname, show=False, printout=True)
+        PNGMetadataManipulator.extract_metadata(args.fname, show=False, printout=True)
 

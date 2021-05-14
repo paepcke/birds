@@ -73,6 +73,39 @@ class FileUtils:
     date_at_start_pat = \
         re.compile(r'([^_]*)[_]{0,1}([\d]{4}-[\d]{2}-[\d]{2}T[\d]{2}_[\d]{2}_[\d]{2})')
 
+
+    #------------------------------------
+    # ensure_directory_existence
+    #-------------------
+    
+    @classmethod
+    def ensure_directory_existence(cls, the_path):
+        '''
+        Ensures that all directories in the given
+        path exist. If the_path 'looks like' a file, the 
+        existence of all directories leading to (and including) 
+        its parents is ensured. If the_path looks like a 
+        directory, ensures that all paths (and including) 
+        the_path exist.
+        
+        Whether or not the_path seems to be a file is 
+        naively determined by whether or not the_path 
+        has an extension. Not perfect, but will do.
+        
+        :param the_path: file or directory path whose
+            directories are to be ensured
+        :type the_path: str
+        '''
+        
+        looks_like_file_path = len(Path(the_path).suffix) > 0
+
+        if looks_like_file_path:
+            the_dir = os.path.dirname(the_path)
+        else:
+            the_dir = the_path
+            
+        os.makedirs(the_dir, exist_ok=True) 
+
     #------------------------------------
     # find_class_paths
     #-------------------
@@ -941,7 +974,8 @@ class CSVWriterCloseable:
 
 # ------------------------ Main ------------
 if __name__ == '__main__':
-    print("Testing Differentiator")
-    Differentiator.test()
-    print("All good")
+    #print("Testing Differentiator")
+    #Differentiator.test()
+    #print("All good")
+    pass
     

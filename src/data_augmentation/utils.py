@@ -1,3 +1,4 @@
+from csv import DictReader
 from enum import Enum
 from fnmatch import fnmatch
 import os
@@ -9,6 +10,8 @@ import librosa
 
 import numpy as np
 import pandas as pd
+
+from natsort import natsorted
 
 
 #-------------------------- Enum for Policy When Output Files Exist -----------
@@ -61,6 +64,21 @@ class ImgAugMethod(Enum):
     FMASK       = '-fmask'
     TMASK       = '-tmask'
     #ORIGINAL    = 'original'
+
+
+# ------------------- Class Interval -------------
+
+class Interval(dict):
+    '''
+    Instances store intervals of ints or
+    floats. Supports a dict API for retrieving
+    the inclusive low bound, and the exclusive
+    high bound.
+    '''
+    def __init__(self, low_val, high_val):
+        super().__init__()
+        self['low_val']  = low_val
+        self['high_val'] = high_val
 
 #------------------------------ Utility  -------------
 
@@ -608,3 +626,155 @@ class Utils:
             return True
         else:
             return False
+
+    #------------------------------------
+    # binary_in_interval_search 
+    #-------------------
+
+    @classmethod
+    def binary_in_interval_search(cls, intervals, interval_start, low_key, high_key):
+        '''
+        Given a *sorted* list L of dict-like instances,
+        and a number N, return the index of the instance
+        in L that contains N. If none if the intervals
+        contains N, return -1.
+        
+        The result is obtained through binary search.
+        
+        Note:
+            o The intervals do not need to overlap. I.e.
+                there may be holes
+            o Like Python ranges, intervals are closed on
+                the left, and open at the right. I.e. 
+                an interval (4,6) includes 4, but not 6.
+            o Unlike Python ranges, N may be a float, and so
+                do the interval bounds.
+            o One option for an acceptable dict-like for
+                the elements in L are instances of Interval.
+                But any dict-API supporting structure is fine.
+        
+        :param intervals: list of intervals for which to
+            test membership
+        :type intervals: [Interval]
+        :param interval_start: number for which an enclosing
+             interval is to be found
+        :type interval_start: {int | float}
+        :param low_key: key with which to retrieve an interval's
+            low bound
+        :type low_key: str
+        :param high_key: key with which to retrieve an interval's
+            high bound
+        :type high_key: str
+        :return index into intervals, or -1
+        :rtype int
+        '''
+        
+        if type(interval_start) != float:
+            interval_start = float(interval_start)
+        
+        low = 0
+        high = len(intervals) - 1
+        mid = 0
+        mids_tried = []
+     
+        while True:
+    
+            mid = (high - low) // 2
+            if mid in mids_tried:
+                return -1
+            else:
+                mids_tried.append(mid)
+            
+            # Does this mid-element's interval
+            # contain interval_start?
+            if intervals[mid][low_key] <= interval_start and \
+               intervals[mid][high_key] > interval_start:
+                # Found an entry with an interval in
+                # which interval_start lies:
+                return mid
+            
+            # Do possible intervals lie to the left?
+            elif intervals[mid][high_key] <= interval_start:
+                # Left interval is below bounds:
+                low = mid + 1
+            
+            # If lower  is smaller, ignore right half
+            # If upper of intervals el is greater
+            # than interval_start, ignore left half
+            
+            elif intervals[mid][low_key] > interval_start:
+                high = mid - 1
+
+    #------------------------------------
+    # read_raven_selection_table 
+    #-------------------
+    
+    @classmethod
+    def read_raven_selection_table(cls, tbl_path):
+        '''
+        Given the path to a Raven selection table
+        .csv file, return a list of dicts. Each dict
+        contains the information in one selection table
+        row, plus two additional entries: time_interval,
+        and freq_interval; these are added for convenience:
+        
+        Selection           row number <int>
+        View                not used
+        Channel             not used
+        Begin Time (s)      begin of vocalization in fractional seconds <float>
+        End Time (s)        end of vocalization in fractional seconds <float>
+        Low Freq (Hz)       lowest frequency within the lassoed vocalization <float>
+        High Freq (Hz)      highest frequency within the lassoed vocalization <float>
+        species             four-letter species name <str>
+        type                {song, call, call-1, call-trill} <str>
+        number              not used
+        mix                 comma separated list of other audible species [<str>]
+        
+        time_interval       Inteval instance from start and end times
+        freq_interval       Inteval instance from start and end frequencies
+        
+        Values are converted to appropriate types as above.
+        Output is suitable for SnippetSelectionTableMapper.match_snippets()
+        
+        The list will be sorted by ascending the 'Begin Time (s)'
+        value.
+
+        :param tbl_path: full path to Raven selection table
+        :type tbl_path: src
+        :return: list of dicts, each dict reflecting the content
+            of one selection table row
+        :rtype [str : Any]
+        '''
+        with open(tbl_path, 'r') as sel_tbl_fd:
+            reader = DictReader(sel_tbl_fd, delimiter='\t')
+            sel_dict_list = [row_dict for row_dict in reader]
+        
+        # Coerce types:
+        for sel_dict in sel_dict_list:
+            sel_dict['Selection'] = str(sel_dict['Selection'])
+            sel_dict['Begin Time (s)'] = float(sel_dict['Begin Time (s)'])
+            sel_dict['End Time (s)'] = float(sel_dict['End Time (s)'])
+            sel_dict['Low Freq (Hz)'] = float(sel_dict['Low Freq (Hz)'])
+            sel_dict['High Freq (Hz)'] = float(sel_dict['High Freq (Hz)'])
+            # Turn the comma-separated list of
+            # overlapping vocalizations into
+            # a (possibly empty) list of strings:
+            sel_dict['mix'] = [] if len(sel_dict['mix']) == 0 else sel_dict['mix'].split(',')
+            # Clean out spurious white space:
+            sel_dict['mix'] = [mix_list_entry.strip() 
+                               for mix_list_entry
+                               in sel_dict['mix']
+                               ]
+            # Remove empty mixes:
+            #**** 
+            sel_dict['time_interval'] = Interval(sel_dict['Begin Time (s)'],
+                                                 sel_dict['End Time (s)'])
+            sel_dict['freq_interval'] = Interval(sel_dict['Low Freq (Hz)'],
+                                                 sel_dict['High Freq (Hz)'])
+            
+        # Make sure the list is sorted by 
+        # ascending start time:
+        sel_dict_list_sorted = natsorted(sel_dict_list, 
+                                         key=lambda row_dict: row_dict['Begin Time (s)'])
+        return sel_dict_list_sorted
+        

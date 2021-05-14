@@ -1,0 +1,5 @@
+Selection	View	Channel	Begin Time (s)	End Time (s)	Low Freq (Hz)	High Freq (Hz)	species	type	number	mix
+1	Spectrogram 1	1	0.000000000	6.237402630	2088.175	8538.314	vase	song	1	rbps, bgta, rcwp
+2	Spectrogram 1	1	2.390074726	3.231216904	1564.100	3519.100	rbps	song	1	
+18	Spectrogram 1	1	1.024500915	3.294473531	2161.467	4492.937	howp	call-1	1	rbps, vase
+19	Spectrogram 1	1	5.926034705	7.964992409	3944.330	9791.219	bgta	call	1	howp

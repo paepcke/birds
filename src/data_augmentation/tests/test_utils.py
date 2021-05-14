@@ -6,8 +6,9 @@ Created on Apr 25, 2021
 import os
 import unittest
 
-from data_augmentation.utils import Utils
 from data_augmentation.utils import AugmentationGoals
+from data_augmentation.utils import Utils, Interval
+
 
 TEST_ALL = True
 #TEST_ALL = False
@@ -19,7 +20,11 @@ class Test(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.cur_dir = os.path.dirname(__file__)
+        cls.data_dir = os.path.join(cls.cur_dir, 'data')
         cls.spectros_dir = os.path.join(cls.cur_dir, 'spectro_data')
+        # A small Raven selection table with its
+        # row ordering intentionally scrambled: 
+        cls.raven_sel_tbl_path = os.path.join(cls.data_dir, 'raven_sel_tbl_unsorted.csv')
 
     def setUp(self):
         pass
@@ -109,6 +114,108 @@ class Test(unittest.TestCase):
         self.assertEqual(augs_to_do['AMADEC'], 4)
         self.assertEqual(augs_to_do['FORANA'], 0)
 
+    #------------------------------------
+    # test_binary_in_interval_search 
+    #-------------------
+
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_binary_in_interval_search(self):
+        
+        intervals = [Interval(1,3), Interval(4,5), Interval(6,7)]
+    
+        res = Utils.binary_in_interval_search(intervals, 0, 'low_val', 'high_val')
+        assert(res == -1)
+    
+        res = Utils.binary_in_interval_search(intervals, 1, 'low_val', 'high_val')
+        assert(res == 0)
+    
+        res = Utils.binary_in_interval_search(intervals, 2, 'low_val', 'high_val')
+        assert(res == 0)
+    
+        res = Utils.binary_in_interval_search(intervals, 3, 'low_val', 'high_val')
+        assert(res == -1)
+    
+        res = Utils.binary_in_interval_search(intervals, 4, 'low_val', 'high_val')
+        assert(res == 1)
+    
+        res = Utils.binary_in_interval_search(intervals, 5, 'low_val', 'high_val')
+        assert(res == -1)
+    
+        res = Utils.binary_in_interval_search(intervals, 8, 'low_val', 'high_val')
+        assert(res == -1)
+        
+
+    #------------------------------------
+    # test_read_raven_selection_table 
+    #-------------------
+
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_read_raven_selection_table(self):
+        
+        dict_list = Utils.read_raven_selection_table(self.raven_sel_tbl_path)
+        
+        desired = \
+                [{'Selection': '1',
+                'View': 'Spectrogram 1',
+                'Channel': '1',
+                'Begin Time (s)': 0.0,
+                'End Time (s)': 6.23740263,
+                'Low Freq (Hz)': 2088.175,
+                'High Freq (Hz)': 8538.314,
+                'species': 'vase',
+                'type': 'song',
+                'number': '1',
+                'mix': ['rbps','bgta','rcwp'],
+                'time_interval': {'low_val': 0.0,'high_val': 6.23740263},
+                'freq_interval': {'low_val': 2088.175,'high_val': 8538.314}
+                },
+            
+                {'Selection': '18',
+                'View': 'Spectrogram 1',
+                'Channel': '1',
+                'Begin Time (s)': 1.024500915,
+                'End Time (s)': 3.294473531,
+                'Low Freq (Hz)': 2161.467,
+                'High Freq (Hz)': 4492.937,
+                'species': 'howp',
+                'type': 'call-1',
+                'number': '1',
+                'mix': ['rbps','vase'],
+                'time_interval': {'low_val': 1.024500915,'high_val': 3.294473531},
+                'freq_interval': {'low_val': 2161.467,'high_val': 4492.937}
+                },
+            
+                {'Selection': '2',
+                'View': 'Spectrogram 1',
+                'Channel': '1',
+                'Begin Time (s)': 2.390074726,
+                'End Time (s)': 3.231216904,
+                'Low Freq (Hz)': 1564.1,
+                'High Freq (Hz)': 3519.1,
+                'species': 'rbps',
+                'type': 'song',
+                'number': '1',
+                'mix': [],
+                'time_interval': {'low_val': 2.390074726,'high_val': 3.231216904},
+                'freq_interval': {'low_val': 1564.1,'high_val': 3519.1}
+                },
+            
+                {'Selection': '19',
+                'View': 'Spectrogram 1',
+                'Channel': '1',
+                'Begin Time (s)': 5.926034705,
+                'End Time (s)': 7.964992409,
+                'Low Freq (Hz)': 3944.33,
+                'High Freq (Hz)': 9791.219,
+                'species': 'bgta',
+                'type': 'call',
+                'number': '1',
+                'mix': ['howp'],
+                'time_interval': {'low_val': 5.926034705, 'high_val': 7.964992409},
+                'freq_interval': {'low_val': 3944.33,'high_val': 9791.219}
+                }]
+        self.assertEqual(dict_list, desired)
+        
 
     #------------------------------------
     # test_sample_compositions_by_species
