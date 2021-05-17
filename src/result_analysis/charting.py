@@ -27,10 +27,18 @@ import seaborn as sns
 
 
 class CELL_LABELING(Enum):
+
+    # The default for the number of species
+    # above which confusion matrices will not
+    # have cell values written in the cells. 
+    # For too many species cells get too small
+    # for the numbers:
+    CONF_MATRIX_CELL_LABEL_LIMIT=10
+
     ALWAYS = 0
     NEVER  = 1
     DIAGONAL = 2
-    AUTO = 5           # If dimension > 5
+    AUTO = CONF_MATRIX_CELL_LABEL_LIMIT  # If dimension > this, no cell lables
 
 # ----------------------- Class Charter --------------
 
@@ -41,7 +49,6 @@ class Charter:
     DIV_BY_ZERO = 0
     
     log = LoggingService()
-
 
     #------------------------------------
     # Constructor 
@@ -441,31 +448,58 @@ class Charter:
     def compute_confusion_matrix(cls, 
                                  truth_labels, 
                                  predicted_class_ids,
-                                 num_classes,
+                                 class_names,
                                  normalize=False
                                  ):
-        # Example Confustion matrix for 16 samples,
-        # in 3 classes:
-        # 
-        #              C_1-pred, C_2-pred, C_3-pred
-        #  C_1-true        3         1        0
-        #  C_2-true        2         6        1
-        #  C_3-true        0         0        3
+        '''
+        Example Confustion matrix for 16 samples,
+        in 3 classes:
         
-        # The class IDs (labels kwarg) is needed for
-        # sklearn to know about classes that were not
-        # encountered:
+                     C_1-pred, C_2-pred, C_3-pred
+         C_1-true        3         1        0
+         C_2-true        2         6        1
+         C_3-true        0         0        3
         
+        The number of classes is needed to let 
+        sklearn to know even about classes that were not
+        encountered.
+        
+        Assumption: self.class_names contains list 
+        of class names, i.e. not the numeric IDs, but the
+        ones to use when labeling the matrix.
+
+        :param truth_labels: truth labels as list of class ids
+        :type truth_labels: [int]
+        :param predicted_class_ids: list of class_ids that were
+            predicted, in same order as truth_labels
+        :type predicted_class_ids: [int]
+        :param class_names: list of class names as known to the
+            user, i.e. not the numeric class ints. But the names
+            to use as matrix labels in class id order!
+        :type class_names: [str]
+        :param normalize: whether or not to normalize ROWS
+            to add to 1. I.e. turn cells into percentages
+        :type normalize: bool
+        :return: a dataframe of the confusion matrix; columns 
+            and rows (i.e. index) set to class ids
+        :rtype: pd.DataFrame 
+        '''
         conf_matrix = torch.tensor(confusion_matrix(
             truth_labels,          # Truth
             predicted_class_ids,   # Prediction
-            labels=list(range(num_classes)) # Class labels
+            labels=list(range(len(class_names))) # Numeric class ID labels
             ))
 
         if normalize:
             conf_matrix = cls.calc_conf_matrix_norm(conf_matrix)
-             
-        return conf_matrix
+
+        # Turn conf matrix from tensors to numpy, and
+        # from there to a dataframe:
+        conf_matrix_df = pd.DataFrame(conf_matrix.numpy(),
+                                      index=class_names,
+                                      columns=class_names
+                                      )        
+        return conf_matrix_df
 
     #------------------------------------
     # calc_conf_matrix_norm
@@ -802,35 +836,50 @@ class Charter:
         if write_in_fields == CELL_LABELING.ALWAYS or \
                               (CELL_LABELING.AUTO and len(class_names) <= CELL_LABELING.AUTO.value):
             annot = conf_matrix.copy()
+            mask = None
         elif write_in_fields == CELL_LABELING.DIAGONAL:
             # Fill with a copy of conf matrix with strings, 
             # but room for up to 3 chars:
             #**************
-            annot = np.full_like(conf_matrix, '', dtype='U3')
-            np.fill_diagonal(annot, np.diag(conf_matrix).astype(str))
+            #annot = np.full_like(conf_matrix, '', dtype='U4')
+            #np.fill_diagonal(annot, np.diag(conf_matrix).astype(str))
             #annot = np.empty_like(conf_matrix)
             #np.fill_diagonal(annot, np.diag(conf_matrix).astype(str))
+            # Fill a new df with True, where df is same
+            # dimensions as another df: annot:
+            mask = pd.DataFrame(np.array([True]*annot.size).reshape(annot.shape))
+            np.fill_diagonal(mask.values, False)
+            
+            
             #**************
         else:
             annot = None
+            mask  = None
 
         cmap.set_bad('gray')
+
         heatmap_ax = sns.heatmap(
-            #cm_normed_floats,
             conf_matrix,
             cmap=cmap,
+            square=True,
             annot=annot,  # Cell labels
-            #****fmt='g',      # Avoid scientific notation
-            fmt='s',      # Avoid scientific notation
+            mask=mask,
+            fmt='d',      # Round to integers
             cbar=True,    # Do draw color bar legend
             ax=ax,
-            xticklabels=class_names,
-            yticklabels=class_names,
             linewidths=1,# Pixel,
             linecolor='gray',
             robust=True   # Compute colors from quantiles instead of 
                           # most extreme values
             )
+        
+        # Add '%' after cell numbers; note that fmt='d%' 
+        # leads to an error; I suspect there is a seaborn
+        # heatmap fmt value that would add '%', but I don't
+        # have time for frigging format strings:
+        
+        for txt in heatmap_ax.texts: txt.set_text(txt.get_text() + " %")
+
         heatmap_ax.set_xticklabels(heatmap_ax.get_xticklabels(), 
                                    rotation = 45 
                                    )

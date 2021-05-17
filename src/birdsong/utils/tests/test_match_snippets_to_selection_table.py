@@ -49,7 +49,22 @@ class TestSnippetMatcher(unittest.TestCase):
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_match_snippets(self):
         self.mapper.match_snippets(self.sel_tbl_lst, self.tst_snips_path, self.tmp_outdir)
-        print('foo')
+        # new Species subdirs we should see under
+        # the tmp dir:
+        subdirs_truth = set(os.listdir(self.tmp_outdir))
+        self.assertSetEqual(subdirs_truth, set(os.listdir(self.tmp_outdir)))
+        
+        species_rep = {
+            'vase' : 4,
+            'bgta' : 3,
+            'rcwp' : 3,
+            'rbps' : 4,
+            'howp' : 1,
+            'noise': 26
+            }
+        for species in subdirs_truth:
+            num_snippets = len(os.listdir(os.path.join(self.tmp_outdir, species)))
+            self.assertEqual(species_rep[species], num_snippets)
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

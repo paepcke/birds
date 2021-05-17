@@ -201,15 +201,25 @@ class TensorBoardPlotter:
     def conf_matrix_to_tensorboard(cls,
                                    writer,
                                    conf_matrix,
-                                   class_names,
                                    step=0,
                                    title='Confusion Matrix'
                                    ):
-        cm_df = pd.DataFrame(conf_matrix, 
-                             columns=class_names,
-                             index=class_names
-                             )
-        conf_matrix_fig = Charter.fig_from_conf_matrix(cm_df, title=title)
+        '''
+        Add confusion matrix to tensorboard as an
+        image. Multiple conf matrices (from multiple steps)
+        maybe be overlaid. Tensorboard will add a slider to 
+        run through them.
+        
+        :param writer: tensorboard writer
+        :type writer: tensorboard.SummaryWriter 
+        :param conf_matrix: confusion matrix to draw as heatmap
+        :type conf_matrix: pd.DataFrame
+        :param step: the step number that generated the matrix
+        :type step: int
+        :param title: title to add at the image
+        :type title: str
+        '''
+        conf_matrix_fig = Charter.fig_from_conf_matrix(conf_matrix, supertitle=title)
         writer.add_figure(title, conf_matrix_fig, global_step=step)
 
     #------------------------------------

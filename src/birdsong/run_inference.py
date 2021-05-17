@@ -11,10 +11,7 @@ from multiprocessing import Pool
 import os
 from pathlib import Path
 import sys
-import tempfile
-
-import pandas as pd
-import numpy as np
+import uuid
 
 from logging_service.logging_service import LoggingService
 from sklearn.metrics import accuracy_score, balanced_accuracy_score
@@ -25,10 +22,6 @@ import torch
 from torch.utils.data.dataloader import DataLoader
 from torchvision.datasets.folder import ImageFolder
 
-sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-
-
 from birdsong.ml_plotting.classification_charts import ClassificationPlotter
 from birdsong.nets import NetUtils
 from birdsong.result_tallying import ResultTally, ResultCollection
@@ -37,7 +30,15 @@ from birdsong.utils.learning_phase import LearningPhase
 from birdsong.utils.tensorboard_plotter import SummaryWriterPlus, \
     TensorBoardPlotter
 from birdsong.utils.utilities import FileUtils, CSVWriterCloseable
+import numpy as np
+import pandas as pd
 from result_analysis.charting import Charter, CELL_LABELING
+
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+
 
 
 class Inferencer:
@@ -106,6 +107,26 @@ class Inferencer:
     #-------------------
 
     def prep_model_inference(self, model_path):
+        '''
+        1. Parses model_path into its components, and 
+            creates a dict: self.model_props, which 
+            contains the network type, grayscale or not,
+            whether pretrained, etc.
+        2. Creates self.csv_writer to write results measures
+            into csv files. The destination file is determined
+            as follows:
+                <script_dir>/runs_raw_inferences/inf_csv_results_<uuid>/<model-props-derived-fname>.csv
+        3. Creates self.writer(), a tensorboard writer with destination dir:
+                <script_dir>/runs_inferences/inf_results_uuid
+        4. Creates an ImageFolder classed dataset to self.samples_path
+        5. Creates a shuffling DataLoader
+        6. Initializes self.num_classes and self.class_names
+        7. Creates self.model from the passed-in model_path name
+        
+        :param model_path: path to model that will be used for
+            inference by this instance of Inferencer
+        :type model_path: str
+        '''
         
         model_fname       = os.path.basename(model_path)
         
@@ -113,11 +134,9 @@ class Inferencer:
         # from the model filename:
         self.model_props  = FileUtils.parse_filename(model_fname)
         
-        self.csv_dir = os.path.join(self.curr_dir, 'runs_raw_inferences')
-        csv_results_root = os.path.join(self.curr_dir, 'runs_raw_inferences')
-        self.csv_dir = tempfile.TemporaryDirectory(dir=csv_results_root,
-                                                   prefix='inf_csv_results_'
-                                                   ).name
+        csv_results_root = os.path.join(self.curr_dir, 'runs_raw_inferences') #****** PARAMETERIZE!
+        self.csv_dir = os.path.join(csv_results_root, f"inf_csv_results_{uuid.uuid4().hex}")
+        os.makedirs(self.csv_dir, exist_ok=True)
 
         csv_file_nm = FileUtils.construct_filename(
             self.model_props,
@@ -129,9 +148,8 @@ class Inferencer:
         self.csv_writer = CSVWriterCloseable(csv_path)
         
         tensorboard_root = os.path.join(self.curr_dir, 'runs_inferences')
-        tensorboard_dest = tempfile.TemporaryDirectory(dir=tensorboard_root,
-                                                       prefix='inf_results'
-                                                       ).name
+        tensorboard_dest = os.path.join(tensorboard_root, f"inf_results_{uuid.uuid4().hex}")
+        os.makedirs(tensorboard_dest, exist_ok=True)
         
         self.writer = SummaryWriterPlus(log_dir=tensorboard_dest)
         
@@ -163,6 +181,9 @@ class Inferencer:
             to_grayscale=self.model_props['to_grayscale']
             )
 
+        self.log.info(f"Tensorboard info written to {tensorboard_dest}")
+        self.log.info(f"Result measurement CSV file(s) written to {csv_path}")
+        
     #------------------------------------
     # __call__ 
     #-------------------
@@ -170,7 +191,7 @@ class Inferencer:
     def __call__(self, gpu_id_model_path_pair):
         gpu_id, self.model_path = gpu_id_model_path_pair
         self.prep_model_inference(self.model_path)
-        self.log.info(f"Being inference with model {FileUtils.ellipsed_file_path(self.model_path)} on gpu_id {gpu_id}")
+        self.log.info(f"Begining inference with model {FileUtils.ellipsed_file_path(self.model_path)} on gpu_id {gpu_id}")
         return self.run_inference(gpu_to_use=gpu_id)
 
     #------------------------------------
@@ -185,9 +206,15 @@ class Inferencer:
         repeats = int(np.ceil(len(self.model_paths) / len(self.gpu_ids)))
         gpu_model_pairings = list(zip(self.gpu_ids*repeats, self.model_paths))
         
+        #************* No parallelism for debugging
+        self(gpu_model_pairings[0])
+        #************* END No parallelism for debugging
+        
         with Pool(len(self.gpu_ids)) as inf_pool:
             # Run as many inferences in parallel as
-            # there are models to try:
+            # there are models to try. The first arg,
+            # (self): means to invoke the __call__() method
+            # on self.
             result_it = inf_pool.imap(self, 
                                       gpu_model_pairings,
                                       chunksize=len(self.gpu_ids)
@@ -384,22 +411,36 @@ class Inferencer:
 
         all_preds   = []
         all_labels  = []
-        class_names = set()
         
         for tally in tally_coll.tallies(phase=LearningPhase.TESTING):
             all_preds.extend(tally.preds)
             all_labels.extend(tally.labels)
-            class_names.add(tally.labels)
         
         conf_matrix = Charter.compute_confusion_matrix(all_labels,
                                                        all_preds,
-                                                       class_names,
+                                                       self.class_names,
                                                        normalize=True
                                                        )
-        fig = Charter.fig_from_conf_matrix(conf_matrix,
+        
+        # Normalization in compute_confusion_matrix() is
+        # to 0-1. Turn those values into percentages:
+        conf_matrix_perc = (100 * conf_matrix).astype(int)
+        
+        # Decide whether or not to write 
+        # confusion cell values into the cells.
+        # The decision depends on how many species
+        # are represented in the conf matrix; too many,
+        # and having numbers in all cells is too cluttered:
+        
+        if len(self.class_names) > CELL_LABELING.CONF_MATRIX_CELL_LABEL_LIMIT.value:
+            write_in_fields=CELL_LABELING.DIAGONAL
+        else:
+            write_in_fields=CELL_LABELING.ALWAYS
+            
+        fig = Charter.fig_from_conf_matrix(conf_matrix_perc,
                                            supertitle='Confusion Matrix\n',
                                            subtitle='Normalized to percentages',
-                                           write_in_fields=CELL_LABELING.DIAGONAL
+                                           write_in_fields=write_in_fields
                                            )
         if show:
             fig.show()
@@ -413,13 +454,18 @@ class Inferencer:
     def _report_charted_results(self, thresholds=None):
         '''
         Computes and (pyplot-)shows a set of precision-recall
-        curves in one plot:
+        curves in one plot. If precision and/or recall are 
+        undefined (b/c of division by zero) for all curves, then
+        returns False, else True. If no curves are defined,
+        logs a warning.
         
         :param thresholds: list of cutoff thresholds
             for turning logits into class ID predictions.
             If None, the default at TensorBoardPlotter.compute_multiclass_pr_curves()
             is used.
         :type thresholds: [float]
+        :return: True if curves were computed and show. Else False
+        :rtype: bool
         '''
 
         # Obtain a dict of CurveSpecification instances,
@@ -436,13 +482,18 @@ class Inferencer:
           
         # Separate out the curves without 
         # ill defined prec, rec, or f1:
-        well_defined_curves = filter(
-            lambda crv_obj: not(crv_obj['undef_prec'] or\
-                                crv_obj['undef_rec'] or\
-                                crv_obj['undef_f1']
-                                ),
-            all_curves_info.values()
+        well_defined_curves = list(filter(
+                    lambda crv_obj: not(crv_obj['undef_prec'] or\
+                                        crv_obj['undef_rec'] or\
+                                        crv_obj['undef_f1']
+                                        ),
+                    all_curves_info.values()
+                    )
             )
+        
+        if len(well_defined_curves) == 0:
+            self.log.warn(f"For all thresholds, one or more of precision, recall or f1 are undefined. No p/r curves to show")
+            return False
         
         # Too many curves are clutter. Only
         # show the best and worst by optimal f1:
@@ -458,6 +509,7 @@ class Inferencer:
           ClassificationPlotter.chart_pr_curves(curves_to_show)
 
         fig.show()
+        return True
 
     #------------------------------------
     # _report_textual_results 
@@ -468,18 +520,31 @@ class Inferencer:
         Give a sequence of tallies with results
         from a series of batches, create long
         outputs, and inputs lists from all tallies
-        Then write a CSV file, and create a text
-        table with the results. Report the table 
-        to tensorboard if possible, and return the
-        table text.
+        
+        Computes information retrieval type values:
+             precision (macro/micro/weighted/by-class)
+             recall    (macro/micro/weighted/by-class)
+             f1        (macro/micro/weighted/by-class)
+             acuracy
+             balanced_accuracy
+        
+        Combines these results into a Pandas series, 
+        and writes them to a csv file. That file is constructed
+        from the passed-in res_dir, appended with 'ir_results.csv'.
+        
+        Finally, constructs Github flavored tables from the
+        above results, and posts them to the 'text' tab of 
+        tensorboard.
+        
+        Returns the results measures Series 
         
         :param tally_coll: collect of tallies from batches
         :type tally_coll: ResultCollection
         :param res_dir: directory where all .csv and other 
             result files are to be written
         :type res_dir: str
-        :return table of results
-        :rtype: str
+        :return results of information retrieval-like measures
+        :rtype: pandas.Series
         '''
         
         all_preds   = []
@@ -545,39 +610,14 @@ class Inferencer:
         res['balanced_accuracy'] = balanced_accuracy_score(all_labels, all_preds)
         
         res_series = pd.Series(list(res.values()),
-                           index=list(res.keys())
-                           )
+                               index=list(res.keys())
+                               )
         
         # Write information retrieval type results
         # to a one-line .csv file, using pandas Series
         # as convenient intermediary:
         res_csv_path = os.path.join(res_dir, 'ir_results.csv')
         res_series.to_csv(res_csv_path)
-        
-        # Get confusion matrix as a tensor,
-        # with fields normalized to 1 (i.e. percentages).
-        conf_matrix = Charter.compute_confusion_matrix(
-            all_labels,
-            all_preds,
-            self.num_classes,
-            normalize=True
-            )
-        
-        # Write confusion matrix to CSV, 
-        # using dataframe as convenient intermediary:
-        conf_matrix_df = pd.DataFrame(conf_matrix.numpy(),
-                                      index=self.class_names,
-                                      columns=self.class_names
-                                      )
-        cm_csv_path = os.path.join(res_dir, 'conf_matrix_results.csv')
-        conf_matrix_df.to_csv(cm_csv_path)
-        
-        # Post to tensorboard as an image:
-        TensorBoardPlotter.conf_matrix_to_tensorboard(
-            self.writer,
-            conf_matrix,
-            self.class_names
-            )
         
         # Make textual tables using Github flavored
         # markup: Results: one column with the model 
@@ -613,9 +653,7 @@ class Inferencer:
         self.writer.add_text('Per class measures', ir_by_class_tbl, global_step=0)
         self.writer.add_text('Accuracy', accuracy_tbl, global_step=0)
         
-        return{'info_retrieval_res' : res_series,
-               'confusion_matrx'    : conf_matrix_df 
-               }
+        return res_series
 
     #------------------------------------
     # close 
