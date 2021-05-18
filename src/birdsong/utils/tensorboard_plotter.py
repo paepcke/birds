@@ -20,7 +20,6 @@ from birdsong.rooted_image_dataset import SingleRootImageDataset
 from birdsong.utils.github_table_maker import GithubTableMaker
 from birdsong.utils.learning_phase import LearningPhase
 import numpy as np
-import pandas as pd
 from result_analysis.charting import Charter
 
 

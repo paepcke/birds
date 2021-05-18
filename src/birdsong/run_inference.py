@@ -11,7 +11,6 @@ from multiprocessing import Pool
 import os
 from pathlib import Path
 import sys
-import uuid
 
 from logging_service.logging_service import LoggingService
 from sklearn.metrics import accuracy_score, balanced_accuracy_score
@@ -20,16 +19,16 @@ from sklearn.metrics import precision_score, recall_score
 from torch import nn
 import torch
 from torch.utils.data.dataloader import DataLoader
-from torchvision.datasets.folder import ImageFolder
 
 from birdsong.ml_plotting.classification_charts import ClassificationPlotter
 from birdsong.nets import NetUtils
 from birdsong.result_tallying import ResultTally, ResultCollection
+from birdsong.rooted_image_dataset import SingleRootImageDataset
 from birdsong.utils.github_table_maker import GithubTableMaker
 from birdsong.utils.learning_phase import LearningPhase
-from birdsong.utils.tensorboard_plotter import SummaryWriterPlus, \
-    TensorBoardPlotter
+from birdsong.utils.tensorboard_plotter import SummaryWriterPlus
 from birdsong.utils.utilities import FileUtils, CSVWriterCloseable
+from data_augmentation.utils import Utils
 import numpy as np
 import pandas as pd
 from result_analysis.charting import Charter, CELL_LABELING
@@ -115,9 +114,9 @@ class Inferencer:
         2. Creates self.csv_writer to write results measures
             into csv files. The destination file is determined
             as follows:
-                <script_dir>/runs_raw_inferences/inf_csv_results_<uuid>/<model-props-derived-fname>.csv
+                <script_dir>/runs_raw_inferences/inf_csv_results_<datetime>/<model-props-derived-fname>.csv
         3. Creates self.writer(), a tensorboard writer with destination dir:
-                <script_dir>/runs_inferences/inf_results_uuid
+                <script_dir>/runs_inferences/inf_results_<datetime>
         4. Creates an ImageFolder classed dataset to self.samples_path
         5. Creates a shuffling DataLoader
         6. Initializes self.num_classes and self.class_names
@@ -134,8 +133,10 @@ class Inferencer:
         # from the model filename:
         self.model_props  = FileUtils.parse_filename(model_fname)
         
-        csv_results_root = os.path.join(self.curr_dir, 'runs_raw_inferences') #****** PARAMETERIZE!
-        self.csv_dir = os.path.join(csv_results_root, f"inf_csv_results_{uuid.uuid4().hex}")
+        csv_results_root = os.path.join(self.curr_dir, 'runs_raw_inferences')
+        #self.csv_dir = os.path.join(csv_results_root, f"inf_csv_results_{uuid.uuid4().hex}")
+        ts = FileUtils.file_timestamp()
+        self.csv_dir = os.path.join(csv_results_root, f"inf_csv_results_{ts}")
         os.makedirs(self.csv_dir, exist_ok=True)
 
         csv_file_nm = FileUtils.construct_filename(
@@ -147,27 +148,29 @@ class Inferencer:
         
         self.csv_writer = CSVWriterCloseable(csv_path)
         
+        ts = FileUtils.file_timestamp()
         tensorboard_root = os.path.join(self.curr_dir, 'runs_inferences')
-        tensorboard_dest = os.path.join(tensorboard_root, f"inf_results_{uuid.uuid4().hex}")
+        tensorboard_dest = os.path.join(tensorboard_root,
+                                        f"inf_results_{ts}"
+                                        )
+                                        #f"inf_results_{ts}{uuid.uuid4().hex}")
         os.makedirs(tensorboard_dest, exist_ok=True)
         
         self.writer = SummaryWriterPlus(log_dir=tensorboard_dest)
         
-        transformations = FileUtils.get_image_transforms(
-            to_grayscale=self.model_props['to_grayscale'])
-        dataset = ImageFolder(self.samples_path,
-                              transformations,
-                              is_valid_file=lambda file: Path(file).suffix \
-                                               in self.IMG_EXTENSIONS
-                              )
+        dataset = SingleRootImageDataset(
+            self.samples_path,
+            to_grayscale=self.model_props['to_grayscale']
+            )
+        
         self.loader = DataLoader(dataset,
                                  batch_size=self.batch_size, 
                                  shuffle=True, 
                                  drop_last=True 
                                  )
-        self.num_classes = len(dataset.classes)
-        self.class_names = dataset.classes
-        
+        self.class_names = dataset.class_names()
+        self.num_classes = len(self.class_names)
+
         # Get the right type of model,
         # Don't bother getting it pretrained,
         # of freezing it, b/c we will overwrite 
@@ -208,6 +211,7 @@ class Inferencer:
         
         #************* No parallelism for debugging
         self(gpu_model_pairings[0])
+        return
         #************* END No parallelism for debugging
         
         with Pool(len(self.gpu_ids)) as inf_pool:
@@ -400,14 +404,36 @@ class Inferencer:
     
     def report_results(self, tally_coll):
         self._report_textual_results(tally_coll, self.csv_dir)
-        self._report_conf_matrix(tally_coll)
+        self._report_conf_matrix(tally_coll, show_in_tensorboard=True)
         self._report_charted_results()
 
     #------------------------------------
     # _report_conf_matrix 
     #-------------------
     
-    def _report_conf_matrix(self, tally_coll, show=True):
+    def _report_conf_matrix(self, tally_coll, show=True, show_in_tensorboard=None):
+        '''
+        Computes the confusion matrix CM from tally collection.
+        Creates an image from CM, and displays it via matplotlib, 
+        if show arg is True. If show_in_tensorboard is a Tensorboard
+        SummaryWriter instance, the figure is posted to tensorboard,
+        no matter the value of the show arg.  
+        
+        Returns the Figure object.
+        
+        :param tally_coll: all ResultTally instances to be included
+            in the confusion matrix
+        :type tally_coll: result_tallying.ResultCollection
+        :param show: whether or not to call show() on the
+            confusion matrix figure, or only return the Figure instance
+        :type show: bool
+        :param show_in_tensorboard: whether or not to post the image
+            to tensorboard
+        :type show_in_tensorboard: bool
+        :return: Figure instance containing confusion matrix heatmap
+            with color legend.
+        :rtype: matplotlib.pyplot.Figure
+        '''
 
         all_preds   = []
         all_labels  = []
@@ -442,7 +468,15 @@ class Inferencer:
                                            subtitle='Normalized to percentages',
                                            write_in_fields=write_in_fields
                                            )
+        if show_in_tensorboard:
+            self.writer.add_figure('Inference Confusion Matrix', 
+                                   fig, 
+                                   global_step=0)
+
         if show:
+            # Something above makes fig lose its
+            # canvas manager. Add that back in:
+            Utils.add_pyplot_manager_to_fig(fig)
             fig.show()
         return fig
         
@@ -461,7 +495,7 @@ class Inferencer:
         
         :param thresholds: list of cutoff thresholds
             for turning logits into class ID predictions.
-            If None, the default at TensorBoardPlotter.compute_multiclass_pr_curves()
+            If None, the default at Charters.compute_multiclass_pr_curves()
             is used.
         :type thresholds: [float]
         :return: True if curves were computed and show. Else False
@@ -618,21 +652,28 @@ class Inferencer:
         # as convenient intermediary:
         res_csv_path = os.path.join(res_dir, 'ir_results.csv')
         res_series.to_csv(res_csv_path)
+
+        res_rnd = {}
+        for meas_nm, meas_val in res.items():
+            
+            # Measure results are either floats (precision, recall, etc.),
+            # or np arrays (e.g. precision-per-class). For both
+            # cases, round each measure to one digit:
+            
+            res_rnd[meas_nm] = round(meas_val,1) if type(meas_val) == float \
+                                                 else meas_val.round(1)
         
-        # Make textual tables using Github flavored
-        # markup: Results: one column with the model 
-        # properties:
         ir_measures_skel = {'col_header' : ['precision', 'recall', 'f1'], 
                             'row_labels' : ['macro','micro','weighted'],
-                            'rows'       : [[res['prec_macro'],    res['recall_macro'],    res['f1_macro']],
-                                            [res['prec_micro'],    res['recall_micro'],    res['f1_micro']],
-                                            [res['prec_weighted'], res['recall_weighted'], res['f1_weighted']]
+                            'rows'       : [[res_rnd['prec_macro'],    res_rnd['recall_macro'],    res_rnd['f1_macro']],
+                                            [res_rnd['prec_micro'],    res_rnd['recall_micro'],    res_rnd['f1_micro']],
+                                            [res_rnd['prec_weighted'], res_rnd['recall_weighted'], res_rnd['f1_weighted']]
                                            ]  
                            }
         
         ir_per_class_rows = [[prec_class, recall_class, f1_class]
                             for prec_class, recall_class, f1_class
-                            in zip(res['prec_by_class'], res['recall_by_class'], res['f1_by_class'])
+                            in zip(res_rnd['prec_by_class'], res_rnd['recall_by_class'], res_rnd['f1_by_class'])
                             ]
         ir_by_class_skel =  {'col_header' : ['precision','recall', 'f1'],
                              'row_labels' : self.class_names,
@@ -641,12 +682,12 @@ class Inferencer:
         
         accuracy_skel = {'col_header' : ['accuracy', 'balanced_accuracy'],
                          'row_labels' : ['Overall'],
-                         'rows'       : [[res['accuracy'], res['balanced_accuracy']]]
+                         'rows'       : [[res_rnd['accuracy'], res_rnd['balanced_accuracy']]]
                          }
 
-        ir_measures_tbl  = GithubTableMaker.make_table(ir_measures_skel)
-        ir_by_class_tbl  = GithubTableMaker.make_table(ir_by_class_skel)
-        accuracy_tbl     = GithubTableMaker.make_table(accuracy_skel)
+        ir_measures_tbl  = GithubTableMaker.make_table(ir_measures_skel, sep_lines=False)
+        ir_by_class_tbl  = GithubTableMaker.make_table(ir_by_class_skel, sep_lines=False)
+        accuracy_tbl     = GithubTableMaker.make_table(accuracy_skel, sep_lines=False)
         
         # Write the markup tables to Tensorboard:
         self.writer.add_text('Information retrieval measures', ir_measures_tbl, global_step=0)

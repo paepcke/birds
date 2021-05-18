@@ -16,7 +16,7 @@ class GithubTableMaker:
     #-------------------
 
     @classmethod
-    def make_table(cls, content_dict):
+    def make_table(cls, content_dict, sep_lines=True):
         '''
         Create github markdown table.
         Content dict must be like:
@@ -28,8 +28,27 @@ class GithubTableMaker:
                            [5,6]
                            ]
 
+        Output would be (the string):
+        
+            |        |    foo   |    bar   |
+            |--------|----------|----------|
+            |  row1  |     1    |     2    |
+            |--------|----------|----------|
+            |  row2  |     3    |     4    |
+            |--------|----------|----------|
+            |  row3  |     5    |     6    |
+            |--------|----------|----------|
+
+        Setting sep_lines to False will leave out the 
+        row separator lines.
+
         :param content_dict: content information
         :type content_dict: {str | [Any]}
+        :param sep_lines: whether or not to include 
+            dashed separation lines between the rows. 
+            Default is True; set False if using for 
+            Tensorboard tables.
+        :type sep_lines: bool
         :return the markdown table text
         :rtype str
         '''
@@ -83,6 +102,9 @@ class GithubTableMaker:
             tbl = f"|{col_spaces}|{'|'.join(padded_col_header)}|\n"
         else:
             tbl = f"|{'|'.join(padded_col_header)}|\n"
+
+        # Must have dashed underline below header
+        # to make it a legal Github flavored table:
         tbl += sep_line
         
         # Add the rows:
@@ -104,7 +126,8 @@ class GithubTableMaker:
                              ]
             row_str += f"{'|'.join(padded_row)}|\n"
             tbl += row_str
-            tbl += sep_line
+            if sep_lines:
+                tbl += sep_line
         #print(tbl)
         return tbl
             
