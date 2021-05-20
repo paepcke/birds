@@ -5,14 +5,20 @@ import os
 from pathlib import Path
 import random
 import shutil
+import warnings
+
 
 import librosa
-import matplotlib.pyplot as plt
+from natsort import natsorted
+from torch import cuda
+import torch
 
+from matplotlib import MatplotlibDeprecationWarning
+import multiprocessing as mp
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-
-from natsort import natsorted
 
 
 #-------------------------- Enum for Policy When Output Files Exist -----------
@@ -84,6 +90,12 @@ class Interval(dict):
 #------------------------------ Utility  -------------
 
 class Utils:
+
+    # If multiple cores are available,
+    # only use some percentage of them to
+    # be nice:
+    
+    MAX_PERC_OF_CORES_TO_USE = 50
 
     #------------------------------------
     # noise_multiplier
@@ -297,7 +309,7 @@ class Utils:
         Similates part of the bash shell find command.
         Only bash patters are supported, not Python regex.
         For the find -type values, only file and directory 
-        are supported as file types. Though abbreviations
+        are supported as types. Though abbreviations
         'f' and 'd' are fine.
         
         Case of strings are case-normalized using os.path.normcase().
@@ -706,6 +718,29 @@ class Utils:
             elif intervals[mid][low_key] > interval_start:
                 high = mid - 1
 
+
+    #------------------------------------
+    # set_seed  
+    #-------------------
+
+    @classmethod
+    def set_seed(cls, seed):
+        '''
+        Set the seed across all different necessary platforms
+        to allow for comparison of different models and runs
+        
+        :param seed: random seed to set for all random num generators
+        :type seed: int
+        '''
+        torch.manual_seed(seed)
+        cuda.manual_seed_all(seed)
+        # Not totally sure what these two do!
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        np.random.seed(seed)
+        os.environ['PYTHONHASHSEED'] = str(seed)
+        random.seed(seed)
+
     #------------------------------------
     # add_pyplot_manager_to_fig
     #-------------------
@@ -809,3 +844,47 @@ class Utils:
                                          key=lambda row_dict: row_dict['Begin Time (s)'])
         return sel_dict_list_sorted
         
+# -------------------- Class ProcessWithoutWarnings ----------
+
+class ProcessWithoutWarnings(mp.Process):
+    '''
+    Subclass of Process to use when creating
+    multiprocessing jobs. Accomplishes two
+    items in addition to the parent:
+    
+       o Blocks printout of various deprecation warnings connected
+           with matplotlib and librosa
+       o Adds ability for CreateSpectrogram and SpectrogramChopper 
+           instances to return a result.
+    '''
+    
+    #def run(self, *args, **kwargs):
+    def run(self):
+
+        # Don't show the annoying deprecation
+        # librosa.display() warnings about renaming
+        # 'basey' to 'base' to match matplotlib: 
+        warnings.simplefilter("ignore", category=MatplotlibDeprecationWarning)
+        
+        # Hide the UserWarning: PySoundFile failed. Trying audioread instead.
+        warnings.filterwarnings(action="ignore",
+                                message="PySoundFile failed. Trying audioread instead.",
+                                category=UserWarning, 
+                                module='', 
+                                lineno=0)
+
+        return super().run()
+    
+    @property
+    def ret_val(self):
+        try:
+            return self._ret_val
+        except NameError:
+            return None
+        
+    @ret_val.setter
+    def ret_val(self, new_val):
+        if not type(new_val) == mp.sharedctypes.Synchronized:
+            raise TypeError(f"The ret_val instance var must be multiprocessing shared C-type, not {new_val}")
+        self._ret_val = new_val
+

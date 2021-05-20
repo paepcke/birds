@@ -163,6 +163,9 @@ class Inferencer:
             to_grayscale=self.model_props['to_grayscale']
             )
         
+        # Make reproducible:
+        Utils.set_seed(42)
+        #********Utils.set_seed(56)
         self.loader = DataLoader(dataset,
                                  batch_size=self.batch_size, 
                                  shuffle=True, 
@@ -195,7 +198,15 @@ class Inferencer:
         gpu_id, self.model_path = gpu_id_model_path_pair
         self.prep_model_inference(self.model_path)
         self.log.info(f"Begining inference with model {FileUtils.ellipsed_file_path(self.model_path)} on gpu_id {gpu_id}")
-        return self.run_inference(gpu_to_use=gpu_id)
+        #****************
+        #return self.run_inference(gpu_to_use=gpu_id)
+        dicts_from_runs = []
+        for i in range(3):
+            self.curr_dict = {}
+            dicts_from_runs.append(self.curr_dict)
+            self.run_inference(gpu_to_use=gpu_id)
+        print(dicts_from_runs)
+        #****************
 
     #------------------------------------
     # go 
@@ -309,6 +320,17 @@ class Inferencer:
                     outputs = FileUtils.to_device(outputs, 'cpu')
                     labels  = FileUtils.to_device(labels, 'cpu')
                     loss    = FileUtils.to_device(loss, 'cpu')
+
+                    #**********
+                    max_logit = outputs[0].max().item()
+                    max_idx = (outputs.squeeze() == max_logit).nonzero(as_tuple=False).item()
+                    smpl_id = torch.utils.data.dataloader.sample_id_seq[-1]
+                    lbl     = labels[0].item()
+                    pred_cl = max_idx
+                    
+                    self.curr_dict[smpl_id] = (smpl_id, lbl, pred_cl)
+                    #**********
+                    
                     
                     # Specify the batch_num in place
                     # of an epoch, which is not applicatble
@@ -341,6 +363,10 @@ class Inferencer:
                         loop_start_time = time_now 
         finally:
             
+            #*********
+            print(f"Sample seq: {torch.utils.data.dataloader.sample_id_seq}")
+            torch.utils.data.dataloader.sample_id_seq = []
+            #*********
             time_now = datetime.datetime.now()
             test_time_duration = time_now - overall_start_time
             # A human readable duration st down to minutes:

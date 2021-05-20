@@ -49,7 +49,7 @@ class SnippetSelectionTableMapper:
         number              not used
         mix                 comma separated list of other audible species 
 
-    When row that matches a snippet contains species in the 'mix' column,
+    When a row that matches a snippet contains species in the 'mix' column,
     copies of the snippets are made, and each is labeled with
     one of those species.
     

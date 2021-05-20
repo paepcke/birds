@@ -4,7 +4,9 @@ from _collections import OrderedDict
 import argparse
 import os, sys
 from pathlib import Path
-import warnings
+
+import multiprocessing as mp
+import numpy as np
 
 # Needed when running headless:
 # Do this before any other matplotlib
@@ -14,13 +16,11 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from logging_service.logging_service import LoggingService
-from matplotlib import MatplotlibDeprecationWarning
 
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import Utils
 from data_augmentation.utils import WhenAlreadyDone
-import multiprocessing as mp
-import numpy as np
+from data_augmentation.utils import ProcessWithoutWarnings
 
 class SpectrogramChopper:
     '''
@@ -80,12 +80,6 @@ class SpectrogramChopper:
 
     '''
 
-    # If multiple cores are available,
-    # only use some percentage of them to
-    # be nice:
-    
-    MAX_PERC_OF_CORES_TO_USE = 50
-    
     # Common logger for all workers:
     log = LoggingService()
 
@@ -538,15 +532,16 @@ class SpectrogramChopper:
                 species_file_pairs = list(zip([species_name]*len(rec_paths), rec_paths))
                 species_file_tuples.extend(species_file_pairs)
             break 
-        
-        # If no subdirectories with spectrograms were
-        # found, warn:
-        cls.log.warn(f"No subdirectories were found in {in_dir}. Did you mean to chop an individual file, rather than a set of species subdirectories?")
+
+        if len(species_file_tuples) == 0:
+            # If no subdirectories with spectrograms were
+            # found, warn:
+            cls.log.warn(f"No subdirectories were found in {in_dir}. Did you mean to chop an individual file, rather than a set of species subdirectories?")
         
         num_cores = mp.cpu_count()
         # Use 80% of the cores:
         if num_workers is None:
-            num_workers = round(num_cores * SpectrogramChopper.MAX_PERC_OF_CORES_TO_USE  / 100)
+            num_workers = round(num_cores * Utils.MAX_PERC_OF_CORES_TO_USE  / 100)
         elif num_workers > num_cores:
             # Limit pool size to number of cores:
             num_workers = num_cores
@@ -617,7 +612,7 @@ class SpectrogramChopper:
     def run_workers(cls, args, overwrite_policy=WhenAlreadyDone.ASK):
         '''
         Called by main to run the SpectrogramChopper in
-        multiple processes at once. Pajcrtitions the
+        multiple processes at once. Partitions the
         audio files to be processed; runs the chopping
         while giving visual progress on terminal.
         
@@ -679,55 +674,6 @@ class SpectrogramChopper:
                 print("")
                 print(f"Chops of {job.name}/{num_workers}: {res}")
                 job_done = True
-
-
-# -------------------- Class ProcessWithoutWarnings ----------
-
-class ProcessWithoutWarnings(mp.Process):
-    '''
-    Subclass of Process to use when creating
-    multiprocessing jobs. Accomplishes two
-    items in addition to the parent:
-    
-       o Blocks printout of various deprecation warnings connected
-           with matplotlib and librosa
-       o Adds ability for SpectrogramChopper instances to 
-           return a result.
-    '''
-    
-    def run(self, *args, **kwargs):
-
-        # Don't show the annoying deprecation
-        # librosa.display() warnings about renaming
-        # 'basey' to 'base' to match matplotlib: 
-        warnings.simplefilter("ignore", category=MatplotlibDeprecationWarning)
-        
-        # Hide the UserWarning: PySoundFile failed. Trying audioread instead.
-        warnings.filterwarnings(action="ignore",
-                                message="PySoundFile failed. Trying audioread instead.",
-                                category=UserWarning, 
-                                module='', 
-                                lineno=0)
-        try:
-            self.ret_value = kwargs['ret_value']
-            del kwargs['ret_value']
-        except KeyError:
-            pass
-        
-        return mp.Process.run(self, *args, **kwargs)
-    
-    @property
-    def ret_val(self):
-        try:
-            return self._ret_val
-        except NameError:
-            return None
-        
-    @ret_val.setter
-    def ret_val(self, new_val):
-        if not type(new_val) == mp.sharedctypes.Synchronized:
-            raise TypeError(f"The ret_val instance var must be multiprocessing shared C-type, not {new_val}")
-        self._ret_val = new_val
 
 # ------------------------ Main -----------------
 if __name__ == '__main__':

@@ -265,8 +265,12 @@ class SoundProcessor:
         Additional info may be included in the .png if info is 
         a dict of key/value pairs.
         
+        The outfile's parent directories are created, if necessary.
+        
         Retrieving the metadata can be done via SoundProcessor.load_spectrogram(),
         or any other PNG reading software that handles the PNG specification.
+        To print the information from the command line, use 
+        <proj-root>src/data_augmentation/list_png_metadata.py 
          
         :param audio_sample: audio
         :type audio_sample: np.array
@@ -312,6 +316,8 @@ class SoundProcessor:
             for key, val in info.items():
                 metadata.add_text(key, str(val))
 
+        outdir = os.path.dirname(outfile)
+        os.makedirs(outdir, exist_ok=True)
         skimage.io.imsave(outfile, img, pnginfo=metadata)
 
 
