@@ -10,6 +10,7 @@ import argparse
 import datetime
 import os
 from pathlib import Path
+import shutil
 import sys
 
 from logging_service import LoggingService
@@ -33,12 +34,17 @@ class SpectrogramCreator:
 
     log = LoggingService()
     
+    # Allow some actions to adjust during
+    # unittesting:
+    
+    UNITTEST_ACTIONS_COUNTS = {}
+    
     #------------------------------------
-    # create_spectrograms 
+    # create_spectrogram 
     #-------------------
 
     @classmethod
-    def create_spectrograms(cls, 
+    def create_spectrogram(cls, 
                             in_dir, 
                             out_dir, 
                             num=None,
@@ -86,16 +92,21 @@ class SpectrogramCreator:
                 
             # Check overwrite policy: if the destination
             # directory is not empty, follow the policy:
-            existing_files = Utils.listdir_abs(dst_dir)
+            existing_dir_content = Utils.listdir_abs(dst_dir)
             
-            # If any files already exist at the destination,
+            # If any files/directories already exist at the destination,
             # check the overwrite policy. If OVERWRITE, remove
             # the files right now: 
-            if len(existing_files) > 0:
+            if len(existing_dir_content) > 0:
                 if overwrite_policy == WhenAlreadyDone.OVERWRITE:
-                    cls.log.info(f"Removing any existing files in {dst_dir}")
-                    for fname in existing_files:
-                        os.remove(fname)
+                    cls.log.info(f"Removing all existing files/dirs in {dst_dir}")
+                    try:
+                        shutil.rmtree(dst_dir)
+                    except OSError as e:
+                        cls.log.err(f"Could not clean out dest dir {dst_dir}: {repr(e)}")
+                        sys.exit(-1)
+                    # Recreate the dst dir (now empty):
+                    os.mkdir(dst_dir)
 
             for i, aud_file in enumerate(Utils.listdir_abs(one_dir)):
                 #cls.log.info(f"Creating spectros for audio in {one_dir}")
@@ -351,22 +362,24 @@ class SpectrogramCreator:
     #-------------------
     
     @classmethod
-    def run_workers(cls, args, overwrite_policy=WhenAlreadyDone.ASK):
+    def run_workers(cls, 
+                    args, 
+                    overwrite_policy=WhenAlreadyDone.ASK,
+                    ):
         '''
         Called by main to run the SpectrogramCreator in
         multiple processes at once. Partitions the
         audio files to be processed; runs the spectrogram 
         creation while giving visual progress on terminal.
         
-        Prints success/failure of each worker. Then
-        returns
+        Prints success/failure of each worker.
 
         :param args: all arguments provided to argparse
         :type args: {str : Any}
         :param overwrite_policy: what to do when a spectrogram already exists
         :type overwrite_policy: WhenAlreadyDone
         '''
-        
+
         # Get a list of lists of species names
         # to process. The list is computed such
         # that each worker has roughly the same
@@ -400,7 +413,7 @@ class SpectrogramCreator:
                                          name=f"ass# {ass_num}"
                                          )
             job.ret_val = ret_value_slot
-            
+
             spectro_creation_jobs.append(job)
             print(f"Starting spectro creation for {job.name}")
             job.start()
@@ -416,7 +429,7 @@ class SpectrogramCreator:
                 # Time for sign of life?
                 now_time = datetime.datetime.now()
                 time_duration = now_time - job_clocks[job.name]
-                if time_duration.seconds % 3 == 0: # seconds:
+                if time_duration.seconds > 0 and time_duration.seconds % 3 == 0: # seconds:
                     
                     # A human readable duration st down to minutes:
                     duration_str = FileUtils.time_delta_str(time_duration, granularity=4)
@@ -451,9 +464,35 @@ class SpectrogramCreator:
                                aud_file, 
                                dst_dir,
                                overwrite_policy=WhenAlreadyDone.ASK, 
-                               species_name='Unknown'):
+                               identifier='Unknown'):
+        '''
+        Convert an audio file into a spectrogram.
+        The destination for the .png file is constructed
+        from dst_dir, and the audio file name.
+        
+        The .png file will contain metadata:
+        
+            o 'sr'          : <sample rate>
+            o 'duration'    : <number of seconds>
+            o 'identifier'  : <species name as per arg to this method>
+        
+        If the destination file already exists, the 
+        overwrite_policy is followed: ASK, OVERWRITE, or
+        SKIP.
+
+        :param aud_file: file to convert: .wav or .mp3
+        :type aud_file: str
+        :param dst_dir: directory for the resulting .png file
+        :type dst_dir: str
+        :param overwrite_policy: action if destination file exists
+        :type overwrite_policy: WhenAlreadyDone
+        :param identifier: typically ID of audio recorder or species
+        :type identifier: str
+        :raise FileNotFoundError, AudioLoadException
+        '''
 
         sound, sr = SoundProcessor.load_audio(aud_file)
+
         # Get parts of the file: root, fname, suffix
         path_el_dict  = Utils.path_elements(aud_file)
         new_fname = path_el_dict['fname'] + '.png'
@@ -462,14 +501,22 @@ class SpectrogramCreator:
         # If dst exists, ask whether to overwrite;
         # skip file if not:
         if os.path.exists(dst_path) and overwrite_policy == WhenAlreadyDone.ASK:
-            if not Utils.user_confirm(f"Overwrite {dst_path}?", False):
+            # During unittesting the following
+            # throws an EOFError. Prevent that from showing:
+            try:
+                do_overwrite = Utils.user_confirm(f"Overwrite {dst_path}?", False)
+            except EOFError:
+                print("Utils.user_confirm() would have been called; pretend 'no'")
+                # Act as if user had replied No:
+                return
+            if not do_overwrite:
                 # Not allowed to overwrite
                 return
             else:
                 os.remove(dst_path)
         
         #cls.log.info(f"Creating spectrogram for {os.path.basename(dst_path)}")
-        SoundProcessor.create_spectrograms(sound, sr, dst_path, info={'species' : species_name})
+        SoundProcessor.create_spectrogram(sound, sr, dst_path, info={'identifier' : identifier})
 
 
 # ------------------------ Main ------------
@@ -485,11 +532,17 @@ if __name__ == '__main__':
                         help='limit processing to first n audio files',
                         default=None)
 
-    parser.add_argument('-y', '--overwrite_policy',
-                    help='if set, overwrite existing out directories without asking; default: False',
-                    action='store_true',
-                    default=False
-                    )
+    parser.add_argument('-y', '--overwrite',
+                        help='overwrite existing output directories; default: ask, unless --resume',
+                        action='store_true',
+                        default=False
+                        )
+    
+    parser.add_argument('-r', '--resume',
+                        help='skip already present spectrograms; overrides --overwrite default: --overwrite setting',
+                        action='store_true',
+                        default=False
+                        )
     
     parser.add_argument('-w', '--workers',
                         type=int,
@@ -511,11 +564,12 @@ if __name__ == '__main__':
 
     # Turn the overwrite_policy arg into the
     # proper enum mem
-    if args.overwrite_policy:
+    if args.resume:
+        overwrite_policy = WhenAlreadyDone.SKIP
+    elif args.overwrite:
         overwrite_policy = WhenAlreadyDone.OVERWRITE
     else:
         overwrite_policy = WhenAlreadyDone.ASK
-        
 
     if not os.path.exists(args.input):
         raise FileNotFoundError(f"Input {args.input} does not exist")
@@ -527,8 +581,8 @@ if __name__ == '__main__':
         SpectrogramCreator.create_one_spectrogram(
             args.input, 
             args.outdir, 
-            overwrite_policy=args.overwrite_policy, 
-            species_name=args.species)
+            overwrite_policy=overwrite_policy, 
+            identifier=args.species)
         sys.exit(0)
     
     # Spectrograms for a directory tree
@@ -537,9 +591,7 @@ if __name__ == '__main__':
     
     
     else:
-        # Use SKIP overwrite policy to ensure
-        # workers don't step on each others' toes:
         SpectrogramCreator.run_workers(args,
-                                       overwrite_policy=WhenAlreadyDone.SKIP
+                                       overwrite_policy=overwrite_policy
                                        )
     sys.exit(0)

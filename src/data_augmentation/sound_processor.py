@@ -20,7 +20,34 @@ import numpy as np
 sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
+# ------------------------ Exception Classes -----------------
 
+class AudioLoadException(Exception):
+    '''
+    Raised when errors occur while loading 
+    audio files. Property 'audio_file' is
+    available in all instances of this exception.
+    The other_msg property, if not None will contain
+    the original error message in case the error was
+    due to some OS or other problem.
+    
+    '''
+    def __init__(self, msg, aud_file, other_msg=None):
+        '''
+        
+        :param msg: main error message
+        :type msg: str
+        :param aud_file: path to problematic audio file
+        :type aud_file: str
+        :param other_msg: optionally communicates more info
+            based on an originally triggering error
+        :type other_msg: {str | None}
+        '''
+        super().__init__(msg)
+        self.audio_file = aud_file
+        self.other_msg  = other_msg
+
+# --------------------- Sound Processor ---------------
 
 class SoundProcessor:
     '''
@@ -250,11 +277,11 @@ class SoundProcessor:
     # --------------- Operations on Spectrograms Files --------------
 
     #------------------------------------
-    # create_spectrograms 
+    # create_spectrogram 
     #-------------------
 
     @classmethod
-    def create_spectrograms(cls, audio_sample, sr, outfile, n_mels=128, info=None):
+    def create_spectrogram(cls, audio_sample, sr, outfile, n_mels=128, info=None):
         '''
         Create and save a spectrogram from an audio 
         sample. Bandpass filter is applied, Mel scale is used,
@@ -631,11 +658,14 @@ class SoundProcessor:
         :type duration: {None | float|
         :returns the recording and the associated sample rate
         :rtype: (np.array, float)
-        :raises FileNotFoundError
+        :raises FileNotFoundError, AudioLoadException
         '''
         
         if not os.path.exists(fname):
             raise FileNotFoundError(f"File {fname} does not exist.")
+        
+        if os.path.getsize(fname) == 0:
+            raise AudioLoadException(f"Audio file to load is empty: {fname}", fname)
 
         # Hide the UserWarning: PySoundFile failed. Trying audioread instead.
         # Happens when loading mp3 files:
@@ -645,7 +675,11 @@ class SoundProcessor:
                                 module='', 
                                 lineno=0)
 
-        recording, sample_rate = librosa.load(fname, offset=offset, duration=duration)
+        try:
+            recording, sample_rate = librosa.load(fname, offset=offset, duration=duration)
+        except Exception as e:
+            raise AudioLoadException(f"Could not load {fname}", fname, other_msg=repr(e)) from e
+
         return recording, sample_rate
 
     #------------------------------------

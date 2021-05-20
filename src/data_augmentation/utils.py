@@ -20,7 +20,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-
 #-------------------------- Enum for Policy When Output Files Exist -----------
 class WhenAlreadyDone(Enum):
     ASK = 0
@@ -493,7 +492,9 @@ class Utils:
         '''
         Given a directory, return its content files. 
         But, in contrast to os.listdir(), the returned
-        files are all absolute.
+        files are all absolute. Note that this is not
+        a recursive walk; only the direct children of
+        dir_path are examined.
         
         :param dir_path: absolute path for directory to list 
         :type dir_path: src

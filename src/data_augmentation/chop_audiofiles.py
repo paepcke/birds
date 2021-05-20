@@ -348,7 +348,7 @@ class SpectrogramChopper:
                                       offset=start_time, duration=window_len)
 
             if not spectro_done or (spectro_done and self.overwrite_policy != WhenAlreadyDone.SKIP):
-                SoundProcessor.create_spectrograms(window_audio,sr,outfile_spectro)
+                SoundProcessor.create_spectrogram(window_audio,sr,outfile_spectro)
             
 
             if self.generate_wav_files:

@@ -14,7 +14,7 @@ TEST_ALL = True
 #TEST_ALL = False
 
 # NOTE: SoundProcessor is also exercised in 
-#       other unittests, such as create_spectrograms()
+#       other unittests, such as create_spectrogram()
 
 class TestSoundProcessor(unittest.TestCase):
 
@@ -44,7 +44,7 @@ class TestSoundProcessor(unittest.TestCase):
         audio_path = os.path.join(self.cur_dir, 'audio_aug_tst_data/DYSMEN_S/dys1.mp3')
         (aud, sr) = SoundProcessor.load_audio(audio_path)
         with tempfile.NamedTemporaryFile(suffix='.png', prefix='spectro', dir='/tmp', delete=True) as fd:
-            SoundProcessor.create_spectrograms(aud, 
+            SoundProcessor.create_spectrogram(aud, 
                                               sr,
                                               fd.name, 
                                               info={'species' : 'DYSMEN_C'})

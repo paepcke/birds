@@ -344,7 +344,7 @@ class Augmenter:
             
         # create new spectrogram if augmented
         if len(aug_choices) != 0:
-            sample_name = SoundProcessor.create_spectrograms(sample_name, 
+            sample_name = SoundProcessor.create_spectrogram(sample_name, 
                                              species_wav_output_dir, 
                                              species_spectrogram_output_dir, 
                                              n_mels=128)
@@ -375,7 +375,7 @@ class Augmenter:
     def create_original_spectrograms(self, samples, n, species_wav_input_dir, species_spectrogram_output_dir):
         samples = random.sample(samples, int(n)) # choose n from all samples
         for sample_name in samples:
-            SoundProcessor.create_spectrograms(sample_name, species_wav_input_dir, species_spectrogram_output_dir, n_mels=128)
+            SoundProcessor.create_spectrogram(sample_name, species_wav_input_dir, species_spectrogram_output_dir, n_mels=128)
 
 
 # ------------------------ Main ------------
