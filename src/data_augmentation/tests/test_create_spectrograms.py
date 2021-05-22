@@ -8,11 +8,12 @@ from pathlib import Path
 import tempfile
 import unittest
 
-import multiprocessing as mp
-import numpy as np
-
 from data_augmentation.create_spectrograms import SpectrogramCreator
 from data_augmentation.utils import Utils, WhenAlreadyDone
+import multiprocessing as mp
+import numpy as np
+from logging_service.logging_service import LoggingService
+
 
 TEST_ALL = True
 #TEST_ALL = False
@@ -259,7 +260,53 @@ class TestSpectrogramCreator(unittest.TestCase):
             new_file_times = self.record_creation_times(dirs_filled)
             for fname in file_times.keys():
                 self.assertTrue(new_file_times[fname] != file_times[fname])
+
+    #------------------------------------
+    # test_bad_wav_file 
+    #-------------------
+    
+    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_bad_wav_file(self):
+
+        with tempfile.TemporaryDirectory(dir='/tmp', 
+                                         prefix='test_spectro') as in_dir:
+    
+            with tempfile.TemporaryDirectory(dir='/tmp', 
+                                             prefix='test_spectro') as out_dir:
+    
+    
+                log_file = os.path.join(out_dir, 'err_log.txt')
+                SpectrogramCreator.log = LoggingService()
+                SpectrogramCreator.log.log_file=log_file
+    
+                bad_species_path = os.path.join(in_dir, 'BADBIRD')
+                os.mkdir(bad_species_path)
+                bad_bird_fname   = 'bad_audio.wav'
+                assignments = ([('BADBIRD', bad_bird_fname)])
+                bad_bird_path = os.path.join(bad_species_path, bad_bird_fname)
+                # Create a 0-length file:
+                Path(bad_bird_path).touch()
                 
+                ret_value_slot = mp.Value("b", False)
+                
+                # Ensure that an error is logged, though
+                # none is raised:
+
+                SpectrogramCreator.create_from_file_list(
+                    assignments,
+                    in_dir,
+                    out_dir,
+                    WhenAlreadyDone.OVERWRITE,
+                    ret_value_slot,
+                    env=None)
+                # Read the log file:
+                with open(log_file, 'r') as fd:
+                    log_entry = fd.read()
+                
+                # The log msg should include:
+                # "ERROR: One file could not be processed ... AudioLoadException('Audio file to load is empty ..."
+                self.assertTrue(log_entry.find('to load is empty') > -1)
+
 # -------------------- Utilities ---------------
 
     #------------------------------------

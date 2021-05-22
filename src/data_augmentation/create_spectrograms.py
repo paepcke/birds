@@ -45,7 +45,7 @@ class SpectrogramCreator:
     
     @classmethod
     def create_from_file_list(cls,
-                              assignment, 
+                              assignments, 
                               in_dir,
                               out_dir,
                               overwrite_policy,
@@ -89,8 +89,8 @@ class SpectrogramCreator:
         process' default environ is then set to match that
         of the initiating process.
         
-        :param assignment: list of species/filename pairs
-        :type assignment: [(str,str)]
+        :param assignments: list of species/filename pairs
+        :type assignments: [(str,str)]
         :param in_dir: source of audio files: individual file,
             or root of subdirectories with audio files
         :type in_dir: str
@@ -117,7 +117,10 @@ class SpectrogramCreator:
         if env is not None:
             os.environ = env
 
-        for species_name, fname in assignment:
+        # Optimism!
+        return_bool.value = True
+        
+        for species_name, fname in assignments:
             # Ex. species_name: AMADEC
             # Ex. fname       : dysmen_my_bird.png
             full_audio_path = os.path.join(in_dir, species_name, fname)
@@ -128,9 +131,8 @@ class SpectrogramCreator:
                                            )
             except Exception as e:
                 return_bool.value = False
-                raise e
-            
-        return_bool.value = True
+                cls.log.err(f"One file could not be processed ({full_audio_path}): {repr(e)}")
+                continue
 
     #------------------------------------
     # compute_worker_assignments 
