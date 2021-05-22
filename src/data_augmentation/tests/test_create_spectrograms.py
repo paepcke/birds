@@ -4,16 +4,18 @@ Created on Apr 26, 2021
 @author: paepcke
 '''
 import os
+from pathlib import Path
 import tempfile
 import unittest
+
+import multiprocessing as mp
+import numpy as np
 
 from data_augmentation.create_spectrograms import SpectrogramCreator
 from data_augmentation.utils import Utils, WhenAlreadyDone
 
-
-#*****TEST_ALL = True
-TEST_ALL = False
-
+TEST_ALL = True
+#TEST_ALL = False
 
 # --------------------- Arguments Class -----------------
 
@@ -26,12 +28,73 @@ class Arguments:
 # --------------------- TestSpectrogramCreator Class -----------------
 
 class TestSpectrogramCreator(unittest.TestCase):
+    '''
+    Tests use 12 audio files distributed evenly over two
+    subdirectories: HENLES_S and DYSMEN_S. For the worker
+    distribution tests the test outcomes depend on the 
+    local machine's number of CPUs. SpectrogramCreator
+    by default uses 50% of available CPUs. An example outcome 
+    for a 12-CPU machine is:
+    
+        assignments = np.array(
+		     [[('HENLES_S', 'SONG_Henicorhinaleucosticta_xc259380.mp3'),
+		      ('HENLES_S', 'SONG_Henicorhinaleucosticta_xc259381.mp3')
+		      ],
+		     [('HENLES_S', 'SONG_Henicorhinaleucosticta_xc259383.mp3'),
+		      ('HENLES_S', 'SONG_Henicorhinaleucosticta_xc259379.mp3')
+		      ],
+		     [('HENLES_S', 'SONG_Henicorhinaleucosticta_xc259378.mp3'),
+		      ('HENLES_S', 'SONG_Henicorhinaleucosticta_xc259384.mp3')
+		      ],
+		     [('DYSMEN_S', 'SONG_Dysithamnusmentalis_xc513.mp3'),
+		      ('DYSMEN_S', 'SONG_Dysithamnusmentalis_xc518466.mp3')],
+		    
+		     [('DYSMEN_S', 'SONG_Dysithamnusmentalis_xc531750.mp3'),
+		      ('DYSMEN_S', 'SONG_Dysithamnusmentalis_xc50519.mp3')],
+		    
+		     [('DYSMEN_S', 'SONG_Dysithamnusmentalis_xc511477.mp3'),
+		      ('DYSMEN_S', 'SONG_Dysithamnusmentalis_xc548015.mp3')
+              ]
+             ])
 
+    Thus, a normal outcome in this case has 12 assignments, spread 
+    across 6 CPUs, with two tasks for each CPU. A task consists of a 
+    tuple: species-subdir-name, and audio file to process. 
+    '''
 
     @classmethod
     def setUpClass(cls):
         cls.cur_dir     = os.path.dirname(__file__)
         cls.sound_root  = os.path.join(cls.cur_dir, 'sound_data')
+        # Number of cores to use:
+        num_cores = mp.cpu_count()
+        cls.num_workers = round(num_cores * Utils.MAX_PERC_OF_CORES_TO_USE  / 100)
+        
+        cls.num_sound_files = len(Utils.find_in_dir_tree(
+            cls.sound_root, 
+            pattern='*.mp3', 
+            entry_type='file'))
+        
+        cls.assignments = np.array(
+		     [[('HENLES_S', 'SONG_Henicorhinaleucosticta_xc259380.mp3'),
+		      ('HENLES_S', 'SONG_Henicorhinaleucosticta_xc259381.mp3')
+		      ],
+		     [('HENLES_S', 'SONG_Henicorhinaleucosticta_xc259383.mp3'),
+		      ('HENLES_S', 'SONG_Henicorhinaleucosticta_xc259379.mp3')
+		      ],
+		     [('HENLES_S', 'SONG_Henicorhinaleucosticta_xc259378.mp3'),
+		      ('HENLES_S', 'SONG_Henicorhinaleucosticta_xc259384.mp3')
+		      ],
+		     [('DYSMEN_S', 'SONG_Dysithamnusmentalis_xc513.mp3'),
+		      ('DYSMEN_S', 'SONG_Dysithamnusmentalis_xc518466.mp3')],
+		    
+		     [('DYSMEN_S', 'SONG_Dysithamnusmentalis_xc531750.mp3'),
+		      ('DYSMEN_S', 'SONG_Dysithamnusmentalis_xc50519.mp3')],
+		    
+		     [('DYSMEN_S', 'SONG_Dysithamnusmentalis_xc511477.mp3'),
+		      ('DYSMEN_S', 'SONG_Dysithamnusmentalis_xc548015.mp3')
+              ]
+             ])        
 
     def setUp(self):
         pass
@@ -42,31 +105,99 @@ class TestSpectrogramCreator(unittest.TestCase):
 
 # -------------------------- Tests -------------
 
+
     #------------------------------------
-    # test_create_spectro 
+    # test_compute_worker_assignments_empty_dest 
     #-------------------
     
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    def test_create_spectro_one_dir(self):
+    def test_compute_worker_assignments_empty_dest(self):
 
-        # A directory that itself contains audio files:
-        src_dir = os.path.join(self.sound_root, 'DYSMEN_S/')
-        self.run_spectrogrammer(src_dir)
+        # Virginal scenario: no spectro was every
+        # created for any of the 12 audio samples:
+        with tempfile.TemporaryDirectory(dir='/tmp', 
+                                         prefix='test_spectro') as dst_dir:
+
+            # Since no spectros are already done,
+            # overwrite_policy should make no difference;
+            # try it for all three:
+
+            self.verify_worker_assignments(self.sound_root,
+                                           dst_dir, 
+                                           WhenAlreadyDone.ASK, 
+                                           self.num_sound_files)
+            self.verify_worker_assignments(self.sound_root,
+                                           dst_dir, 
+                                           WhenAlreadyDone.SKIP, 
+                                           self.num_sound_files)
+            self.verify_worker_assignments(self.sound_root,
+                                           dst_dir, 
+                                           WhenAlreadyDone.OVERWRITE,
+                                           self.num_sound_files)
 
     #------------------------------------
-    # test_create_spectro_multiple_dirs 
+    # test_compute_worker_assignments_one_spectro_done
     #-------------------
     
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    def test_create_spectro_multiple_dirs(self):
-        self.run_spectrogrammer(self.sound_root)
+    def test_compute_worker_assignments_one_spectro_done(self):
 
+        # Scenario: one spectro was already done:
+        with tempfile.TemporaryDirectory(dir='/tmp', 
+                                         prefix='test_spectro') as dst_dir:
+            
+            # Fake-create an existing spectrogram: 
+            os.mkdir(os.path.join(dst_dir, 'HENLES_S'))
+            done_spectro_path = os.path.join(dst_dir, 
+                                             'HENLES_S/SONG_Henicorhinaleucosticta_xc259378.png')
+            Path(done_spectro_path).touch()
+            
+            num_tasks_done = len(Utils.find_in_dir_tree(
+                dst_dir,
+                pattern='*.png', 
+                entry_type='file'))
+
+            true_num_assignments = self.num_sound_files - num_tasks_done
+
+            self.verify_worker_assignments(self.sound_root,
+                                           dst_dir, 
+                                           WhenAlreadyDone.SKIP, 
+                                           true_num_assignments)
+            
+            # We are to overwrite existing files, 
+            # all sound files will need to be done:
+            
+            true_num_assignments = self.num_sound_files
+            self.verify_worker_assignments(self.sound_root,
+                                           dst_dir, 
+                                           WhenAlreadyDone.OVERWRITE, 
+                                           true_num_assignments)
+
+    #------------------------------------
+    # test_assignment_imbalance
+    #-------------------
+
+    # MORE TROUBLE THAN WORTH: does not happen:
+    
+    # @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    # def test_assignment_imbalance(self):
+
+    #     # Scenario: some cores must accomplish
+    #     # more tasks than others:
+    #     with tempfile.TemporaryDirectory(dir='/tmp', 
+    #                                      prefix='test_spectro') as dst_dir:
+
+    #         self.verify_worker_assignments(self.sound_root,
+    #                                        dst_dir, 
+    #                                        WhenAlreadyDone.ASK,
+    #                                        self.num_sound_files,
+    #                                        num_workers_to_use=5)
 
     #------------------------------------
     # test_from_commandline 
     #-------------------
     
-    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_from_commandline(self):
         with tempfile.TemporaryDirectory(dir='/tmp', 
                                          prefix='test_spectro') as dst_dir:
@@ -75,23 +206,22 @@ class TestSpectrogramCreator(unittest.TestCase):
             args.input   = self.sound_root
             args.outdir  = dst_dir
             args.workers = None
-                                                
+
+            # ------ Create spectrograms:
             SpectrogramCreator.run_workers(
                 args,
-                overwrite_policy=WhenAlreadyDone.ASK
+                overwrite_policy=WhenAlreadyDone.OVERWRITE
                 )
-            
+                
             dirs_filled = [os.path.join(dst_dir, species_dir) 
                            for species_dir 
                            in os.listdir(dst_dir)]
             self.check_spectro_sanity(dirs_filled)
-
-            # DO IT AGAIN to ensure that overwrite will
-            # create new files.
             
             # Remember the creation times:
             file_times = self.record_creation_times(dirs_filled)
 
+            # ------ SKIP the existing spectrograms:
             # Run again, asking to skip already existing
             # spectros:
             SpectrogramCreator.run_workers(
@@ -103,51 +233,33 @@ class TestSpectrogramCreator(unittest.TestCase):
                            for species_dir 
                            in os.listdir(dst_dir)]
 
+            # Mod times of png files must NOT have changed,
+            # b/c of skipping
             new_file_times = self.record_creation_times(dirs_filled)
             self.assertDictEqual(new_file_times, file_times)
+            
+            # ------ Force RECREATION of spectrograms:
+            # Run again with OVERWRITE, forcing the 
+            # spectros to be done again:
 
+            SpectrogramCreator.run_workers(
+                args,
+                overwrite_policy=WhenAlreadyDone.OVERWRITE
+                )
+                
+            dirs_filled = [os.path.join(dst_dir, species_dir) 
+                           for species_dir 
+                           in os.listdir(dst_dir)]
+                           
+            self.check_spectro_sanity(dirs_filled)
             
             # File times must be *different* from previous
             # run because we asked to overwrite:
             
-                
-            
-
-#**************                            
-            # SpectrogramCreator.run_workers(
-                # args,
-                # overwrite_policy=WhenAlreadyDone.OVERWRITE
-                # )
-                #
-            # dirs_filled = [os.path.join(dst_dir, species_dir) 
-                           # for species_dir 
-                           # in os.listdir(dst_dir)]
-                           #
-            # self.check_spectro_sanity(dirs_filled)
-            #
-            # # File times must be *different* from previous
-            # # run because we asked to overwrite:
-            #
-            # new_file_times = self.record_creation_times(dirs_filled)
-            # for fname in file_times.keys():
-                # self.assertTrue(new_file_times[fname] != file_times[fname])
-                #
-#**************                
-            # And ONE MORE TIME, this time forcing program
-            # to ask permission to overwrite:
-            
-            # Remember the creation times:
-            #*****file_times = self.record_creation_times(dirs_filled)
-            
-            SpectrogramCreator.run_workers(
-                args,
-                overwrite_policy=WhenAlreadyDone.ASK,
-                )
             new_file_times = self.record_creation_times(dirs_filled)
-            # Spectrograms should all be what they used to be:
-            self.assertDictEqual(new_file_times, file_times)
-
-
+            for fname in file_times.keys():
+                self.assertTrue(new_file_times[fname] != file_times[fname])
+                
 # -------------------- Utilities ---------------
 
     #------------------------------------
@@ -223,7 +335,48 @@ class TestSpectrogramCreator(unittest.TestCase):
             for spec_file in Utils.listdir_abs(species_dst_dir):
                 self.assertTrue(os.stat(spec_file).st_size > 5000)
         
+    #------------------------------------
+    # verify_worker_assignments
+    #-------------------
+    
+    def verify_worker_assignments(self, 
+                                  sound_root,
+                                  outdir,
+                                  overwrite_policy,
+                                  true_num_assignments,
+                                  num_workers_to_use=None
+                                  ):
+        '''
+        Called to compute worker assignments under different
+        overwrite_policy decisions and with no or some spectrograms
+        already created.
+        
+        :param sound_root: root of species/recorder subdirectories
+        :type sound_root: src
+        :param outdir: root of where spectrograms are to be placed
+        :type outdir: str
+        :param overwrite_policy: what to do if dest spectro exists
+        :type overwrite_policy: WhenAlreadyDone
+        :param true_num_assignments: expected number of tasks to
+            be done: number of sound files minus num of spectros
+            already done
+        :type true_num_assignments: int
+        :param num_workers_to_use: number of cores to use
+        :type num_workers_to_use: int
+        '''
 
+        (worker_assignments, num_workers) = SpectrogramCreator.compute_worker_assignments(
+            sound_root,
+            outdir,
+            overwrite_policy=overwrite_policy,
+            num_workers=num_workers_to_use
+            )
+        
+        self.assertEqual(len(worker_assignments), num_workers_to_use)
+        # Must have true_num_assignments assignments, no matter 
+        # how they are distributed across CPUs:
+        num_tasks = sum([len(assignments) for assignments in worker_assignments])
+        self.assertEqual(num_tasks, true_num_assignments)
 
 # ------------------ Main -------------------
 

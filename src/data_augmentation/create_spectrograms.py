@@ -219,13 +219,20 @@ class SpectrogramCreator:
     #-------------------
     
     @classmethod
-    def compute_worker_assignments(cls, in_dir, num_workers=None):
+    def compute_worker_assignments(cls, 
+                                   in_dir, 
+                                   dst_dir, 
+                                   overwrite_policy=WhenAlreadyDone.ASK, 
+                                   num_workers=None
+                                   ):
         '''
         Given the root directory of a set of
         directories whose names are species or field
         recorder IDs, and which contain audio recordings,
         return a multi processing worker assignment.
         
+        :param cls:
+        :type cls:
         Expected:
                          in_dir
 
@@ -261,13 +268,16 @@ class SpectrogramCreator:
 
         :param in_dir: root of species recordings
         :type in_dir: str
+        :param dst_dir: root of subdirectories that will contain
+            spectrograms
+        :type dst_dir: str
         :param num_workers: number of buckets into which to partition 
         :type num_workers: {int | None}
         :return: list of species name lists, and number of workers.
         :rtype: ([[int]], int)
         '''
 
-        # Create:
+        # Create the following structures:
         #     {species : num-recordings}
         #     {species : recordings_dir}
         #     [(species1, fpath1), (species1, fpath2), (species2, fpath3)...]  
@@ -277,12 +287,21 @@ class SpectrogramCreator:
         species_file_tuples = []
         
         for _dir_name, subdir_list, _file_list in os.walk(in_dir):
-            for species_name in subdir_list:
-                species_recordings_dir = os.path.join(in_dir, species_name)
+            for species_or_recorder_name in subdir_list:
+                species_recordings_dir = os.path.join(in_dir, species_or_recorder_name)
                 rec_paths = os.listdir(species_recordings_dir)
-                sample_size_distrib[species_name] = len(rec_paths)
-                sample_dir_dict[species_name] = species_recordings_dir
-                species_file_pairs = list(zip([species_name]*len(rec_paths), rec_paths))
+                # Create new rec_paths with only audio files that
+                # need a spectrogram:
+                new_rec_paths = cls.cull_rec_paths(
+                    species_or_recorder_name, 
+                    dst_dir, 
+                    rec_paths, 
+                    overwrite_policy
+                    )
+                sample_size_distrib[species_or_recorder_name] = len(new_rec_paths)
+                sample_dir_dict[species_or_recorder_name] = species_recordings_dir
+                species_file_pairs = list(zip([species_or_recorder_name]*len(new_rec_paths), 
+                                              new_rec_paths))
                 species_file_tuples.extend(species_file_pairs)
             break 
         
@@ -321,10 +340,11 @@ class SpectrogramCreator:
         tuples is not divisible by num_workers, the left-over
         tuples are distributed over the first sublists.
 
-        :param species_file_pairs:
-        :type species_file_pairs:
-        :param num_workers:
-        :type num_workers:
+        :param species_file_pairs: list of species or recorder name
+            soundfile name tuples
+        :type species_file_pairs: [(str, str)]
+        :param num_workers: number of computer cores to use
+        :type num_workers: int
         :return partitioning of the species_file_pairs tuples
         :rtype: [[(str, str)]]
         '''
@@ -344,7 +364,10 @@ class SpectrogramCreator:
             assignments.append(assign_sublist)
             assign_idx += recs_per_worker
         
-        left_overs = num_recordings % num_workers
+        num_tasks = sum([len(ass) for ass in assignments])
+        # The following seems never to happen, but
+        # too tired to figure out why:
+        left_overs = num_recordings - num_tasks
         if left_overs > 0:
             # Can't have more than num_workers left overs,
             # meaning can't have more leftovers than
@@ -390,6 +413,8 @@ class SpectrogramCreator:
         
         (worker_assignments, num_workers) = SpectrogramCreator.compute_worker_assignments(
             args.input,
+            args.outdir,
+            overwrite_policy=overwrite_policy,
             num_workers=args.workers)
     
         print(f"Distributing workload across {num_workers} workers.")
@@ -454,6 +479,36 @@ class SpectrogramCreator:
                 now_present_imgs = len(Utils.find_in_dir_tree(args.outdir, pattern="*.png"))
                 print(f"Spectrograms created: {now_present_imgs}")
                 job_done = True
+
+    #------------------------------------
+    # cull_rec_paths
+    #-------------------
+
+    @classmethod
+    def cull_rec_paths(cls, species_or_recorder_name, dst_dir, rec_paths, overwrite_policy=WhenAlreadyDone.ASK):
+        new_rec_paths = []
+        for aud_fname in rec_paths:
+            fname_stem = Path(aud_fname).stem
+            dst_path = os.path.join(dst_dir, species_or_recorder_name, f"{fname_stem}.png")
+            if not os.path.exists(dst_path):
+                # Destination spectrogram does not exist;
+                # keep this audio file in the to-do list:
+                new_rec_paths.append(aud_fname)
+                continue
+            if overwrite_policy == WhenAlreadyDone.OVERWRITE:
+                os.remove(dst_path)
+                new_rec_paths.append(aud_fname)
+                continue
+            if overwrite_policy == WhenAlreadyDone.SKIP:
+                # Don't even assign audio file to a worker,
+                # since its spectro already exists:
+                continue
+            if overwrite_policy == WhenAlreadyDone.ASK:
+                if Utils.user_confirm(f"Spectrogram for {dst_path} exists; overwrite?"):
+                    os.remove(dst_path)
+                    new_rec_paths.append(aud_fname)
+                    continue
+        return new_rec_paths
 
     #------------------------------------
     # create_one_spectrogram 
