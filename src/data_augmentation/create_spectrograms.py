@@ -131,7 +131,10 @@ class SpectrogramCreator:
                                            )
             except Exception as e:
                 return_bool.value = False
-                cls.log.err(f"One file could not be processed ({full_audio_path}): {repr(e)}")
+                cls.log.err((f"One file could not be processed \n"
+                             f"    ({full_audio_path}):\n"
+                             f"    {repr(e)}")
+                             )
                 continue
 
     #------------------------------------
@@ -228,7 +231,11 @@ class SpectrogramCreator:
         if len(species_file_tuples) == 0:
             # If no subdirectories with spectrograms were
             # found, warn:
-            cls.log.warn(f"All audio in {in_dir} already done. Or meant to create an individual file, rather than a set of species subdirs?")
+            cls.log.warn((f"\n"
+                          f"    All audio in {in_dir} already done.\n"
+                          f"    Or meant to create an individual file\n"
+                          f"    rather than a set of species subdirs?")
+                          )
         
         num_cores = mp.cpu_count()
         # Use 80% of the cores:
@@ -336,8 +343,9 @@ class SpectrogramCreator:
             args.outdir,
             overwrite_policy=overwrite_policy,
             num_workers=args.workers)
-    
-        print(f"Distributing workload across {num_workers} workers.")
+
+        num_assignments = sum([len(assignments) for assignments in worker_assignments])
+        print(f"Distributing {num_assignments} tasks across {num_workers} workers.")
         
         # For progress reports, get number of already
         # existing .png files in out directory:
@@ -362,44 +370,68 @@ class SpectrogramCreator:
             spectro_creation_jobs.append(job)
             print(f"Starting spectro creation for {job.name}")
             job.start()
+
+        start_time = datetime.datetime.now()
+        jobs_done   = [False]*len(spectro_creation_jobs)
+
+        # Keep checking on each job, until
+        # all are done as indicated by all jobs_done
+        # values being True, a.k.a valued 1:
         
-        job_clocks = {}
-        for job in spectro_creation_jobs:
-            job_done = False
-            job_clocks[job.name] = datetime.datetime.now()
-            while not job_done:
-                # Check for job done with one sec timeout: 
+        while sum(jobs_done) < len(spectro_creation_jobs):
+            for job_idx, job in enumerate(spectro_creation_jobs):
+                # Timeout 1 sec
                 job.join(1)
-                    
-                # Time for sign of life?
-                now_time = datetime.datetime.now()
-                time_duration = now_time - job_clocks[job.name]
-                if time_duration.seconds > 0 and time_duration.seconds % 3 == 0: # seconds:
-                    
-                    # A human readable duration st down to minutes:
-                    duration_str = FileUtils.time_delta_str(time_duration, granularity=4)
-
-                    # Get current and new spectro imgs in outdir:
-                    now_present_imgs = len(Utils.find_in_dir_tree(args.outdir, pattern="*.png"))
-                    newly_present_imgs = now_present_imgs - already_present_imgs
-
-                    # Keep printing number of done snippets in the same
-                    # terminal line:
-                    print(f"{job.name}---Number of spectros: {now_present_imgs} ({newly_present_imgs} new) after {duration_str}", end='\r')
-                    already_present_imgs = now_present_imgs
-
-                # If the call to join() timed out
-                if job.exitcode is None:
-                    # Job not done:
+                if job.exitcode is not None:
+                    # This job finished
+                    res = "OK" if job.ret_val else "Error"
+                    # New line after the single-line progress msgs:
+                    print("")
+                    print(f"Worker {job.name}/{num_workers} finished with: {res}")
+                    already_present_imgs = cls.sign_of_life(job, 
+                                                            already_present_imgs,
+                                                            args.outdir,
+                                                            start_time,
+                                                            force_rewrite=True)
+                    jobs_done[job_idx] = True
+                    # Check on next job:
                     continue
-                res = "OK" if job.ret_val else "Error"
-                # New line after the progress msgs:
-                print("")
-                print(f"Worker {job.name}/{num_workers} finished with: {res}")
-                now_present_imgs = len(Utils.find_in_dir_tree(args.outdir, pattern="*.png"))
-                print(f"Spectrograms created: {now_present_imgs}")
-                job_done = True
+                # This job not finished yet.
+                # Time for sign of life?
+                already_present_imgs = cls.sign_of_life(job, 
+                                                        already_present_imgs,
+                                                        args.outdir, 
+                                                        start_time)
 
+    #------------------------------------
+    # sign_of_life 
+    #-------------------
+    
+    @classmethod
+    def sign_of_life(cls, job, num_already_present_imgs, outdir, start_time, force_rewrite=False):
+        # Time for sign of life?
+        now_time = datetime.datetime.now()
+        time_duration = now_time - start_time
+        # Every 3 seconds, but at least 3:
+        if force_rewrite \
+           or (time_duration.seconds > 0 and time_duration.seconds % 3 == 0): 
+            
+            # A human readable duration st down to minutes:
+            duration_str = FileUtils.time_delta_str(time_duration, granularity=4)
+
+            # Get current and new spectro imgs in outdir:
+            num_now_present_imgs = len(Utils.find_in_dir_tree(outdir, pattern="*.png"))
+            num_newly_present_imgs = num_now_present_imgs - num_already_present_imgs
+
+            # Keep printing number of done snippets in the same
+            # terminal line:
+            print((f"{job.name}---Number of spectros: {num_now_present_imgs} "
+                   f"({num_newly_present_imgs} new) after {duration_str}"),
+                  end='\r')
+            return num_newly_present_imgs
+        else:
+            return num_already_present_imgs
+    
     #------------------------------------
     # cull_rec_paths
     #-------------------
