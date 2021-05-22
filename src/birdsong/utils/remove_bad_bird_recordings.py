@@ -53,11 +53,23 @@ class BirdRecordingCuller:
                 continue
             else:
                 to_delete.append(aud_path)
-        
-        if Utils.user_confirm(f"Delete {len(to_delete)} aud files? (N/y):", default='n'):
-            print('deleting')
+
+        if len(to_delete) > 0:
+            if Utils.user_confirm(f"Delete {len(to_delete)} aud files? (N/y):", default='n'):
+                num_deleted = 0
+                for fname in to_delete:
+                    try:
+                        os.remove(fname)
+                    except Exception as e:
+                        print(f"Could not delete {fname}: {repr(e)}")
+                    else:
+                        num_deleted += 1
+                        
+                print(f"Removed {num_deleted} files")
+            else:
+                print('Canceling')
         else:
-            print('Canceling')
+            print('No files are out of good recorder serial number ranges')
 
     #------------------------------------
     # extract_ser_num 
