@@ -29,8 +29,9 @@ class BirdRecordingCuller:
         # Get all audio file paths relative
         # to dir_root:
         
+        pattern = f'*.{fextension}' 
         wav_paths = Utils.find_in_dir_tree(dir_root, 
-                                           pattern=f'*.{fextension}') 
+                                           pattern=pattern)
                                            
         
         #*********
@@ -54,6 +55,7 @@ class BirdRecordingCuller:
             else:
                 to_delete.append(aud_path)
 
+        print(f"Examined {len(wav_paths)} {pattern} files...")
         if len(to_delete) > 0:
             if Utils.user_confirm(f"Delete {len(to_delete)} aud files? (N/y):", default='n'):
                 num_deleted = 0
