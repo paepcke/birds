@@ -317,7 +317,7 @@ class Utils:
         
         Examples:
            
-           # Return list of files in /tmp
+           # Return  list of absolute file names in /tmp
               find_in_dir_tree('/tmp', entry_type='file')
               
            # Return list of text files in /tmp

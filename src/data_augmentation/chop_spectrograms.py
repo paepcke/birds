@@ -190,7 +190,7 @@ class SpectrogramChopper:
     # chop_file_list 
     #-------------------
     
-    def chop_file_list(self, assignment, return_bool, env=None):
+    def chop_file_list(self, assignments, return_bool, env=None):
         '''
         Takes a list like:
         
@@ -227,8 +227,8 @@ class SpectrogramChopper:
         process' default environ is then set to match that
         of the initiating process.
         
-        :param assignment: list of species/filename pairs
-        :type assignment: [(str,str)]
+        :param assignments: list of species/filename pairs
+        :type assignments: [(str,str)]
         :param env: if provided, the environment of the
             parent process. If None, the current env
             is retained
@@ -247,24 +247,30 @@ class SpectrogramChopper:
         if env is not None:
             os.environ = env
 
-        for species_name, fname in assignment:
+        # Optimism!
+        return_bool.value = True
+
+        for species_name, fname in assignments:
             # Ex. species_name: AMADEC
             # Ex. fname       : dysmen_my_bird.png
             full_spectro_path = os.path.join(self.in_dir, species_name, fname)
             try:
                 self.chop_one_spectro_file(full_spectro_path,
-                                           os.path.join(self.out_dir, species_name)
+                                           os.path.join(self.out_dir, species_name),
+                                           overwrite_policy=overwrite_policy
                                            )
             except Exception as e:
                 return_bool.value = False
-                raise e
-            
-        return_bool.value = True
-    
+                cls.log.err((f"One file could not be processed \n"
+                             f"    ({full_spectro_path}):\n"
+                             f"    {repr(e)}")
+                             )
+                continue
+
     #------------------------------------
     # chop_one_audio_file 
     #-------------------
-
+#********** CHECK 
     def chop_one_spectro_file(self, spectro_fname, 
                               out_dir, 
                               window_len = 5, 
@@ -466,7 +472,11 @@ class SpectrogramChopper:
     #-------------------
     
     @classmethod
-    def compute_worker_assignments(cls, in_dir, num_workers=None):
+    def compute_worker_assignments(cls, 
+                                   in_dir,
+                                   dst_dir,
+                                   overwrite_policy=WhenAlreadyDone.ASK, 
+                                   num_workers=None):
         '''
         Given the root directory of a set of
         directories whose names are species,
@@ -525,18 +535,34 @@ class SpectrogramChopper:
         
         for _dir_name, subdir_list, _file_list in os.walk(in_dir):
             for species_name in subdir_list:
-                species_recordings_dir = os.path.join(in_dir, species_name)
-                rec_paths = os.listdir(species_recordings_dir)
+                species_spectros_dir = os.path.join(in_dir, species_name)
+                rec_paths = os.listdir(species_spectros_dir)
+
+                # Create new rec_paths with only spectro files that
+                # need chopping:
+                new_rec_paths = cls.cull_rec_paths(
+                    species_name, 
+                    dst_dir, 
+                    rec_paths, 
+                    overwrite_policy
+                    )
+
                 sample_size_distrib[species_name] = len(rec_paths)
-                sample_dir_dict[species_name] = species_recordings_dir
-                species_file_pairs = list(zip([species_name]*len(rec_paths), rec_paths))
+                sample_dir_dict[species_name] = species_spectros_dir
+                species_file_pairs = list(zip([species_name]*len(new_rec_paths), 
+                                              new_rec_paths))
+
                 species_file_tuples.extend(species_file_pairs)
             break 
 
         if len(species_file_tuples) == 0:
             # If no subdirectories with spectrograms were
             # found, warn:
-            cls.log.warn(f"No subdirectories were found in {in_dir}. Did you mean to chop an individual file, rather than a set of species subdirectories?")
+            cls.log.warn((f"\n"
+                          f"    All spectrograms in {in_dir} already chopped.\n"
+                          f"    Or did you mean to create an individual file\n"
+                          f"    rather than a set of species subdirs?")
+                          )
         
         num_cores = mp.cpu_count()
         # Use 80% of the cores:

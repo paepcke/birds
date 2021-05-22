@@ -218,7 +218,7 @@ class SpectrogramChopper:
     # chop_file_list 
     #-------------------
     
-    def chop_file_list(self, assignment, return_bool, env=None):
+    def chop_file_list(self, assignments, return_bool, env=None):
         '''
         Takes a list like:
         
@@ -254,8 +254,8 @@ class SpectrogramChopper:
         process' default environ is then set to match that
         of the initiating process.
         
-        :param assignment: list of species/filename pairs
-        :type assignment: [(str,str)]
+        :param assignments: list of species/filename pairs
+        :type assignments: [(str,str)]
         :param env: if provided, the environment of the
             parent process. If None, the current env
             is retained
@@ -274,7 +274,7 @@ class SpectrogramChopper:
         if env is not None:
             os.environ = env
 
-        for species_name, fname in assignment:
+        for species_name, fname in assignments:
             try:
                 self.chop_one_audio_file(self.in_dir,
                                          species_name,

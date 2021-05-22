@@ -13,13 +13,38 @@ from data_augmentation.utils import Utils
 
 
 class BirdRecordingCuller:
+    '''
+    Cull bad recordings from Costa Rica bird
+    call collection.
     
+    Some of the recordings are bad, and must be 
+    ignored. This facitlity automates removal for
+    these audio files, and also of inadvertently
+    generated associated spectrograms.
+    
+    Kelley Langhans' Costa Rica recordings 
+    have file format:
+         
+         AM02_20190715_090204.wav
+         
+      AudioMoth<recorder_id>_yyyymmdd_rrrrrr.wav
+      
+      where rrrrrr are recording IDs.
+
+    Good recording ID ranges are:
+    
+         (50000, 70001),   
+    and  (170000, 180001),
+    
+    both exclusive on the right.
+    '''
 
     #------------------------------------
     # Constructor 
     #-------------------
     
-    def __init__(self, dir_root, fextension):
+    @classmethod
+    def cull(self, dir_root, fextension):
         
         # Good recording code ranges:
         good_rec_id_rngs = [range(50000, 70001),
@@ -82,7 +107,8 @@ class BirdRecordingCuller:
     # extract_ser_num 
     #-------------------
     
-    def extract_ser_num(self, fpath):
+    @classmethod
+    def extract_ser_num(cls, fpath):
         fname_no_ext = Path(fpath).stem
         ser_num = int(fname_no_ext.split('_')[-1])
         return ser_num
@@ -112,6 +138,6 @@ if __name__ == "__main__":
         print("File extension must be '.wav', '.mp3', or '.png'")
         sys.exit(1)
     
-    BirdRecordingCuller(args.rootdir, args.extension)
+    BirdRecordingCuller.cull(args.rootdir, args.extension)
     
     #BirdRecordingCuller('/Users/paepcke/EclipseWorkspacesNew/birds/src/data_augmentation/tests/sound_data/')
