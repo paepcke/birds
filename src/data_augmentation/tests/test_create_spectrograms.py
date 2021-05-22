@@ -365,14 +365,17 @@ class TestSpectrogramCreator(unittest.TestCase):
         :type num_workers_to_use: int
         '''
 
-        (worker_assignments, num_workers) = SpectrogramCreator.compute_worker_assignments(
+        (worker_assignments, _num_workers) = SpectrogramCreator.compute_worker_assignments(
             sound_root,
             outdir,
             overwrite_policy=overwrite_policy,
             num_workers=num_workers_to_use
             )
         
-        self.assertEqual(len(worker_assignments), num_workers_to_use)
+        # Only check for num workers used if
+        # a particular number of requested:
+        if num_workers_to_use is not None:
+            self.assertEqual(len(worker_assignments), num_workers_to_use)
         # Must have true_num_assignments assignments, no matter 
         # how they are distributed across CPUs:
         num_tasks = sum([len(assignments) for assignments in worker_assignments])

@@ -10,7 +10,6 @@ import argparse
 import datetime
 import os
 from pathlib import Path
-import shutil
 import sys
 
 from logging_service import LoggingService
@@ -39,87 +38,6 @@ class SpectrogramCreator:
     
     UNITTEST_ACTIONS_COUNTS = {}
     
-    #------------------------------------
-    # create_spectrogram 
-    #-------------------
-
-    @classmethod
-    def create_spectrogram(cls, 
-                            in_dir, 
-                            out_dir, 
-                            num=None,
-                            overwrite_policy=False
-                            ):
-        '''
-        Given a directory with sound files, create
-        a spectrogram for each, and deposit them,
-        in the out_dir
-        '''
-        dirs_filled = []
-        
-        # Is in_dir the root of subdirectories, each holding
-        # audio files of one species? Or does in_dir hold the
-        # audio files directly?
-        
-        dir_content = Utils.listdir_abs(in_dir)
-        dirs_to_do = [candidate
-                      for candidate
-                      in dir_content
-                      if os.path.isdir(candidate)
-                      ]
-        if len(dirs_to_do) == 0:
-            # Given dir directly contains the audio files:
-            audio_dirs = [in_dir]
-        else:
-            audio_dirs = dirs_to_do
-        
-        cls.log.info(f"Number of audio file dirs for which to create spectrograms: {len(audio_dirs)}")
-        # Go through the absolute paths of the director(y/ies):
-        for one_dir in audio_dirs:
-            
-            # By convention, directory names reflect
-            # species names:
-            species_name = Path(one_dir).stem
-            
-            # At the destination, create a directory
-            # named the same as one_dir, which we are about
-            # to process:
-            dst_dir = os.path.join(out_dir, species_name)
-            
-            if not os.path.exists(dst_dir):
-                cls.log.info(f"Creating dest dir {dst_dir}")
-                os.makedirs(dst_dir)
-                
-            # Check overwrite policy: if the destination
-            # directory is not empty, follow the policy:
-            existing_dir_content = Utils.listdir_abs(dst_dir)
-            
-            # If any files/directories already exist at the destination,
-            # check the overwrite policy. If OVERWRITE, remove
-            # the files right now: 
-            if len(existing_dir_content) > 0:
-                if overwrite_policy == WhenAlreadyDone.OVERWRITE:
-                    cls.log.info(f"Removing all existing files/dirs in {dst_dir}")
-                    try:
-                        shutil.rmtree(dst_dir)
-                    except OSError as e:
-                        cls.log.err(f"Could not clean out dest dir {dst_dir}: {repr(e)}")
-                        sys.exit(-1)
-                    # Recreate the dst dir (now empty):
-                    os.mkdir(dst_dir)
-
-            for i, aud_file in enumerate(Utils.listdir_abs(one_dir)):
-                #cls.log.info(f"Creating spectros for audio in {one_dir}")
-                if not Utils.is_audio_file(aud_file):
-                    continue
-
-                cls.create_one_spectrogram(aud_file, dst_dir, overwrite_policy, species_name)
-                
-                if num is not None and i >= num-1:
-                    break
-            dirs_filled.append(dst_dir)
-        
-        return dirs_filled 
     
     #------------------------------------
     # create_from_file_list 
@@ -308,7 +226,7 @@ class SpectrogramCreator:
         if len(species_file_tuples) == 0:
             # If no subdirectories with spectrograms were
             # found, warn:
-            cls.log.warn(f"No subdirectories were found in {in_dir}. Did you mean to create an individual file, rather than a set of species subdirectories?")
+            cls.log.warn(f"All audio in {in_dir} already done. Or meant to create an individual file, rather than a set of species subdirs?")
         
         num_cores = mp.cpu_count()
         # Use 80% of the cores:
