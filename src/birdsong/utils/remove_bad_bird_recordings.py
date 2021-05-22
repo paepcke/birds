@@ -58,11 +58,11 @@ class BirdRecordingCuller:
         print(f"Examined {len(wav_paths)} {pattern} files...")
         if len(to_delete) > 0:
             
-            if Utils.user_confirm("List the files? (n/Y)", default='y'):
+            if Utils.user_confirm(f"List the {len(to_delete)} bad files? (n/Y)", default='Y'):
                 for fpath in to_delete:
                     print(f"{os.path.getsize(fpath)} bytes: {fpath}")
 
-            if Utils.user_confirm(f"Delete {len(to_delete)} aud files? (N/y):", default='n'):
+            if Utils.user_confirm(f"Delete {len(to_delete)} aud files? (N/y):", default='N'):
                 num_deleted = 0
                 for fname in to_delete:
                     try:
