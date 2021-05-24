@@ -80,7 +80,7 @@ class SpectrogramChopper:
           by MAX_PERC_OF_CORES_TO_USE.
         
     Method chop_all() is used in the single core scenario.
-    Method chop_file_list() is used when multiprocessing. This
+    Method chop_from_file_list() is used when multiprocessing. This
     method is the 'target' in the multiprocessing library's sense.
 
     '''
@@ -97,7 +97,7 @@ class SpectrogramChopper:
     
     def __init__(self, 
                  in_dir_or_spectro_file, 
-                 output_dir, 
+                 outdir, 
                  specific_species=None,
                  overwrite_policy=WhenAlreadyDone.ASK,
                  generate_wav_files=False
@@ -122,8 +122,8 @@ class SpectrogramChopper:
         
         @param in_dir_or_spectro_file: location of soundfile root
         @type in_dir_or_spectro_file: str
-        @param output_dir: root of spectrograms/wav_files to create
-        @type output_dir: src
+        @param outdir: root of spectrograms/wav_files to create
+        @type outdir: src
         @param specific_species: process only a spectific list of species
         @type specific_species: {None | [str]}
         @param overwrite_policy: what to do when an output file already exists
@@ -131,7 +131,7 @@ class SpectrogramChopper:
         '''
 
         self.in_dir         	= in_dir_or_spectro_file
-        self.out_dir        	= output_dir
+        self.out_dir        	= outdir
         self.specific_species   = specific_species
         self.overwrite_policy   = overwrite_policy
         self.generate_wav_files = generate_wav_files
@@ -215,10 +215,10 @@ class SpectrogramChopper:
         return (num_audios, num_spectros)
     
     #------------------------------------
-    # chop_file_list 
+    # chop_from_file_list 
     #-------------------
     
-    def chop_file_list(self, assignments, return_bool, env=None):
+    def chop_from_file_list(self, assignments, return_bool, env=None):
         '''
         Takes a list like:
         
@@ -590,7 +590,7 @@ class SpectrogramChopper:
                                    overwrite_policy=overwrite_policy
                                    )
             ret_value_slot = mp.Value("b", False)
-            job = ProcessWithoutWarnings(target=chopper.chop_file_list,
+            job = ProcessWithoutWarnings(target=chopper.chop_from_file_list,
                                          args=([assignment, ret_value_slot]),
                                          name=f"ass# {ass_num}"
                                          )

@@ -208,9 +208,14 @@ class TestSpectrogramCreator(unittest.TestCase):
             args.outdir  = dst_dir
             args.workers = None
 
+            manager = mp.Manager()
+            global_info = manager.dict()
+            global_info['jobs_status'] = manager.list()
+
             # ------ Create spectrograms:
             SpectrogramCreator.run_workers(
                 args,
+                global_info,
                 overwrite_policy=WhenAlreadyDone.OVERWRITE
                 )
                 
@@ -225,8 +230,12 @@ class TestSpectrogramCreator(unittest.TestCase):
             # ------ SKIP the existing spectrograms:
             # Run again, asking to skip already existing
             # spectros:
+            global_info = manager.dict()
+            global_info['jobs_status'] = manager.list()
+            
             SpectrogramCreator.run_workers(
                 args,
+                global_info,
                 overwrite_policy=WhenAlreadyDone.SKIP
                 )
 
@@ -242,9 +251,12 @@ class TestSpectrogramCreator(unittest.TestCase):
             # ------ Force RECREATION of spectrograms:
             # Run again with OVERWRITE, forcing the 
             # spectros to be done again:
+            global_info = manager.dict()
+            global_info['jobs_status'] = manager.list()
 
             SpectrogramCreator.run_workers(
                 args,
+                global_info,
                 overwrite_policy=WhenAlreadyDone.OVERWRITE
                 )
                 
@@ -265,7 +277,7 @@ class TestSpectrogramCreator(unittest.TestCase):
     # test_bad_wav_file 
     #-------------------
     
-    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_bad_wav_file(self):
 
         with tempfile.TemporaryDirectory(dir='/tmp', 
@@ -387,7 +399,7 @@ class TestSpectrogramCreator(unittest.TestCase):
     #-------------------
     
     def verify_worker_assignments(self, 
-                                  sound_root,
+                                  spectro_root,
                                   outdir,
                                   overwrite_policy,
                                   true_num_assignments,
@@ -398,8 +410,8 @@ class TestSpectrogramCreator(unittest.TestCase):
         overwrite_policy decisions and with no or some spectrograms
         already created.
         
-        :param sound_root: root of species/recorder subdirectories
-        :type sound_root: src
+        :param spectro_root: root of species/recorder subdirectories
+        :type spectro_root: src
         :param outdir: root of where spectrograms are to be placed
         :type outdir: str
         :param overwrite_policy: what to do if dest spectro exists
@@ -413,7 +425,7 @@ class TestSpectrogramCreator(unittest.TestCase):
         '''
 
         (worker_assignments, _num_workers) = SpectrogramCreator.compute_worker_assignments(
-            sound_root,
+            spectro_root,
             outdir,
             overwrite_policy=overwrite_policy,
             num_workers=num_workers_to_use

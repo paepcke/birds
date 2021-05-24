@@ -2,11 +2,20 @@
 
 from _collections import OrderedDict
 import argparse
+import datetime
 import os, sys
 from pathlib import Path
 
+from logging_service.logging_service import LoggingService
+
+from birdsong.utils.utilities import FileUtils
+from data_augmentation.sound_processor import SoundProcessor
+from data_augmentation.utils import ProcessWithoutWarnings
+from data_augmentation.utils import Utils
+from data_augmentation.utils import WhenAlreadyDone
 import multiprocessing as mp
 import numpy as np
+
 
 # Needed when running headless:
 # Do this before any other matplotlib
@@ -15,12 +24,7 @@ import numpy as np
 sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from logging_service.logging_service import LoggingService
 
-from data_augmentation.sound_processor import SoundProcessor
-from data_augmentation.utils import Utils
-from data_augmentation.utils import WhenAlreadyDone
-from data_augmentation.utils import ProcessWithoutWarnings
 
 class SpectrogramChopper:
     '''
@@ -75,7 +79,7 @@ class SpectrogramChopper:
           by MAX_PERC_OF_CORES_TO_USE.
         
     Method chop_all() is used in the single core scenario.
-    Method chop_file_list() is used when multiprocessing. This
+    Method chop_from_file_list() is used when multiprocessing. This
     method is the 'target' in the multiprocessing library's sense.
 
     '''
@@ -89,7 +93,7 @@ class SpectrogramChopper:
     
     def __init__(self, 
                  in_dir_or_spectro_file, 
-                 output_dir, 
+                 outdir, 
                  specific_species=None,
                  overwrite_policy=WhenAlreadyDone.ASK
                  ):
@@ -104,8 +108,8 @@ class SpectrogramChopper:
         
         @param in_dir_or_spectro_file: location of spectrogram root
         @type in_dir_or_spectro_file: str
-        @param output_dir: root of spectrograms to create
-        @type output_dir: src
+        @param outdir: root of spectrograms to create
+        @type outdir: src
         @param specific_species: process only a spectific list of species
         @type specific_species: {None | [str]}
         @param overwrite_policy: what to do when an output file already exists
@@ -113,10 +117,10 @@ class SpectrogramChopper:
         '''
 
         # Ensure the outdir and all its intermediate dirs exist:
-        os.makedirs(output_dir, exist_ok=True)
+        os.makedirs(outdir, exist_ok=True)
 
         self.in_dir = in_dir_or_spectro_file if os.path.isdir(in_dir_or_spectro_file) else None
-        self.out_dir        	= output_dir
+        self.out_dir        	= outdir
         self.specific_species   = specific_species
         self.overwrite_policy   = overwrite_policy
         
@@ -142,55 +146,25 @@ class SpectrogramChopper:
         else:
             # Just do a single spectro, no need for destination
             # subdirs:
-            self.spectrogram_dir_path = output_dir
+            self.spectrogram_dir_path = outdir
 
         # Allow others outside the instance to find the spectros: 
         SpectrogramChopper.spectrogram_dir_path = self.spectrogram_dir_path
 
     #------------------------------------
-    # chop_all
-    #-------------------
-
-    def chop_all(self):
-        '''
-        Workhorse: Assuming self.input is root of all
-        species spectrograms
-
-        Chops each .png file into window_len snippets.
-        Saves those snippets in a new directory under 
-        self.spectrogram_dir_path
-                
-        Resulting directories under self.spectrogram_dir_path 
-        will be as per comment in SpectrogramChopper class
-        definition.
-            
-        If self.specific_species is None, audio files under all
-        species are chopped. Else, self.specific_species is 
-        expected to be a list of species names that correspond
-        to the names of species directories above: Species1, Species2, etc.
-        
-        Returns number of created .png spectrogram snippet files.
-        
-        :return total number of newly created spectrogram snippets
-        :rtype: int
-        '''
-        for species in self.species_list:
-            spectro_files = Utils.listdir_abs(os.path.join(self.in_dir, species))
-            num_files   = len(spectro_files)
-            for i, fpath in enumerate(spectro_files):
-                # Chop one spectrogram file:
-                self.log.info(f"Chopping {species} spectro {i}/{num_files}")
-                self.chop_one_spectrogram_file(fpath, self.out_dir)
-            self.num_chopped += num_files
-
-        num_spectros = Utils.find_in_dir_tree(self.spectrogram_dir_path, pattern='*.png')
-        return num_spectros
-    
-    #------------------------------------
-    # chop_file_list 
+    # chop_from_file_list 
     #-------------------
     
-    def chop_file_list(self, assignments, return_bool, env=None):
+    @classmethod
+    def chop_from_file_list(
+            cls,
+            assignments, 
+            in_dir,
+            out_dir,
+            global_info,
+            overwrite_policy,
+            return_bool,
+            env=None): 
         '''
         Takes a list like:
         
@@ -253,12 +227,12 @@ class SpectrogramChopper:
         for species_name, fname in assignments:
             # Ex. species_name: AMADEC
             # Ex. fname       : dysmen_my_bird.png
-            full_spectro_path = os.path.join(self.in_dir, species_name, fname)
+            full_spectro_path = os.path.join(in_dir, species_name, fname)
             try:
-                self.chop_one_spectro_file(full_spectro_path,
-                                           os.path.join(self.out_dir, species_name),
-                                           overwrite_policy=overwrite_policy
-                                           )
+                cls.chop_one_spectro_file(full_spectro_path,
+                                          os.path.join(out_dir, species_name),
+                                          overwrite_policy=overwrite_policy
+                                          )
             except Exception as e:
                 return_bool.value = False
                 cls.log.err((f"One file could not be processed \n"
@@ -268,14 +242,18 @@ class SpectrogramChopper:
                 continue
 
     #------------------------------------
-    # chop_one_audio_file 
+    # chop_one_spectro_file 
     #-------------------
-#********** CHECK 
-    def chop_one_spectro_file(self, spectro_fname, 
+
+    @classmethod
+    def chop_one_spectro_file(cls, 
+                              spectro_fname, 
                               out_dir, 
                               window_len = 5, 
                               skip_size=2,
-                              original_duration=None):
+                              original_duration=None,
+                              overwrite_policy=WhenAlreadyDone.ASK,                               
+                              ):
         """
         Generates window_len second spectrogram snippets
         from spectrograms files of arbitrary length. 
@@ -315,7 +293,7 @@ class SpectrogramChopper:
 
         # Read the spectrogram, getting an np array:
         spectro_arr, metadata = SoundProcessor.load_spectrogram(spectro_fname)
-        duration	   = metadata.get('duration', None)
+        duration = metadata.get('duration', None)
 
         if duration is None:
             if original_duration is None:
@@ -332,7 +310,7 @@ class SpectrogramChopper:
         # snippets: wall start time is zero:
         
         if duration <= window_len:
-            snippet_path = self.create_snippet_fpath(spectro_fname, 0, out_dir)
+            snippet_path = cls.create_snippet_fpath(spectro_fname, 0, out_dir)
             SoundProcessor.save_image(spectro_arr, snippet_path, metadata)
             return
         # Note: Also have sample rate ('sr') and species ('label')
@@ -365,17 +343,17 @@ class SpectrogramChopper:
             # within the entire spectrogram:
             wall_start_time   = samples_start_idx * twidth
             # Create a name for the snippet file: 
-            snippet_path = self.create_snippet_fpath(spectro_fname,
+            snippet_path = cls.create_snippet_fpath(spectro_fname,
                                                      round(wall_start_time), 
                                                      out_dir)
             
             spectro_done = os.path.exists(snippet_path)
 
             if spectro_done:
-                if self.overwrite_policy == WhenAlreadyDone.SKIP:
+                if overwrite_policy == WhenAlreadyDone.SKIP:
                     # Next snippet:
                     continue
-                elif self.overwrite_policy == WhenAlreadyDone.ASK:
+                elif overwrite_policy == WhenAlreadyDone.ASK:
                     if not Utils.user_confirm(f"Snippet {Path(snippet_path).stem} exists, overwrite?", default='N'):
                         continue
 
@@ -430,7 +408,8 @@ class SpectrogramChopper:
     # create_snippet_fpath 
     #-------------------
     
-    def create_snippet_fpath(self, origin_nm, wall_start_time, out_dir):
+    @classmethod
+    def create_snippet_fpath(cls, origin_nm, wall_start_time, out_dir):
         '''
         Given constituent elements, construct the
         full output path of a new spectrogram snippet.
@@ -536,18 +515,18 @@ class SpectrogramChopper:
         for _dir_name, subdir_list, _file_list in os.walk(in_dir):
             for species_name in subdir_list:
                 species_spectros_dir = os.path.join(in_dir, species_name)
-                rec_paths = os.listdir(species_spectros_dir)
+                spectro_paths = os.listdir(species_spectros_dir)
 
-                # Create new rec_paths with only spectro files that
+                # Create new spectro_paths with only spectro files that
                 # need chopping:
-                new_rec_paths = cls.cull_rec_paths(
+                new_rec_paths = cls.cull_spectro_paths(
                     species_name, 
                     dst_dir, 
-                    rec_paths, 
+                    spectro_paths, 
                     overwrite_policy
                     )
 
-                sample_size_distrib[species_name] = len(rec_paths)
+                sample_size_distrib[species_name] = len(spectro_paths)
                 sample_dir_dict[species_name] = species_spectros_dir
                 species_file_pairs = list(zip([species_name]*len(new_rec_paths), 
                                               new_rec_paths))
@@ -603,8 +582,8 @@ class SpectrogramChopper:
         '''
 
         # Compute near-equal number of files per worker:
-        num_recordings  = len(species_file_pairs)
-        recs_per_worker = int(np.ceil(num_recordings / num_workers))
+        num_spectros  = len(species_file_pairs)
+        spectros_per_worker = int(np.ceil(num_spectros / num_workers))
         
         # Create list of species-file pair lists:
         #    [[(s1,f1), (s1,f2)], [s1,f3,s2:f4], ...]
@@ -613,11 +592,14 @@ class SpectrogramChopper:
         assignments = []
         assign_idx  = 0
         for _worker_idx in range(num_workers):
-            assign_sublist = species_file_pairs[assign_idx:assign_idx+recs_per_worker]
+            assign_sublist = species_file_pairs[assign_idx:assign_idx+spectros_per_worker]
             assignments.append(assign_sublist)
-            assign_idx += recs_per_worker
+            assign_idx += spectros_per_worker
         
-        left_overs = num_recordings % num_workers
+        num_tasks = sum([len(ass) for ass in assignments])
+        # The following seems never to happen, but
+        # too tired to figure out why:
+        left_overs = num_spectros - num_tasks
         if left_overs > 0:
             # Can't have more than num_workers left overs,
             # meaning can't have more leftovers than
@@ -625,7 +607,7 @@ class SpectrogramChopper:
              
             for idx, left_over in enumerate(species_file_pairs[-left_overs:]):
                 assignments[idx].append(left_over)
-        
+
         # Remove empty assignments:
         assignments = [ass for ass in assignments if len(ass) > 0]
         return assignments
@@ -635,7 +617,10 @@ class SpectrogramChopper:
     #-------------------
     
     @classmethod
-    def run_workers(cls, args, overwrite_policy=WhenAlreadyDone.ASK):
+    def run_workers(cls,
+                    args,
+                    global_info,
+                    overwrite_policy=WhenAlreadyDone.ASK):
         '''
         Called by main to run the SpectrogramChopper in
         multiple processes at once. Partitions the
@@ -643,10 +628,24 @@ class SpectrogramChopper:
         while giving visual progress on terminal.
         
         Prints success/failure of each worker. Then
-        returns
+        returns. In order to avoid processes repeatedly
+        reporting the same, or only locally kept info,
+        the globally visible dict `global_info` is passed in.
+        
+        This method will add these key/val pairs:
+        
+           1 The total number of spectros to chop (key 'num_tasks')
+           2 The number of already created snippets (key 'num_snips')
+           3 A list with values False for each job, indicating
+               that the corresponding job is not yet done (key 'jobs_status')
+
+        Processes will update 2 and 3 as they report progress: 
 
         :param args: all arguments provided to argparse
         :type args: {str : Any}
+        :param global_info: interprocess communication
+            dict for reporting progress
+        :type global_info: multiprocessing.manager.dict
         '''
         
         # Get a list of lists of species names
@@ -658,20 +657,53 @@ class SpectrogramChopper:
         
         (worker_assignments, num_workers) = SpectrogramChopper.compute_worker_assignments(
             args.input,
+            args.outdir,
             num_workers=args.workers)
     
         print(f"Distributing workload across {num_workers} workers.")
+
+        # Initialize the dict with shared information:
+        
+        # Fill the inter-process list with False.
+        # Will be used to logging jobs finishing 
+        # many times to the console (i.e. not used
+        # for functions other than reporting progress:
+        
+        for _i in range(num_workers):
+            # NOTE: reportedly one cannot just set the passed-in
+            #       list to [False]*num_workers, b/c 
+            #       a regular python list won't be
+            #       seen by other processes, even if
+            #       embedded in a multiprocessing.manager.list
+            #       instance:
+            global_info['jobs_status'].append(False)
+
+        # Number of full spectrograms to chop:
+        global_info['snips_to_do'] = len(Utils.find_in_dir_tree(args.input, 
+                                                               pattern="*.png")) 
+        
+        
+        # For progress reports, get number of already
+        # existing .png files in out directory:
+        global_info['snips_done'] = len(Utils.find_in_dir_tree(args.outdir, 
+                                                               pattern="*.png")) 
+
         # Assign each list of species to one worker:
         
         chopping_jobs = []
         for ass_num, assignment in enumerate(worker_assignments):
             chopper = SpectrogramChopper(args.input, 
-                                   args.output_dir,
+                                   args.outdir,
                                    overwrite_policy=overwrite_policy
                                    )
             ret_value_slot = mp.Value("b", False)
-            job = ProcessWithoutWarnings(target=chopper.chop_file_list,
-                                         args=([assignment, ret_value_slot]),
+            job = ProcessWithoutWarnings(target=chopper.chop_from_file_list,
+                                         args=(assignment,
+                                               args.input,
+                                               args.outdir,
+                                               global_info,  # ***NEW
+                                               overwrite_policy, 
+                                               ret_value_slot),
                                          name=f"ass# {ass_num}"
                                          )
             job.ret_val = ret_value_slot
@@ -680,26 +712,126 @@ class SpectrogramChopper:
             print(f"Starting chops for {job.name}")
             job.start()
         
-        for job in chopping_jobs:
-            job_done = False
-            while not job_done:
-                # Check for job done with one sec timeout: 
+        start_time = datetime.datetime.now()
+
+        # Keep checking on each job, until
+        # all are done as indicated by all jobs_done
+        # values being True, a.k.a valued 1:
+        
+        while sum(global_info['jobs_status']) < num_workers:
+            for job_idx, job in enumerate(chopping_jobs):
+                # Timeout 1 sec
                 job.join(1)
-                # Get number of generated snippets:
-                num_chopped_snippets = \
-                    len(Utils.find_in_dir_tree(SpectrogramChopper.spectrogram_dir_path))
-                # Keep printing number of done snippets in the same
-                # terminal line:
-                print(f"Number of audio snippets: {num_chopped_snippets}", end='\r')
-                # If the call to join() timed out
-                if job.exitcode is None:
-                    # Job not done:
+                if job.exitcode is not None:
+                    if global_info['jobs_status'][job_idx]:
+                        # One of the processes has already
+                        # reported this job as done. Don't
+                        # report it again:
+                        continue
+
+                    # Let other processes know that this job
+                    # is done, and they don't need to report 
+                    # that fact: we'll do it here below:
+                    global_info['jobs_status'][job_idx] = True
+
+                    # This job finished, and that fact has not
+                    # been logged yet to the console:
+                    
+                    res = "OK" if job.ret_val else "Error"
+                    # New line after the single-line progress msgs:
+                    print("")
+                    print(f"Worker {job.name}/{num_workers} finished with: {res}")
+                    global_info['snips_done'] = cls.sign_of_life(job, 
+                                                                 global_info['snips_done'],
+                                                                 args.outdir,
+                                                                 start_time,
+                                                                 force_rewrite=True)
+                    # Check on next job:
                     continue
-                res = "OK" if job.ret_val else "Error"
-                # New line after the progress msgs:
-                print("")
-                print(f"Chops of {job.name}/{num_workers}: {res}")
-                job_done = True
+                
+                # This job not finished yet.
+                # Time for sign of life?
+                global_info['snips_done'] = cls.sign_of_life(job, 
+                                                             global_info['snips_done'],
+                                                             args.outdir,
+                                                             start_time,
+                                                             force_rewrite=True)
+
+    #------------------------------------
+    # cull_spectro_paths
+    #-------------------
+
+    @classmethod
+    def cull_spectro_paths(cls, 
+                           species_or_recorder_name, 
+                           dst_dir, 
+                           rec_paths, 
+                           overwrite_policy=WhenAlreadyDone.ASK):
+        #******* DISABLED ************
+        # method analogous to cull_rec_paths() in create_spectrograms()
+        # Currently below is just a copy from create_spectrograms().
+        # If we end up needing culling, update this body
+        return rec_paths
+        #******* DISABLED ************
+        # NEVER REACHED
+        new_rec_paths = []
+        for aud_fname in rec_paths:
+            fname_stem = Path(aud_fname).stem
+            dst_path = os.path.join(dst_dir, species_or_recorder_name, f"{fname_stem}.png")
+            if not os.path.exists(dst_path):
+                # Destination spectrogram does not exist;
+                # keep this audio file in the to-do list:
+                new_rec_paths.append(aud_fname)
+                continue
+            if overwrite_policy == WhenAlreadyDone.OVERWRITE:
+                os.remove(dst_path)
+                new_rec_paths.append(aud_fname)
+                continue
+            if overwrite_policy == WhenAlreadyDone.SKIP:
+                # Don't even assign audio file to a worker,
+                # since its spectro already exists:
+                continue
+            if overwrite_policy == WhenAlreadyDone.ASK:
+                if Utils.user_confirm(f"Spectrogram for {dst_path} exists; overwrite?"):
+                    os.remove(dst_path)
+                    new_rec_paths.append(aud_fname)
+                    continue
+        return new_rec_paths
+
+    #------------------------------------
+    # sign_of_life 
+    #-------------------
+    
+    @classmethod
+    def sign_of_life(cls, 
+                     job, 
+                     num_already_present_imgs, 
+                     outdir, 
+                     start_time, 
+                     force_rewrite=False):
+        
+        # Time for sign of life?
+        now_time = datetime.datetime.now()
+        time_duration = now_time - start_time
+        # Every 3 seconds, but at least 3:
+        if force_rewrite \
+           or (time_duration.seconds > 0 and time_duration.seconds % 3 == 0): 
+            
+            # A human readable duration st down to minutes:
+            duration_str = FileUtils.time_delta_str(time_duration, granularity=4)
+
+            # Get current and new spectro imgs in outdir:
+            num_now_present_imgs = len(Utils.find_in_dir_tree(outdir, pattern="*.png"))
+            num_newly_present_imgs = num_now_present_imgs - num_already_present_imgs
+
+            # Keep printing number of done snippets in the same
+            # terminal line:
+            print((f"{job.name}---Number of spectros: {num_now_present_imgs} "
+                   f"({num_newly_present_imgs} new) after {duration_str}"),
+                  end='\r')
+            return num_newly_present_imgs
+        else:
+            return num_already_present_imgs
 
 # ------------------------ Main -----------------
 if __name__ == '__main__':
@@ -710,7 +842,7 @@ if __name__ == '__main__':
     parser.add_argument('input',
                         type=str,
                         help='the path to directory with .png files, or to a single .png file to chop')
-    parser.add_argument('output_dir',
+    parser.add_argument('outdir',
                         type=str,
                         help='the path to output directory to write new .png files')
     parser.add_argument('-w', '--workers',
@@ -752,21 +884,38 @@ if __name__ == '__main__':
     # to be processed:
     if args.workers == 1 or os.path.isfile(args.input):
         chopper = SpectrogramChopper(args.input, 
-                                     args.output_dir,
+                                     args.outdir,
                                      overwrite_policy=overwrite_policy
                                      )
-        if os.path.isfile(args.input):
-            # Just chop an individual spectro:
-            chopper.chop_one_spectro_file(args.input, args.output_dir)
-        else:
-            # Scenario is subdirectories, each containing
-            # spectrograms of one species:
-            chopper.chop_all()
-    else:
-        # Use SKIP overwrite policy to ensure
-        # workers don't step on each others' toes:
-        SpectrogramChopper.run_workers(args,
-                                       overwrite_policy=WhenAlreadyDone.SKIP
-                                       )
+        # Use single workers only for individual files:
+        if os.path.isdir(args.input):
+            raise ValueError(f"Use of single worker only for individual spectrogram file, not dirs: {args.input}")
+        
+        chopper.chop_one_spectro_file(args.input, args.outdir)
+        print('Done')
+        sys.exit(0)
+
+    # Multiprocessing the chopping:
+    # For nice progress reports, create a shared
+    # dict quantities that each process will report
+    # on to the console as progress indications:
+    #    o Which job-completions have already been reported
+    #      to the console (a list)
+    #    o The most recent number of already created
+    #      output images 
+    # The dict will be initialized in run_workers,
+    # but all Python processes on the various cores
+    # will have read/write access:
+    manager = mp.Manager()
+    global_info = manager.dict()
+    global_info['jobs_status'] = manager.list()
+
+    
+    # Use SKIP overwrite policy to ensure
+    # workers don't step on each others' toes:
+    SpectrogramChopper.run_workers(args,
+                                   global_info,
+                                   overwrite_policy=WhenAlreadyDone.SKIP
+                                   )
 
     print("Done")

@@ -326,14 +326,14 @@ class AudioAugmenter:
         :type out_dir: src
         :param method: the audio augmentation method to apply
         :type method: AudAugMethod
-        :param: noise_path: full path to audio files with background
+        :param noise_path: full path to audio files with background
             noises to overlay onto audio (wind, rain, etc.). Ignored
             unless method is AudAugMethod.ADD_NOISE.
         :type noise_path: str
         :return: Newly created audio file (full path) or an Exception
             object whose e.args attribute is a tuple with the error
             msg plus a manually added one 
-        :rtype: {str | Exception|
+        :rtype: {str | Exception}
         '''
         
         failures = None

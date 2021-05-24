@@ -636,7 +636,7 @@ class Utils:
     @classmethod
     def user_confirm(cls, prompt_for_yes_no, default='Y'):
         resp = input(f"{prompt_for_yes_no} (default {default}): ")
-        if resp in ('y','Y','yes','Yes', ''):
+        if resp in ('y','Y','yes','Yes', default):
             return True
         else:
             return False

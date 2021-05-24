@@ -313,7 +313,8 @@ class SpectrogramCreator:
     
     @classmethod
     def run_workers(cls, 
-                    args, 
+                    args,
+                    global_info, 
                     overwrite_policy=WhenAlreadyDone.ASK,
                     ):
         '''
@@ -326,6 +327,9 @@ class SpectrogramCreator:
 
         :param args: all arguments provided to argparse
         :type args: {str : Any}
+        :param global_info: interprocess communication
+            dict for reporting progress
+        :type global_info: multiprocessing.manager.dict
         :param overwrite_policy: what to do when a spectrogram already exists
         :type overwrite_policy: WhenAlreadyDone
         '''
@@ -347,10 +351,30 @@ class SpectrogramCreator:
         num_assignments = sum([len(assignments) for assignments in worker_assignments])
         print(f"Distributing {num_assignments} tasks across {num_workers} workers.")
         
+        # Fill the inter-process list with False.
+        # Will be used to logging jobs finishing 
+        # many times to the console (i.e. not used
+        # for functions other than reporting progress:
+        
+        for _i in range(num_workers):
+            # NOTE: reportedly one cannot just set the passed-in
+            #       list to [False]*num_workers, b/c 
+            #       a regular python list won't be
+            #       seen by other processes, even if
+            #       embedded in a multiprocessing.manager.list
+            #       instance:
+            global_info['jobs_status'].append(False)
+
+        # Number of full spectrograms to chop:
+        global_info['snips_to_do'] = len(Utils.find_in_dir_tree(args.input, 
+                                                               pattern="*.png")) 
+        
+        
         # For progress reports, get number of already
         # existing .png files in out directory:
-        already_present_imgs = len(Utils.find_in_dir_tree(args.outdir, pattern="*.png")) 
-        
+        global_info['snips_done'] = len(Utils.find_in_dir_tree(args.outdir, 
+                                                               pattern="*.png")) 
+
         # Assign each list of species to one worker:
         
         spectro_creation_jobs = []
@@ -372,36 +396,55 @@ class SpectrogramCreator:
             job.start()
 
         start_time = datetime.datetime.now()
-        jobs_done   = [False]*len(spectro_creation_jobs)
+        for _i in range(num_workers):
+            # NOTE: reportedly one cannot just set the passed-in
+            #       list to [False]*num_workers, b/c 
+            #       a regular python list won't be
+            #       seen by other processes, even if
+            #       embedded in a multiprocessing.manager.list
+            #       instance:
+            global_info['jobs_status'].append(False)
 
         # Keep checking on each job, until
         # all are done as indicated by all jobs_done
         # values being True, a.k.a valued 1:
         
-        while sum(jobs_done) < len(spectro_creation_jobs):
+        while sum(global_info['jobs_status']) < len(spectro_creation_jobs):
             for job_idx, job in enumerate(spectro_creation_jobs):
                 # Timeout 1 sec
                 job.join(1)
                 if job.exitcode is not None:
+                    if global_info['jobs_status'][job_idx]:
+                        # One of the processes has already
+                        # reported this job as done. Don't
+                        # report it again:
+                        continue
+
+                    # Let other processes know that this job
+                    # is done, and they don't need to report 
+                    # that fact: we'll do it here below:
+                    global_info['jobs_status'][job_idx] = True
+                    
                     # This job finished
                     res = "OK" if job.ret_val else "Error"
                     # New line after the single-line progress msgs:
                     print("")
                     print(f"Worker {job.name}/{num_workers} finished with: {res}")
-                    already_present_imgs = cls.sign_of_life(job, 
-                                                            already_present_imgs,
-                                                            args.outdir,
-                                                            start_time,
-                                                            force_rewrite=True)
-                    jobs_done[job_idx] = True
+                    global_info['snips_done'] = cls.sign_of_life(job, 
+                                                                 global_info['snips_done'],
+                                                                 args.outdir,
+                                                                 start_time,
+                                                                 force_rewrite=True)
                     # Check on next job:
                     continue
+                
                 # This job not finished yet.
                 # Time for sign of life?
-                already_present_imgs = cls.sign_of_life(job, 
-                                                        already_present_imgs,
-                                                        args.outdir, 
-                                                        start_time)
+                global_info['snips_done'] = cls.sign_of_life(job, 
+                                                             global_info['snips_done'],
+                                                             args.outdir,
+                                                             start_time,
+                                                             force_rewrite=True)
 
     #------------------------------------
     # sign_of_life 
@@ -437,7 +480,32 @@ class SpectrogramCreator:
     #-------------------
 
     @classmethod
-    def cull_rec_paths(cls, species_or_recorder_name, dst_dir, rec_paths, overwrite_policy=WhenAlreadyDone.ASK):
+    def cull_rec_paths(cls, 
+                       species_or_recorder_name, 
+                       dst_dir, 
+                       rec_paths, 
+                       overwrite_policy=WhenAlreadyDone.ASK):
+        '''
+        Check whether any of the audio recordings in rec_paths
+        already contain a corresponding spectro under subdirectories
+        of <dst_dir>/species_or_recorder_name. Collects the audio
+        files that do not already have a spectrogram, and returns
+        that TODO list. 
+
+        :param species_or_recorder_name: species name (e.g. 'sparrow', or
+            audio moth recorder name (e.g. 'AM03')
+        :type species_or_recorder_name: str
+        :param dst_dir: destination root for spectrograms
+        :type dst_dir: str
+        :param rec_paths: list of full paths to audio files
+             to be spectrogrammed
+        :type rec_paths: src
+        :param overwrite_policy: policy when spectro already present
+        :type overwrite_policy: WhenAlreadyDone
+        :rturn new list of audio recordings for those that do need
+            spectrograms to be created
+        :rtype WhenAlreadyDone
+        '''
         new_rec_paths = []
         for aud_fname in rec_paths:
             fname_stem = Path(aud_fname).stem
@@ -598,7 +666,23 @@ if __name__ == '__main__':
     
     
     else:
+        # Multiprocessing the chopping:
+        # For nice progress reports, create a shared
+        # dict quantities that each process will report
+        # on to the console as progress indications:
+        #    o Which job-completions have already been reported
+        #      to the console (a list)
+        #    o The most recent number of already created
+        #      output images 
+        # The dict will be initialized in run_workers,
+        # but all Python processes on the various cores
+        # will have read/write access:
+        manager = mp.Manager()
+        global_info = manager.dict()
+        global_info['jobs_status'] = manager.list()
+        
         SpectrogramCreator.run_workers(args,
+                                       global_info,
                                        overwrite_policy=overwrite_policy
                                        )
     sys.exit(0)
