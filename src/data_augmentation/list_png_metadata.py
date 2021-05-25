@@ -38,6 +38,7 @@ class PNGMetadataManipulator(object):
 
         if printout: 
             try:
+                print(f"Shape: {img.shape}")
                 if len(metadata) == 0:
                     print("No metadata")
                 for key, val in metadata.items():
