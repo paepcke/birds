@@ -9,11 +9,8 @@ import unittest
 from data_augmentation.utils import AugmentationGoals
 from data_augmentation.utils import Utils, Interval
 
-
 TEST_ALL = True
 #TEST_ALL = False
-
-
 
 class Test(unittest.TestCase):
 
@@ -87,6 +84,26 @@ class Test(unittest.TestCase):
         
         # Check existence of first file or dir:
         self.assertTrue(os.path.exists(abs_paths[0]))
+
+    #------------------------------------
+    # test_find_in_tree_gen
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_find_in_tree_gen(self):
+        
+        res = list(Utils.find_in_tree_gen(
+            self.spectros_dir, 
+            pattern='*.png'
+            ))
+        expected = [f"{self.spectros_dir}/AMADEC/Amaziliadecora1061880.png",
+                    f"{self.spectros_dir}/FORANA/SONG_XC609364-41759.png",
+                    f"{self.spectros_dir}/FORANA/SONG_XC253440-FORANA04.png",
+                    f"{self.spectros_dir}/FORANA/SONG_XC520628-passarochao.png",
+                    f"{self.spectros_dir}/FORANA/SONG_XC360575-BFAN.png",
+                    f"{self.spectros_dir}/FORANA/SONG_XC171241-Formicarius_analis.png"
+                    ]
+        self.assertSetEqual(set(res), set(expected))
 
     #------------------------------------
     # test_sample_compositions_by_species 
@@ -215,27 +232,7 @@ class Test(unittest.TestCase):
                 'freq_interval': {'low_val': 3944.33,'high_val': 9791.219}
                 }]
         self.assertEqual(dict_list, desired)
-        
 
-    #------------------------------------
-    # test_sample_compositions_by_species
-    #-------------------
-    
-    #@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    #def test_sample_compositions_by_species(self):
-    #    path = "../TAKAO_BIRD_WAV_feb20_augmented_samples-0.33n-0.33ts-0.33w-exc/spectrograms_augmented/"
-    #    df = Utils.sample_compositions_by_species(path, True)
-    #    print(df)
-    
-    #------------------------------------
-    # test_rec_len_compositions_by_species 
-    #-------------------
-
-    #@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    #def test_rec_len_compositions_by_species(self):
-    #    path = "../TAKAO_BIRD_WAV_feb20/"
-    #    df = Utils.recording_lengths_by_species(path)
-    #    print(df)
 # ---------------- Main --------------
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

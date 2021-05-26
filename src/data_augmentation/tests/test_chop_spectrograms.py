@@ -17,7 +17,6 @@ from data_augmentation.utils import WhenAlreadyDone, Utils
 sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-
 TEST_ALL = True
 #TEST_ALL = False
 
@@ -83,21 +82,27 @@ class TestChopSpectrograms(unittest.TestCase):
                 overwrite_policy=WhenAlreadyDone.OVERWRITE
                 )
             species = Path(self.spectro_file).parent.stem
-            outdir  = os.path.join(dir_nm, species) 
-            chopper.chop_one_spectro_file(self.spectro_file,
-                                          outdir,
-                                          skip_size=self.skip_size
-                                          )
+            outdir  = os.path.join(dir_nm, species)
+            true_snippet_time_width = chopper.chop_one_spectro_file(
+                self.spectro_file,
+                outdir,
+                skip_size=self.skip_size
+                )
             snippet_names = os.listdir(outdir)
-            #num_expected_snippets = 1 + int(self.duration // self.skip_size)
-            num_expected_snippets = int(self.duration // self.skip_size)
-            
+            num_expected_snippets = 0
+            cur_time = true_snippet_time_width
+            while cur_time < self.duration:
+                num_expected_snippets += 1
+                cur_time += self.skip_size
+
             self.assertEqual(len(snippet_names), num_expected_snippets)
             
             # Check embedded metadata of one snippet:
             
             _spectro, metadata = SoundProcessor.load_spectrogram(Utils.listdir_abs(outdir)[0])
-            self.assertEqual(round(float(metadata['duration(secs)'])), self.default_win_len)
+            self.assertEqual(round(float(metadata['duration(secs)']), 3),
+                             round(true_snippet_time_width, 3)
+                             )
             
     #------------------------------------
     # test_compute_worker_assignments_empty_dest 

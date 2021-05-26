@@ -285,9 +285,9 @@ class TensorBoardOpsTester(unittest.TestCase):
             the_transforms.append(transforms.Grayscale())
         the_transforms.append(transforms.ToTensor())
 
-        img_transform = transforms.Compose(the_transforms)
+        transform_img = transforms.Compose(the_transforms)
         img = Image.open(img_path)
-        img = img_transform(img).float()
+        img = transform_img(img).float()
 
         # A 10px frame around each img:
         #grid = make_grid(img, padding=10)

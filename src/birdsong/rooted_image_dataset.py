@@ -73,9 +73,6 @@ from birdsong.utils.utilities import FileUtils
 import numpy as np
 
 
-# Sorting such that numbers in strings
-# do the right thing: "foo2" after "foo10": 
-# Should actually be 1:3 but broke the system:
 SAMPLE_WIDTH  = 400 # pixels
 SAMPLE_HEIGHT = 400 # pixels
 

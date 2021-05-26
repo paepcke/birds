@@ -281,7 +281,7 @@ class SoundProcessor:
     #-------------------
 
     @classmethod
-    def create_spectrogram(cls, audio_sample, sr, outfile, n_mels=128, info=None):
+    def create_spectrogram(cls, audio_sample, sr, outfile, n_mels=256, info=None):
         '''
         Create and save a spectrogram from an audio 
         sample. Bandpass filter is applied, Mel scale is used,
@@ -687,15 +687,18 @@ class SoundProcessor:
     #-------------------
     
     @classmethod
-    def load_spectrogram(cls, fname):
+    def load_spectrogram(cls, fname, to_nparray=True):
         '''
         Loads a .png spectrogram file,
         and returns a numpy array
 
         :param fname: file to load
         :type fname: str
+        :param to_nparray: if True, convert torchvision. Image
+            instance to a numpy array, and return that as result
+        :type to_nparray: bool
         :returns tuple: the image and the .png file's possibly empty metadata dict
-        :rtype: (np.array, {str : str}
+        :rtype: ({np.array|torchvision.Image}, {str : str})
         :raises FileNotFoundError
         '''
         
@@ -709,8 +712,12 @@ class SoundProcessor:
             cls.log.info(f"No available info in .png file: {repr(e)}")
             info = None
         
-        img_arr = np.asarray(Image.open(fname))
-        return (img_arr, info)
+        img_obj = Image.open(fname)
+        if to_nparray:
+            res = np.asarray(img_obj)
+        else:
+            res = img_obj 
+        return (res, info)
 
     #------------------------------------
     # save_image 

@@ -47,16 +47,25 @@ class TestUtilities(unittest.TestCase):
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_construct_filename(self):
         
-        conf = NeuralNetConfig(self.config_path)
-        training_section = conf.Training
-        prop_dict = FileUtils.make_run_props_dict(training_section)
-        
-        fname = FileUtils.construct_filename(prop_dict, 
+        props = {'net_name': 'resnet18',
+                 'min_epochs': '3',
+                 'max_epochs': '6',
+                 'batch_size': '2',
+                 'num_folds': '3',
+                 'seed': '42',
+                 'kernel_size': '7',
+                 'sample_width': '400',
+                 'sample_height': '400',
+                 'lr': '0.01',
+                 'to_grayscale': 'False'
+        }
+
+        fname = FileUtils.construct_filename(props, 
                                              prefix='model', 
                                              suffix='.pth', 
                                              incl_date=False
                                              )
-        expected = 'model_net_resnet18_pre_na_frz_na_lr_0.01_opt_na_bs_2_ks_7_folds_3_gray_False_classes_na.pth' 
+        expected = 'model_net_resnet18_bs_2_folds_3_ks_7_lr_0.01_gray_False.pth'
 
         self.assertEqual(fname, expected)
 
@@ -165,7 +174,6 @@ class TestUtilities(unittest.TestCase):
         self.assertEqual(FileUtils.ellipsed_file_path('/Bblue/foobar/grayhound/bar'),
                          '/Bblue/.../grayhound/bar'
                          )
-
 
 
 # ---------------- Main ---------------

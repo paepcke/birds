@@ -260,7 +260,6 @@ class Utils:
             return []
         return species_names
 
-    
     #------------------------------------
     # find_total_recording_length
     #-------------------
@@ -299,6 +298,77 @@ class Utils:
         return count
 
     #------------------------------------
+    # find_in_tree_gen
+    #-------------------
+
+    @classmethod
+    def find_in_tree_gen(cls, root_dir, pattern='*', entry_type='file'):
+        '''
+        
+        Generator version of find_in_dir_tree(). For new
+        code use this method, which does not generate a
+        comprehensive list first.
+        
+        Similates part of the bash shell find command.
+        Only bash patters are supported, not Python regex.
+        For the find -type values, only file and directory 
+        are supported as types. Though abbreviations
+        'f' and 'd' are fine.
+        
+        Case of strings are case-normalized using os.path.normcase().
+        Change fnmatch to fnmatchcase() in the function to
+        perform case-sensitive searches.
+        
+        Examples:
+           
+           # Successively yield absolute file names in /tmp
+              for f in find_in_dir_tree('/tmp', entry_type='file')
+              
+           # Successively yield absolute paths to text files in /tmp
+              for f in find_in_dir_tree('/tmp', pattern="*.txt")
+              
+           # Successively yield absolute paths to directories in /tmp that start 
+           # with 'Kfold'
+              for d in find_in_dir_tree('/tmp', pattern="Kfold", entry_type='directory')
+              for d in find_in_dir_tree('/tmp', pattern="Kfold", entry_type='d')
+
+        :param root_dir: directory in which to start recursive descent
+        :type root_dir: str
+        :param pattern: pattern that file or dir must match
+        :type pattern: str
+        :param entry_type: whether file or directories are included
+        :type entry_type: str
+        :return: on first call, returns the generator, then, outputs
+            upon each call
+        :rtype: {Iterator | str}
+        '''
+
+        if pattern is None and entry_type is None:
+            raise ValueError("At least one of pattern and/or type must be non-None")
+        if entry_type not in [None, 'file', 'f', 'directory', 'd']:
+            raise ValueError(f"Entry type must be one of {[None, 'file', 'f', 'directory', 'd']}, not {entry_type}")
+    
+        if entry_type in [None, 'f', 'file']:
+            entry_type = 'file'
+        else:
+            entry_type = 'directory'
+    
+        # Walk through directory
+        for dName, _sdName, fList in os.walk(root_dir):
+    
+            if entry_type == 'directory' and fnmatch(dName, pattern):
+                yield dName
+                continue
+        
+            for fname in fList:
+                if entry_type == 'directory' and os.path.isdir(fname):
+                    yield fname
+                    continue
+                # Match search string?
+                if fnmatch(fname, pattern): 
+                    yield os.path.join(dName, fname)
+
+    #------------------------------------
     # find_in_dir_tree 
     #-------------------
 
@@ -327,8 +397,11 @@ class Utils:
            # with 'Kfold'
               find_in_dir_tree('/tmp', pattern="Kfold", entry_type='directory')
               find_in_dir_tree('/tmp', pattern="Kfold", entry_type='d')
-              
-        
+
+        See also: find_in_tree_gen() for a generator version of this method
+                  (Should have implemented this method here as a generator
+                   to start with, and only have one version...hindsight)
+
         :param root_dir: directory in which to start recursive descent
         :type root_dir: str
         :param pattern: pattern that file or dir must match

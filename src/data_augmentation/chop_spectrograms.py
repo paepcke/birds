@@ -25,7 +25,6 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 
-
 class SpectrogramChopper:
     '''
     Processes directories of .png files,
@@ -86,6 +85,11 @@ class SpectrogramChopper:
 
     # Common logger for all workers:
     log = LoggingService()
+    
+    MIN_SNIPPET_WIDTH=256
+    '''Minimum width of spectrogram snippets to satisfy the 
+       torchvision pretrained model minimum value of 
+       224 for both width and height'''
 
     #------------------------------------
     # Constructor 
@@ -252,7 +256,7 @@ class SpectrogramChopper:
                               window_len = 5, 
                               skip_size=2,
                               original_duration=None,
-                              overwrite_policy=WhenAlreadyDone.ASK,                               
+                              overwrite_policy=WhenAlreadyDone.ASK,
                               ):
         """
         Generates window_len second spectrogram snippets
@@ -309,17 +313,16 @@ class SpectrogramChopper:
         # appropriate snippet name to match the other
         # snippets: wall start time is zero:
         
-        if duration <= window_len:
-            snippet_path = cls.create_snippet_fpath(spectro_fname, 0, out_dir)
-            SoundProcessor.save_image(spectro_arr, snippet_path, metadata)
+        if duration < window_len:
+            # No partial snippets
             return
         # Note: Also have sample rate ('sr') and species ('label')
         # in the metadata, but don't need those here.
         
         _freq_bands, time_slices  = spectro_arr.shape 
-        # Time in franctions of second
+        # Time in fractions of second
         # per spectrogram column: 
-        twidth       = duration / time_slices
+        twidth = duration / time_slices
         
         # Integer of duration (which is in seconds):
         time_dur_int = int(np.ceil(duration))
@@ -329,7 +332,14 @@ class SpectrogramChopper:
         # length in *seconds*. Convert to spectrogram 
         # time slices (with rounding error):
 
-        samples_win_len     = int(window_len // twidth)
+        samples_win_len = int(window_len // twidth)
+        # Does samples_win_len satisfy the 
+        # minimum spectrogram snippet width for 
+        # pretrained models?
+        samples_win_len = max(cls.MIN_SNIPPET_WIDTH, samples_win_len)
+        
+        time_true_each_snippet = samples_win_len * twidth
+        
         samples_skip_size   = int(skip_size // twidth)
         samples_upper_bound = int(time_upper_bound // twidth)
 
@@ -357,15 +367,23 @@ class SpectrogramChopper:
                     if not Utils.user_confirm(f"Snippet {Path(snippet_path).stem} exists, overwrite?", default='N'):
                         continue
 
-            # Chop 
+            # Chop: All rows, columns from current
+            #       window start for window lenth samples:
             snippet_data = spectro_arr[:,samples_start_idx : samples_start_idx + samples_win_len]
+            _num_rows, num_cols = snippet_data.shape
+            if num_cols < samples_win_len:
+                # Leave that little spectrogram
+                # snippet leftover for Elijah:
+                break
+
             snippet_info = metadata.copy()
             # Add the 
             snippet_info['duration(secs)']   = samples_win_len * twidth
             snippet_info['start_time(secs)'] = wall_start_time
             snippet_info['end_time(secs)'] = wall_start_time + (samples_win_len * twidth)
             SoundProcessor.save_image(snippet_data, snippet_path, snippet_info)
-
+        return time_true_each_snippet
+    
     #------------------------------------
     # create_dest_dirs 
     #-------------------
