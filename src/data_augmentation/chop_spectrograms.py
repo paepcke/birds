@@ -235,6 +235,7 @@ class SpectrogramChopper:
             try:
                 cls.chop_one_spectro_file(full_spectro_path,
                                           os.path.join(out_dir, species_name),
+                                          species_name,
                                           overwrite_policy=overwrite_policy
                                           )
             except Exception as e:
@@ -252,7 +253,8 @@ class SpectrogramChopper:
     @classmethod
     def chop_one_spectro_file(cls, 
                               spectro_fname, 
-                              out_dir, 
+                              out_dir,
+                              species_name, 
                               window_len = 5, 
                               skip_size=2,
                               original_duration=None,
@@ -282,14 +284,18 @@ class SpectrogramChopper:
     
         :param spectro_fname: full path to spectrogram file to chop
         :type spectro_fname: str
+        :param out_dir: root directory under which spectrogram
+            snippets will be saved (in different subdirs)
+        :type out_dir: str
+        :param species_name: name of species to embed in the 
+            metadata of this snippet, and use for determining
+            subdirectory where to place the snippet
+        :type species_name: str
         :param window_len: number of seconds to be covered by each snippet
         :type window_len: int
         :param skip_size: number of seconds to shift right in 
             time for the start of each chop
         :type skip_size: int
-        :param out_dir: root directory under which spectrogram
-            snippets will be saved (in different subdirs)
-        :type out_dir: str
         :param original_duration:
         :raise ValueError: if neither embedded duration metadata is found
             in the given file, nor original_duration is provided
@@ -354,8 +360,8 @@ class SpectrogramChopper:
             wall_start_time   = samples_start_idx * twidth
             # Create a name for the snippet file: 
             snippet_path = cls.create_snippet_fpath(spectro_fname,
-                                                     round(wall_start_time), 
-                                                     out_dir)
+                                                    round(wall_start_time), 
+                                                    out_dir)
             
             spectro_done = os.path.exists(snippet_path)
 
@@ -380,7 +386,8 @@ class SpectrogramChopper:
             # Add the 
             snippet_info['duration(secs)']   = samples_win_len * twidth
             snippet_info['start_time(secs)'] = wall_start_time
-            snippet_info['end_time(secs)'] = wall_start_time + (samples_win_len * twidth)
+            snippet_info['end_time(secs)']   = wall_start_time + (samples_win_len * twidth)
+            snippet_info['species']          = species_name
             SoundProcessor.save_image(snippet_data, snippet_path, snippet_info)
         return time_true_each_snippet
     
@@ -443,7 +450,7 @@ class SpectrogramChopper:
         :param origin_nm: name of full length file; either full path or
             just the file name are fine
         :type origin_nm: str
-        :param wall_start_time: snipet start time from beginning
+        :param wall_start_time: snippet start time from beginning
             of full length spectrogram
         :type wall_start_time: int
         :param out_dir: destination directory

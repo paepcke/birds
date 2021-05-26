@@ -17,8 +17,8 @@ from data_augmentation.utils import WhenAlreadyDone, Utils
 sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-TEST_ALL = True
-#TEST_ALL = False
+#*********TEST_ALL = True
+TEST_ALL = False
 
 # --------------------- Arguments Class -----------------
 
@@ -70,7 +70,7 @@ class TestChopSpectrograms(unittest.TestCase):
     # test_chop_one_spectrogram_file
     #-------------------
 
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #*******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_chop_one_spectrogram_file(self):
         
         with tempfile.TemporaryDirectory(dir='/tmp',
@@ -86,6 +86,7 @@ class TestChopSpectrograms(unittest.TestCase):
             true_snippet_time_width = chopper.chop_one_spectro_file(
                 self.spectro_file,
                 outdir,
+                'DOVE',
                 skip_size=self.skip_size
                 )
             snippet_names = os.listdir(outdir)
@@ -103,6 +104,7 @@ class TestChopSpectrograms(unittest.TestCase):
             self.assertEqual(round(float(metadata['duration(secs)']), 3),
                              round(true_snippet_time_width, 3)
                              )
+            self.assertEqual(metadata['species'], 'DOVE')
             
     #------------------------------------
     # test_compute_worker_assignments_empty_dest 
