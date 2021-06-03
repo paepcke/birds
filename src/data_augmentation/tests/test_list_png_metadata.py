@@ -3,7 +3,6 @@ Created on May 31, 2021
 
 @author: paepcke
 '''
-from _curses import meta
 import os
 from pathlib import Path
 import shutil
@@ -56,6 +55,28 @@ class PNGMetadataTester(unittest.TestCase):
         shutil.rmtree(self.tmp_dir_obj.name)
 
 # --------------------- Tests ---------------
+
+    #------------------------------------
+    # test_extract_metadata
+    #-------------------
+
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_extract_metadata(self):
+        
+        # Individual file:
+        fname = os.path.join(self.tmp_dir_obj.name, 'dove.png')
+        metadata = PNGMetadataManipulator.extract_metadata(fname)
+        self.assertDictEqual(metadata, self.initial_dove_metadata)
+        
+        # Directory:
+        metadata_list = PNGMetadataManipulator.extract_metadata(self.tmp_dir_obj.name)
+        self.assertEqual(len(metadata_list), 2)
+        for md in metadata_list:
+            self.assertEqual(type(md), dict)
+            
+        for metadata_dict in metadata_list:
+            if metadata_dict != {}:
+                self.assertDictEqual(metadata, self.initial_dove_metadata)
 
     #------------------------------------
     # test_metadata_list

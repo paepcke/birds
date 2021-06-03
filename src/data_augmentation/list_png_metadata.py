@@ -9,6 +9,7 @@ import argparse
 import os
 from pathlib import Path
 import sys
+import pprint
 
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import Utils
@@ -21,7 +22,16 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 class PNGMetadataManipulator(object):
     '''
-    classdocs
+    View, set, or clear the metadata contained in
+    .png files. Capabilities:
+    
+        o for each .png file, return metadata to 
+          caller, plus optionally print metadata to
+          stdout and optionally show the .png
+        o operate on individual files, or entire
+          directories
+        o retrieve either (list of) metadata, or 
+          obtain a generator yielding tuples (fname, metadata)
     '''
     
     #------------------------------------
@@ -29,33 +39,80 @@ class PNGMetadataManipulator(object):
     #-------------------
 
     @classmethod
-    def extract_metadata(cls, png_fname, show=False, printout=False):
+    def extract_metadata(cls, png_src, show=False, printout=False):
+        '''
+        Given a .png file path, or a directory:
+        
+            o extract metadata
+            o print the metadata if requested (printout == True)
+            o show the .png file if requested (show == True)
+            o return: if png_src is a dir: a list of metadata dicts
+                      else just one metadata dict
+        
+        If png_src is a directory, all .png files below the
+        directory will be found recursively, and printed/shown/returned
+        as requested. 
+        
+        :param png_src: .png file or directory tree root containing 
+            .png file
+        :type png_src: src
+        :param show: whether or not to display the .png file
+        :type show: bool
+        :param printout: whether or not to print metadata
+            to stdout
+        :type printout: bool
+        :return: list of metadata dicts, if png_src is a dir, 
+            else one metadata dict
+        :rtype {{src : src} | [{src : src}]}
+        '''
         if show:
             # To save startup time, only load
             # matplotlib if needed:
             import matplotlib.pyplot as plt
-        
-        img, metadata = SoundProcessor.load_spectrogram(png_fname)
 
-        if printout: 
-            try:
-                print(f"Shape: {img.shape}")
-                if len(metadata) == 0:
-                    print("No metadata")
-                for key, val in metadata.items():
-                    print(f"{key} : {val}")
-            except Exception as _e:
-                print("No metadata available")
+        if os.path.isfile(png_src):
+            img, metadata = SoundProcessor.load_spectrogram(png_src)
+            snip_path_md_gen = iter([(png_src, metadata)])
+        else:
+            snip_path_md_gen = cls.metadata_list(png_src)
+            
+        md_list = []
+        for snippet_path, metadata in snip_path_md_gen:
+            md_list.append(metadata)
+    
+            if printout: 
+                try:
+                    print(f"{Path(snippet_path).name}---", end='')
+                    # Very inefficient: if using metadata_list()
+                    # above, we lost the img array. Could fix,
+                    # but not worth it for now:
+                    
+                    try:
+                        print(f"Shape: {img.shape}")
+                    except UnboundLocalError:
+                        img, metadata = SoundProcessor.load_spectrogram(snippet_path)
+                        print(f"Shape: {img.shape}")
 
-        if show:
-            fig = plt.figure()
-            ax = fig.add_subplot(1,1,1)
-            ax.set_title(os.path.basename(png_fname))
-            ax.set_axis_off()
-            plt.imshow(img, cmap='gray')
-            plt.show()
+                    if len(metadata) == 0:
+                        print("No metadata")
+                    pprint.pprint(metadata, 
+                                  sort_dicts=False,
+                                  indent=4)
 
-        return metadata
+                    #for key, val in metadata.items():
+                    #    print(f"{key} : {val}")
+                except Exception as _e:
+                    print("No metadata available")
+    
+            if show:
+                fig = plt.figure()
+                ax = fig.add_subplot(1,1,1)
+                ax.set_title(os.path.basename(snippet_path))
+                ax.set_axis_off()
+                plt.imshow(img, cmap='gray')
+                plt.show()
+
+        return md_list[0] if os.path.isfile(png_src) else md_list
         
     #------------------------------------
     # set_metadata
@@ -122,15 +179,15 @@ class PNGMetadataManipulator(object):
     #-------------------
     
     @classmethod
-    def metadata_list(cls, png_dir):
+    def metadata_list(cls, png_src):
         '''
         Generator that takes the path to a
         directory tree containing .png files.
         Walks the tree, and for each .png file
         returns a tuple (<absolute-file-path, <metadata-dict>) 
 
-        :param png_dir: root of directorty tree
-        :type png_dir: str
+        :param png_src: root of directorty tree
+        :type png_src: str
         :returns successively with each call: a tuple
             of file path and metadata
         :rtype (str : {str : str}
@@ -138,9 +195,14 @@ class PNGMetadataManipulator(object):
             exist, or is not a directory
         '''
         
-        if not os.path.isdir(png_dir):
-            raise FileNotFoundError(f"Must provide an existing directory of png files, not {png_dir}")
-        for root, _dirs, files in os.walk(png_dir):
+        if not os.path.isdir(png_src):
+            raise FileNotFoundError(f"Must provide an existing directory of png files, not {png_src}")
+        if os.path.isfile(png_src):
+            metadata = cls.extract_metadata(png_src)
+            yield (png_src, metadata)
+            return
+            
+        for root, _dirs, files in os.walk(png_src):
             for fname in files:
                 if Path(fname).suffix != '.png':
                     continue 
@@ -157,7 +219,7 @@ if __name__ == '__main__':
                                      description="Show PNG metadata, and image"
                                      )
 
-    parser.add_argument('fname',
+    parser.add_argument('snippet_src',
                         help='fully qualified path to .png file'
                         )
     parser.add_argument('-s', '--show',
@@ -207,22 +269,30 @@ if __name__ == '__main__':
     # Sanity Checks:
     
     # File exists?
-    if not os.path.exists(args.fname):
-        print(f"File {args.fname} not found")
+    if not os.path.exists(args.snippet_src):
+        print(f"File {args.snippet_src} not found")
         sys.exit(1)
-
+        
     setting = args.set_info is not None and len(args.set_info) > 0
     adding  = args.add_info is not None and len(args.add_info) > 0
     
+    # Is snippet_src a directory for which we are
+    # to list all the metadata?
+    if os.path.isdir(args.snippet_src):
+        # Cannot also have set_info or add_info
+        if setting or adding:
+            print("Cannot set or add info which snippet source is a directory")
+            sys.exit(1)
+
     if args.printout and not setting and not adding:
         # Just want to see metadata:
-        PNGMetadataManipulator.extract_metadata(args.fname, show=args.show, printout=args.printout)
+        PNGMetadataManipulator.extract_metadata(args.snippet_src, show=args.show, printout=args.printout)
         sys.exit(0)
 
     # Enforce --set_info and --add_info mutually exclusive:
     if adding and setting:
         print("Cannot simultaneously set metadata and add to existing metadata")
-        sys.exit(1) 
+        sys.exit(1)
     
     # For convenience:
     info_to_add = args.add_info
@@ -246,14 +316,14 @@ if __name__ == '__main__':
 
     if args.printout:
         print("Metadata before:")
-        PNGMetadataManipulator.extract_metadata(args.fname, show=args.show, printout=args.printout)
+        PNGMetadataManipulator.extract_metadata(args.snippet_src, show=args.show, printout=args.printout)
         print("")
 
     # Setting info_to_set:
     if args.outfile is None:
         # Overwrite the input file,
         # i.e. add metadata in place:
-        outfile = args.fname
+        outfile = args.snippet_src
     else:
         outfile = args.outfile
 
@@ -271,14 +341,14 @@ if __name__ == '__main__':
         info_dict[cli_dict_spec[idx]] = cli_dict_spec[idx+1]
 
     if setting:
-        PNGMetadataManipulator.set_metadata(args.fname, info_dict, outfile, setting=True)
+        PNGMetadataManipulator.set_metadata(args.snippet_src, info_dict, outfile, setting=True)
     else:
         # Just adding to metadata
-        PNGMetadataManipulator.set_metadata(args.fname, info_dict, outfile, setting=False)
+        PNGMetadataManipulator.set_metadata(args.snippet_src, info_dict, outfile, setting=False)
 
     # If printing to console, show metadata 
     # after this update:
     
     if args.printout:
         print("Metadata after:")
-        PNGMetadataManipulator.extract_metadata(args.fname, show=False, printout=True)
+        PNGMetadataManipulator.extract_metadata(args.snippet_src, show=False, printout=True)
