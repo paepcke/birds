@@ -7,6 +7,7 @@ Created on Apr 29, 2021
 
 import argparse
 import os
+from pathlib import Path
 import sys
 
 from data_augmentation.sound_processor import SoundProcessor
@@ -28,7 +29,7 @@ class PNGMetadataManipulator(object):
     #-------------------
 
     @classmethod
-    def extract_metadata(self, png_fname, show=False, printout=False):
+    def extract_metadata(cls, png_fname, show=False, printout=False):
         if show:
             # To save startup time, only load
             # matplotlib if needed:
@@ -61,10 +62,10 @@ class PNGMetadataManipulator(object):
     #-------------------
 
     @classmethod
-    def set_metadata(self, png_fpath, info_to_set, outfile=None, setting=False):
+    def set_metadata(cls, png_fpath, info_to_set, outfile=None, setting=False):
         '''
         Modify metadata in a .png file. Distinguishes between
-        replacing existing metadata (set == True), and adding
+        replacing existing metadata (setting == True), and adding
         to the existing info (set == False). Either way, takes
         a dict of metadata in info_to_set. 
         
@@ -97,6 +98,56 @@ class PNGMetadataManipulator(object):
             metadata.update(info_to_set)
             
         SoundProcessor.save_image(img, outfile, metadata)
+
+    #------------------------------------
+    # clear_metadata
+    #-------------------
+
+    @classmethod
+    def clear_metadata(cls, png_fpath, outfile=None):
+        '''
+        Clear all metadata from given png file. If outfile
+        is none, clears in place.
+        
+        :param png_fpath: png file whose metadata to clear
+        :type png_fpath: src
+        :param outfile: if given, copy of png_fpath file with
+            metadata cleared
+        :type outfile: {None | str}
+        '''
+        cls.set_metadata(png_fpath, {}, outfile, setting=True)
+
+    #------------------------------------
+    # metadata_list
+    #-------------------
+    
+    @classmethod
+    def metadata_list(cls, png_dir):
+        '''
+        Generator that takes the path to a
+        directory tree containing .png files.
+        Walks the tree, and for each .png file
+        returns a tuple (<absolute-file-path, <metadata-dict>) 
+
+        :param png_dir: root of directorty tree
+        :type png_dir: str
+        :returns successively with each call: a tuple
+            of file path and metadata
+        :rtype (str : {str : str}
+        :raise FileNotFoundError if given dir does not
+            exist, or is not a directory
+        '''
+        
+        if not os.path.isdir(png_dir):
+            raise FileNotFoundError(f"Must provide an existing directory of png files, not {png_dir}")
+        for root, _dirs, files in os.walk(png_dir):
+            for fname in files:
+                if Path(fname).suffix != '.png':
+                    continue 
+                fpath = os.path.join(root, fname)
+                metadata = cls.extract_metadata(fpath)
+                yield (fpath, metadata)
+
 
 # ------------------------ Main ------------
 if __name__ == '__main__':

@@ -85,6 +85,9 @@ class Interval(dict):
         super().__init__()
         self['low_val']  = low_val
         self['high_val'] = high_val
+        
+    def contains(self, num):
+        return num >= self['low_val'] and num < self['high_val']
 
 #------------------------------ Utility  -------------
 

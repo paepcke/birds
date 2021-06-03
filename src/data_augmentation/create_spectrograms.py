@@ -126,8 +126,9 @@ class SpectrogramCreator:
             full_audio_path = os.path.join(in_dir, species_name, fname)
             try:
                 cls.create_one_spectrogram(full_audio_path,
-                                            os.path.join(out_dir, species_name),
-                                            overwrite_policy=overwrite_policy
+                                           os.path.join(out_dir, species_name),
+                                           overwrite_policy=overwrite_policy,
+                                           identifier=species_name
                                            )
             except Exception as e:
                 return_bool.value = False
@@ -549,7 +550,7 @@ class SpectrogramCreator:
         
             o 'sr'          : <sample rate>
             o 'duration'    : <number of seconds>
-            o 'identifier'  : <species name as per arg to this method>
+            o 'identifier'  : <any identifier as per arg to this method>
         
         If the destination file already exists, the 
         overwrite_policy is followed: ASK, OVERWRITE, or
