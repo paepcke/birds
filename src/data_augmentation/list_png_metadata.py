@@ -210,6 +210,123 @@ class PNGMetadataManipulator(object):
                 metadata = cls.extract_metadata(fpath)
                 yield (fpath, metadata)
 
+    #------------------------------------
+    # species_distribution
+    #-------------------
+    
+    @classmethod
+    def snippet_distribution(cls, png_root_dir):
+        '''
+        Given a root directory with subdirectories that
+        contain .png files, return a dict mapping 
+        species to number of samples for that species.
+        
+        PNG files contained in png_root_dir itself are
+        considered in species the name of png_root_dir.
+        
+        Assumption: the name of each subdirectory is 
+            the name of a species.
+
+        :param png_root_dir: root of directories that contain
+            png snippets
+        :type png_root_dir: src
+        :return: mapping of species name to number of snippets
+        :rtype: {str : int}
+        '''
+        snip_distrib = {}
+        for root, _dirs, files in os.walk(png_root_dir):
+            png_files = list(filter(lambda fname: fname.endswith('.png'), files))
+            if len(png_files) > 0:
+                # Species name is the current dir:
+                snip_distrib[Path(root).name] = len(png_files)            
+        return snip_distrib
+
+    #------------------------------------
+    # handle_metadata_modification 
+    #-------------------
+    
+    @classmethod
+    def handle_metadata_modification(cls, args):
+
+        setting = args.set_info is not None and len(args.set_info) > 0
+        adding  = args.add_info is not None and len(args.add_info) > 0
+        
+        # Is snippet_src a directory for which we are
+        # to list all the metadata?
+        if os.path.isdir(args.snippet_src):
+            # Cannot also have set_info or add_info
+            if setting or adding:
+                print("Cannot set or add info which snippet source is a directory")
+                sys.exit(1)
+    
+        if args.printout and not setting and not adding:
+            # Just want to see metadata:
+            PNGMetadataManipulator.extract_metadata(args.snippet_src, show=args.show, printout=args.printout)
+            sys.exit(0)
+    
+        # Enforce --set_info and --add_info mutually exclusive:
+        if adding and setting:
+            print("Cannot simultaneously set metadata and add to existing metadata")
+            sys.exit(1)
+        
+        # For convenience:
+        info_to_add = args.add_info
+        info_to_set = args.set_info
+        
+        # Enforce args to set_info or add_info being 
+        # equal length, i.e. having 'names' and 'values'
+        # as pairs:
+        if (setting and len(info_to_set) % 2 != 0) \
+           or (adding and len(info_to_add) % 2 != 0):
+            print("Info entries must be pairs of keys and values; length is odd numbered here")
+            sys.exit(1)
+    
+        # Safety precaution just for setting
+        # (and thereby overwriting) metadata:
+        
+        if setting and not args.force:
+            if not Utils.user_confirm("Really want to overwrite png file metadata? (N/y)", default='n'):
+                print("Canceling")
+                sys.exit(0)
+    
+        if args.printout:
+            print("Metadata before:")
+            PNGMetadataManipulator.extract_metadata(args.snippet_src, show=args.show, printout=args.printout)
+            print("")
+    
+        # Setting info_to_set:
+        if args.outfile is None:
+            # Overwrite the input file,
+            # i.e. add metadata in place:
+            outfile = args.snippet_src
+        else:
+            outfile = args.outfile
+    
+        # Key/val pairs for setting metadata 
+        # came in as a sequence of keys and values
+        # on the cmd line. Turn that sequence
+        # into a dict, as needed by set_metadata: 
+        info_dict = {}
+        # Grab the CLI metadata modification info 
+        # (i.e. key/vals to set or key/vals to add):
+        cli_dict_spec = info_to_set if info_to_set is not None else info_to_add
+    
+        # Grab pairs from the CLI (each being a key and a val):
+        for idx in range(0, len(cli_dict_spec)-1, 2):
+            info_dict[cli_dict_spec[idx]] = cli_dict_spec[idx+1]
+    
+        if setting:
+            PNGMetadataManipulator.set_metadata(args.snippet_src, info_dict, outfile, setting=True)
+        else:
+            # Just adding to metadata
+            PNGMetadataManipulator.set_metadata(args.snippet_src, info_dict, outfile, setting=False)
+    
+        # If printing to console, show metadata 
+        # after this update:
+        
+        if args.printout:
+            print("Metadata after:")
+            PNGMetadataManipulator.extract_metadata(args.snippet_src, show=False, printout=True)
 
 # ------------------------ Main ------------
 if __name__ == '__main__':
@@ -223,13 +340,20 @@ if __name__ == '__main__':
                         help='fully qualified path to .png file'
                         )
     parser.add_argument('-s', '--show',
-                        help='show png image in addition to listing the metadata',
-                        action='store_true')
+                        help='show png image in addition to listing the metadata; default: False',
+                        action='store_true',
+                        default=False)
 
     parser.add_argument('-p', '--printout',
-                        help='if set, print metadate to console; default: True',
+                        help='if set, print metadate to console; default: False',
                         action='store_true',
-                        default=True
+                        default=False
+                        )
+
+    parser.add_argument('-d', '--distribution',
+                        help='if set, print how many snippets are in each species subdir',
+                        action='store_true',
+                        default=False
                         )
 
     parser.add_argument('--set_info',
@@ -259,96 +383,35 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
 
-    # All the checks below should be simplified.
-    # Summary:
-    #    o If args say to just show metadata, do that and quit
-    #    o When asked to modify metadata in a .png file, 
-    #         distinguish between *adding* to existing, vs.
-    #         *replacing*. Provide warning if replacing
 
     # Sanity Checks:
+
+    # Check for nothing having been requested:
+    if not (args.printout or
+            args.distribution or
+            args.set_info or
+            args.add_info
+            ):
+        print("Nothing request; set one or more of the parameters:")
+        parser.print_help()
     
-    # File exists?
+    # File/dir exists?
     if not os.path.exists(args.snippet_src):
         print(f"File {args.snippet_src} not found")
         sys.exit(1)
         
+    # If printout of snippet distribution by species
+    # is requested, do that now:
+    
+    if args.distribution:
+        distrib_dict = PNGMetadataManipulator.snippet_distribution(args.snippet_src)
+        pprint.pprint(distrib_dict)
+        
     setting = args.set_info is not None and len(args.set_info) > 0
     adding  = args.add_info is not None and len(args.add_info) > 0
-    
-    # Is snippet_src a directory for which we are
-    # to list all the metadata?
-    if os.path.isdir(args.snippet_src):
-        # Cannot also have set_info or add_info
-        if setting or adding:
-            print("Cannot set or add info which snippet source is a directory")
-            sys.exit(1)
-
-    if args.printout and not setting and not adding:
-        # Just want to see metadata:
-        PNGMetadataManipulator.extract_metadata(args.snippet_src, show=args.show, printout=args.printout)
-        sys.exit(0)
-
-    # Enforce --set_info and --add_info mutually exclusive:
-    if adding and setting:
-        print("Cannot simultaneously set metadata and add to existing metadata")
-        sys.exit(1)
-    
-    # For convenience:
-    info_to_add = args.add_info
-    info_to_set = args.set_info
-    
-    # Enforce args to set_info or add_info being 
-    # equal length, i.e. having 'names' and 'values'
-    # as pairs:
-    if (setting and len(info_to_set) % 2 != 0) \
-       or (adding and len(info_to_add) % 2 != 0):
-        print("Info entries must be pairs of keys and values; length is odd numbered here")
-        sys.exit(1)
-
-    # Safety precaution just for setting
-    # (and thereby overwriting) metadata:
-    
-    if setting and not args.force:
-        if not Utils.user_confirm("Really want to overwrite png file metadata? (N/y)", default='n'):
-            print("Canceling")
-            sys.exit(0)
-
-    if args.printout:
-        print("Metadata before:")
-        PNGMetadataManipulator.extract_metadata(args.snippet_src, show=args.show, printout=args.printout)
-        print("")
-
-    # Setting info_to_set:
-    if args.outfile is None:
-        # Overwrite the input file,
-        # i.e. add metadata in place:
-        outfile = args.snippet_src
-    else:
-        outfile = args.outfile
-
-    # Key/val pairs for setting metadata 
-    # came in as a sequence of keys and values
-    # on the cmd line. Turn that sequence
-    # into a dict, as needed by set_metadata: 
-    info_dict = {}
-    # Grab the CLI metadata modification info 
-    # (i.e. key/vals to set or key/vals to add):
-    cli_dict_spec = info_to_set if info_to_set is not None else info_to_add
-
-    # Grab pairs from the CLI (each being a key and a val):
-    for idx in range(0, len(cli_dict_spec)-1, 2):
-        info_dict[cli_dict_spec[idx]] = cli_dict_spec[idx+1]
-
-    if setting:
-        PNGMetadataManipulator.set_metadata(args.snippet_src, info_dict, outfile, setting=True)
-    else:
-        # Just adding to metadata
-        PNGMetadataManipulator.set_metadata(args.snippet_src, info_dict, outfile, setting=False)
-
-    # If printing to console, show metadata 
-    # after this update:
-    
-    if args.printout:
-        print("Metadata after:")
+    if setting or adding:
+        # Add or modify metadata. If --printout
+        # is set, this method will do the printing: 
+        PNGMetadataManipulator.handle_metadata_modification(args)
+    elif args.printout:
         PNGMetadataManipulator.extract_metadata(args.snippet_src, show=False, printout=True)
