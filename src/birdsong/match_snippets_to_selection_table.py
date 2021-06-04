@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 '''
 Created on May 13, 2021
 
@@ -37,18 +38,32 @@ class SnippetSelectionTableMapper:
     and end time.
     
     The end goal is for each available selection table
-    to gather the snippets from the field recording that
-    the table covers. Each snippet's embedded metadata is
-    enriched with information from the table. 
-        
-    In case of a match, the table row's species determination S is 
-    noted. For snippets that do not match any selection table
-    row, S is set to be 'noise'.
+    to 'find' and augment the metadata of the snippets 
+    from the field recording that the table covers. Each 
+    snippet's embedded metadata is enriched with information 
+    from the table, such as frequency, species, and more.
     
-    In addition, snippets that do match receive two additional
-    key/val pairs: freq_low and freq_high. These values are
-    taken from the matching selection table row: 
-
+    In the overall workflow, this module fits as follows:
+    
+         o Field recording R is taped in the field
+         o R is loaded into Raven, or other sound labeling
+              software. A Selection Table is manually created
+              and exported. Each row contains start and end
+              times of an observation, plus frequencies, etc.
+         o Table and a spectrogram S_R of recording R are exported
+         o S_R is chopped into 6-sec 'snippet' images
+         
+         o Using this SnippetSelectionTableMapper class,
+           each snippet's time interval is matched to the
+           time intervals in the selection table rows. When
+           a snippet's interval overlaps a row's observation interval,
+           a match has occurred. If no row is found that matches
+           a snippet, the snippet is assumed to contain environment
+           noise.
+           
+           A matched snippet's embedded metadata is augmented
+           with information from the matching row (see below).
+    
     Raven selection tables for birds are csv files:
 
         Selection           row number
@@ -61,13 +76,15 @@ class SnippetSelectionTableMapper:
         species             four-letter species name
         type                {song, call, call-1, call-trill}
         number              not used
-        mix                 comma separated list of other audible species 
+        mix                 comma separated list of other audible species
+        
+    A non-empty mix column indicates that multiple observations
+    are detected at the same time in the recording. In this case,
+    a copy of a matching snippet is made for each element in the
+    mix list. Each snippet replica's 'species' metadata field is
+    set to one of the mix members.
 
-    When a row that matches a snippet contains species in the 'mix' column,
-    copies of the snippets are made, and each is labeled with
-    one of those species.
-    
-    Snippet metadata is expected to look like this:
+    At the outset, snippet metadata is expected to look like this:
     
 		 sr : 22050
 		 duration : 115.0
@@ -890,8 +907,12 @@ if __name__ == '__main__':
 
     parser.add_argument('snippets_path',
                         help='Path directory of snippets with embedded time information')
-
+    parser.add_argument('outdir',
+                        help='Path directory where modified snippets will be placed (created if not exists)')
 
     args = parser.parse_args()
 
-    matcher = SnippetSelectionTableMapper(args.selection_table_loc, args.snippets_path)
+    matcher = SnippetSelectionTableMapper(args.selection_table_loc, 
+                                          args.snippets_path,
+                                          args.outdir
+                                          )
