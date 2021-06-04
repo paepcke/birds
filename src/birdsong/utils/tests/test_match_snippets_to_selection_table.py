@@ -3,6 +3,8 @@ Created on May 13, 2021
 
 @author: paepcke
 '''
+from _collections import OrderedDict
+from _collections_abc import Iterable
 import os
 from pathlib import Path
 import shutil
@@ -11,14 +13,14 @@ import tempfile
 import unittest
 import warnings
 
-from birdsong.utils.match_snippets_to_selection_table import SnippetSelectionTableMapper
 from birdsong.utils.match_snippets_to_selection_table import SelTblSnipsAssoc
+from birdsong.utils.match_snippets_to_selection_table import SnippetSelectionTableMapper
 from data_augmentation.list_png_metadata import PNGMetadataManipulator
 from data_augmentation.utils import Utils, Interval
 
 
-#*****8TEST_ALL = True
-TEST_ALL = False
+TEST_ALL = True
+#TEST_ALL = False
 
 '''
 The following are the correct results for matching test 28 test snippets at 
@@ -37,104 +39,202 @@ be in subdirectories of the temporary directory created
 in test_whole_think(). Those subdirs will be named after
 the species.
 '''
-snippet_matching_truth = {
-    'AM01_20190711_170000_sw-start0_wcpa' : {   'end': 5.944272445820434,
-                                                'species': 'wcpa',
-                                                'start': 0.0},
-    'AM01_20190711_170000_sw-start10'     : {   'end': 43.88544891640867,
-                                                'species': 'noise',
-                                                'start': 9.98452012383901},
-    'AM01_20190711_170000_sw-start12'     : {   'end': 43.88544891640867,
-                                                'species': 'noise',
-                                                'start': 11.981424148606811},
-    'AM01_20190711_170000_sw-start14'     : {   'end': 53.869969040247675,
-                                                'species': 'noise',
-                                                'start': 13.978328173374614},
-    'AM01_20190711_170000_sw-start16'     : {   'end': 53.869969040247675,
-                                                'species': 'noise',
-                                                'start': 15.975232198142416},
-    'AM01_20190711_170000_sw-start18'     : {   'end': 43.88544891640867,
-                                                'species': 'noise',
-                                                'start': 17.97213622291022},
-    'AM01_20190711_170000_sw-start20'     : {   'end': 25.913312693498455,
-                                                'species': 'noise',
-                                                'start': 19.96904024767802},
-    'AM01_20190711_170000_sw-start22_shwc': {  'end': 27.910216718266255,
-                                               'species': 'shwc',
-                                               'start': 21.96594427244582},
-    'AM01_20190711_170000_sw-start24_shwc': {  'end': 29.907120743034056,
-                                               'species': 'shwc',
-                                               'start': 23.962848297213622},
-    'AM01_20190711_170000_sw-start26_shwc': {  'end': 31.90402476780186,
-                                               'species': 'shwc',
-                                               'start': 25.959752321981426},
-    'AM01_20190711_170000_sw-start26_unk1': {  'end': 31.90402476780186,
-                                               'species': 'unk1',
-                                               'start': 25.959752321981426},
-    'AM01_20190711_170000_sw-start28'     : {  'end': 33.90092879256966,
-                                               'species': 'shwc',
-                                               'start': 27.956656346749227},
-    'AM01_20190711_170000_sw-start28_unk1': {  'end': 33.90092879256966,
-                                               'species': 'unk1',
-                                               'start': 27.956656346749227},
-    'AM01_20190711_170000_sw-start2_wcpa' : {  'end': 7.9411764705882355,
-                                               'species': 'wcpa',
-                                               'start': 1.996904024767802},
-    'AM01_20190711_170000_sw-start30_shwc': {  'end': 35.89783281733746,
-                                               'species': 'shwc',
-                                               'start': 29.953560371517028},
-    'AM01_20190711_170000_sw-start30_unk1': {  'end': 35.89783281733746,
-                                               'species': 'unk1',
-                                               'start': 29.953560371517028},
-    'AM01_20190711_170000_sw-start30_wcpa': {  'end': 35.89783281733746,
-                                               'species': 'wcpa',
-                                               'start': 29.953560371517028},
-    'AM01_20190711_170000_sw-start32'     : {  'end': 37.89473684210527,
-                                               'species': 'unk1',
-                                               'start': 31.950464396284833},
-    'AM01_20190711_170000_sw-start34'     : {  'end': 39.89164086687306,
-                                               'species': 'noise',
-                                               'start': 33.94736842105263},
-    'AM01_20190711_170000_sw-start36'     : {  'end': 43.88544891640867,
-                                               'species': 'noise',
-                                               'start': 35.94427244582044},
-    'AM01_20190711_170000_sw-start38'     : {  'end': 43.88544891640867,
-                                               'species': 'noise',
-                                               'start': 37.94117647058824},
-    'AM01_20190711_170000_sw-start40'     : {  'end': 43.88544891640867,
-                                               'species': 'noise',
-                                               'start': 39.93808049535604},
-    'AM01_20190711_170000_sw-start42'     : {  'end': 43.88544891640867,
-                                               'species': 'noise',
-                                               'start': 41.93498452012384},
-    'AM01_20190711_170000_sw-start44'     : {  'end': 43.88544891640867,
-                                               'species': 'noise',
-                                               'start': 43.93188854489164},
-    'AM01_20190711_170000_sw-start46'     : {  'end': 43.88544891640867,
-                                               'species': 'noise',
-                                               'start': 45.92879256965944},
-    'AM01_20190711_170000_sw-start48'     : {  'end': 53.869969040247675,
-                                               'species': 'noise',
-                                               'start': 47.925696594427244},
-    'AM01_20190711_170000_sw-start4_wcpa' : {  'end': 9.938080495356038,
-                                               'species': 'wcpa',
-                                               'start': 3.993808049535604},
-    'AM01_20190711_170000_sw-start50'     : {  'end': 43.88544891640867,
-                                               'species': 'noise',
-                                               'start': 49.92260061919505},
-    'AM01_20190711_170000_sw-start52'     : {  'end': 57.863777089783284,
-                                               'species': 'noise',
-                                               'start': 51.91950464396285},
-    'AM01_20190711_170000_sw-start54'     : {  'end': 59.860681114551085,
-                                               'species': 'wcpa',
-                                               'start': 53.916408668730654},
-    'AM01_20190711_170000_sw-start6'      : {  'end': 43.88544891640867,
-                                               'species': 'noise',
-                                               'start': 5.9907120743034055},
-    'AM01_20190711_170000_sw-start8'      : {  'end': 53.869969040247675,
-                                               'species': 'noise',
-                                               'start': 7.987616099071208}
-    }
+
+
+# The following truth was created by pausing 
+# test_whole_thing() just before it ends (and
+# destroys the tmp dir). Then:
+#
+#     from data_augmentation.list_png_metadata import PNGMetadataManipulator as PMM
+#     # Get list of (full-path, metadata_dict) elements:
+#     res = list(PMM.metadata_list('/tmp/snip_matchingi0qywb0h'))
+#     # Convert the full paths to just the fnames, and make a dict
+#     # fname : md-dict:
+#     d = {}
+#     for fname, md in res:
+#         d[Path(fname).stem] = md
+
+#     # Only keep species, and start/end times of metadata:
+#     for fname, md in d.items():
+#         d[fname] = {'species'    : md['species'],
+#                     'start_time' : float(md['start_time(secs)']),
+#                     'end_time'   : float(md['end_time(secs)'])
+#                     }
+#     # Sort by start time of snippets:
+#     sorted_d = OrderedDict(sorted(d.items(),
+#                            key=lambda fname_dict_tuple: fname_dict_tuple[1]['start_time']))
+
+#     # Pretty print without sorting the metadata dicts:                
+#     pprint.pprint(sorted_d, sort_dicts=False)
+
+snippet_matching_truth = \
+OrderedDict([('AM01_20190711_170000_sw-start0_wcpa',
+              {'species': 'wcpa',
+               'start_time': 0.0,
+               'end_time': 5.944272445820434}),
+             ('AM01_20190711_170000_sw-start2_wcpa',
+              {'species': 'wcpa',
+               'start_time': 1.996904024767802,
+               'end_time': 7.9411764705882355}),
+             ('AM01_20190711_170000_sw-start4_wcpa',
+              {'species': 'wcpa',
+               'start_time': 3.993808049535604,
+               'end_time': 9.938080495356038}),
+             ('AM01_20190711_170000_sw-start6',
+              {'species': 'noise',
+               'start_time': 5.9907120743034055,
+               'end_time': 11.93498452012384}),
+             ('AM01_20190711_170000_sw-start8',
+              {'species': 'noise',
+               'start_time': 7.987616099071208,
+               'end_time': 13.931888544891642}),
+             ('AM01_20190711_170000_sw-start10',
+              {'species': 'noise',
+               'start_time': 9.98452012383901,
+               'end_time': 15.928792569659443}),
+             ('AM01_20190711_170000_sw-start12',
+              {'species': 'noise',
+               'start_time': 11.981424148606811,
+               'end_time': 17.925696594427244}),
+             ('AM01_20190711_170000_sw-start14',
+              {'species': 'noise',
+               'start_time': 13.978328173374614,
+               'end_time': 19.922600619195048}),
+             ('AM01_20190711_170000_sw-start16',
+              {'species': 'noise',
+               'start_time': 15.975232198142416,
+               'end_time': 21.91950464396285}),
+             ('AM01_20190711_170000_sw-start18',
+              {'species': 'noise',
+               'start_time': 17.97213622291022,
+               'end_time': 23.916408668730654}),
+             ('AM01_20190711_170000_sw-start20',
+              {'species': 'noise',
+               'start_time': 19.96904024767802,
+               'end_time': 25.913312693498455}),
+             ('AM01_20190711_170000_sw-start22_shwc',
+              {'species': 'shwc',
+               'start_time': 21.96594427244582,
+               'end_time': 27.910216718266255}),
+             ('AM01_20190711_170000_sw-start24_shwc',
+              {'species': 'shwc',
+               'start_time': 23.962848297213622,
+               'end_time': 29.907120743034056}),
+             ('AM01_20190711_170000_sw-start26_shwc',
+              {'species': 'shwc',
+               'start_time': 25.959752321981426,
+               'end_time': 31.90402476780186}),
+             ('AM01_20190711_170000_sw-start26_unk1',
+              {'species': 'unk1',
+               'start_time': 25.959752321981426,
+               'end_time': 31.90402476780186}),
+             ('AM01_20190711_170000_sw-start28',
+              {'species': 'shwc',
+               'start_time': 27.956656346749227,
+               'end_time': 33.90092879256966}),
+             ('AM01_20190711_170000_sw-start28_unk1',
+              {'species': 'unk1',
+               'start_time': 27.956656346749227,
+               'end_time': 33.90092879256966}),
+             ('AM01_20190711_170000_sw-start30_wcpa',
+              {'species': 'wcpa',
+               'start_time': 29.953560371517028,
+               'end_time': 35.89783281733746}),
+             ('AM01_20190711_170000_sw-start30_shwc',
+              {'species': 'shwc',
+               'start_time': 29.953560371517028,
+               'end_time': 35.89783281733746}),
+             ('AM01_20190711_170000_sw-start30_unk1',
+              {'species': 'unk1',
+               'start_time': 29.953560371517028,
+               'end_time': 35.89783281733746}),
+             ('AM01_20190711_170000_sw-start32',
+              {'species': 'unk1',
+               'start_time': 31.950464396284833,
+               'end_time': 37.89473684210527}),
+             ('AM01_20190711_170000_sw-start34',
+              {'species': 'noise',
+               'start_time': 33.94736842105263,
+               'end_time': 39.89164086687306}),
+             ('AM01_20190711_170000_sw-start36',
+              {'species': 'noise',
+               'start_time': 35.94427244582044,
+               'end_time': 41.88854489164087}),
+             ('AM01_20190711_170000_sw-start38',
+              {'species': 'noise',
+               'start_time': 37.94117647058824,
+               'end_time': 43.88544891640867}),
+             ('AM01_20190711_170000_sw-start40',
+              {'species': 'noise',
+               'start_time': 39.93808049535604,
+               'end_time': 45.88235294117647}),
+             ('AM01_20190711_170000_sw-start42',
+              {'species': 'noise',
+               'start_time': 41.93498452012384,
+               'end_time': 47.87925696594427}),
+             ('AM01_20190711_170000_sw-start44',
+              {'species': 'noise',
+               'start_time': 43.93188854489164,
+               'end_time': 49.87616099071207}),
+             ('AM01_20190711_170000_sw-start46',
+              {'species': 'noise',
+               'start_time': 45.92879256965944,
+               'end_time': 51.873065015479874}),
+             ('AM01_20190711_170000_sw-start48',
+              {'species': 'noise',
+               'start_time': 47.925696594427244,
+               'end_time': 53.869969040247675}),
+             ('AM01_20190711_170000_sw-start50',
+              {'species': 'noise',
+               'start_time': 49.92260061919505,
+               'end_time': 55.86687306501548}),
+             ('AM01_20190711_170000_sw-start52',
+              {'species': 'noise',
+               'start_time': 51.91950464396285,
+               'end_time': 57.863777089783284}),
+             ('AM01_20190711_170000_sw-start54',
+              {'species': 'wcpa',
+               'start_time': 53.916408668730654,
+               'end_time': 59.860681114551085})])
+
+'''
+The above in summary:
+'species': 'wcpa',
+'species': 'wcpa',
+'species': 'wcpa',
+'species': 'wcpa',
+
+'species': 'shwc',
+'species': 'shwc',
+'species': 'shwc',
+'species': 'shwc',
+
+'species': 'noise',
+'species': 'noise',
+'species': 'noise',
+'species': 'noise',
+'species': 'noise',
+'species': 'noise',
+'species': 'noise',
+'species': 'noise',
+'species': 'noise',
+'species': 'noise',
+'species': 'noise',
+'species': 'noise',
+'species': 'noise',
+'species': 'noise',
+'species': 'noise',
+'species': 'noise',
+'species': 'noise',
+'species': 'noise',
+
+'species': 'unk1',
+'species': 'unk1',
+'species': 'unk1',
+'species': 'unk1'
+'''
+
+
 
 
 class TestSnippetMatcher(unittest.TestCase):
@@ -340,17 +440,21 @@ class TestSnippetMatcher(unittest.TestCase):
         assoc170k = rec_id_to_sel_tbl_snips_gens['AM01_20190711_170000']
         
         self.assertEqual(assoc170k.rec_id, 'AM01_20190711_170000')
-        self.assertEqual(assoc170k.snip_dir, self.tst_snips_dir)
+        self.assertTrue(isinstance(assoc170k.snip_dir, Iterable))
         
         # Get number of snippets with recording id 
         # of 'AM01_20190711_170000' that we have among 
         # the test snippets:
-        snip_fnames = os.listdir(assoc170k.snip_dir)
+        snip_metadata_dicts = list(assoc170k)
+        snip_fnames = [snip_metadata_dict['snip_path']
+                       for snip_metadata_dict
+                       in snip_metadata_dicts
+                       ]
         snips_fname_filter = filter(self.mapper.extract_recording_id, snip_fnames)
         snips_list = list(snips_fname_filter)
         num_tst_snips  = len(snips_list)
         
-        num_snips_in_generator = len(list(assoc170k))
+        num_snips_in_generator = len(snip_metadata_dicts)
         self.assertEqual(num_snips_in_generator, num_tst_snips)
 
     #------------------------------------
@@ -411,17 +515,24 @@ class TestSnippetMatcher(unittest.TestCase):
         truth_sel = self.sel2.copy()
         truth_sel['mix'] = list(set(['cat', 'species1']))
         
-        self.assertDictEqual(res_sel_dict, truth_sel)
+        for key,val in res_sel_dict.items():
+            if key != 'mix':
+                self.assertEqual(val, truth_sel[key])
+            else:
+                # Compare the mix lists regardless of
+                # order. Contrary to the method name, 
+                # the test does test the individual list
+                # members:
+                self.assertCountEqual(val, truth_sel['mix'])
         
         # Case 7: Interval entirely to the right of all sels:
         self.assertIsNone(self.mapper.find_covering_sel(self.sels, self.iv7))
-        
 
     #------------------------------------
     # test_whole_thing
     #-------------------
 
-    #*********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_whole_thing(self):
         # Integration test:
 
@@ -488,24 +599,86 @@ class TestSnippetMatcher(unittest.TestCase):
                         for (snip_path, metadata_dict)
                         in all_snip_metadata
                         }
-        # Check all the values against the truth:
-        for fname in snip_md_dict.keys():
-            start_time_to_test = snippet_matching_truth[fname]['start']
-            start_time_truth   = float(snip_md_dict[fname]['start_time(secs)'])
-            self.assertEqual(start_time_to_test, start_time_truth)
-            
-            end_time_to_test = snippet_matching_truth[fname]['end']
-            end_time_truth   = float(snip_md_dict[fname]['end_time(secs)'])
-            self.assertEqual(end_time_to_test, end_time_truth)
-            
-            species_to_test = snippet_matching_truth[fname]['species']
-            species_truth   = snip_md_dict[fname]['species']
-            self.assertEqual(species_to_test, species_truth)
-
-
-        print('foo')
         
+        noise_start_times = [md['start_time(secs)']
+                             for md
+                             in snip_md_dict.values()
+                             if md['species'] == 'noise'
+                             ]
+        noise_end_times = [md['end_time(secs)']
+                             for md
+                             in snip_md_dict.values()
+                             if md['species'] == 'noise'
+                             ]
+        
+        shwc_start_times = [md['start_time(secs)']
+                             for md
+                             in snip_md_dict.values()
+                             if md['species'] == 'shwc'
+                             ]
+        shwc_end_times = [md['end_time(secs)']
+                             for md
+                             in snip_md_dict.values()
+                             if md['species'] == 'shwc'
+                             ]
+        
+        wcpa_start_times = [md['start_time(secs)']
+                             for md
+                             in snip_md_dict.values()
+                             if md['species'] == 'wcpa'
+                             ]
+        wcpa_end_times = [md['end_time(secs)']
+                             for md
+                             in snip_md_dict.values()
+                             if md['species'] == 'wcpa'
+                             ]
 
+        unk1_start_times = [md['start_time(secs)']
+                             for md
+                             in snip_md_dict.values()
+                             if md['species'] == 'unk1'
+                             ]
+        unk1_end_times = [md['end_time(secs)']
+                             for md
+                             in snip_md_dict.values()
+                             if md['species'] == 'unk1'
+                             ]
+        
+        for _fname, md in PNGMetadataManipulator.metadata_list(root_dir):
+            species = md['species']
+            if species == 'noise':
+                self.assertIn(md['start_time(secs)'], noise_start_times)
+                self.assertIn(md['end_time(secs)'], noise_end_times)
+            elif species == 'shwc':
+                self.assertIn(md['start_time(secs)'], shwc_start_times)
+                self.assertIn(md['end_time(secs)'], shwc_end_times)
+            elif species == 'wcpa':
+                self.assertIn(md['start_time(secs)'], wcpa_start_times)
+                self.assertIn(md['end_time(secs)'], wcpa_end_times)
+            elif species == 'unk1':
+                self.assertIn(md['start_time(secs)'], unk1_start_times)
+                self.assertIn(md['end_time(secs)'], unk1_end_times)
+
+        num_noise_snips = len(os.listdir(os.path.join(root_dir, 'noise')))
+        self.assertEqual(num_noise_snips, 18)
+        self.assertEqual(len(noise_start_times), 18)
+        self.assertEqual(len(noise_end_times), 18)
+        
+        num_shwc_snips = len(os.listdir(os.path.join(root_dir, 'shwc')))
+        self.assertEqual(num_shwc_snips, 4)
+        self.assertEqual(len(shwc_start_times), 4)
+        self.assertEqual(len(shwc_end_times), 4)
+        
+        num_wcpa_snips = len(os.listdir(os.path.join(root_dir, 'wcpa')))
+        self.assertEqual(num_wcpa_snips, 4)
+        self.assertEqual(len(wcpa_start_times), 4)
+        self.assertEqual(len(wcpa_end_times), 4)
+
+        num_unk1_snips = len(os.listdir(os.path.join(root_dir, 'unk1')))
+        self.assertEqual(num_unk1_snips, 4)
+        self.assertEqual(len(unk1_start_times), 4)
+        self.assertEqual(len(unk1_end_times), 4)
+        
 
 # ---------------------- Main ------------
 if __name__ == "__main__":

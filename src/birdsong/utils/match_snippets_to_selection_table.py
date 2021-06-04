@@ -3,8 +3,10 @@ Created on May 13, 2021
 
 @author: paepcke
 '''
+from _collections_abc import Iterable
 import argparse
 from bisect import bisect_right
+import inspect
 import os
 from pathlib import Path
 import re
@@ -25,7 +27,6 @@ from data_augmentation.utils import Utils, Interval
 #      that the snippets can be fed out by start time.
 #      The second time is to copy the img to an outdir,
 #      with augmented metadata (species added).
-
 class SnippetSelectionTableMapper:
     '''
     
@@ -425,7 +426,7 @@ class SnippetSelectionTableMapper:
             while not found:
                 try:
                     sel_left_idx, _left_begin_sel_time  = self.find_le(begin_times[start_idx:], 
-                                                                       time_low)
+                                                                           time_low)
                     if end_times[sel_left_idx] > time_low:
                         found = True
                     else:
@@ -434,11 +435,11 @@ class SnippetSelectionTableMapper:
                             # No selection is covered by the snippet:
                             return None
                 except ValueError:
-                    # Snippet begins before the first selection.
-                    # Does it reach into the the first selection
-                    # or maybe even beyond:
-                    if time_high >= begin_times[0]:
-                        sel_left_idx = 0
+                    # Snippet begins before the currently still possible
+                    # selections. Does it reach into the the first of those
+                    # selections, or maybe even beyond?
+                    if time_high >= begin_times[start_idx:][0]:
+                        sel_left_idx = start_idx
                         found = True
                         continue
                     
@@ -452,7 +453,6 @@ class SnippetSelectionTableMapper:
             sel_right_idx, _right_end_sel_time = self.find_gt(end_times, time_high)
 
             # If this entire snippet gt the right-most interval?
-            # above the interval?
             if begin_times[sel_right_idx] > time_high: #**************
                 sel_right_idx -= 1
 
@@ -505,7 +505,7 @@ class SnippetSelectionTableMapper:
             try:
                 other_species.remove(left_sel['species'])
             except KeyError:
-                pass
+                pass    
             
             other_species_lst = list(other_species)
 
@@ -745,10 +745,12 @@ class SelTblSnipsAssoc:
     
     def __init__(self, raven_sel_tbl_path, snips_src):
         
-        if type(snips_src) == str:
-            if not os.path.isdir(snips_src):
-                raise ValueError(f'Arg snips_src must be a directory, not {snips_src}')
-        elif not isinstance(snips_src, types.GeneratorType):
+        if type(snips_src) == str and not os.path.isdir(snips_src):
+            raise ValueError(f'Arg snips_src must be a directory or generator/iterable, not {snips_src}')
+
+        if not  (isinstance(snips_src, Iterable) or \
+                 inspect.isgeneratorfunction(snips_src)
+                 ):
             raise ValueError(f'Arg snips_src must be a directory, not {snips_src}')
 
         self.raven_sel_tbl_path = raven_sel_tbl_path
@@ -769,7 +771,7 @@ class SelTblSnipsAssoc:
     def snips_iterator(self, root=None):
         '''
         
-        If root is a generator, we assume that it
+        If root is a generator or iterable, we assume that it
         will yield absolute paths to snippets. If root 
         is None, we set root to self.snip_dir.
         Else, assume root is a directory below which snippets
@@ -794,7 +796,11 @@ class SelTblSnipsAssoc:
         metadata_list   = []
         
         
-        if isinstance(root, types.GeneratorType):
+        if type(root) != str and \
+           (isinstance(root, types.GeneratorType) or \
+            isinstance(root, Iterable)
+            ):
+
             # Root is a ready made generator.
             snip_gen = root
         else:
