@@ -843,7 +843,7 @@ class SpectrogramChopper:
            or (time_duration.seconds > 0 and time_duration.seconds % 3 == 0): 
             
             # A human readable duration st down to minutes:
-            duration_str = FileUtils.time_delta_str(time_duration, granularity=4)
+            duration_str = Utils.time_delta_str(time_duration, granularity=4)
 
             # Get current and new spectro imgs in outdir:
             num_now_present_imgs = len(Utils.find_in_dir_tree(outdir, pattern="*.png"))
