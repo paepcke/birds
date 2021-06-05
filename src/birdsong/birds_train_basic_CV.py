@@ -12,17 +12,11 @@ import os
 import random
 import sys
 
-import numpy as np
-
+from logging_service.logging_service import LoggingService
 from torch import cuda, unsqueeze
 from torch import nn
 from torch import optim
 import torch
-
-from logging_service.logging_service import LoggingService
-
-sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from birdsong.cross_validation_dataloader import CrossValidatingDataLoader, \
     EndOfSplit
@@ -36,6 +30,13 @@ from birdsong.utils.model_archive import ModelArchive
 from birdsong.utils.neural_net_config import NeuralNetConfig, ConfigError
 from birdsong.utils.tensorboard_plotter import SummaryWriterPlus, TensorBoardPlotter
 from birdsong.utils.utilities import FileUtils, CSVWriterCloseable  # , Differentiator
+from data_augmentation.utils import Utils
+import numpy as np
+
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
 
 
 class BirdsBasicTrainerCV:
@@ -293,7 +294,7 @@ class BirdsBasicTrainerCV:
                     end_time = datetime.datetime.now()
                     train_time_duration = end_time - epoch_start_time
                     # A human readable duration st down to minutes:
-                    duration_str = FileUtils.time_delta_str(train_time_duration, granularity=4)
+                    duration_str = Utils.time_delta_str(train_time_duration, granularity=4)
                     
                     self.log.info(f"Done training epoch {epoch} of split {split_num} (duration: {duration_str})")
     
@@ -314,7 +315,7 @@ class BirdsBasicTrainerCV:
             end_time = datetime.datetime.now()
             train_time_duration = end_time - split_start_time
             # A human readable duration st down to minutes:
-            duration_str = FileUtils.time_delta_str(train_time_duration, granularity=4)
+            duration_str = Utils.time_delta_str(train_time_duration, granularity=4)
             
             self.log.info(f"Done training split {split_num} (duration: {duration_str})")
             
@@ -323,10 +324,10 @@ class BirdsBasicTrainerCV:
             
         end_time       = datetime.datetime.now()
         epoch_duration = end_time - epoch_start_time
-        epoch_dur_str  = FileUtils.time_delta_str(epoch_duration, granularity=4)
+        epoch_dur_str  = Utils.time_delta_str(epoch_duration, granularity=4)
         
         cumulative_dur = end_time - overall_start_time
-        cum_dur_str    = FileUtils.time_delta_str(cumulative_dur, granularity=4)
+        cum_dur_str    = Utils.time_delta_str(cumulative_dur, granularity=4)
         
         msg = f"Done epoch {epoch}  (epoch duration: {epoch_dur_str}; cumulative: {cum_dur_str})"
         self.log.info(msg)
@@ -411,7 +412,7 @@ class BirdsBasicTrainerCV:
         end_time = datetime.datetime.now()
         val_time_duration = end_time - start_time
         # A human readable duration st down to minues:
-        duration_str = FileUtils.time_delta_str(val_time_duration, granularity=4)
+        duration_str = Utils.time_delta_str(val_time_duration, granularity=4)
         self.log.info(f"Done validation (duration: {duration_str})")
 
         return val_time_duration
@@ -1130,64 +1131,6 @@ class BirdsBasicTrainerCV:
         np.random.seed(seed)
         os.environ['PYTHONHASHSEED'] = str(seed)
         random.seed(seed)
-
-    #------------------------------------
-    # time_delta_str 
-    #-------------------
-    
-    def time_delta_str(self, epoch_delta, granularity=2):
-        '''
-        Takes the difference between two datetime times:
-        
-               start_time = datetime.datetime.now()
-               <some time elapses>
-               end_time = datetime.datetime.now()
-               
-               delta = end_time - start_time
-               time_delta_str(delta
-        
-        Depending on granularity, returns a string like:
-        
-            Granularity:
-                      1  '160.0 weeks'
-                      2  '160.0 weeks, 4.0 days'
-                      3  '160.0 weeks, 4.0 days, 6.0 hours'
-                      4  '160.0 weeks, 4.0 days, 6.0 hours, 42.0 minutes'
-                      5  '160.0 weeks, 4.0 days, 6.0 hours, 42.0 minutes, 13.0 seconds'
-        
-            For smaller time deltas, such as 10 seconds,
-            does not include leading zero times. For
-            any granularity:
-            
-                          '10.0 seconds'
-
-            If duration is less than second, returns '< 1sec>'
-            
-        :param epoch_delta:
-        :type epoch_delta:
-        :param granularity:
-        :type granularity:
-        '''
-        intervals = (
-            ('weeks', 604800),  # 60 * 60 * 24 * 7
-            ('days', 86400),    # 60 * 60 * 24
-            ('hours', 3600),    # 60 * 60
-            ('minutes', 60),
-            ('seconds', 1),
-            )
-        secs = epoch_delta.total_seconds()
-        result = []
-        for name, count in intervals:
-            value = secs // count
-            if value:
-                secs -= value * count
-                if value == 1:
-                    name = name.rstrip('s')
-                result.append("{} {}".format(value, name))
-        dur_str = ', '.join(result[:granularity])
-        if len(dur_str) == 0:
-            dur_str = '< 1sec>'
-        return dur_str
 
     #------------------------------------
     # step_number

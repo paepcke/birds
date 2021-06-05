@@ -992,7 +992,7 @@ class BirdsTrainBasic:
     # time_delta_str 
     #-------------------
     
-    def time_delta_str(self, epoch_delta, granularity=2):
+    def time_delta_str(self, time_delta, granularity=2):
         '''
         Takes the difference between two datetime times:
         
@@ -1020,8 +1020,8 @@ class BirdsTrainBasic:
 
             If duration is less than second, returns '< 1sec>'
             
-        :param epoch_delta:
-        :type epoch_delta:
+        :param time_delta:
+        :type time_delta:
         :param granularity:
         :type granularity:
         '''
@@ -1032,7 +1032,7 @@ class BirdsTrainBasic:
             ('minutes', 60),
             ('seconds', 1),
             )
-        secs = epoch_delta.total_seconds()
+        secs = time_delta.total_seconds()
         result = []
         for name, count in intervals:
             value = secs // count
