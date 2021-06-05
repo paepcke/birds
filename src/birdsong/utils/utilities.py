@@ -845,66 +845,6 @@ class FileUtils:
     def str2bool(cls, the_str):
         return the_str in ('1', 'y', 'Y', 'yes', 'Yes', 'True')
 
-
-    #------------------------------------
-    # time_delta_str 
-    #-------------------
-
-    @classmethod
-    def time_delta_str(cls, epoch_delta, granularity=2):
-        '''
-        Takes the difference between two datetime times:
-        
-               start_time = datetime.datetime.now()
-               <some time elapses>
-               end_time = datetime.datetime.now()
-               
-               delta = end_time - start_time
-               time_delta_str(delta
-        
-        Depending on granularity, returns a string like:
-        
-            Granularity:
-                      1  '160.0 weeks'
-                      2  '160.0 weeks, 4.0 days'
-                      3  '160.0 weeks, 4.0 days, 6.0 hours'
-                      4  '160.0 weeks, 4.0 days, 6.0 hours, 42.0 minutes'
-                      5  '160.0 weeks, 4.0 days, 6.0 hours, 42.0 minutes, 13.0 seconds'
-        
-            For smaller time deltas, such as 10 seconds,
-            does not include leading zero times. For
-            any granularity:
-            
-                          '10.0 seconds'
-
-            If duration is less than second, returns '< 1sec>'
-            
-        :param epoch_delta:
-        :type epoch_delta:
-        :param granularity:
-        :type granularity:
-        '''
-        intervals = (
-            ('weeks', 604800),  # 60 * 60 * 24 * 7
-            ('days', 86400),    # 60 * 60 * 24
-            ('hours', 3600),    # 60 * 60
-            ('minutes', 60),
-            ('seconds', 1),
-            )
-        secs = epoch_delta.total_seconds()
-        result = []
-        for name, count in intervals:
-            value = secs // count
-            if value:
-                secs -= value * count
-                if value == 1:
-                    name = name.rstrip('s')
-                result.append("{} {}".format(value, name))
-        dur_str = ', '.join(result[:granularity])
-        if len(dur_str) == 0:
-            dur_str = '< 1sec>'
-        return dur_str
-
 # ----------------------- CSVWriterFDAccessible -------
 
 class CSVWriterCloseable:
