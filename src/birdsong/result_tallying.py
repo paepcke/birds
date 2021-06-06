@@ -346,7 +346,7 @@ class ResultTally:
                  outputs, 
                  labels, 
                  loss,
-                 num_classes,
+                 class_names,
                  batch_size,
                  testing=False,
                  **kwargs
@@ -386,8 +386,8 @@ class ResultTally:
         :type labels: [int]
         :param loss: loss computed by the loss function
         :type loss: float
-        :param num_classes: number of target classes
-        :type num_classes: int
+        :param class_names: target class names
+        :type class_names: [str]
         '''
 
         # Some of the following assignments to instance
@@ -397,7 +397,8 @@ class ResultTally:
         self.created_at     = datetime.datetime.now()
         self.phase          = phase
         self.step           = step
-        self.num_classes    = num_classes
+        self.num_classes    = len(class_names)
+        self.class_names    = class_names
         self.batch_size     = batch_size
         self.preds          = None
         self.labels         = labels.tolist()
@@ -463,6 +464,7 @@ class ResultTally:
             
             self.update_tally_metrics(self.__getattribute__('labels'),
                                       self.__getattribute__('preds'),
+                                      self.__getattribute__('class_names'),
                                       )
             
         return self.__getattribute__(attr_name)
@@ -471,7 +473,7 @@ class ResultTally:
     # update_tally_metrics 
     #-------------------
     
-    def update_tally_metrics(self, labels, preds):
+    def update_tally_metrics(self, labels, preds, class_names):
         '''
         Called from __getattr__(), so don't retrieve
         instance vars; pass them in.
@@ -479,6 +481,8 @@ class ResultTally:
         :type labels:
         :param preds:
         :type preds:
+        :param class_names:
+        :type class_names:
         '''
 
         # Compute accuracy, adjust for chance, given 
@@ -551,6 +555,8 @@ class ResultTally:
                 self.num_classes
                 )
 
+        self.mean_loss = torch.mean(self.losses)
+        
         # A confusion matrix whose entries
         # are normalized to show percentage
         # of all samples in a row the classifier
@@ -559,10 +565,9 @@ class ResultTally:
         self.conf_matrix = Charter.compute_confusion_matrix(
             labels,
             preds,
-            self.num_classes,
+            class_names,
             normalize=True)
-            
-        self.mean_loss = torch.mean(self.losses)
+
 
         self.metrics_stale = False
 

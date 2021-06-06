@@ -448,7 +448,7 @@ class BirdsBasicTrainerCV:
                             outputs, 
                             labels, 
                             loss,
-                            self.num_classes,
+                            self.class_names,
                             self.batch_size)
         # Add result to intermediate results collection of
         # tallies:
@@ -512,8 +512,9 @@ class BirdsBasicTrainerCV:
                                            [LearningPhase.TRAINING,
                                             LearningPhase.VALIDATING
                                             ],
-                                           step, 
-                                           self.class_names)
+                                           step
+                                           )
+
         # History of learning rate adjustments:
         lr_this_step = self.optimizer.param_groups[0]['lr']
         self.writer.add_scalar('learning_rate', lr_this_step,

@@ -5,14 +5,10 @@ Created on Dec 19, 2020
 '''
 
 
-import json
 import os
 from pathlib import Path
 import unittest
-from datetime import datetime
 import socket
-
-import torch
 
 from birdsong.birds_train_basic_CV import BirdsBasicTrainerCV 
 from birdsong.utils.neural_net_config import NeuralNetConfig
@@ -20,8 +16,8 @@ from birdsong.utils.neural_net_config import NeuralNetConfig
 # This file is out of date: Uses EpochSummary
 # class. 
 
-#*****TEST_ALL = True
-TEST_ALL = False
+TEST_ALL = True
+#TEST_ALL = False
 
 class TestBirdsTrainingBasicCV(unittest.TestCase):
 
@@ -106,11 +102,11 @@ class TestBirdsTrainingBasicCV(unittest.TestCase):
     # test_train
     #-------------------
 
-    #****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_train(self):
         self.set_distribution_env_vars()
         try:
-            trainer = BirdsBasicTrainerCV(self.config)
+            _trainer = BirdsBasicTrainerCV(self.config)
         except Exception as e:
             print(f"****train: {repr(e)}")
             raise
@@ -120,7 +116,7 @@ class TestBirdsTrainingBasicCV(unittest.TestCase):
             # print(f"Running on {device}")
             # predicted_time = f"about 3 minutes"\
                 # if device == trainer.cpu\
-              # else f"about 15 seconds" 
+            # else f"about 15 seconds" 
             # print(f"Start test training a small dataset ({predicted_time})...")
             # t_start = datetime.now()
             # trainer.train()
@@ -139,8 +135,8 @@ class TestBirdsTrainingBasicCV(unittest.TestCase):
             # # Everything should be on CPU, not GPU
             # # after running:
             # self.assertEqual(trainer.device_residence(trainer.model), 
-                             # torch.device('cpu'))
-                             #
+            # torch.device('cpu'))
+            #
             # # Expected number of results is 10:
             # #   1 train + 1 validation result for
             # #   each epoch. Epochs turns out to be
@@ -148,9 +144,9 @@ class TestBirdsTrainingBasicCV(unittest.TestCase):
             #
             # expected_intermediate_results = trainer.epoch * 2
             # self.assertEqual(len(trainer.tally_collection),
-                             # expected_intermediate_results
-                             # )
-                             #
+            # expected_intermediate_results
+            # )
+            #
             # # Our test dataset has 6 target classes:
             # self.assertEqual(trainer.num_classes, 6)
             #
@@ -175,11 +171,11 @@ class TestBirdsTrainingBasicCV(unittest.TestCase):
             #
             # # Next five elements should be floats:
             # for measure_name in ['loss', 
-                                 # 'training_accuracy',
-                                 # 'testing_accuracy',
-                                 # 'precision',
-                                 # 'recall'
-                                 # ]:
+            # 'training_accuracy',
+            # 'testing_accuracy',
+            # 'precision',
+            # 'recall'
+            # ]:
                 # measure_type = type(measures[measure_name])
                 # self.assertEqual(measure_type, float)
                 #
@@ -188,8 +184,8 @@ class TestBirdsTrainingBasicCV(unittest.TestCase):
             #
             # conf_matrix = torch.tensor(measures['confusion_matrix'])
             # self.assertEqual(conf_matrix.shape,
-                             # (trainer.num_classes, trainer.num_classes) 
-                         # )
+            # (trainer.num_classes, trainer.num_classes) 
+            # )
         # finally:
             # trainer.cleanup()
 

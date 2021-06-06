@@ -481,10 +481,15 @@ class FileUtils:
     #-------------------
     
     @classmethod
-    def load_preds_and_labels(cls, csv_path):
+    def load_preds_and_labels(cls, csv_path, class_names):
         '''
-        Returns a ResultCollection. Each 
-        ResultTally in the collection holds
+        Training saves the label/prediction pairs
+        in a csv file for later training. By convention
+        the location is <proj-root>/src/birdsong/runs_raw_results.
+        
+        This method materializes these results into 
+        ResultTally instances, and returns a ResultCollection. 
+        Each ResultTally in the collection holds
         the outcomes of one epoch:
         
                 created_at
@@ -500,6 +505,10 @@ class FileUtils:
         :param csv_path: path to CSV file with info
             from a past run
         :type csv_path: str
+        :param class_names: name of target classes
+        :type class_names: [str]
+        :return: the results read from the csv file
+        :rtype: ResultCollection
         '''
 
         # Deferred import to avoid import circularity
@@ -651,7 +660,7 @@ class FileUtils:
         '''
         
         fastest_device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        if device == 'cpu' or fastest_device == 'cpu':
+        if device == 'cpu' or fastest_device == torch.device('cpu'):
             return item.to('cpu')
 
         elif device != 'gpu':

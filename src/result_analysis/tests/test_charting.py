@@ -16,7 +16,6 @@ from result_analysis.charting import Charter, CELL_LABELING
 TEST_ALL = True
 #TEST_ALL = False
 
-
 class Test(unittest.TestCase):
 
 

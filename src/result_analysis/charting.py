@@ -847,7 +847,10 @@ class Charter:
             #np.fill_diagonal(annot, np.diag(conf_matrix).astype(str))
             # Fill a new df with True, where df is same
             # dimensions as another df: annot:
+            annot = conf_matrix.copy()
             mask = pd.DataFrame(np.array([True]*annot.size).reshape(annot.shape))
+            mask.index    = conf_matrix.index
+            mask.columns  = conf_matrix.columns
             np.fill_diagonal(mask.values, False)
             
             
@@ -864,7 +867,7 @@ class Charter:
             square=True,
             annot=annot,  # Cell labels
             mask=mask,
-            fmt='d',      # Round to integers
+            fmt='.0%',    # Round to int, multiply by 100, add '%'
             cbar=True,    # Do draw color bar legend
             ax=ax,
             linewidths=1,# Pixel,

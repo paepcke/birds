@@ -78,8 +78,7 @@ class TensorBoardPlotter:
                         tally_coll,
                         writer,
                         phases,
-                        step,
-                        class_names
+                        step
                         ):
         '''
         Take the ResultTally instances from
@@ -150,7 +149,6 @@ class TensorBoardPlotter:
                 TensorBoardPlotter.conf_matrix_to_tensorboard(
                     writer,
                     tally.conf_matrix,
-                    class_names,
                     step=step,
                     title=f"Confusion Matrix Series"
                     )
