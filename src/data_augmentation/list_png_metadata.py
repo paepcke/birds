@@ -345,13 +345,13 @@ if __name__ == '__main__':
                         default=False)
 
     parser.add_argument('-p', '--printout',
-                        help='if set, print metadate to console; default: False',
+                        help='print metadate to console; default: False unless nothing else requested',
                         action='store_true',
                         default=False
                         )
 
     parser.add_argument('-d', '--distribution',
-                        help='if set, print how many snippets are in each species subdir',
+                        help='print how many snippets are in each species subdir',
                         action='store_true',
                         default=False
                         )
@@ -359,14 +359,18 @@ if __name__ == '__main__':
     parser.add_argument('--set_info',
                         type=str,
                         nargs='+',
-                        help='set metadata; repeatable; mutually exclusive with --add_info: key and value; ex.: --set_info foo 10 bar 20 -- fname.png',
+                        help=('set metadata; repeatable; mutually exclusive with\n'
+                              '   --add_info: key and value; \n'
+                              '   ex.: --set_info foo 10 bar 20 -- fname.png'),
                         default=None
                         )
 
     parser.add_argument('--add_info',
                         type=str,
                         nargs='+',
-                        help='add metadata; repeatable; mutually exclusive with --set_info: key and value; ex.: --add_info foo 10 bar 20 -- fname.png',
+                        help=('add metadata; repeatable; mutually exclusive with\n'
+                              '    --set_info: key and value; \n'
+                              '    ex.: --add_info foo 10 bar 20 -- fname.png'),
                         default=None
                         )
     
@@ -375,7 +379,7 @@ if __name__ == '__main__':
                         )
 
     parser.add_argument('-f', '--force',
-                        help="if set, don't ask confirmation when replacing metadata (rather than adding): do confirm",
+                        help="don't ask confirmation when replacing metadata; default: do confirm",
                         action='store_true',
                         default=False
                         )
@@ -392,8 +396,10 @@ if __name__ == '__main__':
             args.set_info or
             args.add_info
             ):
-        print("Nothing request; set one or more of the parameters:")
-        parser.print_help()
+        # Just assume printing is what's wanted:
+        #print("Nothing request; set one or more of the parameters:")
+        #parser.print_help()
+        args.printout = True
     
     # File/dir exists?
     if not os.path.exists(args.snippet_src):
