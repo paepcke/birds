@@ -117,12 +117,6 @@ class SnippetSelectionTableMapper:
     TASK_QUEUE_SIZE=1000
     '''Number of snippet matching tasks to submit before waiting for some to be finished'''
 
-    RECORDING_ID_PAT = re.compile(r'[_]{0,1}(AM[0-9]{2}_[0-9]{8}_[0-9]{6})')
-    '''Regex pattern to identify audio moth recording identifiers embedded in filenames.
-       Ex.: DS_AM01_20190719_063242.png
-            /foo/bar/AM01_20190719_063242_start.txt
-    '''
-
     #------------------------------------
     # Constructor 
     #-------------------
@@ -878,41 +872,12 @@ class SnippetSelectionTableMapper:
         #    {<recording_id> : <dir-of-matching-snippets>}
         recording_selection_tables = {}
         for table_path in sel_tables_src:
-            recording_id = self.extract_recording_id(table_path)
+            recording_id = FileUtils.extract_recording_id(table_path)
             if recording_id is not None:
                 recording_selection_tables[recording_id] = \
                     SelTblSnipsAssoc(table_path, snippets_src)
 
         return recording_selection_tables
-
-    #------------------------------------
-    # extract_recording_id
-    #-------------------
-    
-    @classmethod
-    def extract_recording_id(cls, spectro_path_or_fname):
-        '''
-        Given any name like:
-        
-            o [<parent_dirs>]/AM01_20190719_063242.png
-            o [<parent_dirs>]/DS_AM01_20190711_170000.Table.1.selections.txt
-        
-        return the portion:
-               <recorder-id>_<date>_<recording_id> 
-        
-        where <recorder-id> is AMnn (AM: AudioMoth).
-
-        :param spectro_path_or_fname:
-        :type spectro_path_or_fname:
-        :return: substring <recorder-id>_<date>_<recording_id>,
-            or None if no match
-        :rtype: str
-        '''
-        fname_only = Path(spectro_path_or_fname).stem
-        m = cls.RECORDING_ID_PAT.search(fname_only)
-        if m is not None:
-            return m.groups()[0]
-        return None
 
     #------------------------------------
     # save_updated_snippet
@@ -1014,11 +979,11 @@ class SnippetSelectionTableMapper:
         '''
         count = 0
         if os.path.isfile(root) and \
-            SnippetSelectionTableMapper.extract_recording_id(root) in rec_ids:
+            FileUtils.extract_recording_id(root) in rec_ids:
             count += 1
         for _dir_root, _dirs, files in os.walk(root):
             for snip_path in files:
-                if SnippetSelectionTableMapper.extract_recording_id(snip_path) in rec_ids:
+                if FileUtils.extract_recording_id(snip_path) in rec_ids:
                     count += 1
         return count
 
@@ -1146,7 +1111,7 @@ class SelTblSnipsAssoc:
 
         self.raven_sel_tbl_path = raven_sel_tbl_path
         self.snip_dir = snips_src
-        self.rec_id   = SnippetSelectionTableMapper.extract_recording_id(raven_sel_tbl_path)
+        self.rec_id   = FileUtils.extract_recording_id(raven_sel_tbl_path)
 
 
     #------------------------------------
@@ -1280,7 +1245,7 @@ class SelTblSnipsAssoc:
     #-------------------
     
     def recording_id_matches(self, snippet_path):
-        snip_rec_id = SnippetSelectionTableMapper.extract_recording_id(snippet_path)
+        snip_rec_id = FileUtils.extract_recording_id(snippet_path)
         return snip_rec_id == self.rec_id
 
 # ------------------------ Main ------------

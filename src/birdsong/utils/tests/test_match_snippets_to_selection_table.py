@@ -13,18 +13,19 @@ import tempfile
 import unittest
 import warnings
 
-import multiprocessing as mp
-
 from birdsong.match_snippets_to_selection_table import SelTblSnipsAssoc
 from birdsong.match_snippets_to_selection_table import SnippetSelectionTableMapper
+from birdsong.utils.utilities import FileUtils
 from data_augmentation.list_png_metadata import PNGMetadataManipulator
 from data_augmentation.utils import Utils, Interval
+import multiprocessing as mp
 
 
 TEST_ALL = True
 #TEST_ALL = False
 
 '''
+from birdsong.utils.utilities import FileUtils
 The following are the correct results for matching test 28 test snippets at 
 <proj-root>/src/birdsong/utils/tests/data/fld_snippets
 to the selection table DS_AM01_20190711_170000.Table.1.selections.txt
@@ -379,8 +380,8 @@ class TestSnippetMatcher(unittest.TestCase):
         
         self.assertEqual(len(tbl_snips_mapping), 2)
 
-        rec_id1 = self.mapper.extract_recording_id(self.sel_tbl_path1)
-        rec_id2 = self.mapper.extract_recording_id(self.sel_tbl_path2)
+        rec_id1 = FileUtils.extract_recording_id(self.sel_tbl_path1)
+        rec_id2 = FileUtils.extract_recording_id(self.sel_tbl_path2)
         
         self.assertSetEqual(set(list(tbl_snips_mapping.keys())), 
                             set([rec_id1, rec_id2])
@@ -465,7 +466,7 @@ class TestSnippetMatcher(unittest.TestCase):
                        for snip_metadata_dict
                        in snip_metadata_dicts
                        ]
-        snips_fname_filter = filter(self.mapper.extract_recording_id, snip_fnames)
+        snips_fname_filter = filter(FileUtils.extract_recording_id, snip_fnames)
         snips_list = list(snips_fname_filter)
         num_tst_snips  = len(snips_list)
         
@@ -499,11 +500,11 @@ class TestSnippetMatcher(unittest.TestCase):
     def test_extract_recording_id(self):
         
         tst_path = '/foo/bar/AM01_20190719_063242.png'
-        rec_id = self.mapper.extract_recording_id(tst_path)
+        rec_id = FileUtils.extract_recording_id(tst_path)
         self.assertEqual(rec_id, 'AM01_20190719_063242')
         
         tst_path = '/foo/barAM01_20190719_063242/fum.png'
-        rec_id = self.mapper.extract_recording_id(tst_path)
+        rec_id = FileUtils.extract_recording_id(tst_path)
         self.assertTrue(rec_id is None)
 
     #------------------------------------

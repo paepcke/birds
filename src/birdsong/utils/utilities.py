@@ -23,7 +23,13 @@ class FileUtils:
     '''
     classdocs
     '''
-    
+
+    RECORDING_ID_PAT = re.compile(r'[_]{0,1}(AM[0-9]{2}_[0-9]{8}_[0-9]{6})')
+    '''Regex pattern to identify audio moth recording identifiers embedded in filenames.
+       Ex.: DS_AM01_20190719_063242.png
+            /foo/bar/AM01_20190719_063242_start.txt
+    '''
+
     str2bool = lambda the_str: the_str in ('1', 'y', 'Y', 'yes', 'Yes', 'True')
     
     # Elements that make up a filename
@@ -399,6 +405,34 @@ class FileUtils:
         
         return prop_dict
 
+    #------------------------------------
+    # extract_recording_id
+    #-------------------
+    
+    @classmethod
+    def extract_recording_id(cls, spectro_path_or_fname):
+        '''
+        Given any name like:
+        
+            o [<parent_dirs>]/AM01_20190719_063242.png
+            o [<parent_dirs>]/DS_AM01_20190711_170000.Table.1.selections.txt
+        
+        return the portion:
+               <recorder-id>_<date>_<recording_id> 
+        
+        where <recorder-id> is AMnn (AM: AudioMoth).
+
+        :param spectro_path_or_fname:
+        :type spectro_path_or_fname:
+        :return: substring <recorder-id>_<date>_<recording_id>,
+            or None if no match
+        :rtype: str
+        '''
+        fname_only = Path(spectro_path_or_fname).stem
+        m = cls.RECORDING_ID_PAT.search(fname_only)
+        if m is not None:
+            return m.groups()[0]
+        return None
 
     #------------------------------------
     # expand_filename 
