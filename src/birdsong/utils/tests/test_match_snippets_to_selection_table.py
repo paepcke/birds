@@ -13,8 +13,10 @@ import tempfile
 import unittest
 import warnings
 
-from birdsong.utils.match_snippets_to_selection_table import SelTblSnipsAssoc
-from birdsong.utils.match_snippets_to_selection_table import SnippetSelectionTableMapper
+import multiprocessing as mp
+
+from birdsong.match_snippets_to_selection_table import SelTblSnipsAssoc
+from birdsong.match_snippets_to_selection_table import SnippetSelectionTableMapper
 from data_augmentation.list_png_metadata import PNGMetadataManipulator
 from data_augmentation.utils import Utils, Interval
 
@@ -234,14 +236,11 @@ The above in summary:
 'species': 'unk1'
 '''
 
-
-
-
 class TestSnippetMatcher(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.cur_dir        = os.path.dirname(__file__)
+        cls.cur_dir        = os.path.abspath(os.path.dirname(__file__))
         cls.data_dir       = os.path.join(cls.cur_dir, 'data')
         cls.sel_tbl_dir    = os.path.join(cls.data_dir, 'selection_tables')
         cls.sel_tbl_path1  = os.path.join(cls.sel_tbl_dir, 
@@ -312,6 +311,22 @@ class TestSnippetMatcher(unittest.TestCase):
                                 category=ResourceWarning,
                                          message='unclosed file'
                                 )
+        
+        # A communication dict visible to 
+        # All processes:
+        # For nice progress reports, create a shared
+        # dict quantities that each process will report
+        # on to the console as progress indications:
+        #    o Which job-completions have already been reported
+        #      to the console (a list)
+        #    o The most recent number of already created
+        #      output images 
+        # The dict will be initialized in run_workers,
+        # but all Python processes on the various cores
+        # will have read/write access:
+        manager = mp.Manager()
+        cls.global_info = manager.dict()
+        cls.global_info['jobs_status'] = manager.list()
 
     #------------------------------------
     # setUP 
@@ -326,7 +341,7 @@ class TestSnippetMatcher(unittest.TestCase):
         #    self.tst_snips_dir, 
         #    self.tmp_outdir
         #    )
-        self.mapper = SnippetSelectionTableMapper(None,None,None,unittesting=True)
+        self.mapper = SnippetSelectionTableMapper(None,None,None,None,unittesting=True)
 
     #------------------------------------
     # tearDown 
@@ -540,7 +555,8 @@ class TestSnippetMatcher(unittest.TestCase):
             _mapper = SnippetSelectionTableMapper(
                 self.sel_tbl_dir,
                 self.tst_snips_dir,
-                tmp_dir_name
+                tmp_dir_name,
+                self.global_info
                 )
             
             #for fpath, metadata in PNGMetadataManipulator.metadata_list(tmp_dir_name):

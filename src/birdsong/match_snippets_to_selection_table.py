@@ -7,16 +7,21 @@ Created on May 13, 2021
 from _collections_abc import Iterable
 import argparse
 from bisect import bisect_right
+import datetime
 import inspect
+from logging import INFO
 import os
 from pathlib import Path
 import re
 import sys
 import types
 
+from logging_service.logging_service import LoggingService
+
 from birdsong.utils.utilities import FileUtils
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import Utils, Interval
+import multiprocessing as mp
 
 
 # TODO
@@ -109,6 +114,9 @@ class SnippetSelectionTableMapper:
 
     '''
 
+    TASK_QUEUE_SIZE=1000
+    '''Number of snippet matching tasks to submit before waiting for some to be finished'''
+
     RECORDING_ID_PAT = re.compile(r'[_]{0,1}(AM[0-9]{2}_[0-9]{8}_[0-9]{6})')
     '''Regex pattern to identify audio moth recording identifiers embedded in filenames.
        Ex.: DS_AM01_20190719_063242.png
@@ -122,11 +130,13 @@ class SnippetSelectionTableMapper:
     def __init__(self, 
                  selection_tbl_loc, 
                  spectrogram_locs, 
-                 out_dir,
+                 outdir,
+                 global_info,
+                 num_workers=None,
                  unittesting=False
                  ):
         '''
-        Create snippet copies into out_dir 
+        Create snippet copies into outdir 
         for all snippets that are covered
         by any of the given selection tables.
         
@@ -137,8 +147,8 @@ class SnippetSelectionTableMapper:
         :param spectrogram_locs: individual or directory of 
             spectrogram snippets.
         :type spectrogram_locs: str
-        :param out_dir: destination of snippet copies
-        :type out_dir: src
+        :param outdir: destination of snippet copies
+        :type outdir: src
         :param unittesting: if True, does not initialize
             the instance, or run any operations
         :type unittesting: bool
@@ -150,19 +160,17 @@ class SnippetSelectionTableMapper:
         if not os.path.exists(selection_tbl_loc):
             print(f"Cannot open {selection_tbl_loc}")
             sys.exit(1)
+            
+        sel_tbl_paths = self.make_sel_tbl_dict(selection_tbl_loc)
+        if len(sel_tbl_paths) == 0:
+            print (f"No selection table(s) found at {selection_tbl_loc}")
+            sys.exit(1)
         
         if not os.path.exists(spectrogram_locs):
             print(f"Spectrogram snippets {spectrogram_locs} not found")
             sys.exit(1)
-        
-        # Is path to sel tbl an individual tsv file?
-        if os.path.isfile(selection_tbl_loc):
-            table_paths = iter([selection_tbl_loc])
-        else:
-            # Caller gave directory of .csv files.
-            # Get them all recursively:
-            table_paths = Utils.find_in_tree_gen(selection_tbl_loc, 
-                                                 pattern="*.txt")
+
+        self.log = LoggingService()
 
         # Is snippets path to an individual .png snippet file?
         if os.path.isfile(spectrogram_locs):
@@ -172,18 +180,20 @@ class SnippetSelectionTableMapper:
             # Get them all recursively:
             snippet_paths = Utils.find_in_tree_gen(spectrogram_locs, 
                                                     pattern="*.png")
-        # If out_dir does not exist, create it,
+        # If outdir does not exist, create it,
         # and all dirs along the path:
-        if not os.path.exists(out_dir):
-            os.makedirs(out_dir)
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
 
         # Get dict:
+        #
         #    {<recording-id> : SelTblSnipsAssoc-instance}
+        #
         # where each SelTblSnipsAssoc instance is a generator
-        # of snippet metadata from snippet that are covered in 
+        # of snippet metadata from snippets that are covered in 
         # the selection table that is associated with the instance.
-        # In addition the absolute snippet path is added as
-        # entry of key 'snip_path'.
+        # In addition the absolute snippet path is added to that
+        # metadata as entry with key 'snip_path'.
         # 
         # The generator feeds out the snippet metadata in order of
         # start time.
@@ -193,23 +203,246 @@ class SnippetSelectionTableMapper:
 
         rec_id_assocs = self.create_snips_gen_for_sel_tbls(
             snippet_paths, 
-            table_paths)
+            iter(list(sel_tbl_paths.values())))
+        
+        num_cores = mp.cpu_count()
+        # Use only a percentage of the cores:
+        if num_workers is None:
+            num_workers = round(num_cores * Utils.MAX_PERC_OF_CORES_TO_USE  / 100)
+        elif num_workers > num_cores:
+            # Limit pool size to number of cores:
+            num_workers = num_cores
 
-        for assoc in rec_id_assocs.values():
-            # The assoc focuses on a single selection
-            # table, and the snippets it covers.
-            # Get the info contained in each row of 
-            # the sel tb. This will be a list of dicts, each with
-            # the information from one selection tbl row:
-            
-            selections = Utils.read_raven_selection_table(assoc.raven_sel_tbl_path)
+        # Initialize a dict for sharing information
+        # among the processes (other than assignments,
+        # which are passed through queues):
+        
+        # Fill the inter-process list with False
+        # to indicate none of the jobs has finished.
+        # Will be used to avoid logging that fact that a
+        # particular job finishing over and over to the 
+        # console (i.e. not used for functions other than 
+        # reporting progress):
+        
+        for _i in range(num_workers):
+            # NOTE: reportedly one cannot just set the passed-in
+            #       list to [False]*num_workers, b/c 
+            #       a regular python list won't be
+            #       seen by other processes, even if
+            #       embedded in a multiprocessing.manager.list
+            #       instance. Instead, global_info['jobs_status']
+            #       is a special type of list created by mp.manager:
+            global_info['jobs_status'].append(False)
 
-            # Go through each snippet in the association, enrich its 
-            # metadata with species info. Then copy the enriched
-            # snippet to the target dir:
+        # Number of full spectrograms to chop:
+        global_info['snips_to_do'] = len(Utils.find_in_dir_tree(spectrogram_locs, 
+                                                                pattern="*.png")) 
+        
+        
+        # For progress reports, get number of already
+        # existing .png files in out directory:
+        global_info['snips_done'] = len(Utils.find_in_dir_tree(outdir, 
+                                                               pattern="*.png")) 
+
+        # Find number of tasks to do: the number of snippets
+        # any of the recordings in which we are interested:
+        num_matching_tasks = self.count_recordings_by_rec_ids(
+            spectrogram_locs, 
+            list(rec_id_assocs.keys())
+            )
+        
+        # Queue to pass snippet paths to workers.
+        # All workers will grab snippet paths from the
+        # queue, and try to match them against selections:
+        task_queue = mp.Manager().Queue(maxsize=self.TASK_QUEUE_SIZE)
+        snip_matching_jobs = []
+
+        # Start all the workers:
+        for i in range(min(num_matching_tasks, num_workers)):
+            ret_value_slot = mp.Value("b", False)
+            job = mp.Process(target=self.process_one_sel_tbl,
+                             args=(task_queue,),
+                             name=f"snippet_matcher-{i}"
+                             )
+            job.ret_val = ret_value_slot
+            snip_matching_jobs.append(job)
+            print(f"Starting matching for table {job.name}")
+            job.start()
+
+        # Feed one snippet after the other 
+        # to the task_queue, for workers to match
+        # against selections:
+        for assoc_count, recording_snippet_assoc in enumerate(rec_id_assocs.values()):
+            # Each assoc is an instance containing
+            # the path to a selection table (raven_sel_tbl_path),
+            # and the recording ID (rec_id) associated with
+            # that table. Additionally, the assoc is itself
+            # a generator of snippet metadata for snippets
+            # whose filename marks it as part of the recording
+            # of ID rec_id. Feed all the metadata to the queue,
+            # then loop to feed snippets for the next selection
+            # table:
             
-            for snip_metadata in iter(assoc):
-                self.match_snippet(selections, snip_metadata, out_dir)
+            for snippet_md in recording_snippet_assoc:
+                # Create another dict from the snippet metadata
+                # to serve as task argument for one worker:
+                task_args = snippet_md.copy()
+                # Add the selection table path to the md:
+                task_args['sel_tbl_path'] = sel_tbl_paths[recording_snippet_assoc.rec_id]
+                task_args['outdir'] = outdir
+                # Among other info, snippet_md now has:
+                # {... 'start_time(secs)': '2.0',
+                #      'end_time(secs)': '6.9',
+                #      'snip_path': 'AM01_20190711_170000_....png',
+                #      'sel_tbl_path': 'DS_AM01_20190711_170000...txt',
+                #      'outdir' : '/foo/bar/labeled_snippets/',
+                #      ...}
+                # Pass that dict into the task queue to be picked
+                # up by any of the workers:
+                task_queue.put(task_args)
+                if assoc_count > 0 and assoc_count % 1000 == 0:
+                    # Report progress in place, w/o CR ("end='")
+                    if self.log.logging_level >= INFO:
+                        print(f"Matching jobs submitted: {assoc_count}",
+                              end=''
+                              )
+
+        # All tasks have been fed into the task
+        # queue (though they may not be done yet).
+        # Feed one 'poison' entry into the queue for
+        # each worker to swallow and terminate:
+        for _i in range(num_workers):
+            task_queue.put('STOP')
+        start_time = datetime.datetime.now()
+
+        # Keep checking on each job, until
+        # all are done as indicated by all jobs_done
+        # values being True, a.k.a valued 1:
+        
+        while sum(global_info['jobs_status']) < num_workers:
+            for job_idx, job in enumerate(snip_matching_jobs):
+                # Timeout 1 sec
+                job.join(4)
+                if job.exitcode is not None:
+                    if global_info['jobs_status'][job_idx]:
+                        # One of the processes has already
+                        # reported this job as done. Don't
+                        # report it again:
+                        continue
+                        
+                    # Let other processes know that this job
+                    # is done, and they don't need to report 
+                    # that fact: we'll do it here below:
+                    global_info['jobs_status'][job_idx] = True
+                    
+                    # This job finished, and that fact has not
+                    # been logged yet to the console:
+                    
+                    res = "OK" if job.ret_val else "Error"
+                    # New line after the single-line progress msgs:
+                    print("")
+                    print(f"Worker {job.name}/{num_workers} finished with: {res}")
+                    global_info['snips_done'] = self.sign_of_life(job, 
+                                                                  global_info['snips_done'],
+                                                                  outdir,
+                                                                  start_time,
+                                                                  force_rewrite=True)
+                    # Check on next job:
+                    continue
+                    #
+                # # This job not finished yet.
+                # # Time for sign of life?
+                # global_info['snips_done'] = self.sign_of_life(job, 
+                                                              # global_info['snips_done'],
+                                                              # outdir,
+                                                              # start_time,
+                                                              # force_rewrite=True)
+
+    #------------------------------------
+    # process_one_sel_tbl 
+    #-------------------
+    
+    def process_one_sel_tbl(self, task_queue):
+        '''
+        This is the target of each process once it
+        is forked by the multiprocess.Process(...).start()
+        call. 
+        
+        Thus each new instance variable will be unique
+        to one (i.e. this) process. Similarly, the 
+        'name' instance var will be a human readable string
+        naming this process for purposes of logging.
+        
+        The task queue is a multiprocessing.Queue. Each item
+        fed from the work coordinator to this process via the
+        queue is a dict containing the following:
+
+           *******FILL IN 
+           
+        Each task is to match one snippet to any of the selections
+        in the associated selection table. If a match is found,
+        the snippet's metadata is augmented with the species label,
+        and placed into the outdir. Else the snippet is labeled as
+        'noise' and also placed into the outdir.
+        
+        When the snippet is processed, task_queue.task_done() is called,
+        and the next item is taken from the queue.
+        
+        When the string 'STOP' is passed through the queue, this
+        process calls task_queue.task_done() one last time, and terminates.
+
+        :param task_queue: queue through which work coordinator 
+            feeds tasks.
+        :type task_queue: mp.queue
+        '''
+
+        my_job_name = mp.current_process().name
+        # Dict mapping selection table path to 
+        # the list of dicts that represent the selection
+        # table rows:
+        
+        selections_all_tables = {}
+        last_alive_msg_time = datetime.datetime.now()
+        num_snips_processed = 0
+
+        done = False
+        while not done:
+            
+            task_args = task_queue.get()
+            try:
+                if task_args == 'STOP':
+                    done = True
+                    continue
+                
+                sel_tbl_path = task_args['sel_tbl_path']
+                try:
+                    selections = selections_all_tables[sel_tbl_path]
+                except KeyError:
+                    # Haven't encountered this sel table yet:
+                    self.log.info(f"Reading selection table {sel_tbl_path}...")
+                    selections = Utils.read_raven_selection_table(sel_tbl_path)
+                    selections_all_tables[sel_tbl_path] = selections
+    
+                # If this snippet matches any selection in one of
+                # the cached selection tables, enrich the snippet's 
+                # metadata with species info. Then copy the enriched
+                # snippet to the target dir:
+
+                outdir = task_args['outdir']
+                    
+                self.match_snippet(selections, task_args, outdir)
+                num_snips_processed += 1
+                
+                # Time for a sign of life?
+                now_time = datetime.datetime.now()
+                elapsed_time = now_time - last_alive_msg_time
+                if elapsed_time.seconds > 5 and self.log.logging_level >= INFO:
+                    #print(f"{my_job_name}---Number of spectros: {num_snips_processed} ",
+                    #      end='\r')
+                    #last_alive_msg_time = datetime.datetime.now()
+                    pass
+            finally:
+                task_queue.task_done()
 
     #------------------------------------
     # match_snippet
@@ -621,7 +854,7 @@ class SnippetSelectionTableMapper:
         '''
 
         # Table paths may be an individual
-        # file, a directory, or a generator
+        # file, a directory, or a generator/iterator
         # of absolute paths. Sanity checks:
         
         if type(sel_tables_src) == str:
@@ -632,7 +865,7 @@ class SnippetSelectionTableMapper:
             elif os.path.isdir(sel_tables_src):
                 sel_tables_src = Utils.listdir_abs(sel_tables_src)
         # If not a string, sel_tables_src better be a generator:
-        elif not isinstance(sel_tables_src, types.GeneratorType):
+        elif not isinstance(sel_tables_src, Iterable):
             raise ValueError(f"Table paths must be a generator, or an absolute path to a selection table or dir")
 
         # Same checks for snippet location:
@@ -642,7 +875,7 @@ class SnippetSelectionTableMapper:
                 raise ValueError(f"Snippet paths must be a generator, or an absolute path to a snippet dir")
             snippets_src = iter(Utils.listdir_abs(snippets_src))
         # If not a string, snippets_src better be a generator:
-        elif not isinstance(sel_tables_src, types.GeneratorType):
+        elif not isinstance(sel_tables_src, Iterable):
             raise ValueError(f"Snippets src must be a generator, or an absolute path to dir")
 
         # Build a dict:
@@ -714,6 +947,121 @@ class SnippetSelectionTableMapper:
         FileUtils.ensure_directory_existence(snip_outname)
         SoundProcessor.save_image(spectro_arr, snip_outname , metadata)
 
+    #------------------------------------
+    # make_sel_tbl_dict 
+    #-------------------
+    
+    def make_sel_tbl_dict(self, sel_tbls_root):
+        '''
+        Given either the path to a single selection
+        table, or to the root of a directory of selection
+        tables, return a dict or recording ID to full
+        selection table paths.
+        
+        Assumption: selection table file names are of the
+        form 
+             DS_AM02_20190716_172958.Table.1.selections.txt
+               [--------------------]                 [----]
+                   important part                    Required
+                                                       suffix 
+        
+        The 'important part' is the recording ID, which will
+        be used as the dict keys. Files not matching the above
+        pattern will be ignored.
+        
+        :param sel_tbls_root: path to selection table, or to
+            root directory of selection tables 
+        :type sel_tbls_root: src
+        :return: dict mapping recording ID to absolute paths
+        :rtype: {src : src}
+        '''
+        pat = re.compile(re.compile(r'.*(AM[0-9]{2}_[0-9]{8}_[0-9]{6}).*[.]txt$'))
+        res = {}
+        
+        # Individual selection table file?
+        if os.path.isfile(sel_tbls_root):
+            match = pat.match(sel_tbls_root)
+            if match is not None:
+                res[match.groups()[0]] = sel_tbls_root
+            return res
+        
+        # Walk directory, collecting sel tbl files:
+        for root, _dirs, files in os.walk(sel_tbls_root):
+            for file in files:
+                match = pat.match(file)
+                if match is not None:
+                    res[match.groups()[0]] = os.path.join(root, file)
+        return res
+
+
+    #------------------------------------
+    # count_recordings_by_rec_ids
+    #-------------------
+
+    def count_recordings_by_rec_ids(self, root, rec_ids):
+        '''
+        Given a directory tree root and a list of recording
+        IDs, return the number of .png files containing any of
+        the IDs. A recording ID is of the form
+        
+            <recorder-id>_<date>_<recording_id>
+            
+        As in the first part of 'AM01_20190711_170000_sw-start26_unk1.png'
+        
+        :param root: directory tree root
+        :type root: str
+        :param rec_ids: list of recording IDs for which to
+            count png files
+        :type rec_ids: [str]
+        :return: count of matching png files
+        :rtype: int
+        '''
+        count = 0
+        if os.path.isfile(root) and \
+            SnippetSelectionTableMapper.extract_recording_id(root) in rec_ids:
+            count += 1
+        for _dir_root, _dirs, files in os.walk(root):
+            for snip_path in files:
+                if SnippetSelectionTableMapper.extract_recording_id(snip_path) in rec_ids:
+                    count += 1
+        return count
+
+    #------------------------------------
+    # sign_of_life 
+    #-------------------
+    
+    @classmethod
+    def sign_of_life(cls, 
+                     job, 
+                     num_already_present_imgs, 
+                     outdir, 
+                     start_time, 
+                     force_rewrite=False):
+        
+        # Time for sign of life?
+        now_time = datetime.datetime.now()
+        time_duration = now_time - start_time
+        # Every 3 seconds, but at least 3:
+        if force_rewrite \
+           or (time_duration.seconds > 0 and time_duration.seconds % 3 == 0): 
+            
+            # A human readable duration st down to minutes:
+            duration_str = Utils.time_delta_str(time_duration, granularity=4)
+
+            # Get current and new spectro imgs in outdir:
+            num_now_present_imgs = len(Utils.find_in_dir_tree(outdir, pattern="*.png"))
+            num_newly_present_imgs = num_now_present_imgs - num_already_present_imgs
+
+            # Keep printing number of done snippets in the same
+            # terminal line:
+            print((f"{job.name}---Number of spectros: {num_now_present_imgs} "
+                   f"({num_newly_present_imgs} new) after {duration_str}"),
+                  end='\r')
+            return num_newly_present_imgs
+        else:
+            return num_already_present_imgs
+
+
 # ---------------------- Class SelTblSnipsAssoc ---------
 
 class SelTblSnipsAssoc:
@@ -773,6 +1121,19 @@ class SelTblSnipsAssoc:
         self.raven_sel_tbl_path = raven_sel_tbl_path
         self.snip_dir = snips_src
         self.rec_id   = SnippetSelectionTableMapper.extract_recording_id(raven_sel_tbl_path)
+
+
+    #------------------------------------
+    # __len__ 
+    #-------------------
+    
+    def __len__(self):
+        
+        try:
+            return self.num_snippets
+        except Exception:
+            # Iterator has not initialized this number yet:
+            return 0
 
     #------------------------------------
     # __iter__ 
@@ -836,11 +1197,12 @@ class SelTblSnipsAssoc:
         time_sorted_metadata = sorted(metadata_list,
                                       key=lambda md: md['start_time(secs)'])
 
+        self.num_snippets = len(time_sorted_metadata)
         # Now keep feeding the list of sorted
         # metadata:
         # Since Python 3.7 generators raising 
         # StopIteration is no longer silently 
-        # discarded; so need to catch it ourselves:
+        # discarded, need to catch it ourselves:
         try:
             for metadata in time_sorted_metadata:
                 yield metadata
@@ -871,6 +1233,7 @@ class SelTblSnipsAssoc:
             for snip_path in files:
                 if self.recording_id_matches(snip_path):
                     yield os.path.join(dir_root, snip_path)
+
 
     #------------------------------------
     # __str__ 
@@ -911,8 +1274,24 @@ if __name__ == '__main__':
                         help='Path directory where modified snippets will be placed (created if not exists)')
 
     args = parser.parse_args()
+    
+    # Multiprocessing the matching:
+    # For nice progress reports, create a shared
+    # dict quantities that each process will report
+    # on to the console as progress indications:
+    #    o Which job-completions have already been reported
+    #      to the console (a list)
+    #    o The most recent number of already created
+    #      output images 
+    # The dict will be initialized in __init__(),
+    # but all Python processes on the various cores
+    # will have read/write access:
+    manager = mp.Manager()
+    global_info = manager.dict()
+    global_info['jobs_status'] = manager.list()
 
     matcher = SnippetSelectionTableMapper(args.selection_table_loc, 
                                           args.snippets_path,
-                                          args.outdir
+                                          args.outdir,
+                                          global_info
                                           )
