@@ -313,7 +313,7 @@ class SnippetSelectionTableMapper:
         # each worker to swallow and terminate:
         for _i in range(num_workers):
             task_queue.put('STOP')
-        start_time = datetime.datetime.now()
+        #start_time = datetime.datetime.now()
 
         # Keep checking on each job, until
         # all are done as indicated by all jobs_done
@@ -342,21 +342,21 @@ class SnippetSelectionTableMapper:
                     # New line after the single-line progress msgs:
                     print("")
                     print(f"Worker {job.name}/{num_workers} finished with: {res}")
-                    global_info['snips_done'] = self.sign_of_life(job, 
-                                                                  global_info['snips_done'],
-                                                                  outdir,
-                                                                  start_time,
-                                                                  force_rewrite=True)
+                    #global_info['snips_done'] = self.sign_of_life(job, 
+                    #                                              global_info['snips_done'],
+                    #                                              outdir,
+                    #                                              start_time,
+                    #                                              force_rewrite=True)
                     # Check on next job:
                     continue
                     #
                 # # This job not finished yet.
                 # # Time for sign of life?
                 # global_info['snips_done'] = self.sign_of_life(job, 
-                                                              # global_info['snips_done'],
-                                                              # outdir,
-                                                              # start_time,
-                                                              # force_rewrite=True)
+                #                                              # global_info['snips_done'],
+                #                                              # outdir,
+                #                                              # start_time,
+                #                                              # force_rewrite=True)
 
     #------------------------------------
     # process_one_sel_tbl 
@@ -402,7 +402,7 @@ class SnippetSelectionTableMapper:
         # table rows:
         
         selections_all_tables = {}
-        last_alive_msg_time = datetime.datetime.now()
+        start_time = datetime.datetime.now()
         num_snips_processed = 0
 
         done = False
@@ -433,14 +433,10 @@ class SnippetSelectionTableMapper:
                 self.match_snippet(selections, task_args, outdir)
                 num_snips_processed += 1
                 
-                # Time for a sign of life?
-                now_time = datetime.datetime.now()
-                elapsed_time = now_time - last_alive_msg_time
-                if elapsed_time.seconds > 5 and self.log.logging_level >= INFO:
-                    #print(f"{my_job_name}---Number of spectros: {num_snips_processed} ",
-                    #      end='\r')
-                    #last_alive_msg_time = datetime.datetime.now()
-                    pass
+                self.sign_of_life_progress_provided(my_job_name, 
+                                                    num_snips_processed, 
+                                                    start_time, 
+                                                    force_rewrite=True)
             finally:
                 task_queue.task_done()
 
@@ -1025,6 +1021,36 @@ class SnippetSelectionTableMapper:
                 if SnippetSelectionTableMapper.extract_recording_id(snip_path) in rec_ids:
                     count += 1
         return count
+
+    #------------------------------------
+    # sign_of_life_progress_provided 
+    #-------------------
+    
+    @classmethod
+    def sign_of_life_progress_provided(cls, 
+                     job_name, 
+                     num_already_present_imgs, 
+                     start_time, 
+                     force_rewrite=False):
+        
+        # Time for sign of life?
+        #*****************
+        #force_rewrite=True
+        #*****************
+
+        now_time = datetime.datetime.now()
+        time_duration = now_time - start_time
+        # Every 3 seconds, but at least 3:
+        if force_rewrite \
+           or (time_duration.seconds > 0 and time_duration.seconds % 3 == 0): 
+            
+            # A human readable duration st down to minutes:
+            duration_str = Utils.time_delta_str(time_duration, granularity=4)
+
+            # Keep printing number of done snippets in the same
+            # terminal line:
+            print(f"{job_name}---Number of spectros: {num_already_present_imgs} after {duration_str}",
+                  end='\r')
 
     #------------------------------------
     # sign_of_life 

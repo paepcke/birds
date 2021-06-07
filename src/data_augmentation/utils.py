@@ -980,7 +980,7 @@ class Utils:
                 result.append("{} {}".format(value, name))
         dur_str = ', '.join(result[:granularity])
         if len(dur_str) == 0:
-            dur_str = '< 1sec>'
+            dur_str = '< 1sec'
         return dur_str
 
 

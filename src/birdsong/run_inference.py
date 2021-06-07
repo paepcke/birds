@@ -370,7 +370,7 @@ class Inferencer:
             time_now = datetime.datetime.now()
             test_time_duration = time_now - overall_start_time
             # A human readable duration st down to minutes:
-            duration_str = FileUtils.time_delta_str(test_time_duration, granularity=4)
+            duration_str = Utils.time_delta_str(test_time_duration, granularity=4)
             self.log.info(f"Done with inference: {samples_processed} test samples; {duration_str}")
             # Total number of batches we ran:
             num_batches = 1 + batch_num # b/c of zero-base
