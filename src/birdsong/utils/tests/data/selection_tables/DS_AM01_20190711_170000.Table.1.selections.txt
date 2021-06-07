@@ -1,0 +1,8 @@
+Selection	View	Channel	Begin Time (s)	End Time (s)	Low Freq (Hz)	High Freq (Hz)	Delta Time (s)	species	type	number	mix
+5	Spectrogram 1	1	0.014506764	4.656671354	345.6	22050.0	4.6422	no bird			
+6	Spectrogram 1	1	5.099127667	27.203955141	0.0	22050.0	22.1048	no bird			
+8	Spectrogram 1	1	33.765944341	58.510278217	0.0	22050.0	24.7443	no bird			
+1	Spectrogram 1	1	58.612545398	58.889506846	1564.1	10342.8	0.2770	wcpa	flight call	1	
+2	Spectrogram 1	1	4.753313284	5.025145817	1555.3	10057.3	0.2718	wcpa	flight call	1	
+3	Spectrogram 1	1	27.259203279	29.059452697	2695.8	3836.3	1.8002	shwc	song	1	
+4	Spectrogram 1	1	31.184284966	33.687195838	518.4	1157.8	2.5029	unk1	song	1	
