@@ -1503,14 +1503,22 @@ if __name__ == '__main__':
     birds_scientific = []
     bird_code_cnv = SpeciesNameConverter()
     for bird in birds_to_process:
-        if len(bird) == 4:
-            birds_scientific.append(bird_code_cnv[bird,
-                                                  DIRECTION.FOUR_SCI 
-                                                  ])
-        elif len(bird) == 6:
-            birds_scientific.append(bird_code_cnv[bird,
-                                                  DIRECTION.SIX_SCI
-                                                  ])
+        try:
+            if len(bird) == 4:
+                birds_scientific.append(bird_code_cnv[bird,
+                                                      DIRECTION.FOUR_SCI 
+                                                      ])
+            elif len(bird) == 6:
+                birds_scientific.append(bird_code_cnv[bird,
+                                                      DIRECTION.SIX_SCI
+                                                      ])
+        except KeyError:
+            # Could not find scienfic name of a
+            # 4-letter or 6-letter species. Since
+            # we have not started yet, stop now:
+            print(f"Could not convert {bird} into scientific name")
+            sys.exit(-1)
+            
         else:
             # Bird is already a scientific name.
             # Replace underscores needed for
