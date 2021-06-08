@@ -1416,12 +1416,19 @@ if __name__ == '__main__':
     Examples:
         xeno_canto_manager.py --download "Tangara gyrola"
         xeno_canto_manager.py --download BHTA "Lophotriccus pileatus"
-    
+        
+        xeno_canto_manager.py \\
+                 --destdir /home/data/birds/Soundfiles/XCForAllLabeledRecs \\
+                 --download \\
+                 --overwrite \\
+                 --all_recordings \\
+                 LEMO BGDO YTTO COTF GHOT GKIS HOWO MITY RBPE RCRW SHWO        
     '''
 
     parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
                                      formatter_class=argparse.RawTextHelpFormatter,
-                                     description="Download and process Xeno Canto bird sounds"
+                                     description="Download and process Xeno Canto bird sounds",
+                                     epilog=examples
                                      )
   
     parser.add_argument('-d', '--destdir',
