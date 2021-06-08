@@ -1520,7 +1520,7 @@ if __name__ == '__main__':
         # metadata, and no already existing and
         # saved collection was specified: 
         
-        sound_collection = XenoCantoCollection(birds_to_process,
+        sound_collection = XenoCantoCollection(birds_scientific,
                                                dest_dir=args.destdir,
                                                always_overwrite=args.overwrite
                                                )
@@ -1529,7 +1529,7 @@ if __name__ == '__main__':
           
     if 'download' in todo:
         one_per_species = not args.all_recordings
-        sound_collection.download(birds_to_process,
+        sound_collection.download(birds_scientific,
                                   one_per_species=one_per_species,
                                   overwrite_existing=args.overwrite,
                                   courtesy_delay=args.timedelay)
