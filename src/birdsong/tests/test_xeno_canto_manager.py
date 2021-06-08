@@ -180,7 +180,7 @@ class XenoCantoProcessorTester(unittest.TestCase):
         # Non-existing dest dir:
         with tempfile.TemporaryDirectory(dir='/tmp') as tmp_dir_name:
             os.rmdir(tmp_dir_name)
-            go_ahead = rec.download(dest_dir=tmp_dir_name, testing=True)
+            go_ahead = rec.download(dest_root=tmp_dir_name, testing=True)
             self.assertTrue(os.path.exists(tmp_dir_name) and \
                             os.path.isdir(tmp_dir_name))
             self.assertTrue(go_ahead)
@@ -189,7 +189,7 @@ class XenoCantoProcessorTester(unittest.TestCase):
     # test_download_explicit_overwrite_ok 
     #-------------------
 
-    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_download_explicit_overwrite_ok(self):
 
         rec = self.make_fake_rec_instance(load_dir=self.curr_dir)
@@ -285,7 +285,7 @@ class XenoCantoProcessorTester(unittest.TestCase):
                     fname = fd.name
                     rec.full_name = fname
                     rec._filename = os.path.basename(fname)
-                    go_ahead = rec.download(dest_dir='/usr/bin/foo',
+                    go_ahead = rec.download(dest_root='/usr/bin/foo',
                                             testing=True)
     
                 self.assertTrue(go_ahead)
@@ -333,7 +333,7 @@ class XenoCantoProcessorTester(unittest.TestCase):
             fname = fd.name
             rec.full_name = fname
             rec._filename = os.path.basename(fname)
-            go_ahead = rec.download(dest_dir=os.path.dirname(fname),
+            go_ahead = rec.download(dest_root=os.path.dirname(fname),
                                     overwrite_existing=overwrite_existing, 
                                     testing=True)
             self.assertEqual(go_ahead, expected_go_ahead)

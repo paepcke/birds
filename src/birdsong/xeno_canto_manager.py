@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
 """
+Download and manage Xeno Canto recordings.
+
+Usage example:
+   
+   xeno_canto_manager.py --download "Tangara gyrola"
+   
+
 Functions involved in downloading birds from xeno-canto
 Can be used from the command line (see argparse entries
 at end of file). Or one can import XenoCantoCollection
@@ -93,29 +100,10 @@ for recording in sound_collection(one_per_bird_phylo=False):
 
 """
 
-import argparse
-import datetime
-import os
-from pathlib import Path
-import pickle
-
-import numpy as np
-
 # Use orjson for reading.
 # It is lightning fast:
-import orjson
-
-import re
-import sys
-import time
-import requests
-
-from logging_service import LoggingService
-from birdsong.utils.utilities import FileUtils
-
 # TODO:
 #   o Example for creating a .json collection
-
 '''
 Usage example assuming you have a 
   .json file with a previously saved collection
@@ -156,6 +144,25 @@ Usage example assuming you have a
 
 '''
 # ---------------- Class XenoCantoCollection ----------
+
+import argparse
+import datetime
+import os
+from pathlib import Path
+import pickle
+import re
+import sys
+import time
+
+from logging_service import LoggingService
+import orjson
+import requests
+
+from birdsong.utils.species_name_converter import SpeciesNameConverter, \
+    DIRECTION
+from birdsong.utils.utilities import FileUtils
+import numpy as np
+
 
 class XenoCantoCollection:
     '''
@@ -356,6 +363,25 @@ class XenoCantoCollection:
             # done lazily:
             
             for rec_dict in recordings_list:
+                # Add the 4-letter and 6-letter codes
+                # to the recording's metadata:
+                sci_name = f"{rec_dict['gen']}_{rec_dict['sp']}"
+                try:
+                    rec_dict['four_code'] = SpeciesNameConverter()[sci_name,
+                                                                   DIRECTION.SCI_FOUR]
+                except KeyError:
+                    # Could not find a four-letter code from
+                    # the scientific name:
+                    rec_dict['four_code'] = None
+                    
+                try:
+                    rec_dict['six_code'] = SpeciesNameConverter()[sci_name,
+                                                                   DIRECTION.SCI_SIX]
+                except KeyError:
+                    # Could not find a six-letter code from
+                    # the scientific name:
+                    rec_dict['six_code'] = None
+
                 rec_obj  = XenoCantoRecording(rec_dict, 
                                               dest_dir=self.dest_dir, 
                                               log=self.log)
@@ -1033,9 +1059,10 @@ class XenoCantoRecording:
         Recording metadata must be a dict from the 
         'recordings' entry of a Xeno Canto download.
         The dict contains much info, such as bird name, 
-        recording_metadata location, length, sample rate, and
-        file download information. Create instance vars
-        from just some of them.
+        recording_metadata location, length, sample rate,
+        4-letter and 6-letter codes, and file download 
+        information. Create instance vars from just 
+        some of them.
 
         :param recording_metadata: a 'recordings' entry from a
             XenoCanto metadata download of available recordings
@@ -1073,6 +1100,8 @@ class XenoCantoRecording:
         self._xeno_canto_id = recording_metadata['id']
         self.genus     = recording_metadata['gen']
         self.species   = recording_metadata['sp']
+        self.four_code = recording_metadata['four_code']
+        self.six_code = recording_metadata['six_code']
         self.phylo_name= f"{self.genus}{self.species}"
         self.full_name = f"{self.phylo_name}_xc{self._xeno_canto_id}"
         
@@ -1100,18 +1129,23 @@ class XenoCantoRecording:
     #-------------------
     
     def download(self, 
-                 dest_dir=None, 
+                 dest_root=None, 
                  overwrite_existing=None,
                  testing=False):
         
-        if dest_dir is None:
-            dest_dir = self.dest_dir
+        if dest_root is None:
+            dest_root = self.dest_dir
             
         if overwrite_existing is None:
             # Use the global default. False, unless changed
             # during __init__()
             overwrite_existing = self.always_overwrite
+
+        # If necessary, create a subdir named by the 4-letter
+        # code of the bird species:
         
+        dest_dir = os.path.join(dest_root, self.four_code)
+
         while not os.path.exists(dest_dir):
             try:
                 os.makedirs(dest_dir)
@@ -1176,7 +1210,7 @@ class XenoCantoRecording:
             self.log.info(f"Skipping {self._filename}: already downloaded.")
             return self.full_name
         
-        self.log.info(f"Downloading {fname_descr}...")
+        self.log.info(f"Downloading {self.four_code}: {fname_descr}...")
         try:
             response = requests.get(self._url)
         except Exception as e:
@@ -1377,7 +1411,14 @@ if __name__ == '__main__':
 #              'Dysithamnus+mentalis', 'Lophotriccus+pileatus', 'Euphonia+imitans', 'Tangara+icterocephala', 
 #              'Catharus+ustulatus', 'Parula+pitiayumi', 'Henicorhina+leucosticta', 'Corapipo+altera', 
 #              'Empidonax+flaviventris']
- 
+
+    examples = '''
+    Examples:
+        xeno_canto_manager.py --download "Tangara gyrola"
+        xeno_canto_manager.py --download BHTA "Lophotriccus pileatus"
+    
+    '''
+
     parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
                                      formatter_class=argparse.RawTextHelpFormatter,
                                      description="Download and process Xeno Canto bird sounds"
@@ -1419,8 +1460,7 @@ if __name__ == '__main__':
     parser.add_argument('birds_to_process',
                         type=str,
                         nargs='+',
-                        help='Repeatable: <genus>+<species>. Ex: Tangara_gyrola')
-  
+                        help='Repeatable: <genus>_<species> or "<genus> <species>". Ex: Tangara_gyrola')
   
     args = parser.parse_args()
   
@@ -1449,13 +1489,28 @@ if __name__ == '__main__':
     # argparse constructs a name:
       
     birds_to_process = args.birds_to_process
+
+    # Turn 4-letter or 6-letter codes into
+    # their scientific names:
     
-    # Replace underscores needed for
-    # not confusing bash with the '+' signs
-    # required in URLs:
-    birds_to_process = [bird.replace('_', '+') 
-                        for bird 
-                        in birds_to_process]
+    birds_scientific = []
+    bird_code_cnv = SpeciesNameConverter()
+    for bird in birds_to_process:
+        if len(bird) == 4:
+            birds_scientific.append(bird_code_cnv[bird,
+                                                  DIRECTION.FOUR_SCI 
+                                                  ])
+        elif len(bird) == 6:
+            birds_scientific.append(bird_code_cnv[bird,
+                                                  DIRECTION.SIX_SCI
+                                                  ])
+        else:
+            # Bird is already a scientific name.
+            # Replace underscores needed for
+            # not confusing bash with the '+' signs
+            # that are required in URLs:
+            birds_scientific.append(bird.replace('_', '+'))
+            birds_scientific.append(bird.replace(' ', '+'))
           
     if sound_collection is None and \
         (('collect_info' in  todo) or\
