@@ -14,7 +14,6 @@ import sys
 
 from logging_service import LoggingService
 
-from birdsong.utils.utilities import FileUtils
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import ProcessWithoutWarnings
 from data_augmentation.utils import Utils, WhenAlreadyDone
@@ -461,7 +460,7 @@ class SpectrogramCreator:
            or (time_duration.seconds > 0 and time_duration.seconds % 3 == 0): 
             
             # A human readable duration st down to minutes:
-            duration_str = FileUtils.time_delta_str(time_duration, granularity=4)
+            duration_str = Utils.time_delta_str(time_duration, granularity=4)
 
             # Get current and new spectro imgs in outdir:
             num_now_present_imgs = len(Utils.find_in_dir_tree(outdir, pattern="*.png"))
