@@ -49,7 +49,8 @@ if __name__ == '__main__':
     
     for root, dirs, files in os.walk(args.directory):
         for subdir in dirs:
-            num_files = len(files)
+            full_subdir_path = os.path.join(root,subdir)
+            num_files = len(os.listdir(full_subdir_path))
             if args.full:
                 print(f"{os.path.join(root, subdir)},{num_files}")
             else:
