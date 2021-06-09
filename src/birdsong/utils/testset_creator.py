@@ -198,7 +198,7 @@ if __name__ == '__main__':
 
     from_dir = args.from_dir
     
-    if not os.exists(from_dir) or not os.path.isdir(from_dir):
+    if not os.path.exists(from_dir) or not os.path.isdir(from_dir):
         print(f"Directory {from_dir} does not exist")
         sys.exit(1)
 
