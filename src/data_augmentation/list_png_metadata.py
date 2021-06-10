@@ -18,8 +18,6 @@ from data_augmentation.utils import Utils
 sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-
-
 class PNGMetadataManipulator(object):
     '''
     View, set, or clear the metadata contained in
@@ -98,7 +96,7 @@ class PNGMetadataManipulator(object):
                     pprint.pprint(metadata, 
                                   sort_dicts=False,
                                   indent=4)
-
+                    
                     #for key, val in metadata.items():
                     #    print(f"{key} : {val}")
                 except Exception as _e:
@@ -110,6 +108,8 @@ class PNGMetadataManipulator(object):
                 ax.set_title(os.path.basename(snippet_path))
                 ax.set_axis_off()
                 plt.imshow(img, cmap='gray')
+                # Invert y axis to make 0 be in lower left:
+                ax.invert_yaxis()
                 plt.show()
 
         return md_list[0] if os.path.isfile(png_src) else md_list
@@ -420,4 +420,7 @@ if __name__ == '__main__':
         # is set, this method will do the printing: 
         PNGMetadataManipulator.handle_metadata_modification(args)
     elif args.printout:
-        PNGMetadataManipulator.extract_metadata(args.snippet_src, show=False, printout=True)
+        PNGMetadataManipulator.extract_metadata(
+            args.snippet_src, 
+            show=args.show, 
+            printout=True)
