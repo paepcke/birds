@@ -13,7 +13,7 @@ from scipy.signal import lfilter
 import skimage.io
 import soundfile
 
-from data_augmentation.utils import Utils
+from data_augmentation.utils import Utils, Interval
 import numpy as np
 
 
@@ -61,6 +61,9 @@ class SoundProcessor:
     # package:
 
     log = LoggingService()
+
+    SPECTRO_WIN_HEIGHT=256
+    '''Number of frequency bands in spectrogram'''
 
     #------------------------------------
     # Constructor Stub 
@@ -281,7 +284,12 @@ class SoundProcessor:
     #-------------------
 
     @classmethod
-    def create_spectrogram(cls, audio_sample, sr, outfile, n_mels=256, info=None):
+    def create_spectrogram(cls,
+                           audio_sample, 
+                           sr, 
+                           outfile, 
+                           n_mels=None, # Default: SoundProcessor.SPECTRO_WIN_HEIGHT
+                           info=None):
         '''
         Create and save a spectrogram from an audio 
         sample. Bandpass filter is applied, Mel scale is used,
@@ -317,6 +325,9 @@ class SoundProcessor:
         
         if info is not None and type(info) != dict:
             raise TypeError(f"If provided, info must be a dict, not {type(info)}")
+        
+        if n_mels is None:
+            n_mels = SoundProcessor.SPECTRO_WIN_HEIGHT
         
         # Use bandpass filter for audio before converting to spectrogram
         audio = SoundProcessor.filter_bird(audio_sample, sr)
@@ -565,6 +576,87 @@ class SoundProcessor:
 
     # ----------------- Utilities --------------
 
+
+    #------------------------------------
+    # energy_highlights
+    #-------------------
+    
+    @classmethod
+    def energy_highlights(cls, audio_sample, sr):
+        '''
+        Given an audio data numpy array, return
+        an array of Interval instances. Each instance
+        contains the low frequency and high frequency
+        among the frequency bands of higher intensity
+        then 2 standard deviations above the mean intensity
+        of the overall audio.
+        
+        Takes a short-time fast Fourier transform (STFT).
+        takes the mean intensity in each frequency band,
+        and and find those with higher than 2 sdev mean
+        of intensity across the band.
+        
+        :param audio_sample: 1D array of audio signal
+        :type audio_sample: np array
+        :return: a list of frequency intervals that each
+            contain more than 2 sdev higher intensity than
+            the overall signal 
+        :rtype: [Interval]
+        '''
+        
+        spectro_complex = librosa.stft(audio_sample)
+        spectro = np.abs(spectro_complex)
+        
+        center_frequencies = librosa.fft_frequencies(sr)
+        
+        #num_freq_bands, num_time_slices = spectro.shape
+        freqbands_width = center_frequencies[1] - center_frequencies[0] 
+        
+        # Get mean intensity across each freq band:
+        intensity_means = np.mean(spectro, axis=1)
+        
+        # The mean and stdev among those mean intensities:
+        intensity_overall_mean = np.mean(spectro)
+        intensity_std_among_bands = np.std(intensity_means)
+        
+        # The bands with higher intensity mean than 
+        # 2 stdevs of the bands:
+        high_intensity_bands_mask = \
+            abs((intensity_means - intensity_overall_mean)) > 2*intensity_std_among_bands
+            
+        # Use the mask to pull out an array
+        # of center frequencies whose band contains
+        # more than 2Sdev's worth of intensity. Result
+        # will be like:
+        #     
+        #    array([   0.        ,   10.76660156,   21.53320312, 1679.58984375,
+        #           1690.35644531, 1701.12304688, 1711.88964844, 1722.65625   ,        
+        #               ...
+
+        high_intensity_bands = np.compress(high_intensity_bands_mask, 
+                                           center_frequencies)
+        
+        # Form frequency intervals of high intensity
+        # by combining adjacent high-intensity bands.
+        # Each element of high_intensity_bands_mask is
+        # adjacent to its predecessor, if the two center
+        # frequencies are freqbands_width apart:
+        
+        low_band = 0.
+        ref_band = 0.
+        intervals = []
+        
+        for band in high_intensity_bands[1:]:
+            if band - ref_band > freqbands_width:
+                intervals.append(Interval(low_band, ref_band+1))
+                low_band = band
+            ref_band = band
+        
+        # The last interval:
+        intervals.append(Interval(low_band, ref_band+1))
+        
+        return intervals
+
     #------------------------------------
     # set_random_seed 
     #-------------------
@@ -626,8 +718,6 @@ class SoundProcessor:
     
         # normalize the volume
         return output / np.max(output)
-
-
 
     #------------------------------------
     # scale_minmax

@@ -8,6 +8,7 @@ import tempfile
 import unittest
 
 from data_augmentation.sound_processor import SoundProcessor
+from data_augmentation.utils import Interval
 
 
 TEST_ALL = True
@@ -51,6 +52,26 @@ class TestSoundProcessor(unittest.TestCase):
             _spectro, info = SoundProcessor.load_spectrogram(fd.name)
             truth = {'sr': '22050', 'duration': '10.8', 'species': 'DYSMEN_C'}
             self.assertDictEqual(info, truth)
+
+    #------------------------------------
+    # test_energy_highlights 
+    #-------------------
+
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_energy_highlights(self):
+        audio_path = os.path.join(self.cur_dir, 'audio_aug_tst_data/DYSMEN_S/dys1.mp3')
+        (aud, sr) = SoundProcessor.load_audio(audio_path)
+        high_intensity_intervals = SoundProcessor.energy_highlights(aud, sr)
+        
+        # Should have 2 freq 'band bundles" of high intensity
+        # area:
+        self.assertEqual(len(high_intensity_intervals), 2)
+        
+        # And the frequency bounds:
+        truth = [Interval(0.0, 22.533203125), Interval(1679.58984375, 1971.2880859375)]
+        self.assertEqual(high_intensity_intervals, truth)
+
+# ------------- Main ------------
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']
