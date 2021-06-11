@@ -11,6 +11,7 @@ from multiprocessing import Pool
 import os
 from pathlib import Path
 import sys
+import traceback as tb
 
 from logging_service.logging_service import LoggingService
 from sklearn.metrics import accuracy_score, balanced_accuracy_score
@@ -100,7 +101,7 @@ class Inferencer:
         self.IMG_EXTENSIONS = FileUtils.IMG_EXTENSIONS
         self.log      = LoggingService()
         self.curr_dir = os.path.dirname(__file__)
-        
+
     #------------------------------------
     # prep_model_inference 
     #-------------------
@@ -127,7 +128,8 @@ class Inferencer:
         :type model_path: str
         '''
         
-        model_fname       = os.path.basename(model_path)
+        self.model_path = model_path
+        model_fname = os.path.basename(model_path)
         
         # Extract model properties
         # from the model filename:
@@ -165,7 +167,6 @@ class Inferencer:
         
         # Make reproducible:
         Utils.set_seed(42)
-        #********Utils.set_seed(56)
         self.loader = DataLoader(dataset,
                                  batch_size=self.batch_size, 
                                  shuffle=True, 
@@ -201,7 +202,7 @@ class Inferencer:
         #****************
         #return self.run_inference(gpu_to_use=gpu_id)
         dicts_from_runs = []
-        for i in range(3):
+        for _i in range(3):
             self.curr_dict = {}
             dicts_from_runs.append(self.curr_dict)
             self.run_inference(gpu_to_use=gpu_id)
@@ -322,14 +323,18 @@ class Inferencer:
                     loss    = FileUtils.to_device(loss, 'cpu')
 
                     #**********
-                    max_logit = outputs[0].max().item()
-                    max_idx = (outputs.squeeze() == max_logit).nonzero(as_tuple=False).item()
-                    smpl_id = torch.utils.data.dataloader.sample_id_seq[-1]
-                    lbl     = labels[0].item()
-                    pred_cl = max_idx
-                    
-                    self.curr_dict[smpl_id] = (smpl_id, lbl, pred_cl)
-                    #**********
+                    # max_logit = outputs[0].max().item()
+                    # max_idxes = (outputs.squeeze() == max_logit).nonzero(as_tuple=False)
+                    # max_idx = max_idxes.amax().item()
+                    # smpl_id = torch.utils.data.dataloader.sample_id_seq[-1]
+                    # lbl     = labels[0].item()
+                    # pred_cl = max_idx
+                    #
+                    # try:
+                        # self.curr_dict[smpl_id] = (smpl_id, lbl, pred_cl)
+                    # except AttributeError:
+                        # self.curr_dict = {smpl_id : (smpl_id, lbl, pred_cl)}
+                    # #**********
                     
                     
                     # Specify the batch_num in place
@@ -340,7 +345,7 @@ class Inferencer:
                                         outputs, 
                                         labels, 
                                         loss,
-                                        self.num_classes,
+                                        self.class_names,
                                         self.batch_size)
                     result_coll.add(tally, step=None)
                     
@@ -361,12 +366,13 @@ class Inferencer:
                     if (time_now - loop_start_time).seconds >= 5:
                         self.log.info(f"GPU{gpu_to_use} processed {samples_processed}/{num_test_samples} samples")
                         loop_start_time = time_now 
+        except Exception as e:
+            # Print stack trace:
+            tb.print_exc()
+            self.log.err(f"Error during inference loop: {repr(e)}")
+            return
         finally:
             
-            #*********
-            print(f"Sample seq: {torch.utils.data.dataloader.sample_id_seq}")
-            torch.utils.data.dataloader.sample_id_seq = []
-            #*********
             time_now = datetime.datetime.now()
             test_time_duration = time_now - overall_start_time
             # A human readable duration st down to minutes:
@@ -476,7 +482,7 @@ class Inferencer:
         
         # Normalization in compute_confusion_matrix() is
         # to 0-1. Turn those values into percentages:
-        conf_matrix_perc = (100 * conf_matrix).astype(int)
+        # conf_matrix_perc = (100 * conf_matrix).astype(int)
         
         # Decide whether or not to write 
         # confusion cell values into the cells.
@@ -489,14 +495,14 @@ class Inferencer:
         else:
             write_in_fields=CELL_LABELING.ALWAYS
             
-        fig = Charter.fig_from_conf_matrix(conf_matrix_perc,
+        fig = Charter.fig_from_conf_matrix(conf_matrix,
                                            supertitle='Confusion Matrix\n',
                                            subtitle='Normalized to percentages',
                                            write_in_fields=write_in_fields
                                            )
         if show_in_tensorboard:
             self.writer.add_figure('Inference Confusion Matrix', 
-                                   fig, 
+                                   fig,
                                    global_step=0)
 
         if show:
@@ -731,10 +737,10 @@ class Inferencer:
             self.writer.close()
         except Exception as e:
             self.log.err(f"Could not close tensorboard writer: {repr(e)}")
-        #try:
-        #    self.csv_writer.close()
-        #except Exception as e:
-        #    self.log.err(f"Could not close CSV writer: {repr(e)}")
+        try:
+            self.csv_writer.close()
+        except Exception as e:
+            self.log.err(f"Could not close CSV writer: {repr(e)}")
 
 
 # ------------------------ Main ------------

@@ -5,6 +5,7 @@ Created on May 6, 2021
 '''
 import argparse
 import copy
+import csv
 from enum import Enum
 import os
 import sys
@@ -679,21 +680,45 @@ class Charter:
         # Then evaluate each label column vector 
         # separately.
         
-        bin_labels = label_binarize(truth_labels.flatten(),
-                                    classes=list(range(num_classes)))
+        truth_labels_flat = truth_labels.flatten()
+        class_ids         = list(range(num_classes))
+        bin_labels = label_binarize(truth_labels_flat,
+                                    classes=class_ids)
 
-        assert(bin_labels.shape == torch.Size([num_samples, num_classes])) 
-        assert(raw_preds.shape == \
-               torch.Size([num_batches, batch_size, num_classes])
-               )
+        # Num rows and cols of the binarized value:
+        bin_labels_num_rows, bin_labels_num_cols = bin_labels.shape
+        # As many rows in binarized as number of labels
+        # i.e. number of samples:
+        assert(bin_labels_num_rows == len(truth_labels_flat))
+        # Number of cols is same as number of class IDs,
+        # except when only 2 classes exist: then num of 
+        # cols for binarized value is 1:
+        num_classes = len(class_ids)
+        assert(bin_labels_num_cols == num_classes if num_classes > 2 else 1)
         
+        # For two classes (i.e. binary case), label_binarize()
+        # returns only one col of 1s/0s. That's presumably
+        # because for the other class the logical NOT of the
+        # binarized column is implied. Add that col explicitly
+        # to make binary and multi-class case easier to 
+        # treat the same:
+        
+        if num_classes == 2:
+            inverse_binarized = np.logical_not(bin_labels[:,0]).reshape(16,1)
+            bin_labels = np.append(bin_labels, inverse_binarized, axis=1)
+
+        # Preds are of shape 
+        #    [<num-channels>, <num_samples>, <num_classes>
         # Want straight down: logits for each class, for
-        # each sample ('lst' for 'list'):
+        # each sample:
         
         raw_preds_lst = raw_preds.reshape([num_samples, num_classes])
+        #raw_preds_num_rows, raw_preds_num_cols = raw_preds_lst.shape 
 
-        assert(raw_preds_lst.shape == bin_labels.shape)
         
+        assert(raw_preds_lst.shape == torch.Size([len(truth_labels_flat),
+                                                  num_classes]))
+
         # Turn logits into probs, rowise:
         preds = torch.softmax(raw_preds_lst, dim=1) 
 
@@ -709,7 +734,7 @@ class Charter:
         # columns for one class at
         # a time, and get the prec/rec numbers.
 
-        for col_idx in range(num_classes):
+        for col_idx in class_ids:
             bin_label_col = torch.tensor(bin_labels[:,col_idx])
             preds_col     = preds[:,col_idx]
 
@@ -872,7 +897,7 @@ class Charter:
             ax=ax,
             linewidths=1,# Pixel,
             linecolor='gray',
-            robust=True   # Compute colors from quantiles instead of 
+            robust=True   # Compute colors from quantiles istead of 
                           # most extreme values
             )
         
@@ -881,7 +906,7 @@ class Charter:
         # heatmap fmt value that would add '%', but I don't
         # have time for frigging format strings:
         
-        for txt in heatmap_ax.texts: txt.set_text(txt.get_text() + " %")
+        #*****for txt in heatmap_ax.texts: txt.set_text(txt.get_text() + " %")
 
         heatmap_ax.set_xticklabels(heatmap_ax.get_xticklabels(), 
                                    rotation = 45 
@@ -913,7 +938,18 @@ class Charter:
     def read_conf_matrix_from_file(cls, cm_path):
         '''
         Read a previously computed confusion matrix from
-        file. Return a dataframe containing the cm. 
+        file. Return a dataframe containing the cm.
+        
+        NOTE: this method is for reading files saved to csv
+              by numpy or pandas.
+
+        NOTE: if arrays of predicted and truth classes are
+              available, rather than an already computed confusion
+              matrix saved to file, see compute_confusion_matrix()
+              
+        NOTE: to read raw results saved during training (usually into
+              src/birdsong/runs_raw_results), use: 
+              confusion_matrices_from_raw_results(), followed by compute_confusion_matrix()
         
         Depending on the original dataframe/tensor,np_array
         from which which the .csv was created, the first line
@@ -934,9 +970,7 @@ class Charter:
         Since conf matrices are square, we can check
         and correct for that.
         
-        NOTE: if arrays of predicted and truth classes are
-               available, rather than an already computed confusion
-               matrix saved to file, see compute_confusion_matrix(). 
+        NOTE:  
         
         :param cm_path: path to confusion matrix in csv format
         :type cm_path: str
@@ -955,6 +989,139 @@ class Charter:
 
         return df_good
 
+    #------------------------------------
+    # confusion_matrices_from_raw_results()
+    #-------------------
+    
+    @classmethod
+    def confusion_matrices_from_raw_results(cls, fname, class_names=None, normalize=False):
+        '''
+        Read csv prediction/truth files created by the training 
+        process. The files are by default written to
+        src/birdsong/runs_raw_results.
+        
+        File format:
+        
+			step,train_preds,train_labels,val_preds,val_labels
+			0,"[2, 2, 3, 2, 3]","[2, 3, 1, 1, 1]","[4, 4, 4, 4, 4,]","[3, 4, 4, 2, 2]"
+			2,"[5, 5, 4, 5, 4]","[2, 3, 2, 2, 2]","[4, 4, 4, 4, 4]","[2, 4, 4, 1, 1]"
+
+        
+        Target cass names: if provided, the value should be an 
+        array of strings with human-readable class names, or a list 
+        of integers that correspond to target classes. If None, the
+        method looks for a file class_names.txt in fname's directory,
+        where it expects to find a single row like:
+        
+           ['DYSMEN_S', 'HENLES_S', 'audi', 'bmw', 'diving_gear', 'office_supplies']
+            
+        If that file is unavailable, and class_names is None: ValueError.
+        
+        Returns a list of TrainHistoryCMs instances whose API is:
+        
+              <inst>.step         ---> int
+              <inst>.training     ---> dataframe confusion matrix
+              <inst>.validation   ---> dataframe confusion matrix
+
+        :param fname: name of csv file to read
+        :type fname: str
+        :param class_names: if provided, an array of strings with
+            human-readable class names, or a list of integers 
+            that correspond to target classes.
+        :type class_names: {[str] | [int]}
+        :param normalize: normalize: whether or not to normalize ROWS
+            to add to 1. I.e. turn cells into percentages
+        :type normalize: bool
+        :returns: list of TrainHistoryCMs instances, each 
+            containing one training step's train and validation
+            outcome as dataframes
+        :rtype: [TrainHistoryCMs]
+        :raise ValueError if class_names cannot be found
+        :raise FileNotFoundError if fname does not exist
+        '''
+        
+        if not os.path.exists(fname):
+            raise FileNotFoundError(f"Cannot find file {fname}")
+
+        if class_names is None:
+            # Get class names from file, if available:
+            class_name_file = os.path.join(os.path.dirname(fname), 
+                                           'class_names.txt')
+            if os.path.exists(class_name_file):
+                with open(class_name_file, 'r') as fd:
+                    class_names_str = fd.read()
+                # Now have something like:
+                #
+                #   "['DYSMEN_S', 'HENLES_S', 'audi', 'bmw', 'diving_gear', 'office_supplies']\n"
+                #
+                # Use eval to retrieve the list, but 
+                # do it safely to avoid attacks by content
+                # placed in the class_names.txt file:
+    
+                class_names = eval(class_names_str,
+                   {"__builtins__":None},    # No built-ins at all
+                   {}                        # No additional func
+                   )
+            else:
+                raise ValueError("Must provide class names as argument, or in class_name.txt file")
+
+        results = []
+        # Get one row with step, train-preds, train_labels,
+        # val_preds, and val_labels at a time:
+        with open(fname, 'r') as data_fd:
+            reader = csv.DictReader(data_fd)
+            for outcome_dict in reader:
+                # Safely turn string formatted
+                # lists into lists of ints:
+                train_labels = eval(outcome_dict['train_labels'],
+                   {"__builtins__":None},    # No built-ins at all
+                   {}                        # No additional func
+                   )
+                train_preds = eval(outcome_dict['train_preds'],
+                   {"__builtins__":None},    # No built-ins at all
+                   {}                        # No additional func
+                   )
+                train_preds_df = cls.compute_confusion_matrix(train_labels, 
+                                                              train_preds, 
+                                                              class_names, 
+                                                              normalize)
+
+                val_labels = eval(outcome_dict['val_labels'],
+                   {"__builtins__":None},    # No built-ins at all
+                   {}                        # No additional func
+                   )
+                val_preds = eval(outcome_dict['val_preds'],
+                   {"__builtins__":None},    # No built-ins at all
+                   {}                        # No additional func
+                   )
+
+                val_preds_df = cls.compute_confusion_matrix(val_labels,
+                                                            val_preds,
+                                                            class_names,
+                                                            normalize)
+                results.append(TrainHistoryCMs(outcome_dict['step'], 
+                                                 train_preds_df, 
+                                                 val_preds_df,
+                                                 normalize))
+        return results
+
+# ------------------ Class TrainHistoryCMs -----------
+
+class TrainHistoryCMs:
+    '''
+    Instances hold a training step (int), and
+    two confusion matrices as dataframes: the step's
+    training outcome CM, and the corresponding validation
+    CM. 
+    
+    Attributes: step, training, validation, normalized
+    '''
+    
+    def __init__(self, step, train_cm, val_cm, normalized):
+        self.step = int(step)
+        self.training   = train_cm
+        self.validation = val_cm
+        self.normalized = normalized
 
 # ------------------ Class Best Operating Point -----------
 

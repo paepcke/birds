@@ -19,8 +19,6 @@ class InferenceTester(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        super(InferenceTester, cls).setUpClass()
-        
         cls.curr_dir = os.path.dirname(__file__)
         
         # Training data: root of species subdirectories:
@@ -43,7 +41,7 @@ class InferenceTester(unittest.TestCase):
         # more than one model will be involved
         # in inference testing:
         
-        cls.saved_model = os.path.join(
+        cls.saved_model_path = os.path.join(
             cls.saved_model_dir,
             os.listdir(cls.saved_model_dir)[0]
             )
@@ -58,8 +56,10 @@ class InferenceTester(unittest.TestCase):
             )
 
         cls.num_samples = 0
-        cls.num_species = len(os.listdir(cls.samples_path))
+        cls.num_species = 0
         for _dirName, _subdirList, fileList in os.walk(cls.samples_path):
+            if len(fileList) > 0:
+                cls.num_species += 1
             cls.num_samples += len(fileList)
 
     def setUp(self):
@@ -72,7 +72,7 @@ class InferenceTester(unittest.TestCase):
     # test_inference
     #-------------------
     
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_inference(self):
         # We have 60 test images. So, 
         # with drop_last True, a batch size
@@ -82,11 +82,12 @@ class InferenceTester(unittest.TestCase):
         batch_size = 16
         
         inferencer = Inferencer(
-            self.saved_model,
+            self.saved_model_path,
             self.samples_path,
             batch_size=batch_size,
             labels_path=self.labels_path
             )
+        inferencer.prep_model_inference(self.saved_model_path)
         print('Running inference...')
         tally_coll = inferencer.run_inference()
         print('Done running inference.')
@@ -111,11 +112,12 @@ class InferenceTester(unittest.TestCase):
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test__report_charted_results(self):
         inferencer = Inferencer(
-            self.saved_model,
+            self.saved_model_path,
             self.samples_path,
             batch_size=16,
             labels_path=self.labels_path
             )
+        inferencer.prep_model_inference(self.saved_model_path)
         print('Running inference...')
         tally_coll = inferencer.run_inference()
         print('Done running inference.')

@@ -4,6 +4,7 @@ Created on May 7, 2021
 @author: paepcke
 '''
 import os
+import tempfile
 import unittest
 
 import torch
@@ -16,12 +17,11 @@ from result_analysis.charting import Charter, CELL_LABELING
 TEST_ALL = True
 #TEST_ALL = False
 
-class Test(unittest.TestCase):
+class ChartingTester(unittest.TestCase):
 
 
     @classmethod
     def setUpClass(cls):
-        super(Test, cls).setUpClass()
         cls.cur_dir  = os.path.dirname(__file__)
         cls.data_dir = os.path.join(cls.cur_dir, 'data')
         
@@ -250,6 +250,107 @@ class Test(unittest.TestCase):
             res = pd.DataFrame(res, columns=['first', 'second'])
         return res
 
+    #------------------------------------
+    # test_confusion_matrices_from_raw_results
+    #-------------------
+    
+    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_confusion_matrices_from_raw_results(self):
+        
+        # Prepare a fake runs_raw_results directory,
+        # which would normally be created during the course
+        # of a training process:
+        
+        with tempfile.TemporaryDirectory(dir='/tmp',
+                                         prefix='charting_tests') as tmp_dir_nm:
+            (fname, class_names) = self.make_raw_results(tmp_dir_nm)
+            res_TrainHistoryCMs = Charter.confusion_matrices_from_raw_results(fname,
+                                                                              class_names, 
+                                                                              normalize=False)
+            step0_train_truth = [
+               [0,0,0,0,0,0],
+               [0,0,1,2,0,0],
+               [0,0,1,0,0,0],
+               [0,0,1,0,0,0],
+               [0,0,0,0,0,0],
+               [0,0,0,0,0,0]
+               ]
+            truth_df = pd.DataFrame(step0_train_truth)
+            truth_df.columns = class_names
+            truth_df.index   = class_names
+            self.assert_dataframes_equal(res_TrainHistoryCMs[0].training,
+                                         truth_df) 
+
+            step0_val_truth = [
+               [0,0,0,0,0,0],
+               [0,0,0,0,0,0],
+               [0,0,0,0,2,0],
+               [0,0,0,0,1,0],
+               [0,0,0,0,2,0],
+               [0,0,0,0,0,0]
+               ]
+            truth_df = pd.DataFrame(step0_val_truth)
+            truth_df.columns = class_names
+            truth_df.index   = class_names
+            self.assert_dataframes_equal(res_TrainHistoryCMs[0].validation,
+                                         truth_df) 
+            
+            
+            step2_train_truth = [
+               [0,0,0,0,0,0],
+               [0,0,0,0,0,0],
+               [0,0,0,0,2,2],
+               [0,0,0,0,0,1],
+               [0,0,0,0,0,0],
+               [0,0,0,0,0,0]
+               ]
+            truth_df = pd.DataFrame(step2_train_truth)
+            truth_df.columns = class_names
+            truth_df.index   = class_names
+            self.assert_dataframes_equal(res_TrainHistoryCMs[1].training,
+                                         truth_df) 
+            
+            step2_val_truth = [
+               [0,0,0,0,0,0],
+               [0,0,0,0,2,0],
+               [0,0,0,0,1,0],
+               [0,0,0,0,0,0],
+               [0,0,0,0,2,0],
+               [0,0,0,0,0,0]
+               ]
+            truth_df = pd.DataFrame(step2_val_truth)
+            truth_df.columns = class_names
+            truth_df.index   = class_names
+            self.assert_dataframes_equal(res_TrainHistoryCMs[1].validation,
+                                         truth_df) 
+
+# ---------------------- Utilities --------------------
+
+    def make_raw_results(self, dst_dir):
+        '''
+        Create a fake runs_raw_results .csv and
+        class_names.txt files. These two would normally
+        be left behind by a training process.
+        
+        :param dir: destination of .csv and .txt files
+        :type dir: src
+        '''
+        csv_content = ("step,train_preds,train_labels,val_preds,val_labels\n"
+                       '0,"[2, 2, 3, 2, 3]","[2, 3, 1, 1, 1]","[4, 4, 4, 4, 4,]","[3, 4, 4, 2, 2]"\n'
+                       '2,"[5, 5, 4, 5, 4]","[2, 3, 2, 2, 2]","[4, 4, 4, 4, 4]","[2, 4, 4, 1, 1]"\n'
+                       )
+        names_content = ['DYSMEN_S', 'HENLES_S', 'audi', 'bmw', 'diving_gear', 'office_supplies']
+        fname = os.path.join(dst_dir, 'raw_data.csv')
+        
+        # Write the pred/labels csv file
+        with open(fname, 'w') as fd:
+            fd.write(csv_content)
+        class_names_path = os.path.join(dst_dir, 'class_names.txt')
+        
+        # Write the class names:
+        with open(class_names_path, 'w') as fd:
+            fd.write(str(names_content))
+        return fname, names_content
 
 # ---------------------- Main --------------------
 

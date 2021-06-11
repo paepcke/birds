@@ -217,8 +217,6 @@ class BirdsBasicTrainerCV:
 
                 epoch_start_time = datetime.datetime.now()
         
-                self.log.info(f"Starting epoch {epoch} training")
-                        
                 # Sanity check record: will record
                 # how many samples from each class were
                 # used:
@@ -230,7 +228,7 @@ class BirdsBasicTrainerCV:
                 label_distrib = {}
                 batch_num = 0
     
-                self.log.info(f"Train epoch {epoch}/{self.max_epochs} split {split_num}/{self.train_loader.num_folds}")
+                self.log.info(f"Split {split_num}/{self.train_loader.num_folds}: Epoch {epoch}/{self.max_epochs} ")
                 try:
                     for batch, targets in self.train_loader:
                         # Update the sanity check
@@ -303,7 +301,13 @@ class BirdsBasicTrainerCV:
                     #print(f"****** LblDist: {label_distrib}")
                     #***********
                     self.validate_split(step_num)
-                    self.visualize_step(step_num)
+                    try:
+                        self.visualize_step(step_num)
+                    except Exception as e:
+                        # Make sure the reporting to Tensorboard, etc.
+                        # does not throw us:
+                        self.log.err(f"While viz for step {step_num} {repr(e)}; continuing training")
+                        
                     # Save model, keeping self.model_archive_size models: 
                     self.model_archive.save_model(self.model, epoch)
     
@@ -311,13 +315,14 @@ class BirdsBasicTrainerCV:
                     
                     # Next Epoch
                     continue 
-                
+            
+            # End of one epoch of one split:
             end_time = datetime.datetime.now()
             train_time_duration = end_time - split_start_time
             # A human readable duration st down to minutes:
             duration_str = Utils.time_delta_str(train_time_duration, granularity=4)
             
-            self.log.info(f"Done training split {split_num} (duration: {duration_str})")
+            self.log.info(f"Done training split {split_num} through {self.max_epochs} epochs (duration: {duration_str})")
             
             # Next split
             continue
@@ -329,7 +334,7 @@ class BirdsBasicTrainerCV:
         cumulative_dur = end_time - overall_start_time
         cum_dur_str    = Utils.time_delta_str(cumulative_dur, granularity=4)
         
-        msg = f"Done epoch {epoch}  (epoch duration: {epoch_dur_str}; cumulative: {cum_dur_str})"
+        msg = f"Done training all splits (duration: {epoch_dur_str}; cumulative: {cum_dur_str})"
         self.log.info(msg)
 
         #******self.scheduler.step()
@@ -770,6 +775,12 @@ class BirdsBasicTrainerCV:
         # after run is finished:
         self.csv_writer = self.create_csv_writer(raw_data_dir)
         
+        # Write the (ordered by ID!) class names
+        # into file 'class_names':
+        with open(os.path.join(raw_data_dir, 'class_names.txt'), 'w') as fd:
+            fd.write(f"{self.class_names}\n")
+            
+        
         # Place to store intermediate models:
         self.model_archive = \
             self.create_model_archive(self.config, 
@@ -796,9 +807,9 @@ class BirdsBasicTrainerCV:
         Create a csv_writer that will fill a csv
         file during training/validation as follows:
         
-            epoch  train_preds   train_labels  val_preds  val_labels
+            step  train_preds   train_labels  val_preds  val_labels
             
-        Cols after the integer 'epoch' col will each be
+        Cols after the integer 'step' col will each be
         an array of ints:
         
                   train_preds    train_lbls   val_preds  val_lbls
@@ -889,7 +900,7 @@ class BirdsBasicTrainerCV:
                                         mode=mode, 
                                         delimiter=',')
 
-        header = ['epoch', 'train_preds', 'train_labels', 'val_preds', 'val_labels']
+        header = ['step', 'train_preds', 'train_labels', 'val_preds', 'val_labels']
         csv_writer.writerow(header)
 
         

@@ -752,7 +752,7 @@ class ResultTally:
     #-------------------
     
     def __repr__(self):
-        (cm_num_rows, cm_num_cols) = self.conf_matrix.size()
+        (cm_num_rows, cm_num_cols) = self.conf_matrix.shape
         cm_dim = f"{cm_num_rows} x {cm_num_cols}"
         learning_phase = str(self.phase)
         human_readable = (f"<ResultTally step {self.step} " +
