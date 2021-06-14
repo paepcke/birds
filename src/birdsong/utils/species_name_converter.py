@@ -135,6 +135,42 @@ class SpeciesNameConverter:
         cls.four_to_sci_dict['LESG']   = 'AMAZILIA DECORA'
         cls.sci_to_four_dict['AMAZILIA DECORA'] = ['LESG']
         
+        cls.six_to_four_dict['CLAPRE'] = 'BGDO'
+        cls.four_to_six_dict['BLGD']   = 'CLAPRE'
+        cls.four_to_sci_dict['BLGD']   = 'Claravis pretiosa'
+        cls.sci_to_four_dict['Claravis pretiosa'] = ['BGDO']
+        
+        cls.six_to_four_dict['RAMAMB'] = 'YTTO'
+        cls.four_to_six_dict['CMTO']   = 'RAMAMB'
+        cls.four_to_sci_dict['CMTO']   = 'Ramphastos ambiguus'
+        cls.sci_to_four_dict['Ramphastos ambiguus'] = ['YTTO']
+
+        cls.six_to_four_dict['STILAR'] = 'GHOT'
+        cls.four_to_six_dict['GHTA']   = 'STILAR'
+        cls.four_to_sci_dict['GHTA']   = 'Stilpnia larvata'
+        cls.sci_to_four_dict['Stilpnia larvata'] = ['GHOT']
+
+        cls.six_to_four_dict['PITSUL'] = 'GKIS'
+        cls.four_to_six_dict['GRKI']   = 'PITSUL'
+        cls.four_to_sci_dict['GRKI']   = 'Pitangus sulphuratus'
+        cls.sci_to_four_dict['Pitangus sulphuratus'] = ['GKIS']
+
+        cls.six_to_four_dict['CYCGUJ'] = 'RBPE'
+        cls.four_to_six_dict['RBPS']   = 'CYCGUJ'
+        cls.four_to_sci_dict['RBPS']   = 'Cyclarhis gujanensis'
+        cls.sci_to_four_dict['Cyclarhis gujanensis'] = ['RBPE']
+        
+        cls.six_to_four_dict['LEPSOU'] = 'SHWO'
+        cls.four_to_six_dict['SHWC']   = 'LEPSOU'
+        cls.four_to_sci_dict['SHWC']   = 'Lepidocolaptes souleyetii'
+        cls.sci_to_four_dict['Lepidocolaptes souleyetii'] = ['SHWO']
+        
+        cls.six_to_four_dict['RAMPAS'] = 'SCRT'
+        cls.four_to_six_dict['SRTA']   = 'RAMPAS'
+        cls.four_to_sci_dict['SRTA']   = 'Ramphocelus passerinii'
+        cls.sci_to_four_dict['Ramphocelus passerinii'] = ['SCRT']
+
+
         # See comment for DIRECTION enumeration above
         # for the following dict lookup table for conversions.
         # The enumeration members such as FOUR_SIX are 
@@ -433,7 +469,7 @@ if __name__ == '__main__':
 
     parser.add_argument('direction',
                         choices=['four_six', 'four_sci',
-                                 'six-four', 'six_sci',
+                                 'six_four', 'six_sci',
                                  'sci_four', 'sci_six' 
                                  ],
                         help='Direction of conversion'
