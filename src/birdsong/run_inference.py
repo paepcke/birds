@@ -274,7 +274,7 @@ class Inferencer:
             try:
                 if torch.cuda.is_available():
                     self.model.load_state_dict(torch.load(self.model_path))
-                    FileUtils.to_device(self.model, 'gpu', gpu_to_use)
+                    self.model = FileUtils.to_device(self.model, 'gpu', gpu_to_use)
                 else:
                     self.model.load_state_dict(torch.load(
                         self.model_path,
