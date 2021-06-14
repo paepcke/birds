@@ -704,7 +704,7 @@ class Charter:
         # treat the same:
         
         if num_classes == 2:
-            inverse_binarized = np.logical_not(bin_labels[:,0]).reshape(16,1)
+            inverse_binarized = np.logical_not(bin_labels[:,0]).reshape(num_samples,1)
             bin_labels = np.append(bin_labels, inverse_binarized, axis=1)
 
         # Preds are of shape 
