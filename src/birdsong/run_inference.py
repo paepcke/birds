@@ -792,6 +792,9 @@ if __name__ == '__main__':
     # Same for samples path, though we only allow
     # one of those paths. 
     samples_path = FileUtils.expand_filename(args.samples_path)[0]
+    if not os.path.exists(samples_path):
+        print(f"Samples path {samples_path} does not exist")
+        sys.exit(1)
     
     # Ensure that the file arrangements are as required by
     # the ImageFolder class: 
