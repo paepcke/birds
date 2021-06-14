@@ -703,7 +703,6 @@ class FileUtils:
         # Will use a GPU; was a particular one specified?
         if gpu_id is None:
             gpu_id = 0
-            torch.cuda.set_device(gpu_id)
         else:
             # Check device number:
             if type(gpu_id) != int:
@@ -715,9 +714,6 @@ class FileUtils:
 
         torch.cuda.set_device(gpu_id)
         return item.to(fastest_device)
-
-        
-
 
     #------------------------------------
     # gpu_memory_report 

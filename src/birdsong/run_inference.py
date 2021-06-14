@@ -284,7 +284,7 @@ class Inferencer:
                 emsg = repr(e)
                 if emsg.find("size mismatch for conv1") > -1:
                     emsg += " Maybe model was trained with to_grayscale=False, but local net created for grayscale?"
-                    raise RuntimeError(emsg) from e
+                raise RuntimeError(emsg) from e
 
             loss_fn = nn.CrossEntropyLoss()
     
