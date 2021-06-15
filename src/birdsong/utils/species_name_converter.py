@@ -175,9 +175,6 @@ class SpeciesNameConverter:
         cls.four_to_sci_dict['RCWP']   = 'Melanerpes rubricapillus'
         cls.sci_to_four_dict['Melanerpes rubricapillus'] = ['RCRW']
 
-
-RCRW Melanerpes rubricapillus MELRUB
-
         # See comment for DIRECTION enumeration above
         # for the following dict lookup table for conversions.
         # The enumeration members such as FOUR_SIX are 
