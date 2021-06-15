@@ -170,6 +170,13 @@ class SpeciesNameConverter:
         cls.four_to_sci_dict['SRTA']   = 'Ramphocelus passerinii'
         cls.sci_to_four_dict['Ramphocelus passerinii'] = ['SCRT']
 
+        cls.six_to_four_dict['MELRUB'] = 'RCRW'
+        cls.four_to_six_dict['RCWP']   = 'MELRUB'
+        cls.four_to_sci_dict['RCWP']   = 'Melanerpes rubricapillus'
+        cls.sci_to_four_dict['Melanerpes rubricapillus'] = ['RCRW']
+
+
+RCRW Melanerpes rubricapillus MELRUB
 
         # See comment for DIRECTION enumeration above
         # for the following dict lookup table for conversions.
