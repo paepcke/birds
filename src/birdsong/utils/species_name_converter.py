@@ -147,7 +147,7 @@ class SpeciesNameConverter:
 
         cls.six_to_four_dict['STILAR'] = 'GHOT'
         cls.four_to_six_dict['GHTA']   = 'STILAR'
-        cls.four_to_sci_dict['GHTA']   = 'Stilpnia larvata'
+        cls.four_to_sci_dict['GHTA']   = 'Tangara larvata'
         cls.sci_to_four_dict['Stilpnia larvata'] = ['GHOT']
 
         cls.six_to_four_dict['PITSUL'] = 'GKIS'
