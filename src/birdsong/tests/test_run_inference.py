@@ -11,8 +11,8 @@ import torch
 from birdsong.run_inference import Inferencer
 
 
-TEST_ALL = True
-#TEST_ALL = False
+#********TEST_ALL = True
+TEST_ALL = False
 
 
 class InferenceTester(unittest.TestCase):
