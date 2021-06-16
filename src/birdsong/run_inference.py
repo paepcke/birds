@@ -34,13 +34,6 @@ import numpy as np
 import pandas as pd
 from result_analysis.charting import Charter, CELL_LABELING
 
-
-sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-
-
-
-
 class Inferencer:
     '''
     classdocs
@@ -270,6 +263,9 @@ class Inferencer:
         batch_num   = -1
         overall_start_time = datetime.datetime.now()
 
+        # Load the previously created model
+        # with the learned weights:
+        
         try:
             try:
                 if torch.cuda.is_available():
@@ -786,12 +782,41 @@ if __name__ == '__main__':
         model_paths_raw = args.model_paths
         
     model_paths = []
+    # For each model path, determine whether 
+    # it is a dir, has tilde or $HOME, etc.
+    # and create a flat list of full paths
+    # to models:
+    
     for fname in model_paths_raw:
-        model_paths.extend(FileUtils.expand_filename(fname))
+        # If fname is a file name (i.e. in our context has an extension):
+        if len(Path(fname).suffix) > 0:
+            # Resolve tilde and env vars:
+            model_paths.append(os.path.expanduser(os.path.expandvars(fname)))
+            continue
+        # fname is a directory:
+        for root, dirs, files in os.walk(fname):
+            # For files in this dir, expand them,...
+            expanded_fnames = [os.path.expanduser(os.path.expandvars(one_fname))
+                                for one_fname
+                                in files
+                                ]
+            #... and prepend the root before adding
+            # as a full model path:
+            model_paths.extend([os.path.join(root, fname)
+                                for fname in
+                                expanded_fnames
+                                ])
+
+    # Ensure the all model paths exist:
+    for model_path in model_paths:
+        if not os.path.exists(model_path):
+            print(f"Cannot find model {model_path}")
+            sys.exit(1)
 
     # Same for samples path, though we only allow
-    # one of those paths. 
-    samples_path = FileUtils.expand_filename(args.samples_path)[0]
+    # one of those paths.
+    sample_name =  args.samples_path[0]
+    samples_path = os.path.expanduser(os.path.expandvars(sample_name))
     if not os.path.exists(samples_path):
         print(f"Samples path {samples_path} does not exist")
         sys.exit(1)
