@@ -776,6 +776,11 @@ if __name__ == '__main__':
     
     # Expand Unix wildcards, tilde, and env 
     # vars in the model paths:
+    
+    if args.model_paths is None:
+        print("Must provide --model_paths: path(s) to models over which to inference")
+        sys.exit(1)
+    
     if type(args.model_paths) != list:
         model_paths_raw = [args.model_paths]
     else:
@@ -815,8 +820,10 @@ if __name__ == '__main__':
 
     # Same for samples path, though we only allow
     # one of those paths.
-    sample_name =  args.samples_path[0]
-    samples_path = os.path.expanduser(os.path.expandvars(sample_name))
+    if args.samples_path is None:
+        print(f"Must provide --samples_path: directory with subdirs of spectrogram snippets")
+        sys.exit(1)
+    samples_path = os.path.expanduser(os.path.expandvars(args.samples_path))
     if not os.path.exists(samples_path):
         print(f"Samples path {samples_path} does not exist")
         sys.exit(1)
@@ -849,7 +856,7 @@ if __name__ == '__main__':
                     found_at_least_one_img = True
                     break
             if not found_at_least_one_img:
-                print(f"Subdirectory {subdir} does not include any image files.")
+                print(f"Subdirectory '{subdir}' does not include any image files.")
                 print(dir_struct_desc)
                 sys.exit(1)
         # No need to walk deeper:
