@@ -8,7 +8,6 @@ from pathlib import Path
 
 from logging_service.logging_service import LoggingService
 
-from birdsong.utils.utilities import FileUtils
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import ProcessWithoutWarnings
 from data_augmentation.utils import Utils

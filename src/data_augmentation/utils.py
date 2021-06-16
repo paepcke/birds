@@ -899,12 +899,14 @@ class Utils:
             sel_dict['End Time (s)'] = float(sel_dict['End Time (s)'])
             sel_dict['Low Freq (Hz)'] = float(sel_dict['Low Freq (Hz)'])
             sel_dict['High Freq (Hz)'] = float(sel_dict['High Freq (Hz)'])
+            # Make the four-letter species upper case:
+            sel_dict['species'] = sel_dict['species'].upper()
             # Turn the comma-separated list of
             # overlapping vocalizations into
             # a (possibly empty) list of strings:
             sel_dict['mix'] = [] if len(sel_dict['mix']) == 0 else sel_dict['mix'].split(',')
             # Clean out spurious white space:
-            sel_dict['mix'] = [mix_list_entry.strip() 
+            sel_dict['mix'] = [mix_list_entry.strip().upper() 
                                for mix_list_entry
                                in sel_dict['mix']
                                ]
