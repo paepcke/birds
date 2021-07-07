@@ -3,6 +3,29 @@
 Created on Mar 12, 2021
 
 @author: paepcke
+
+TODO:
+    o Catch cnt-C and complete without a stack trace
+       after finishing the 'finally' clause
+    o Why always: 
+      run_inference.py(3254979): 2021-07-06 14:01:54,082;WARNING: For all thresholds, one or more of precision,
+              recall or f1 are undefined. No p/r curves to show
+    o ir_results.csv: 
+		,0       
+		prec_macro,0.0622439088620259
+		prec_micro,0.07980347329707624
+              ...
+      Why the leading zero?
+      
+    o When setting CLI batch_size to 128 instead of 16:
+      Assertion fails:
+        # Be afraid...be very afraid:
+	    assert(self.all_outputs_tn.shape == \
+                   torch.Size([num_batches,
+                               self.batch_size,
+                               self.num_classes])
+                   )
+
 '''
 from _collections import OrderedDict
 import argparse
@@ -48,7 +71,8 @@ class Inferencer:
                  samples_path,
                  batch_size=1, 
                  labels_path=None,
-                 gpu_ids=0
+                 gpu_ids=0,
+                 sampling=None
                  ):
         '''
         Given the path to a trained model,
@@ -79,13 +103,17 @@ class Inferencer:
         :type labels_path:
         :param gpu_ids: Device number of GPU, in case 
             one is available
-        :type gpu_ids: {int | [int]} 
+        :type gpu_ids: {int | [int]}
+        :param sampling: only use given percent of the samples in
+            each class.
+        :type sampling: {int | None}
         '''
 
         self.model_paths  = model_paths
         self.samples_path = samples_path
         self.labels_path  = labels_path
         self.gpu_ids      = gpu_ids if type(gpu_ids) == list else [gpu_ids]
+        self.sampling     = sampling
         if batch_size is not None:
             self.batch_size = batch_size
         else:
@@ -155,7 +183,8 @@ class Inferencer:
         
         dataset = SingleRootImageDataset(
             self.samples_path,
-            to_grayscale=self.model_props['to_grayscale']
+            to_grayscale=self.model_props['to_grayscale'],
+            percentage=self.sampling
             )
         
         # Make reproducible:
@@ -760,7 +789,12 @@ if __name__ == '__main__':
                         help='device number of GPU(s) (zero-origin); repeatable; only used if GPU available; defaults to ID 0',
                         default=0
                         )
-
+    parser.add_argument('-s', '--sampling',
+                        type=int,
+                        help='optional: only use given percentage of samples in each class; default: all',
+                        default=None 
+                        )
+    
     parser.add_argument('--model_paths',
                         nargs='+',
                         help='path(s) to the saved Pytorch model(s); repeatable, if more than one, composites of results from all models. ',
@@ -835,8 +869,7 @@ if __name__ == '__main__':
     #         img_file        img_file                  img_file
     #         img_file        img_file                  img_file
     #                   ...                  ...
-    
-    
+
     dir_struct_desc = f"Samples must be in *sub*directories with image files under {samples_path}"
     for root, dirs, _files in os.walk(samples_path):
         if len(dirs) == 0:
@@ -865,7 +898,8 @@ if __name__ == '__main__':
     inferencer = Inferencer(model_paths,
                             samples_path,
                             labels_path=None,
-                            gpu_ids=args.device if type(args.device) == list else [args.device]
+                            gpu_ids=args.device if type(args.device) == list else [args.device],
+                            sampling=args.sample
                             )
     inferencer.go()
 
