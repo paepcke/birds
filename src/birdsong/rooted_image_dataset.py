@@ -70,6 +70,7 @@ from torchvision import transforms
 from torchvision.datasets import folder
 
 from birdsong.utils.utilities import FileUtils
+from data_augmentation.utils import Utils
 import numpy as np
 
 
@@ -239,9 +240,13 @@ class SingleRootImageDataset:
             for sample_folder in sample_folder_list:
 
                 # List of full paths to each sample of current class.
+                if percentage is not None:
+                    sample_paths = Utils.random_list_percentage(os.listdir(sample_folder), percentage)
+                else:
+                    sample_paths = os.listdir(sample_folder)
                 folder_content  = [os.path.join(sample_folder, sample_path)
                                    for sample_path 
-                                   in natsort.natsorted(os.listdir(sample_folder))
+                                   in natsort.natsorted(sample_paths)
                                    if Path(sample_path).suffix in FileUtils.IMG_EXTENSIONS
                                    ]
 
@@ -267,16 +272,6 @@ class SingleRootImageDataset:
                 # Update where to start the IDs for the
                 # next folder
                 sample_id_start += len(sample_id_range)
-
-        if percentage is None:
-            # Use all samples
-            return
-        
-        self.sample_id_to_class, self.sample_id_to_path = \
-            self._cull_samples(self.sample_id_to_class, 
-                               self.sample_id_to_path,
-                               percentage
-                               )
 
     #------------------------------------
     # sample_ids

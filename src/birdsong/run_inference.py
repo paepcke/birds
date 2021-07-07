@@ -899,7 +899,7 @@ if __name__ == '__main__':
                             samples_path,
                             labels_path=None,
                             gpu_ids=args.device if type(args.device) == list else [args.device],
-                            sampling=args.sample
+                            sampling=args.sampling
                             )
     inferencer.go()
 

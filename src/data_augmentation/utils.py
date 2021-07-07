@@ -819,6 +819,16 @@ class Utils:
         random.seed(seed)
 
     #------------------------------------
+    # random_list_percentage 
+    #-------------------
+    
+    @classmethod
+    def random_list_percentage(cls, lst, percentage):
+        num_items_to_get = int(len(lst)*percentage/100)
+        res_lst = random.sample(lst, num_items_to_get)
+        return res_lst
+
+    #------------------------------------
     # add_pyplot_manager_to_fig
     #-------------------
     

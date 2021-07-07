@@ -7,10 +7,11 @@ NOTE: this is a pretty slim set of unittests.
       Needs more.
 
 '''
+import os
 import unittest
 
 from birdsong.rooted_image_dataset import SingleRootImageDataset
-
+from torch.utils.data.dataloader import DataLoader
 
 TEST_ALL = True
 #TEST_ALL = False
@@ -18,6 +19,15 @@ TEST_ALL = True
 
 class TestRootedImageDataset(unittest.TestCase):
 
+    @classmethod
+    def setUpClass(cls):
+        cls.cur_dir  = os.path.dirname(__file__)
+        cls.data_dir = os.path.join(cls.cur_dir, 'data_other/TestSnippets')
+        # Count number of AMADECs:
+        amadec_root = os.path.join(cls.data_dir, 'AMADEC')
+        melrub_root = os.path.join(cls.data_dir, 'MELRUB')
+        cls.num_amadecs = len(os.listdir(amadec_root))
+        cls.num_melrub  = len(os.listdir(melrub_root))
 
     def setUp(self):
         pass
@@ -28,46 +38,47 @@ class TestRootedImageDataset(unittest.TestCase):
 
 # ------------------ Tests -------------------
 
-    def test_cull_samples(self):
-        ds = SingleRootImageDataset('/dummy/filename.txt')
-        sample_id_to_class = {
-         100 : 0,
-         101 : 0,
-         102 : 0,
-         103 : 0,
-         104 : 0,
-         105 : 0,
-         200 : 1,
-         201 : 1,
-         202 : 1,
-         203 : 1,
-         204 : 1,
-         205 : 1
-         }
+    def test_dataset_setup(self):
+        ds = SingleRootImageDataset(self.data_dir)
+        self.assertEqual(len(ds), 21)
         
-        sample_id_to_path = {
-         100 : '/tmp/foo/img0',
-         101 : '/tmp/foo/img1',
-         102 : '/tmp/foo/img2',
-         103 : '/tmp/foo/img3',
-         104 : '/tmp/foo/img4',
-         105 : '/tmp/foo/img5',
-         200 : '/tmp/foo/img6',
-         201 : '/tmp/foo/img7',
-         202 : '/tmp/foo/img8',
-         203 : '/tmp/foo/img9',
-         204 : '/tmp/foo/img10',
-         205 : '/tmp/foo/img11'
-         }
+        self.assertEqual(ds.class_names(), ['AMADEC', 'MELRUB'])
         
-        reduced_sid2cid, reduced_sid2path = ds.cull_samples(
-            sample_id_to_class,
-            sample_id_to_path,
-            20
-            )
-        self.assertEqual(len(reduced_sid2cid), 2)
-        self.assertEqual(len(reduced_sid2path), 2)
+        self.assertListEqual(list(ds.sample_ids()), list(range(21)))
 
+        # Map from class ID to species name:
+        clid2clnm = {cls_id : cls_nm
+                     for (cls_id, cls_nm)
+                     in zip(ds.class_id_list(), ds.class_names())
+                     }
+        # Get only a percentage:
+        ds1perc = SingleRootImageDataset(self.data_dir, percentage=50)
+        
+        self.assertEqual(len(ds1perc), 10)
+        # Expect sample IDs still to be consecutive ints,
+        # not a broken chain:
+        self.assertListEqual(list(ds1perc.sample_ids()), list(range(10)))
+
+        dl =  DataLoader(ds1perc,
+                         batch_size=1,
+                         shuffle=False, 
+                         drop_last=True 
+                        )
+        self.assertEqual(len(dl), 10)
+        num_seen_species = {'AMADEC' : 0, 'MELRUB' : 0}
+        for _batch_num, (_batch, targets) in enumerate(dl):
+            target_species_nm = clid2clnm[targets.item()]
+            num_seen_species[target_species_nm] += 1
+            
+        # Expected AMADECs: 50% of self.num_amadecs:
+        expected_amadec = int(self.num_amadecs / 2)
+        expected_melrub = int(self.num_melrub / 2)
+        self.assertEqual(num_seen_species['AMADEC'], expected_amadec)
+        self.assertEqual(num_seen_species['MELRUB'], expected_melrub)
+        
+        
+        
+# ---------------------- Main --------------------
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']
     unittest.main()
