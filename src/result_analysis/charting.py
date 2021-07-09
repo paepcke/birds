@@ -320,7 +320,7 @@ class Charter:
         # and log a warning:
         if len(class_list) == 1:
             cls.log.warn(f"Only label {class_list[0]} occurs; always guessing that value.")
-        class_list.append(class_list[0])
+            class_list.append(class_list[0])
         
         # So far, no undefined recall or precision
         # i.e. no 0-denominator found:

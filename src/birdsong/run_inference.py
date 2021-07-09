@@ -11,20 +11,12 @@ TODO:
       run_inference.py(3254979): 2021-07-06 14:01:54,082;WARNING: For all thresholds, one or more of precision,
               recall or f1 are undefined. No p/r curves to show
     o ir_results.csv: 
-		,0       
-		prec_macro,0.0622439088620259
-		prec_micro,0.07980347329707624
+        ,0       
+        prec_macro,0.0622439088620259
+        prec_micro,0.07980347329707624
               ...
       Why the leading zero?
       
-    o When setting CLI batch_size to 128 instead of 16:
-      Assertion fails:
-        # Be afraid...be very afraid:
-	    assert(self.all_outputs_tn.shape == \
-                   torch.Size([num_batches,
-                               self.batch_size,
-                               self.num_classes])
-                   )
 
 '''
 from _collections import OrderedDict
@@ -222,13 +214,13 @@ class Inferencer:
         self.prep_model_inference(self.model_path)
         self.log.info(f"Begining inference with model {FileUtils.ellipsed_file_path(self.model_path)} on gpu_id {gpu_id}")
         #****************
-        #return self.run_inference(gpu_to_use=gpu_id)
-        dicts_from_runs = []
-        for _i in range(3):
-            self.curr_dict = {}
-            dicts_from_runs.append(self.curr_dict)
-            self.run_inference(gpu_to_use=gpu_id)
-        print(dicts_from_runs)
+        return self.run_inference(gpu_to_use=gpu_id)
+        # dicts_from_runs = []
+        # for _i in range(3):
+        #     self.curr_dict = {}
+        #     dicts_from_runs.append(self.curr_dict)
+        #     self.run_inference(gpu_to_use=gpu_id)
+        # print(dicts_from_runs)
         #****************
 
     #------------------------------------
@@ -244,8 +236,8 @@ class Inferencer:
         gpu_model_pairings = list(zip(self.gpu_ids*repeats, self.model_paths))
         
         #************* No parallelism for debugging
-        self(gpu_model_pairings[0])
-        return
+        result_collection = self(gpu_model_pairings[0])
+        return result_collection
         #************* END No parallelism for debugging
         
         with Pool(len(self.gpu_ids)) as inf_pool:
@@ -703,13 +695,33 @@ class Inferencer:
         res_series = pd.Series(list(res.values()),
                                index=list(res.keys())
                                )
+        # The series looks like:
+        #    prec_macro,0.04713735383721669
+        #    prec_micro,0.0703125
+        #    prec_weighted,0.047204446832196136
+        #    prec_by_class,"[0.         0.09278351 0.         0.         0.05747126 0.08133971
+        #        0.03971119 0.18181818 0.07194245 0.0877193  0.         0.
+        #        0.        ]"
+        #    recall_macro,0.07039151324865611
+        #    recall_micro,0.0703125
+        #
+        # We want a df like:
+        #   prec_macro,prec_micro,...prec_GLDH, prec_VASE, ..., rec_GLDH, rec_VASE,...
+        #
+        # Expand the per-class-pred:
+        
+        
+        
         
         # Write information retrieval type results
         # to a one-line .csv file, using pandas Series
-        # as convenient intermediary:
+        # and df as convenient intermediary:
         res_csv_path = os.path.join(res_dir, 'ir_results.csv')
-        res_series.to_csv(res_csv_path)
+        res_df = self.res_measures_to_df(res_series)
+        res_df.to_csv(res_csv_path, index=False)
 
+        # Next, construct Tensorboard markup tables
+        # for the same results:
         res_rnd = {}
         for meas_nm, meas_val in res.items():
             
@@ -768,6 +780,67 @@ class Inferencer:
             self.log.err(f"Could not close CSV writer: {repr(e)}")
 
 
+# --------------------- Utilities -------------------
+
+    #------------------------------------
+    # res_measures_to_df 
+    #-------------------
+    
+    def res_measures_to_df(self, measure_series):
+        '''
+        Given a pandas series like:
+        
+            prec_macro,0.04713735383721669
+            prec_micro,0.0703125
+            prec_weighted,0.047204446832196136
+                  ...
+            prec_by_class,"[0.         0.09278351 0.         0.         0.05747126 0.08133971
+                0.03971119 0.18181818 0.07194245 0.0877193  0.         0.
+                0.        ]"
+              ...
+            recall_macro,0.07039151324865611
+            recall_micro,0.0703125
+        
+        create a dataframe with the series' index as column
+        names. However, for list-valued entries, expand,
+        giving each list element its own column. Col names
+        for those expansions will be <SPECIES_ABBREV>_prec
+        or <SPECIES_ABBREV>_rec, as appropriate.
+        
+        :param measure_series:
+        :type measure_series:
+        :return: dataframe with no special index, and
+           new column names
+        :rtype: pd.DataFrame
+        '''
+        col_names = []
+        col_vals  = []
+        for meas_nm in measure_series.index:
+            if type(measure_series[meas_nm]) != np.ndarray:
+                col_names.append(meas_nm)
+                col_vals.append(measure_series[meas_nm])
+                continue
+            
+            # Have array-valued entry like prec_per_class:
+            list_values = measure_series[meas_nm]
+            
+            # Shorten 'prec_by_class' and 'recall_by_class'
+            # to 'prec' and 'rec', b/c we will append the
+            # species name:
+            if meas_nm == 'prec_by_class':
+                col_nm_prefix = 'prec'
+            elif meas_nm == 'recall_by_class':
+                col_nm_prefix = 'rec'
+            else:
+                col_nm_prefix = meas_nm
+                
+            for class_id, class_nm in enumerate(self.class_names):
+                col_names.append(f"{col_nm_prefix}_{class_nm}")
+                col_vals.append(list_values[class_id])
+        
+        df = pd.DataFrame([col_vals], columns=col_names)
+        return df
+
 # ------------------------ Main ------------
 if __name__ == '__main__':
     
@@ -780,6 +853,7 @@ if __name__ == '__main__':
                         help='optional path to labels for use in measures calcs; default: no measures',
                         default=None)
     parser.add_argument('-b', '--batch_size',
+                        type=int,
                         help='batch size to use; default: 1',
                         default=1
                         )
@@ -899,7 +973,10 @@ if __name__ == '__main__':
                             samples_path,
                             labels_path=None,
                             gpu_ids=args.device if type(args.device) == list else [args.device],
-                            sampling=args.sampling
+                            sampling=args.sampling,
+                            batch_size=args.batch_size
                             )
-    inferencer.go()
-
+    result_collection = inferencer.go()
+    #*************
+    print(f"Result collection: {result_collection}")
+    #*************
