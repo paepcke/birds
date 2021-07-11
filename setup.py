@@ -41,6 +41,7 @@ setup(
                         'adjustText>=0.7.3',
                         'discrete-differentiator>=0.1',
                         'scikit-image>=0.18.1',
+                        'skorch>=0.10.0',
                         ],
 
     tests_require    =[

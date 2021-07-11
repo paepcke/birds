@@ -36,6 +36,9 @@ from torch import nn
 import torch
 from torch.utils.data.dataloader import DataLoader
 
+from skorch import NeuralNet
+from skorch.callbacks import EpochScoring
+
 from birdsong.ml_plotting.classification_charts import ClassificationPlotter
 from birdsong.nets import NetUtils
 from birdsong.result_tallying import ResultTally, ResultCollection
@@ -252,12 +255,83 @@ class Inferencer:
             results = [res.get() for res in result_it]
             print(f"******Results: {results}")
 
-
     #------------------------------------
     # run_inferencer 
     #-------------------
     
     def run_inference(self, gpu_to_use=0):
+
+        
+        sko_net = NeuralNet(
+            module=self.model,
+            criterion=torch.nn.NLLLoss,
+            batch_size=self.batch_size,
+            train_split=None,    # We won't train, just infer
+            #callbacks=[EpochScoring('f1')]
+            device=f"cuda:{gpu_to_use}" if torch.cuda.is_available() else "cpu"
+            )
+
+        sko_net.initialize()  # This is important!
+        sko_net.load_params(f_params=self.model_path)
+        truth = []
+        pred_logits = []
+        for X,y in self.loader:
+            pred_logits.append(sko_net.predict(X))
+            truth.append(y)
+            
+        # Preds are now a list of np-arrays, each
+        # of which has shape (batch_size, num_classes).
+        # The length of the list is the number of batches
+        # retrieved from the dataset. Use map() to
+        # turn the np arrays into tensors, and concatenate
+        # the rows (i.e. all the batches) into one tensor:
+        pred_logits_tn = torch.cat(list(map(torch.tensor, pred_logits)))
+        
+        # Get a tensor:
+        #    sample0  [prob_class0, prob_class1, ..., prob_class_n]
+        #    sample1  [prob_class0, prob_class1, ..., prob_class_n]
+        #                  ...
+        
+        pred_probs = torch.softmax(pred_logits_tn, dim=1)
+        
+        # Probabilities across one row must add to 1:
+        # But due to rounding they add to 0.99999999xyz
+        #assert(sum(pred_probs[0,:]) == 1)
+        
+        # Truth is a list of tensors, each of batch_size
+        # length. The length of the list (i.e. then number
+        # of tensors is the number of batches extracted from
+        # the dataset. Turn into a 1-D tensor of truth:
+        truth_tn = torch.cat(truth)
+        
+        # For each row in pred_probs, get the 
+        # most like class; the position of the max
+        # probability is synonymous with the class ID.
+        # Get:
+        #    sample0 class3
+        #    sample1 class1
+        #       ...
+        pred_classes = pred_probs.argmax(dim=1)
+
+        # For evaluation the whole outcome, use
+        # Pandas data structures:
+        
+        truth_series  = pd.Series(truth_tn)
+        pred_probs_df = pd.DataFrame(pred_probs)
+        # Turn each of the df's one-element tensors
+        # into floats:
+        pred_probs_df = pred_probs_df.applymap(lambda el: el.item())
+        Charter.visualize_testing_result(truth_series, pred_probs_df)
+        
+        acc = accuracy_score(truth_series, pred_classes)
+        
+        print('foo')
+
+    #------------------------------------
+    # run_inferencerOLD 
+    #-------------------
+    
+    def run_inferenceOLD(self, gpu_to_use=0):
         '''
         Runs model over dataloader. Along
         the way: creates ResultTally for each

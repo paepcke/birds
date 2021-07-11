@@ -14,8 +14,8 @@ import pandas as pd
 from result_analysis.charting import Charter, CELL_LABELING
 
 
-TEST_ALL = True
-#TEST_ALL = False
+#******TEST_ALL = True
+TEST_ALL = False
 
 class ChartingTester(unittest.TestCase):
 
@@ -24,6 +24,7 @@ class ChartingTester(unittest.TestCase):
     def setUpClass(cls):
         cls.cur_dir  = os.path.dirname(__file__)
         cls.data_dir = os.path.join(cls.cur_dir, 'data')
+        cls.viz_data_dir = os.path.join(cls.data_dir, 'visualization')
         
         cls.conf_normed_matrix_path = os.path.join(cls.data_dir, 
                                                    'conf_matrix_results.csv')
@@ -167,6 +168,44 @@ class ChartingTester(unittest.TestCase):
                                                                         'notso_nice_df.csv'))
         self.assert_dataframes_equal(nice_df, truth)
         self.assert_dataframes_equal(notso_nice_df, truth)
+
+
+    #------------------------------------
+    # test_visualize_testing_result 
+    #-------------------
+    
+    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_visualize_testing_result(self):
+        
+        truth_labels = pd.read_csv(os.path.join(self.viz_data_dir, 'truth_labels_300_samples.csv'))
+        # Get a series from the one-and-only column
+        # (pd.read_csv() creates a df, not a series,
+        # with which we will work:
+        truth_labels = truth_labels.iloc[:,0]
+        
+        # Probabilities of 300 samples, one
+        # column for each target class
+        pred_probs   = pd.read_csv(os.path.join(self.viz_data_dir, 'pred_probs_300_samples.csv'))
+        
+        mAP, pr_curve_specs = Charter.visualize_testing_result(truth_labels, pred_probs)
+        
+        self.assertEqual(round(mAP, 3), 0.091)
+        
+        num_samples, num_classes = pred_probs.shape
+        self.assertEqual(len(pr_curve_specs), num_classes)
+        self.assertEqual(len(truth_labels), num_samples)
+        
+        avg_prec_class_0 = pr_curve_specs[0]['avg_prec']
+        self.assertEqual(round(avg_prec_class_0, 6), 0.104266)
+        
+        best_op_pt_10 = pr_curve_specs[10]['best_op_pt']
+        self.assertEqual(round(best_op_pt_10['f1'], 4), 0.1931)
+        
+        self.assertEqual(round(best_op_pt_10['threshold'], 7), 0.0037106)
+        self.assertEqual(round(best_op_pt_10['precision'], 7), 0.1157025)
+        self.assertEqual(round(best_op_pt_10['recall'], 7), 0.5833333)
+        
+        print('foo')
 
 
 # ------------------- Utilities ---------------

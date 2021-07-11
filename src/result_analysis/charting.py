@@ -15,9 +15,9 @@ from logging_service.logging_service import LoggingService
 from matplotlib import cm as col_map
 from matplotlib import pyplot as plt
 import sklearn
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, precision_recall_curve
 from sklearn.metrics._classification import precision_score, recall_score
-from sklearn.metrics._ranking import average_precision_score
+from sklearn.metrics import average_precision_score
 from sklearn.preprocessing._label import label_binarize
 import torch
 
@@ -84,8 +84,8 @@ class Charter:
 
     @classmethod
     def visualize_testing_result(cls,
-                                 truth_labels, 
-                                 pred_class_ids
+                                 truth_labels,
+                                 pred_probs
                                  ):
         '''
         Use to visualize results from using a 
@@ -93,10 +93,27 @@ class Charter:
         
         Draws a PR curve, and adds a table with 
         the average precison (AP) of each class.
+        
+        The truth_labels are expected to be a Pandas
+        Series of integers of length num_test_samples.
+        
+        The pred_probs must be a 1D or 2D dataframe.
+        Each row contains the set of probabilities assigned
+        to one class. So: width is number of classes,
+        height must be num_test_samples, class_id.e. same as
+        the length of the truth Series.
+                
+        :param truth_labels: the class IDs corresponding to 
+            the true classification
+        :type truth_labels: pd.Series
+        :param pred_probs: probabilities assigned for each 
+            class_id
+        :type pred_probs: pd.DataFrame
         '''
+
         # Find number of classes involved:
-        all_class_ids = set(truth_labels)
-        num_classes   = len(all_class_ids)
+        _num_samples, num_classes = pred_probs.shape
+        pred_class_ids = list(range(num_classes))
         
         # Will alternately treat each class 
         # prediction as a one-vs-all binary
@@ -116,7 +133,8 @@ class Charter:
         #             ...
 
         bin_labels = label_binarize(truth_labels,
-                                    classes=list(range(num_classes)))
+                                    classes=pred_class_ids
+                                    )
 
         # Make tensors just for manipulation
         # convenience:
@@ -127,8 +145,10 @@ class Charter:
         precisions = dict()
         recalls = dict()
         average_precisions = dict()
+        
+        pr_curve_specs = {}
 
-        # Go through each column, i.e. the
+        # Go through each column, class_id.e. the
         # 1/0 labels/preds for one class at
         # a time, and get the prec/rec numbers.
         # The [1] in prec & rec is b/c precision_recall_curve
@@ -137,43 +157,29 @@ class Charter:
         # last element. The prec/rec we want is the 
         # where 1 is the thresholds:
         
-        for i in range(num_classes):
+        for class_id in range(num_classes):
             
-            bin_labels_arr = bin_labels_tn[:,i].tolist()
-            preds_arr  = preds_tn.tolist()
+            bin_labels_np = bin_labels[:,class_id]
+            preds_series  = pred_probs.iloc[:,class_id]
             
             # Get precision and recall at each
             # of the default thresholds:
-            precs, recs = \
-                cls.compute_binary_pr_curve(bin_labels_arr,
-                                            preds_arr
-                                            )
-            precisions[i] = precs
-            recalls[i]    = recs
+            pr_curve_spec = \
+                cls.compute_binary_pr_curve(bin_labels_np,
+                                            preds_series,
+                                            class_id)
             
-            # Avg prec is:
-            #
-            #      AP = SUM_ovr_n((R_n - R_n-1)*P_n
-            #
-            # I.e. the increase in recalls times current
-            # precisions as each pred/sample pair is 
-            # processed:
-            
-            average_precisions[i] = \
-                average_precision_score(bin_labels_arr,
-                                        preds_arr,
-                                        average='macro',
-                                        )
-                
-        mAP = np.mean(list(average_precisions.values()))
+            pr_curve_specs[class_id] = pr_curve_spec
+
+        mAP = np.mean([pr_curve_spec['avg_prec']
+                       for pr_curve_spec
+                       in list(pr_curve_specs.values())
+                       ])
         
-        return (mAP, 
-                precisions, 
-                recalls, 
-                average_precisions
-                )
+        return (mAP, pr_curve_specs) 
 
 # ----------------- Computations ---------------
+
 
     #------------------------------------
     # compute_binary_pr_curve 
@@ -181,6 +187,99 @@ class Charter:
 
     @classmethod
     def compute_binary_pr_curve(cls, 
+                                truth_series,
+                                pred_probs_series,
+                                class_id
+                                ):
+        '''
+        Given a series of prediction probabilities for
+        a single class (against all others), and corresponding
+        1/0 truth values. Return a CurveSpecification instance
+        that contains all information needed to draw a PR curve.
+        Also includes the optimal operating point for this class,
+        i.e. the threshold that leads to the optimal f1.
+        
+        Each element in pred_probs_series corresponds to a
+        classifier's output probability for one test sample.
+        The probability is that the sample is of target class 
+        class_id (as opposed to some other class). The corresponding
+        truth_series element is 1 if the sample truly is of class
+        class_id, else the element is 0.
+        
+          pred_probs_series:                truth_series:
+              [for sample0]  0.1              1
+              [for sample1]  0.4              0
+                  ...                        ...
+
+        
+
+        :param truth_series: 1 or 0 indicating whether or not sample
+            at index i is of class class_id
+        :type truth_series: [int]
+        :param pred_probs_series: probabilities that sample at
+            index i is of class class_id
+        :type pred_probs_series: [float]
+        :param class_id: the class id for which this 
+            PR curve is being computed.
+        :type class_id: int
+        :return all information needed to draw the PR curve
+            for class_id, plus indicator of the optimal operating point
+            for class_id
+        :rtype: CurveSpecification
+        '''
+
+        # So far, no undefined recall or precision
+        # i.e. no 0-denominator found:
+        undef_prec = False
+        undef_rec  = False
+        undef_f1   = False
+
+        # The last prec will be 1, the last rec will
+        # be 0, and will not have a corresponding 
+        # threshold. This ensures that the graph starts
+        # on the y axis:
+        precs_np, recs_np, thresholds = \
+            precision_recall_curve(truth_series, pred_probs_series)
+
+        pr_curve_df = pd.DataFrame(np.array([thresholds, precs_np[:-1],recs_np[:-1]]).transpose(),
+                                   columns=['Threshold', 'Precision', 'Recall']
+                                   )
+        with warnings.catch_warnings():
+            try:
+                warnings.filterwarnings("error",
+                                        #category=UndefinedMetricWarning
+                                        category=UserWarning
+                                        )
+                warnings.filterwarnings("ignore",
+                                        #category=UndefinedMetricWarning
+                                        category=RuntimeWarning
+                                        )
+                f1_scores_np = 2 * (precs_np * recs_np) / (precs_np + recs_np)
+                # Add these f1s to the pr_curve info:
+                pr_curve_df['f1'] = f1_scores_np[:-1]
+                
+            except Exception as e:
+                raise type(e)(f"Error during f1 computation: {e}") from e
+
+        best_op_idx = pr_curve_df['f1'].argmax()
+        
+        best_operating_pt = BestOperatingPoint(pr_curve_df.iloc[best_op_idx,:])
+
+        avg_prec = average_precision_score(truth_series, pred_probs_series) 
+        res = CurveSpecification(pr_curve_df,
+                                 best_operating_pt,
+                                 avg_prec,
+                                 class_id
+                                 )
+        
+        return res
+
+    #------------------------------------
+    # compute_binary_pr_curveOLD 
+    #-------------------
+
+    @classmethod
+    def compute_binary_pr_curveOLD(cls, 
                                 labels, 
                                 preds,
                                 class_id,
@@ -1137,35 +1236,33 @@ class BestOperatingPoint(dict):
     # Constructor
     #-------------------
     
-    def __init__(self,
-                 threshold,
-                 f1_score,
-                 precision,
-                 recall
-                 ):
+    def __init__(self, op_pt_info):
         '''
+        A pd series containing:
+			 Threshold    0.000853
+			 Precision    0.115044
+			 Recall       0.928571
+			 f1           0.204724
         
-        :param threshold: probability value that is the best
-            decision threshold between two classes
-        :type threshold: float
-        :param f1_score: the F1 score achieved at the 
-            given threshold's recall and precision
-        :type f1_score: float
-        :param precision: the precision value of the 
-            best operating point on the PR curve
-        :type precision: float
-        :param recall: the recall value of the 
-            best operating point on the PR curve
-        :type recall: float
+        where:
+            Threshold is probability value that is the best
+                      decision threshold between two classes
+            Precision is the precision value of the 
+                      best operating point on the PR curve
+            Recall    is the recall value of the 
+                      best operating point on the PR curve
+            f1        is the f1 score computed from the given
+                      precision/recall
+        
+        :param op_pt_info: the parameters of the operating point 
+        :type op_pt_info: pd.Pandas
         '''
         super().__init__()
 
-        if type(f1_score) == torch.Tensor:
-            f1_score = float(f1_score)
-        if type(precision) == torch.Tensor:
-            precision = float(precision)
-        if type(recall) == torch.Tensor:
-            recall = float(recall)
+        f1_score  = op_pt_info.f1
+        precision = op_pt_info.Precision
+        recall    = op_pt_info.Recall
+        threshold = op_pt_info.Threshold
 
         self.__setitem__('threshold', threshold)
         self.__setitem__('f1', f1_score)
@@ -1220,29 +1317,51 @@ class CurveSpecification(dict):
     #-------------------
     
     def __init__(self,
+                 pr_curve_df,
                  best_operating_pt,
-                 recalls,
-                 precisions,
-                 thresholds,
                  avg_precision,
                  class_id,
                  **kwargs
                  ):
         '''
+        The pr_curve_df holds for each decision threshold
+        the probability threshold value, the corresponding
+        precision and recall, and the f1 value:
+            ['Threshold', 'Precision', 'Recall', 'f1']
+            
+        Behaves like a dict.
+
+        The number of rows is one less than the number of samples
+        to make the curve start on the Y axis. The last-threshold's
+        prec value is implied to be 1, the recall value is implied
+        to be 0.
         
+        Resulting instance will have the following dict keys
+        build in:
+        
+        	'best_op_pt',
+        	'recalls',
+        	'precisions',
+        	'thresholds',
+        	'avg_prec',
+        	'class_id',
+        	
+        The best_op_pt's keys are:
+        
+            ['threshold', 'f1', 'precision', 'recall']
+        
+        :param pr_curve_df: dataframe with columns
+            ['Threshold', 'Precision', 'Recall', 'f1'] and 
+            shape (number-of-samples - 1, 4)
+        :type pr_curve_df: pd.DataFrame
         :param best_operating_pt: information where on the 
             curve the optimal F1 score is achieved
         :type best_operating_pt: BestOperatingPoint
-        :param recalls: all recall values that with corresponding
-            precisions define the curve
-        :type recalls: [float]
-        :param precisions: all recall values that with corresponding
-            recall define the curve
-        :type precisions: [float]
-        :param thresholds: the decision thresholds at which the
-            (recall/precision) points on the curve were computed. 
-        :type thresholds: [float]
-        :param avg_precision: the average of all precisions (AP)
+        :param avg_precision: AP summarizes a precision-recall curve as 
+            the weighted mean of precisions achieved at each threshold, 
+            with the increase in recall from the previous threshold 
+            used as the weight:
+               SUM_n((R_n - R_(n-1)) * P_n)
         :type avg_precision: [float]
         :param class_id: class for which this obj
             is the pr-curve
@@ -1251,13 +1370,47 @@ class CurveSpecification(dict):
         '''
         
         super().__init__()
+        self.pr_curve_df = pr_curve_df
         self.__setitem__('best_op_pt', best_operating_pt)
-        self.__setitem__('recalls', recalls)
-        self.__setitem__('precisions', precisions)
-        self.__setitem__('thresholds', thresholds)
+        self.__setitem__('recalls', pr_curve_df['Recall'])
+        self.__setitem__('precisions', pr_curve_df['Precision'])
+        self.__setitem__('thresholds', pr_curve_df['Threshold'])
         self.__setitem__('avg_prec', avg_precision)
         self.__setitem__('class_id', class_id)
         self.update(**kwargs)
+
+    #------------------------------------
+    # def undef_prec 
+    #-------------------
+
+    def undef_prec(self):
+        '''
+        Returns the number of precision values
+        that are 0
+        '''
+        return sum(self.precisions == 0)
+        
+    #------------------------------------
+    # def undef_prec 
+    #-------------------
+
+    def undef_rec(self):
+        '''
+        Returns the number of recall values
+        that are 0
+        '''
+        return sum(self.recalls == 0)
+    
+    #------------------------------------
+    # def undef_f1
+    #-------------------
+
+    def undef_f1(self):
+        '''
+        Returns the number of undefined (nan)
+        f1 values
+        '''
+        return sum(self.f1.isna())
 
     #------------------------------------
     # __repr__ 
