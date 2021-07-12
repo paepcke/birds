@@ -136,26 +136,12 @@ class Charter:
                                     classes=pred_class_ids
                                     )
 
-        # Make tensors just for manipulation
-        # convenience:
-        
-        bin_labels_tn = torch.tensor(bin_labels)
-        preds_tn      = torch.tensor(pred_class_ids)
-        
-        precisions = dict()
-        recalls = dict()
-        average_precisions = dict()
-        
         pr_curve_specs = {}
 
         # Go through each column, class_id.e. the
         # 1/0 labels/preds for one class at
-        # a time, and get the prec/rec numbers.
-        # The [1] in prec & rec is b/c precision_recall_curve
-        # returns a triplet for binary classification:
-        # prec/rec at thresholds 0, 1, putting 1 as the 
-        # last element. The prec/rec we want is the 
-        # where 1 is the thresholds:
+        # a time, and get the prec/rec numbers at different
+        # thresholds.
         
         for class_id in range(num_classes):
             
@@ -228,12 +214,6 @@ class Charter:
         :rtype: CurveSpecification
         '''
 
-        # So far, no undefined recall or precision
-        # i.e. no 0-denominator found:
-        undef_prec = False
-        undef_rec  = False
-        undef_f1   = False
-
         # The last prec will be 1, the last rec will
         # be 0, and will not have a corresponding 
         # threshold. This ensures that the graph starts
@@ -241,6 +221,9 @@ class Charter:
         precs_np, recs_np, thresholds = \
             precision_recall_curve(truth_series, pred_probs_series)
 
+        # The -1 in precs_np and recs_np take away the
+        # closing p==1 and r==0 so the lengths are the
+        # same as the number of thresholds:
         pr_curve_df = pd.DataFrame(np.array([thresholds, precs_np[:-1],recs_np[:-1]]).transpose(),
                                    columns=['Threshold', 'Precision', 'Recall']
                                    )
@@ -273,272 +256,6 @@ class Charter:
                                  )
         
         return res
-
-    #------------------------------------
-    # compute_binary_pr_curveOLD 
-    #-------------------
-
-    @classmethod
-    def compute_binary_pr_curveOLD(cls, 
-                                labels, 
-                                preds,
-                                class_id,
-                                thresholds=None,
-                                ):
-        '''
-        Return the recall (x-axis) and precision (y-axis)
-        values of a PR curve, its average precision (AP),
-        and optimal threshold with corresponding f1, precision, 
-        and recall values
-        
-        The optimal threshold's prec and rec yield the
-        maximum f1 score. Information provided in the 
-        BestOperatingPoint instance that is part of this
-        method's return:
-        
-            threshold
-            f1
-            prec
-            rec
-
-        The result is packaged as a CurveSpecification
-        that contains:
-        
-        	best_op_pt
-        	precisions
-        	recalls
-        	thresholds
-        	avg_prec'
-
-        Procedure:
-        
-        A prec/rec point is computed for each 
-        threshold point. 
-        
-        Works for binary classification.
-        But can use sklearn's label_binaries to compute 
-        separate curves for each class 
-        (see compute_multiclass_pr_curves())
-        
-        Differs from sklearn.precision_recall_curve() in
-        that the sklearn method does not take a list
-        of thresholds.  
-        
-        Example:
-        (preds are probabilities, but they
-         are from one class, different samples.
-         So dont' add to 1):
-        
-               labels  = [1,1,0,1]
-               preds  = [0.2, 0.4, 0.1, 0.2] 
-          thresholds  = [0.3, 0.7]
-          
-          The predictions are turned into decisions like this:
-               preds_decided_0.3 = [0, 1, 0, 0]
-               preds_decided_0.5 = [0, 0, 0, 0]
-          
-          Two prec and rec computations are executed:
-          
-            pr0:  prec and rec from [1, 1, 0, 1] 
-                                    [0, 1, 0, 0]
-        
-            pr1:  prec and rec from [1, 1, 0, 1]
-                                    [0, 0, 0, 0]
-
-           resulting in:
-              precs = [p0, p1]
-              recs  = [r0, r1]
-
-          F1 values fs = [f0, f1] are computed for p0/r0,
-          and p1/r1. The position idx (argmax) of 
-          the highest f1 is determined. 
-          
-          best_op_pt = {
-             'threshold' : thresholds[idx], 
-             'f1'        : fs[idx], 
-             'prec'      : precs[idx] 
-             'rec'       : recs[idx]
-            }
-
-          Finally the average precision (AP) is
-          computed. It derives from precs and recs:
-          
-          for k=0 to k=n-1
-          AP = sum_ovr_k((recs_k - recs_[k-1]) * preds_k)
-          
-          where n is number of thresholds, 
-          recs_k and precs_k are precision and 
-          recall at the kth threshold. By definition,
-          preds_n = 1, recs_n = 0.
-
-          Returned: a CurveSpecification instance
-              containing:
-                  best_op_pt
-                  precisions
-                  recalls
-                  avg_prec
-
-        :param labels: integer binary class labels.
-            Exs.: [1,1,0,0], ['yes', 'yes', 'no', 'yes']
-        :type labels: [int | str]
-        :param preds: predictions output from a classifier.
-            May be floats or integers
-        :type preds: [float | int]
-        :param class_id: ID of target class for which this
-            curve is being constructed
-        :type class_id: {int | str}
-        :param thresholds: list of decision thresholds to
-            decide whether preds are one class or the other.
-            If None, uses [0.2, 0.4, 0.6, 0.8, 1]
-        :type thresholds: [float | int]
-        :return: CurveSpecification instances with optimal 
-            operating point, and lists with prec and recall 
-            ready for drawing a PR curve
-        :rtype: CurveSpecification
-        :raises ValueError if labels hold more than 
-            two distinct values
-        '''
-        if type(labels) != list:
-            labels = labels.tolist()
-            
-        uniq_classes = set(labels)
-        
-        if len(uniq_classes) > 2:
-            raise ValueError(f"Labels limited to up to two distinct values; got {uniq_classes}")
-
-        if thresholds is None:
-            thresholds = [0.2, 0.4, 0.6, 0.8]
-        precisions = []
-        recalls = []
-        class_list = list(uniq_classes)
-        # Degenerate case: Only a single
-        # class ever occurs in the labels.
-        # To make the code below work, we
-        # add a copy of that only class to
-        # the class list of known classes,
-        # and log a warning:
-        if len(class_list) == 1:
-            cls.log.warn(f"Only label {class_list[0]} occurs; always guessing that value.")
-            class_list.append(class_list[0])
-        
-        # So far, no undefined recall or precision
-        # i.e. no 0-denominator found:
-        undef_prec = False
-        undef_rec  = False
-        undef_f1   = False
-        
-        for threshold in thresholds:
-            y_pred = []
-            for pred in preds:
-                # Instead of just class_list[1],
-                # must guard against only one
-                # class (ID=0) in the labels.
-                # In that special case, we always
-                # predict 0:
-                if pred >= threshold:
-                    y_pred.append(class_list[1])
-                else:
-                    y_pred.append(class_list[0])
-    
-            y_pred_tn = torch.tensor(y_pred)
-            
-            # For 'No positive exist and classifier
-            # properly doesn't predict a positive,
-            # use:
-            #      precision=1
-            #      recall   =1
-            # In this case prec and rec are undefined,
-            # causing division by 0:
-            
-            try:
-                
-                with warnings.catch_warnings():
-                    # Action to take: Ignore 
-                    warnings.filterwarnings("error",
-                                            #category=UndefinedMetricWarning,
-                                            category=UserWarning,
-                                            )
-                    precision = precision_score(y_true=labels, 
-                                                y_pred=y_pred_tn, 
-                                                pos_label=class_list[1],
-                                                    zero_division='warn')
-            except Exception as _e:
-                # Was it a div by zero from the prec calc?
-                undef_prec = True
-                precision  = Charter.DIV_BY_ZERO
-                
-            try:
-                
-                with warnings.catch_warnings():
-                    # Action to take: Ignore 
-                    warnings.filterwarnings("error",
-                                            #category=UndefinedMetricWarning
-                                            category=UserWarning
-                                            )
-                    recall    = recall_score(y_true=labels, 
-                                             y_pred=y_pred_tn, 
-                                             pos_label=class_list[1],
-                                             zero_division=Charter.DIV_BY_ZERO)
-            except Exception as _e:
-                # Was it a div by zero from the prec calc?
-                undef_rec = True
-                recall  = Charter.DIV_BY_ZERO
-
-            precisions.append(precision)
-            recalls.append(recall)
-
-        precs_np = np.array(precisions)
-        recs_np  = np.array(recalls)
-
-        with warnings.catch_warnings():
-            try:
-                warnings.filterwarnings("error",
-                                        #category=UndefinedMetricWarning
-                                        category=UserWarning
-                                        )
-                warnings.filterwarnings("true_divide",
-                                        #category=UndefinedMetricWarning
-                                        category=RuntimeWarning
-                                        )
-                f1_scores = 2 * (precs_np * recs_np) / (precs_np + recs_np)
-            except Exception as _e:
-                # Was it a div by zero from the prec calc?
-                undef_f1= True
-                # When both prec and recall are 0,
-                # set f1 to zero:
-                f1_scores = torch.tensor(
-                    [Charter.DIV_BY_ZERO]*len(precs_np))
-
-        best_op_idx = np.argmax(f1_scores)
-        
-        best_operating_pt = BestOperatingPoint(
-            thresholds[best_op_idx],
-            f1_scores[best_op_idx],
-            precisions[best_op_idx],
-            recalls[best_op_idx]
-            )            
-
-        # To make average_precision computation
-        # work:
-        recs_np_padded = np.append(recs_np, [0])
-        precs_np_padded = np.append(precs_np, [1])
-        
-        avg_precision = \
-            np.sum((recs_np_padded[:-1] - recs_np_padded[1:]) * precs_np_padded[:-1])
-        
-        res = CurveSpecification(best_operating_pt,
-                                 recs_np_padded,
-                                 precs_np_padded,
-                                 thresholds,
-                                 avg_precision,
-                                 class_id,
-                                 undef_prec=undef_prec,
-                                 undef_rec=undef_rec,
-                                 undef_f1=undef_f1
-                                 )
-        
-        return res
-
 
     #------------------------------------
     # compute_confusion_matrix
@@ -650,230 +367,6 @@ class Charter:
                 return conf_matrix.div(conf_matrix.sum(axis='columns'), axis='rows')
             else:
                 raise TypeError(f"Matrix must be a dataframe, numpy array, or tensor, not {type(conf_matrix)}")
-
-    #------------------------------------
-    # compute_multiclass_pr_curves 
-    #-------------------
-    
-    @classmethod
-    def compute_multiclass_pr_curves(cls,
-                                    truth_labels, 
-                                    raw_preds,
-                                    thresholds=[0.2, 0.4, 0.6, 0.8]
-                                    ):
-        '''
-        Computes the data needed to draw
-        a family of PR curves for the results
-        of multiclass classifier output.
-        
-        Returns a dict of the constituent 
-        single-class curve specs, and a
-        mean average precision (mAP) score
-        for all curves combined.
-        
-        Each result dict maps a class ID
-        to all info needed for one of the
-        curves:
-
-          1:
-              {'best_op_pt' : best_operating_pt,
-               'precisions' : precisions,
-               'recalls'    : recalls,
-               'thresholds' : thresholds,
-               'avg_prec'   : avg_precision
-               }
-          2:
-              {'best_op_pt' : best_operating_pt,
-               'precisions' : precisions,
-               'recalls'    : recalls,
-               'thresholds' : thresholds,
-               'avg_prec'   : avg_precision
-               }
-
-        where best_op_pt is:
-
-               {'threshold' : <optimal decision probability value>
-                'f1'        : <f1 at the optimal threshold>
-                'prec'      : <precision at the optimal threshold>
-                'thresholds' : thresholds,
-                'rec'       : <recall at the optimal threshold>
-                }
-
-        Each of the avg_prec is the 
-        the average of precisions across the 
-        samples of one class (AP). I.e. there will
-        be as many elements in average_precisions
-        as there are classes. 
-        
-        The Mean Average Precision (mAP) is 
-        the mean of the average_precision values.
-        This measure summarizes the family of PR curves.
-        It is comparable to AUC ROC.
-        
-        The precisions and recalls returns are dicts.
-        The keys are class IDs, and the values are the
-        precisions for that class. They are the quantities
-        from which the average_precision values are 
-        computed.
-        
-        Summary: 
-            o precisions/recalls are the lowest granularity
-              of information: the per class precs and recs
-              at different thresholds.
-              
-              There are as many entries in these dicts as
-              there are classes. And prec/rec value pair
-              from the precisions and recalls dict are results
-              of one threshold. 
-
-               TODO: o finish this sentence by running and
-                       seeing what's what
-                     o A unit test for this method
-                     o Finally: the actual drawing of the 
-                         curves with pyplot
-                         
-            o average_precision aggregates the precisions
-              of one class across multiple thresholds. There 
-              will be as many entries in this dict as there 
-              are classes.
-              
-            o mAP aggregates the average_precision values
-              across all classes. This is one number.
-
-        :param truth_labels: all truth labels shaped
-            torch.Size([num-batches, batch-size])
-        :type truth_labels: Tensor
-        :param raw_preds: the logits for each class for
-            each sample as 
-            torch.Shape([num-batches, batch-size, num-classes])
-        :type raw_preds: Tensor
-        :return: (precisions, recalls, average_precisions, mAP)
-        :rtype: ({int : [floats]}, {int : [floats]}, [floats], float)
-        '''
-
-        (num_batches, 
-         batch_size, 
-         num_classes) = raw_preds.shape
-        
-        num_samples = num_batches * batch_size
-        
-        # Will alternately treat each class 
-        # prediction as a one-vs-all binary
-        # classification.
-        #
-        # Ex. let labels = [1,0,0,1,2]
-        #      and preds = [0.3,0.6,0.1,0.7,0.9]
-        #
-        # Convert the labels to a one-hot vector;
-        # the width of the binarized labels is 
-        # num_classes:
-        #
-        #       L A B E L S               P R E D S
-        #       ------------              ----------
-        #     [1,         [[0, 1, 0],       [0.3,
-        #      0,          [1, 0, 0],        0.6,
-        #      0,   ==>    [1, 0, 0],        0.1,
-        #      1,          [0, 1, 0],        0.7,
-        #      2]          [0, 0, 1]]        0.9]
-        #
-        # Then evaluate each label column vector 
-        # separately.
-        
-        truth_labels_flat = truth_labels.flatten()
-        class_ids         = list(range(num_classes))
-        bin_labels = label_binarize(truth_labels_flat,
-                                    classes=class_ids)
-
-        # Num rows and cols of the binarized value:
-        bin_labels_num_rows, bin_labels_num_cols = bin_labels.shape
-        # As many rows in binarized as number of labels
-        # i.e. number of samples:
-        assert(bin_labels_num_rows == len(truth_labels_flat))
-        # Number of cols is same as number of class IDs,
-        # except when only 2 classes exist: then num of 
-        # cols for binarized value is 1:
-        num_classes = len(class_ids)
-        assert(bin_labels_num_cols == num_classes if num_classes > 2 else 1)
-        
-        # For two classes (i.e. binary case), label_binarize()
-        # returns only one col of 1s/0s. That's presumably
-        # because for the other class the logical NOT of the
-        # binarized column is implied. Add that col explicitly
-        # to make binary and multi-class case easier to 
-        # treat the same:
-        
-        if num_classes == 2:
-            inverse_binarized = np.logical_not(bin_labels[:,0]).reshape(num_samples,1)
-            bin_labels = np.append(bin_labels, inverse_binarized, axis=1)
-
-        # Preds are of shape 
-        #    [<num-channels>, <num_samples>, <num_classes>
-        # Want straight down: logits for each class, for
-        # each sample:
-        
-        raw_preds_lst = raw_preds.reshape([num_samples, num_classes])
-        #raw_preds_num_rows, raw_preds_num_cols = raw_preds_lst.shape 
-
-        
-        assert(raw_preds_lst.shape == torch.Size([len(truth_labels_flat),
-                                                  num_classes]))
-
-        # Turn logits into probs, rowise:
-        preds = torch.softmax(raw_preds_lst, dim=1) 
-
-        # Place to hold the result dicts 
-        # from compute_binary_pr_curve()
-        # for each of the classes. This
-        # will be class-name : binary-result-dict
-        
-        all_curves_info = {}
-        
-        # Go through each column, class_id i.e. the
-        # 1/0-vector label columns and preds 
-        # columns for one class at
-        # a time, and get the prec/rec numbers.
-
-        for col_idx in class_ids:
-            bin_label_col = torch.tensor(bin_labels[:,col_idx])
-            preds_col     = preds[:,col_idx]
-
-            # Get all info for this single, binary
-            # classification: list of 1/0 labels, and
-            # list of floats, which are the preds for
-            # the current class:
-            
-            #**************
-            # # Using sklearn's precision_recall_curve,
-            # # which determines thresholds by its own
-            # # algorithm:
-            #
-            # from sklearn.metrics import precision_recall_curve 
-            # sklearn_precs,\
-            # sklearn_recs,\
-            # sklearn_thresholds = \
-            #     precision_recall_curve(bin_label_col, preds_col)
-            #**************
-
-            # Obtain the information needed to 
-            # draw one PR curve: a CurveSpecification
-            # instance:
-            one_class_curve = cls.compute_binary_pr_curve(bin_label_col,
-                                                          preds_col,
-                                                          col_idx,   # class_id
-                                                          thresholds
-                                                          )
-
-            # Accumulate the curve indices 
-            # in a dict, keyed by class ID:
-            all_curves_info[col_idx] = one_class_curve
-
-        avg_precs = [binary_curve_info['avg_prec']
-                     for binary_curve_info
-                     in all_curves_info.values()
-                     ]
-        mAP = np.mean(np.array(avg_precs)).tolist()
-        
-        return (all_curves_info, mAP) 
 
 
 # ----------------- Visualizations ---------------
@@ -1306,6 +799,7 @@ class CurveSpecification(dict):
          thresholds       : list of probability decision thresholds
                             at which precions/recall pairs were computed
          avg_precision    : the Average Precision (AP) of all the points
+         
          class_id         : ID (int or str) for which instances is a curve
          
     The precisions and recalls array-likes form
@@ -1342,6 +836,7 @@ class CurveSpecification(dict):
         	'best_op_pt',
         	'recalls',
         	'precisions',
+        	'f1_scores'
         	'thresholds',
         	'avg_prec',
         	'class_id',
@@ -1376,6 +871,7 @@ class CurveSpecification(dict):
         self.__setitem__('precisions', pr_curve_df['Precision'])
         self.__setitem__('thresholds', pr_curve_df['Threshold'])
         self.__setitem__('avg_prec', avg_precision)
+        self.__setitem__('f1_scores', pr_curve_df['f1'])
         self.__setitem__('class_id', class_id)
         self.update(**kwargs)
 
@@ -1388,7 +884,7 @@ class CurveSpecification(dict):
         Returns the number of precision values
         that are 0
         '''
-        return sum(self.precisions == 0)
+        return sum(self['precisions'] == 0)
         
     #------------------------------------
     # def undef_prec 
@@ -1399,7 +895,7 @@ class CurveSpecification(dict):
         Returns the number of recall values
         that are 0
         '''
-        return sum(self.recalls == 0)
+        return sum(self['recalls'] == 0)
     
     #------------------------------------
     # def undef_f1
@@ -1410,7 +906,7 @@ class CurveSpecification(dict):
         Returns the number of undefined (nan)
         f1 values
         '''
-        return sum(self.f1.isna())
+        return sum(self['f1_scores'].isna())
 
     #------------------------------------
     # __repr__ 

@@ -321,8 +321,13 @@ class Inferencer:
         # Turn each of the df's one-element tensors
         # into floats:
         pred_probs_df = pred_probs_df.applymap(lambda el: el.item())
-        Charter.visualize_testing_result(truth_series, pred_probs_df)
         
+        # The predicted class is the index with
+        # the highest number in each row (i.e. in each
+        # sample's row of class probabilities): 
+        predicted_classes = pred_probs_df.to_numpy().argmax(axis=1) 
+        
+        self.report_results(truth_series, pred_probs_df, predicted_classes)
         acc = accuracy_score(truth_series, pred_classes)
         
         print('foo')
@@ -525,10 +530,10 @@ class Inferencer:
     # report_results 
     #-------------------
     
-    def report_results(self, tally_coll):
-        self._report_textual_results(tally_coll, self.csv_dir)
-        self._report_conf_matrix(tally_coll, show_in_tensorboard=True)
-        self._report_charted_results()
+    def report_results(self, truth_series, pred_probs, predicted_classes):
+        #*******self._report_textual_results(tally_coll, self.csv_dir)
+        #*******self._report_conf_matrix(tally_coll, show_in_tensorboard=True)
+        self._report_charted_results(truth_series, pred_probs, predicted_classes)
 
     #------------------------------------
     # _report_conf_matrix 
@@ -608,7 +613,7 @@ class Inferencer:
     # _report_charted_results 
     #-------------------
     
-    def _report_charted_results(self, thresholds=None):
+    def _report_charted_results(self, truth_series, pred_probs_df, predicted_classes):
         '''
         Computes and (pyplot-)shows a set of precision-recall
         curves in one plot. If precision and/or recall are 
@@ -629,22 +634,17 @@ class Inferencer:
         # one for each class, plus the mean Average Precision
         # across all curves. The dict will be keyed
         # by class ID:
-
-        (all_curves_info, mAP) = \
-          Charter.compute_multiclass_pr_curves(
-              self.all_labels_tn,
-              self.all_outputs_tn,
-              thresholds
-              )
-          
+        
+        mAP, pr_curves = Charter.visualize_testing_result(truth_series, pred_probs_df)
+        
         # Separate out the curves without 
         # ill defined prec, rec, or f1:
         well_defined_curves = list(filter(
-                    lambda crv_obj: not(crv_obj['undef_prec'] or\
-                                        crv_obj['undef_rec'] or\
-                                        crv_obj['undef_f1']
-                                        ),
-                    all_curves_info.values()
+                    lambda crv_obj: crv_obj.undef_prec() + \
+                                    crv_obj.undef_rec() + \
+                                    crv_obj.undef_f1() \
+                                    == 0,
+                    pr_curves.values()
                     )
             )
         
@@ -655,15 +655,30 @@ class Inferencer:
         # Too many curves are clutter. Only
         # show the best and worst by optimal f1:
         f1_sorted = sorted(well_defined_curves,
-                           key=lambda obj: obj['best_op_pt']['f1']
+                           key=lambda curve: curve['best_op_pt']['f1']
                            )
         curves_to_show = {crv_obj['class_id'] : crv_obj
                           for crv_obj in (f1_sorted[0], f1_sorted[-1])
                           }
         #********** Mixup with objs blurring together
         
-        (_num_classes, fig) = \
-          ClassificationPlotter.chart_pr_curves(curves_to_show)
+        fig = ClassificationPlotter.chart_pr_curves(curves_to_show)
+
+        # Get human readable name of hardest
+        # class (lowest average precision for 1-against-all),
+        # and easiest:
+        hardest_cl_id, easiest_cl_id = curves_to_show.keys()
+        hardest_cl_nm = self.class_names[hardest_cl_id]
+        easiest_cl_nm = self.class_names[easiest_cl_id]
+        
+        legend = fig.axes[0].get_legend()
+        # Get 4 text lines:
+        #    'class 0'
+        #    'class 1'
+        #    'Optimal operation'
+        texts  = legend.get_texts()
+        texts[0].set_text(f"Hardest: {hardest_cl_nm}")
+        texts[1].set_text(f"Easiest: {easiest_cl_nm}")
 
         fig.show()
         return True
@@ -943,11 +958,11 @@ if __name__ == '__main__':
                         default=None 
                         )
     
-    parser.add_argument('--model_paths',
+    parser.add_argument('model_paths',
                         nargs='+',
                         help='path(s) to the saved Pytorch model(s); repeatable, if more than one, composites of results from all models. ',
                         default=None)
-    parser.add_argument('--samples_path',
+    parser.add_argument('samples_path',
                         help='path to samples to run through model',
                         default=None)
 

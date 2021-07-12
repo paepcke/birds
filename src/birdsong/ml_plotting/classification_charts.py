@@ -38,8 +38,13 @@ class ClassificationPlotter(object):
         figure is ready for calling show(). 
 
         The curve_info is expected to be a single
-        CurveSpecification instance, or a list. Each
-        instance should contain at least a 'precisions'
+        CurveSpecification instance, or a list of such
+        instances. One curve is drawn for each instance.
+        
+        Each curve should show the achieved f1 for each 
+        precision/recall pair for a single class: one-against-all.
+         
+        Each instance should contain at least a 'precisions'
         and a 'recalls' key with the precs and recs
         that define the curve.
         
@@ -76,12 +81,6 @@ class ClassificationPlotter(object):
             Keys are class names or IDs; the values are dicts
             as documented above.
         :type curve_info: [CurveSpecification]
-        :param thresholds: optional list of probability/logit
-            threshold values used to create the points
-            that make up the curve
-        :type thresholds: {None | [float]
-        :param mAP: optionally the mean average precision
-        :type mAP: {None | fload}
         '''
         fig = plt.figure()
         
@@ -89,8 +88,6 @@ class ClassificationPlotter(object):
         ax.set_xlabel('Recall', size=cls.AXIS_TITLE_SIZE)
         ax.set_ylabel('Precision', size=cls.AXIS_TITLE_SIZE)
 
-        num_classes = len(curve_info.keys())
-        
         for class_label, curve_obj in enumerate(curve_info.values()):
             # Use plot idiom 
             #
@@ -100,9 +97,11 @@ class ClassificationPlotter(object):
             #
             # It's OK that curve_obj contains
             # other info than just recs/preds:
+            thresholds = curve_obj['thresholds']
             ax.plot('recalls', 'precisions', 
                     data=curve_obj,
-                    label=f"class {class_label}"
+                    label=f"class {class_label}",
+                    markevery=thresholds
                     ) 
             # Highlight the optimal operating point:
             # if curve_obj has no BOP info, just
@@ -121,7 +120,7 @@ class ClassificationPlotter(object):
                 # Next to the best op point, put
                 # the corresponding threshold and
                 # f1 value:
-                bop_thresh = bop_obj['threshold']
+                bop_thresh = round(bop_obj['threshold'])
                 bop_f1     = round(bop_obj['f1'], 2)
 
                 bop_txt    = f"f1: {bop_f1}\n" + f"thresh: {bop_thresh}"
@@ -209,7 +208,7 @@ class ClassificationPlotter(object):
         adjust_text(ax.texts)
         adjust_text(ax.texts)
         adjust_text(ax.texts)
-        return (num_classes, fig)
+        return fig
     
     
 # ---------------------- Utils -------------

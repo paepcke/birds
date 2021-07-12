@@ -14,8 +14,8 @@ import pandas as pd
 from result_analysis.charting import Charter, CELL_LABELING
 
 
-#******TEST_ALL = True
-TEST_ALL = False
+TEST_ALL = True
+#TEST_ALL = False
 
 class ChartingTester(unittest.TestCase):
 
@@ -174,7 +174,7 @@ class ChartingTester(unittest.TestCase):
     # test_visualize_testing_result 
     #-------------------
     
-    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_visualize_testing_result(self):
         
         truth_labels = pd.read_csv(os.path.join(self.viz_data_dir, 'truth_labels_300_samples.csv'))
@@ -204,8 +204,6 @@ class ChartingTester(unittest.TestCase):
         self.assertEqual(round(best_op_pt_10['threshold'], 7), 0.0037106)
         self.assertEqual(round(best_op_pt_10['precision'], 7), 0.1157025)
         self.assertEqual(round(best_op_pt_10['recall'], 7), 0.5833333)
-        
-        print('foo')
 
 
 # ------------------- Utilities ---------------
@@ -293,7 +291,7 @@ class ChartingTester(unittest.TestCase):
     # test_confusion_matrices_from_raw_results
     #-------------------
     
-    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_confusion_matrices_from_raw_results(self):
         
         # Prepare a fake runs_raw_results directory,
