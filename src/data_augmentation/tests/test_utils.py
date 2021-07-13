@@ -6,6 +6,8 @@ Created on Apr 25, 2021
 import os
 import unittest
 
+import pandas as pd
+
 from data_augmentation.utils import AugmentationGoals
 from data_augmentation.utils import Utils, Interval
 
@@ -179,10 +181,10 @@ class Test(unittest.TestCase):
                 'End Time (s)': 6.23740263,
                 'Low Freq (Hz)': 2088.175,
                 'High Freq (Hz)': 8538.314,
-                'species': 'vase',
+                'species': 'VASE',
                 'type': 'song',
                 'number': '1',
-                'mix': ['rbps','bgta','rcwp'],
+                'mix': ['RBPS','BGTA','RCWP'],
                 'time_interval': {'low_val': 0.0,'high_val': 6.23740263},
                 'freq_interval': {'low_val': 2088.175,'high_val': 8538.314}
                 },
@@ -194,10 +196,10 @@ class Test(unittest.TestCase):
                 'End Time (s)': 3.294473531,
                 'Low Freq (Hz)': 2161.467,
                 'High Freq (Hz)': 4492.937,
-                'species': 'howp',
+                'species': 'HOWP',
                 'type': 'call-1',
                 'number': '1',
-                'mix': ['rbps','vase'],
+                'mix': ['RBPS','VASE'],
                 'time_interval': {'low_val': 1.024500915,'high_val': 3.294473531},
                 'freq_interval': {'low_val': 2161.467,'high_val': 4492.937}
                 },
@@ -209,7 +211,7 @@ class Test(unittest.TestCase):
                 'End Time (s)': 3.231216904,
                 'Low Freq (Hz)': 1564.1,
                 'High Freq (Hz)': 3519.1,
-                'species': 'rbps',
+                'species': 'RBPS',
                 'type': 'song',
                 'number': '1',
                 'mix': [],
@@ -224,14 +226,40 @@ class Test(unittest.TestCase):
                 'End Time (s)': 7.964992409,
                 'Low Freq (Hz)': 3944.33,
                 'High Freq (Hz)': 9791.219,
-                'species': 'bgta',
+                'species': 'BGTA',
                 'type': 'call',
                 'number': '1',
-                'mix': ['howp'],
+                'mix': ['HOWP'],
                 'time_interval': {'low_val': 5.926034705, 'high_val': 7.964992409},
                 'freq_interval': {'low_val': 3944.33,'high_val': 9791.219}
                 }]
         self.assertEqual(dict_list, desired)
+
+    #------------------------------------
+    # test_pad_series 
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_pad_series(self):
+        s = pd.Series([1,2,3])
+        
+        # Series already (more than) the proper length:
+        new_s = Utils.pad_series(s, 'left', 1)
+        self.assertTrue((s == new_s).all())
+        
+        # Series already (exactly) the proper length:
+        new_s = Utils.pad_series(s, 'left', 3)
+        self.assertTrue((s == new_s).all())        
+        
+        # Pad one on the left:
+        new_s = Utils.pad_series(s, 'left', 4)
+        self.assertTrue((new_s == pd.Series([1,1,2,3])).all())
+        
+        # Pad one on the right:
+        new_s = Utils.pad_series(s, 'right', 4)
+        self.assertTrue((new_s == pd.Series([1,2,3,3])).all())
+        
+
 
 # ---------------- Main --------------
 if __name__ == "__main__":
