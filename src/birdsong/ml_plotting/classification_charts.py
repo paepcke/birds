@@ -34,13 +34,13 @@ class ClassificationPlotter(object):
     #-------------------
     
     @classmethod
-    def chart_pr_curves(cls, curve_info):
+    def chart_pr_curves(cls, curve_specs):
         '''
         Creates and returns a pyplot figure instance
         with one PR curve for each class. The returned
         figure is ready for calling show(). 
 
-        The curve_info is expected to be a single
+        The curve_specs is expected to be a single
         CurveSpecification instance, or a list of such
         instances. One curve is drawn for each instance.
         
@@ -80,19 +80,12 @@ class ClassificationPlotter(object):
             prec'      : <precision at the optimal threshold>
             rec'       : <recall at the optimal threshold>
         
-        :param curve_info: dict of info for drawing the curves.
-            Keys are class names or IDs; the values are dicts
-            as documented above.
-        :type curve_info: {int : CurveSpecification}
+        :param curve_specs: info for drawing the curves.
+        :type curve_specs: [CurveSpecification]
         '''
 
         # Leave the original curve spec instances alone:
-        curve_info_cpy = copy.deepcopy(curve_info)
-        # We don't need the class IDs that are the keys
-        # of the curve_info dict. We want the curve specs
-        # themselves.:
-        
-        curve_specs = list(curve_info_cpy.values()) 
+        curve_specs = copy.deepcopy(curve_specs)
 
         # The precision_recall_curve() uses different 
         # numbers of thresholds, each time (depending on 
@@ -182,14 +175,11 @@ class ClassificationPlotter(object):
             try:
                 avg_prec    = round(curve_obj['avg_prec'], 2)
                 crv_txt     = f"AP: {avg_prec.round(2)}\n{bop_txt}"
-                # Left-most point of the curve:
-                crv_xy_left = (curve_obj['recalls'][0],
-                               curve_obj['precisions'][0]
-                               )
 
                 # Put AP and threshold info
-                # at the left end of each curve:
-                ax.annotate(crv_txt, crv_xy_left)
+                # on top of the AP marker; we'll move
+                # it to the side later:
+                ax.annotate(crv_txt, bop_xy)
 
             except KeyError:
                 # No average precisions available.
