@@ -256,9 +256,9 @@ class Charter:
             except Exception as e:
                 raise type(e)(f"Error during f1 computation: {e}") from e
 
-        # The [1:] excludes the f1 computed from the
-        # prec/rec point artificially added by precision_recall_curve():
-        best_op_idx = pr_curve_df['f1'][1:].argmax()
+        # The [:-1] excludes the f1 computed from the
+        # prec/rec point artificially added by precision_recall_curve().
+        best_op_idx = pr_curve_df['f1'][:-1].argmax()
         
         try:
             best_threshold    = thresholds[best_op_idx]
@@ -839,6 +839,9 @@ class CurveSpecification(dict):
          
     The precisions and recalls array-likes form
     the x/y pairs when zipped. 
+    
+    NOTE: For now equality (__eq__) is implemented
+          as 'identical'. I.e. the very same id number
     '''
     
     #------------------------------------
@@ -982,6 +985,19 @@ class CurveSpecification(dict):
     def __str__(self):
         return repr(self)
 
+    #------------------------------------
+    # __eq__ 
+    #-------------------
+
+    def __eq__(self, other):
+        return id(self) == id(other)
+    
+    #------------------------------------
+    # __neq__ 
+    #-------------------
+
+    def __neq__(self, other):
+        return not self.__eq__(other)
 
 # ---------------------- Classes to Specify Visualization Requests ------
 
