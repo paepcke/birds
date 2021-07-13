@@ -16,7 +16,7 @@ from matplotlib import cm as col_map
 from matplotlib import pyplot as plt
 import sklearn
 from sklearn.metrics import confusion_matrix, precision_recall_curve
-from sklearn.metrics._classification import precision_score, recall_score
+#from sklearn.metrics._classification import precision_score, recall_score
 from sklearn.metrics import average_precision_score
 from sklearn.preprocessing._label import label_binarize
 import torch
@@ -221,12 +221,19 @@ class Charter:
         precs_np, recs_np, thresholds = \
             precision_recall_curve(truth_series, pred_probs_series)
 
-        # The -1 in precs_np and recs_np take away the
-        # closing p==1 and r==0 so the lengths are the
-        # same as the number of thresholds:
-        pr_curve_df = pd.DataFrame(np.array([thresholds, precs_np[:-1],recs_np[:-1]]).transpose(),
-                                   columns=['Threshold', 'Precision', 'Recall']
-                                   )
+        # Remove NaNs by interpolating from neighboring
+        # values. Works for all but NaN at position 0:
+        precs_series = pd.Series(precs_np).interpolate()
+        recs_series  = pd.Series(recs_np).interpolate()
+        
+        pr_curve_df = pd.concat([precs_series, recs_series], axis=1)
+        pr_curve_df.columns = ['Precision', 'Recall'] 
+        thresholds_series = pd.Series(thresholds, name='Threshold')
+        
+        # Compute f1 for each corresponding precision/recall pair
+        # i.e. across each row of pr_curve_df. Take care
+        # cases when both recall and precision are zero:
+        # Suppress warnings:
         with warnings.catch_warnings():
             try:
                 warnings.filterwarnings("error",
@@ -237,19 +244,40 @@ class Charter:
                                         #category=UndefinedMetricWarning
                                         category=RuntimeWarning
                                         )
+                
+                # Fix precision and recall NaN values 
+                # by interpolating from their neighbors:
+                
+                
                 f1_scores_np = 2 * (precs_np * recs_np) / (precs_np + recs_np)
                 # Add these f1s to the pr_curve info:
-                pr_curve_df['f1'] = f1_scores_np[:-1]
+                pr_curve_df['f1'] = f1_scores_np
                 
             except Exception as e:
                 raise type(e)(f"Error during f1 computation: {e}") from e
 
-        best_op_idx = pr_curve_df['f1'].argmax()
+        # The [1:] excludes the f1 computed from the
+        # prec/rec point artificially added by precision_recall_curve():
+        best_op_idx = pr_curve_df['f1'][1:].argmax()
         
-        best_operating_pt = BestOperatingPoint(pr_curve_df.iloc[best_op_idx,:])
+        try:
+            best_threshold    = thresholds[best_op_idx]
+        except IndexError as e:
+            raise IndexError(f"Best operating point's f1 is the last in pr_curve_df, so thresholds is 1 short.")\
+                from e
+        # Get row containing the optimal prec/recall/f1 triplet,
+        # and add the optimal threshold to that pd.Series:
+         
+        best_prec_recall_series = pr_curve_df.iloc[best_op_idx,:]
+        optimal_parms_series = \
+            best_prec_recall_series.append(pd.Series(best_threshold, index=['Threshold']))
+        
+        # A nice object containing all about the optimal point:
+        best_operating_pt = BestOperatingPoint(optimal_parms_series)
 
         avg_prec = average_precision_score(truth_series, pred_probs_series) 
         res = CurveSpecification(pr_curve_df,
+                                 thresholds_series,
                                  best_operating_pt,
                                  avg_prec,
                                  class_id
@@ -526,6 +554,12 @@ class Charter:
     
 # -------------------- Utilities for Charter Class --------------
 
+
+    #------------------------------------
+    # read_conf_matrix_from_file
+    #-------------------
+    
+
     @classmethod
     def read_conf_matrix_from_file(cls, cm_path):
         '''
@@ -747,8 +781,9 @@ class BestOperatingPoint(dict):
             f1        is the f1 score computed from the given
                       precision/recall
         
-        :param op_pt_info: the parameters of the operating point 
-        :type op_pt_info: pd.Pandas
+        :param op_pt_info: the parameters of the operating point
+            precision, recall, f1, threshold
+        :type op_pt_info: pd.Series
         '''
         super().__init__()
 
@@ -812,6 +847,7 @@ class CurveSpecification(dict):
     
     def __init__(self,
                  pr_curve_df,
+                 thresholds,
                  best_operating_pt,
                  avg_precision,
                  class_id,
@@ -840,6 +876,15 @@ class CurveSpecification(dict):
         	'thresholds',
         	'avg_prec',
         	'class_id',
+        
+        In addition, methods:
+            undef_prec
+            undef_rec
+            undef_f1
+        return the number of undefined (nan)
+        precisions, recalls, and f1 values, respectively.
+        These values can be use to discard curves that
+        include nan values.
         	
         The best_op_pt's keys are:
         
@@ -849,6 +894,9 @@ class CurveSpecification(dict):
             ['Threshold', 'Precision', 'Recall', 'f1'] and 
             shape (number-of-samples - 1, 4)
         :type pr_curve_df: pd.DataFrame
+        :param thresholds: the probability decision thresholds
+            used for the given set of prec/rec pairs
+        :type thresholds: pd.Series
         :param best_operating_pt: information where on the 
             curve the optimal F1 score is achieved
         :type best_operating_pt: BestOperatingPoint
@@ -869,7 +917,17 @@ class CurveSpecification(dict):
         self.__setitem__('best_op_pt', best_operating_pt)
         self.__setitem__('recalls', pr_curve_df['Recall'])
         self.__setitem__('precisions', pr_curve_df['Precision'])
-        self.__setitem__('thresholds', pr_curve_df['Threshold'])
+        
+        # Sklearn's precision_recall_curve computation
+        # adds an 'artificial' recall and precision point at the 
+        # end to force the precision vs. recall curves to start
+        # on the X axis. But if plotting precision and/or recall against
+        # threshold, then that point needs to be removed, b/c it does
+        # not have a corresponding threshold value:
+        self.__setitem__('recalls_sans_last', pr_curve_df['Recall'][:-1])
+        self.__setitem__('precisions_sans_last', pr_curve_df['Precision'][:-1])
+        
+        self.__setitem__('thresholds', thresholds)
         self.__setitem__('avg_prec', avg_precision)
         self.__setitem__('f1_scores', pr_curve_df['f1'])
         self.__setitem__('class_id', class_id)
@@ -884,7 +942,7 @@ class CurveSpecification(dict):
         Returns the number of precision values
         that are 0
         '''
-        return sum(self['precisions'] == 0)
+        return sum(self['precisions'].isna())
         
     #------------------------------------
     # def undef_prec 
@@ -895,7 +953,7 @@ class CurveSpecification(dict):
         Returns the number of recall values
         that are 0
         '''
-        return sum(self['recalls'] == 0)
+        return sum(self['recalls'].isna())
     
     #------------------------------------
     # def undef_f1

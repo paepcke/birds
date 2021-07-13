@@ -305,7 +305,7 @@ class Inferencer:
         truth_tn = torch.cat(truth)
         
         # For each row in pred_probs, get the 
-        # most like class; the position of the max
+        # most likely class; the position of the max
         # probability is synonymous with the class ID.
         # Get:
         #    sample0 class3
@@ -322,14 +322,7 @@ class Inferencer:
         # into floats:
         pred_probs_df = pred_probs_df.applymap(lambda el: el.item())
         
-        # The predicted class is the index with
-        # the highest number in each row (i.e. in each
-        # sample's row of class probabilities): 
-        predicted_classes = pred_probs_df.to_numpy().argmax(axis=1) 
-        
-        self.report_results(truth_series, pred_probs_df, predicted_classes)
-        acc = accuracy_score(truth_series, pred_classes)
-        
+        self.report_results(truth_series, pred_probs_df, pred_classes)
         print('foo')
 
     #------------------------------------
@@ -638,7 +631,9 @@ class Inferencer:
         mAP, pr_curves = Charter.visualize_testing_result(truth_series, pred_probs_df)
         
         # Separate out the curves without 
-        # ill defined prec, rec, or f1:
+        # ill defined prec, rec, or f1. Prec and
+        # rec should have none, b/c NaNs were interpolated
+        # out earlier.
         well_defined_curves = list(filter(
                     lambda crv_obj: crv_obj.undef_prec() + \
                                     crv_obj.undef_rec() + \
@@ -660,8 +655,7 @@ class Inferencer:
         curves_to_show = {crv_obj['class_id'] : crv_obj
                           for crv_obj in (f1_sorted[0], f1_sorted[-1])
                           }
-        #********** Mixup with objs blurring together
-        
+
         fig = ClassificationPlotter.chart_pr_curves(curves_to_show)
 
         # Get human readable name of hardest

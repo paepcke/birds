@@ -3,11 +3,14 @@ Created on Mar 20, 2021
 
 @author: paepcke
 '''
+import copy
+
+from adjustText import adjust_text
 import natsort
 
 import matplotlib.pyplot as plt
 
-from adjustText import adjust_text
+from data_augmentation.utils import Utils
 
 class ClassificationPlotter(object):
     '''
@@ -80,15 +83,52 @@ class ClassificationPlotter(object):
         :param curve_info: dict of info for drawing the curves.
             Keys are class names or IDs; the values are dicts
             as documented above.
-        :type curve_info: [CurveSpecification]
+        :type curve_info: {int : CurveSpecification}
         '''
+
+        # Leave the original curve spec instances alone:
+        curve_info_cpy = copy.deepcopy(curve_info)
+        # We don't need the class IDs that are the keys
+        # of the curve_info dict. We want the curve specs
+        # themselves.:
+        
+        curve_specs = list(curve_info_cpy.values()) 
+
+        # The precision_recall_curve() uses different 
+        # numbers of thresholds, each time (depending on 
+        # when recall==1 is reached). To plot multiple
+        # pr-curves in one fig, we need to make prec/rec
+        # pd.Series lengths equal for all curves. Since
+        # the precision_recall_curve() method fills the
+        # precs and recs arrays with points from right to left,
+        # we pad the *start* of the respective series with
+        # their first point for all curves.
+        
+        # Find max-length precs pd.Series among the curves:
+        prec_rec_lengths = [len(crv['precisions'])
+                           for crv in curve_specs
+                           ]
+        max_prec_rec_len = max(prec_rec_lengths)
+
+        for crv in curve_specs:
+            padded_preds = Utils.pad_series(crv['precisions'], 'left', max_prec_rec_len)
+            padded_recs = Utils.pad_series(crv['recalls'], 'left', max_prec_rec_len)
+            crv['precisions'] = padded_preds
+            crv['recalls'] = padded_recs
+
         fig = plt.figure()
         
         ax = fig.subplots(nrows=1, ncols=1)
         ax.set_xlabel('Recall', size=cls.AXIS_TITLE_SIZE)
         ax.set_ylabel('Precision', size=cls.AXIS_TITLE_SIZE)
 
-        for class_label, curve_obj in enumerate(curve_info.values()):
+        # Possible point markers for each
+        # successive curve:
+        markers    = 'ox+*^@'
+        ap_markers = '*'
+        colors  = ['mediumblue', 'black', 'red', 'springgreen', 'magenta', 'chocolate']
+        
+        for class_label, curve_obj in enumerate(curve_specs):
             # Use plot idiom 
             #
             #  plot('<key_for_x_axis_data,
@@ -96,12 +136,19 @@ class ClassificationPlotter(object):
             #       data=<dict>
             #
             # It's OK that curve_obj contains
-            # other info than just recs/preds:
-            thresholds = curve_obj['thresholds']
-            ax.plot('recalls', 'precisions', 
-                    data=curve_obj,
-                    label=f"class {class_label}",
-                    markevery=thresholds
+            # other info than just recs/preds.
+            # The [1:] selectors cut off the 
+            # artificially introduced point that
+            # forces the chart to start at 0. The
+            # downside of this cutoff is that the 
+            # X-axis does not end at 1, unless recall
+            # goes that far. But w/o the cutoff the chart
+            # is confusing:
+            ax.plot(curve_obj['recalls'][1:],
+                    curve_obj['precisions'][1:],
+                    marker=markers[class_label],
+                    color=colors[class_label],
+                    label=f"Class {class_label}"
                     ) 
             # Highlight the optimal operating point:
             # if curve_obj has no BOP info, just
@@ -112,15 +159,15 @@ class ClassificationPlotter(object):
                 bop_obj = curve_obj['best_op_pt']
                 bop_xy   = (bop_obj['recall'], bop_obj['precision'])
                 ax.plot(bop_xy[0], bop_xy[1],
-                        color='green',
-                        marker='o',
+                        color=colors[class_label],
+                        marker=ap_markers,
                         markersize=cls.BEST_OP_PT_SIZE,
                         label=cls.BOP_LABEL
                         )
                 # Next to the best op point, put
                 # the corresponding threshold and
                 # f1 value:
-                bop_thresh = round(bop_obj['threshold'])
+                bop_thresh = round(bop_obj['threshold'],2)
                 bop_f1     = round(bop_obj['f1'], 2)
 
                 bop_txt    = f"f1: {bop_f1}\n" + f"thresh: {bop_thresh}"
@@ -202,7 +249,7 @@ class ClassificationPlotter(object):
         fig.suptitle("Precision-Recall Plot")
         
         # Adjust text to avoid chart elements.
-        # Of the many optional args the is surely 
+        # Of the many optional args there is surely 
         # one that multiplies distance by three.
         # Just adjust three times for now:
         adjust_text(ax.texts)
@@ -210,9 +257,7 @@ class ClassificationPlotter(object):
         adjust_text(ax.texts)
         return fig
     
-    
 # ---------------------- Utils -------------
-
 
 #     #------------------------------------
 #     # annotate_pt 
@@ -250,3 +295,30 @@ class ClassificationPlotter(object):
 #                     xy=left_crv_pt
 #                     ) 
 
+'''
+        # The precision_recall_curve() uses different 
+        # numbers of thresholds, each time (depending on 
+        # when recall==1 is reached). To plot multiple
+        # pr-curves in one fig, we need to make prec/rec
+        # pd.Series lengths equal for all curves. Since
+        # the precision_recall_curve() method fills the
+        # precs and recs arrays with points from right to left,
+        # we pad the *start* of the respective series with
+        # their first point for all curves.
+        
+        # Find max-length precs pd.Series among the curves:
+        prec_rec_lengths = [len(crv['precisions'])
+                           for crv in list(pr_curve_specs.values())
+                           ]
+        max_prec_rec_len = max(prec_rec_lengths)
+
+        #***** Don't extend all the series.
+        #      Only do it for the curves we actually
+        #      plot******
+        for crv in list(pr_curve_specs.values()):
+            padded_preds = cls.pad_series(crv['precisions'], 'left', max_prec_rec_len)
+            padded_recs = cls.pad_series(crv['recalls'], 'left', max_prec_rec_len)
+            crv['predictions'] = padded_preds
+            crv['recalls'] = padded_recs
+
+'''

@@ -995,6 +995,50 @@ class Utils:
             dur_str = '< 1sec'
         return dur_str
 
+    #------------------------------------
+    # pad_series
+    #-------------------
+    
+    @classmethod
+    def pad_series(cls, the_series, side, length):
+        '''
+        Given a series and a length, pad the
+        series with its first (or last) element
+        until length is reached. 
+        
+        The side argument must be in {'left', 'right'}.
+        If len(the_series) >= length is already satisfied,
+        returns the_series unchanged.
+        
+        :param the_series: series to pad
+        :type the_series: pd.Series
+        :param side: either 'left' or 'right'
+        :type side: str
+        :param length: target length
+        :type length: int
+        :return new, padded series, or orginal series
+        :rtype: pd.Series
+        '''
+        
+        if side not in ['left', 'right']:
+            raise ValueError(f"The side parameter must be 'left' or 'right', not {side}")
+        
+        if len(the_series) >= length:
+            return the_series
+        
+        num_pads_needed = length - len(the_series)
+        if side == 'right':
+            pad_val = the_series.iloc[-1]
+            # Append padding to the_series
+            new_series = the_series.append(pd.Series([pad_val]*num_pads_needed), 
+                                           ignore_index=True)
+        else:
+            # Pad on the left:
+            pad_val = the_series[0]
+            # Append the_series to padding:
+            new_series = pd.Series([pad_val]*num_pads_needed).append(the_series, 
+                                                                     ignore_index=True)
+        return new_series
 
 
 # -------------------- Class ProcessWithoutWarnings ----------

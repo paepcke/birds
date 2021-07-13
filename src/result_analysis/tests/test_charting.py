@@ -361,6 +361,31 @@ class ChartingTester(unittest.TestCase):
             self.assert_dataframes_equal(res_TrainHistoryCMs[1].validation,
                                          truth_df) 
 
+    #------------------------------------
+    # test_pad_series 
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_pad_series(self):
+        s = pd.Series([1,2,3])
+        
+        # Series already (more than) the proper length:
+        new_s = Charter.pad_series(s, 'left', 1)
+        self.assertTrue((s == new_s).all())
+        
+        # Series already (exactly) the proper length:
+        new_s = Charter.pad_series(s, 'left', 3)
+        self.assertTrue((s == new_s).all())        
+        
+        # Pad one on the left:
+        new_s = Charter.pad_series(s, 'left', 4)
+        self.assertTrue((new_s == pd.Series([1,1,2,3])).all())
+        
+        # Pad one on the right:
+        new_s = Charter.pad_series(s, 'right', 4)
+        self.assertTrue((new_s == pd.Series([1,2,3,3])).all())
+        
+
 # ---------------------- Utilities --------------------
 
     def make_raw_results(self, dst_dir):
