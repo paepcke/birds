@@ -152,7 +152,7 @@ class ClassificationPlotter(object):
                     ) 
             # Highlight the optimal operating point:
             # if curve_obj has no BOP info, just
-            # error out. Else: 'rec', 'pred' are the
+            # error out. Else: 'recall', 'precision' are the
             # keys for the recall/prediction values
             # of the BOP:
             try:
@@ -171,17 +171,17 @@ class ClassificationPlotter(object):
                 bop_f1     = round(bop_obj['f1'], 2)
 
                 bop_txt    = f"f1: {bop_f1}\n" + f"thresh: {bop_thresh}"
-                ax.annotate(bop_txt, xy=bop_xy) 
+                #********ax.annotate(bop_txt, xy=bop_xy) 
                 
             except KeyError:
                 # No best operating point provided
                 pass
             
             # Add the average precision (AP) and
-            # the threshold that  into:
+            # the threshold that generates the optimum:
             try:
                 avg_prec    = round(curve_obj['avg_prec'], 2)
-                crv_txt     = f"AP: {avg_prec.round(2)}"
+                crv_txt     = f"AP: {avg_prec.round(2)}\n{bop_txt}"
                 # Left-most point of the curve:
                 crv_xy_left = (curve_obj['recalls'][0],
                                curve_obj['precisions'][0]
