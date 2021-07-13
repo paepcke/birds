@@ -1147,7 +1147,8 @@ class XenoCantoRecording:
             dest_dir = os.path.join(dest_root, self.four_code)
         except TypeError as e:
             # Four-letter code was unavailable in the recording metadata:
-            dest_dir = os.path.join(dest_root, f"unknown4letter_xc_{self._xeno_canto_id}")
+            
+            dest_dir = os.path.join(dest_root, f"unknown4letter_{self.full_name}")
 
         while not os.path.exists(dest_dir):
             try:
