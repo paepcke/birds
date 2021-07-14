@@ -7,14 +7,15 @@ import os
 import unittest
 
 import torch
-import pandas as pd
-import numpy as np
 
 from birdsong.run_inference import Inferencer
+import numpy as np
+import pandas as pd
+from result_analysis.charting import CurveSpecification
 
 
-#*********TEST_ALL = True
-TEST_ALL = False
+TEST_ALL = True
+#TEST_ALL = False
 
 
 class InferenceTester(unittest.TestCase):
@@ -75,7 +76,7 @@ class InferenceTester(unittest.TestCase):
     # test_inference
     #-------------------
     
-    #********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_inference(self):
         # We have 60 test images. So, 
         # with drop_last True, a batch size
@@ -161,6 +162,100 @@ class InferenceTester(unittest.TestCase):
             self.assertTrue(all(df == truth))
         finally:
             inferencer.close()
+
+    #------------------------------------
+    # test_pick_pr_curve_classes 
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_pick_pr_curve_classes(self):
+        
+         
+        # This instance won't do anything,
+        # due to unittesting == True:
+        inferencer = Inferencer(
+            self.saved_model_path,
+            self.samples_path,
+            batch_size=16,
+            labels_path=self.labels_path,
+            unittesting=True
+            )
+       
+        # Corner case: only one spec:
+        crv_specs = self.make_crv_specs(1)
+        crvs = inferencer.pick_pr_curve_classes(crv_specs)
+        self.assertListEqual(crvs, crv_specs)
+
+        # Four curves with bop['f1'] from 0.0 to 0.3
+        crv_specs = self.make_crv_specs(4)
+        crvs = inferencer.pick_pr_curve_classes(crv_specs)
+        self.assertListEqual(crvs, [crv_specs[0], crv_specs[2], crv_specs[3]])
+        
+        # Four curves with bop['f1'] of 0.0, 0.0, 0.2, 0.2
+        # i.e. median == max:
+        crv_specs = self.make_crv_specs(4)
+        crv_specs[1]['best_op_pt']['f1'] = 0.0
+        crv_specs[2]['best_op_pt']['f1'] = 0.2
+        crv_specs[3]['best_op_pt']['f1'] = 0.2
+        crvs = inferencer.pick_pr_curve_classes(crv_specs)
+        for i, true_crv in enumerate([crv_specs[0], crv_specs[1], crv_specs[3]]):
+            self.assertEqual(crvs[i], true_crv)
+
+        # Four curves with bop['f1'] of 0.0, 0.0, 0.0, 0.2
+        crv_specs = self.make_crv_specs(4)
+        crv_specs[1]['best_op_pt']['f1'] = 0.0
+        crv_specs[2]['best_op_pt']['f1'] = 0.0
+        crv_specs[3]['best_op_pt']['f1'] = 0.2
+        crvs = inferencer.pick_pr_curve_classes(crv_specs)
+        for i, true_crv in enumerate([crv_specs[0], crv_specs[3], crv_specs[3]]):
+            self.assertEqual(crvs[i], true_crv)
+
+        
+# -------------------- Utilities --------------
+
+    #------------------------------------
+    # make_crv_specs 
+    #-------------------
+    
+    def make_crv_specs(self, num):
+        '''
+        Makes rudimentary CurveSpecification
+        instances. Only enough for testing.
+        Don't take any of the numbers seriously.
+        
+        :param num: number of specs to create
+        :type num: int
+        :returns list of CurveSpecification
+        :rtype [CurveSpecification]
+        '''
+        
+        df = pd.DataFrame([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]],
+                          columns=['Precision', 'Recall', 'f1']
+                          )
+                          
+        crv_specs = []
+        for i in range(num):
+            bop = pd.Series([
+                         0.000853,
+                         0.115044,
+                         0.928571,
+                         0.204724
+                         ], 
+                index = ['Threshold', 'Precision', 'Recall', 'f1']
+                )
+            # All curve specs will be the
+            # same, except for the f1, which
+            # will be rising:
+            bop['f1'] = i/10
+            
+            crv_spec = CurveSpecification(df,
+                                         [0.0, 0.1, 0.2], # Thresholds
+                                         bop,
+                                         0.1, # AP
+                                         i # class_id
+                                         )
+            crv_specs.append(crv_spec)
+        return crv_specs
 
 # ---------------------- Main -------------
 

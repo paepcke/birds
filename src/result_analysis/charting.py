@@ -136,6 +136,25 @@ class Charter:
                                     classes=pred_class_ids
                                     )
 
+        # The sklearn label_binarize() method returns
+        # an  n x c array of 1s and 0s, where n is the number of
+        # samples, and c is the number of distinct classes.
+        # This is a one-hot encoding. However, when there are
+        # only two classes a column vector is returned instead.
+        # It has a 1 when a sample is of the first class. When
+        # the sample is of the second class, the col vec is 0.
+        # Change that singularity, so that code below can rely
+        # a consistent array width:
+        
+        if len(pred_class_ids) == 2:
+            bin_labels_df = pd.concat([pd.DataFrame(bin_labels), 
+                                       pd.Series(1-bin_labels[:,0])], 
+                                       axis=1)
+            bin_labels_df.columns=[0,1]
+        else:
+            bin_labels_df = pd.DataFrame(bin_labels, 
+                                         columns=list(range(len(pred_class_ids))))
+
         pr_curve_specs = {}
 
         # Go through each column, class_id.e. the
@@ -145,13 +164,13 @@ class Charter:
         
         for class_id in range(num_classes):
             
-            bin_labels_np = bin_labels[:,class_id]
+            bin_labels_series = bin_labels_df.iloc[:,class_id]
             preds_series  = pred_probs.iloc[:,class_id]
             
             # Get precision and recall at each
             # of the default thresholds:
             pr_curve_spec = \
-                cls.compute_binary_pr_curve(bin_labels_np,
+                cls.compute_binary_pr_curve(bin_labels_series,
                                             preds_series,
                                             class_id)
             
@@ -201,10 +220,10 @@ class Charter:
 
         :param truth_series: 1 or 0 indicating whether or not sample
             at index i is of class class_id
-        :type truth_series: [int]
+        :type truth_series: pd.Series[int]
         :param pred_probs_series: probabilities that sample at
             index i is of class class_id
-        :type pred_probs_series: [float]
+        :type pred_probs_series: pd.Series[float]
         :param class_id: the class id for which this 
             PR curve is being computed.
         :type class_id: int
@@ -249,9 +268,9 @@ class Charter:
                 # by interpolating from their neighbors:
                 
                 
-                f1_scores_np = 2 * (precs_np * recs_np) / (precs_np + recs_np)
+                f1_scores_series = 2 * (precs_series * recs_series) / (precs_series + recs_series)
                 # Add these f1s to the pr_curve info:
-                pr_curve_df['f1'] = f1_scores_np
+                pr_curve_df['f1'] = f1_scores_series
                 
             except Exception as e:
                 raise type(e)(f"Error during f1 computation: {e}") from e

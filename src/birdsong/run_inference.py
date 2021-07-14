@@ -51,6 +51,7 @@ from data_augmentation.utils import Utils
 import numpy as np
 import pandas as pd
 from result_analysis.charting import Charter, CELL_LABELING
+from seaborn.matrix import heatmap
 
 class Inferencer:
     '''
@@ -67,7 +68,8 @@ class Inferencer:
                  batch_size=1, 
                  labels_path=None,
                  gpu_ids=0,
-                 sampling=None
+                 sampling=None,
+                 unittesting=False
                  ):
         '''
         Given the path to a trained model,
@@ -102,7 +104,12 @@ class Inferencer:
         :param sampling: only use given percent of the samples in
             each class.
         :type sampling: {int | None}
+        :param unittesting: if True, returns immediately
+        :type unittesting: bool
         '''
+
+        if unittesting:
+            return
 
         self.model_paths  = model_paths
         self.samples_path = samples_path
@@ -648,31 +655,48 @@ class Inferencer:
             return False
         
         # Too many curves are clutter. Only
-        # show the best and worst by optimal f1:
-        f1_sorted = sorted(well_defined_curves,
+        # show the best, worst, and median by optimal f1:
+        f1_sorted_curves = sorted(well_defined_curves,
                            key=lambda curve: curve['best_op_pt']['f1']
                            )
-        curves_to_show = {crv_obj['class_id'] : crv_obj
-                          for crv_obj in (f1_sorted[0], f1_sorted[-1])
-                          }
+        curves_to_show = self.pick_pr_curve_classes(f1_sorted_curves)
 
         fig = ClassificationPlotter.chart_pr_curves(curves_to_show)
 
         # Get human readable name of hardest
         # class (lowest average precision for 1-against-all),
-        # and easiest:
-        hardest_cl_id, easiest_cl_id = curves_to_show.keys()
-        hardest_cl_nm = self.class_names[hardest_cl_id]
-        easiest_cl_nm = self.class_names[easiest_cl_id]
+        # and easiest
+        # [the try/except/else, and legend texts
+        #    should be done way more elegantly!]:
+        try:
+            hardest_cl_id, median_cl_id, easiest_cl_id = [crv['class_id'] 
+                                                          for crv 
+                                                          in curves_to_show]
+        except ValueError:
+            # Happens when less than 3 classes are at play:
+            hardest_cl_id = curves_to_show[0]['class_id']
+            hardest_cl_nm = self.class_names[hardest_cl_id]
+            if len(curves_to_show) == 2:
+                easiest_cl_id = curves_to_show[1]['class_id']
+                easiest_cl_nm = self.class_names[easiest_cl_id]
+            median_cl_nm = None
+        else:
+            hardest_cl_nm = self.class_names[hardest_cl_id]
+            median_cl_nm  = self.class_names[median_cl_id]
+            easiest_cl_nm = self.class_names[easiest_cl_id]
         
         legend = fig.axes[0].get_legend()
-        # Get 4 text lines:
+        # Get text lines:
         #    'class 0'
         #    'class 1'
         #    'Optimal operation'
         texts  = legend.get_texts()
         texts[0].set_text(f"Hardest: {hardest_cl_nm}")
-        texts[1].set_text(f"Easiest: {easiest_cl_nm}")
+        texts[1].set_text(f"Median: {median_cl_nm}" \
+                          if median_cl_nm is not None \
+                          else f"Easiest: {easiest_cl_nm}")
+        if median_cl_nm is not None:
+            texts[2].set_text(f"Easiest: {easiest_cl_nm}")
 
         fig.show()
         return True
@@ -866,6 +890,81 @@ class Inferencer:
 # --------------------- Utilities -------------------
 
     #------------------------------------
+    # pick_pr_curve_classes 
+    #-------------------
+
+    def pick_pr_curve_classes(self, f1_sorted_curves):
+        '''
+        Given a list of CurveSpecification instances
+        that are already sorted by increasing f1 values
+        of their best operating point.
+        
+        From among those instances, find three 'interesting' 
+        curves to plot in a precision-recall chart. 
+        
+        We pick the two extremes, and the curve with best-op-pt 
+        having the median f1. If the median f1 is the same
+        as one of the other two, move along the list of
+        curves to find one with a different f1. 
+        
+        :param f1_sorted_curves: list of CurveSpecification
+            instances that are sorted by the f1 values of
+            their best operating point.
+        :type f1_sorted_curves: [CurveSpecification]
+        :return three CurveSpecification instances
+        :rtype [CurveSpecification]
+        '''
+        
+        if len(f1_sorted_curves) <= 3:
+            # Use all curves:
+            return f1_sorted_curves
+        
+        min_best_f1_crv = f1_sorted_curves[0]
+        max_best_f1_crv = f1_sorted_curves[-1]
+        med_f1_crv      = f1_sorted_curves[len(f1_sorted_curves) // 2]
+        
+        min_f1 = min_best_f1_crv['best_op_pt']['f1']
+        max_f1 = max_best_f1_crv['best_op_pt']['f1']
+        med_f1 = med_f1_crv['best_op_pt']['f1']
+        
+        if med_f1 not in (min_f1, max_f1):
+            return [min_best_f1_crv, med_f1_crv, max_best_f1_crv] 
+        
+        # Median of the best op points' f1 scores is
+        # same as one of the extremes:
+        
+        f1_scores = [crv['best_op_pt']['f1'] 
+                     for crv in f1_sorted_curves]
+        med_f1_idx = f1_sorted_curves.index(med_f1_crv)
+        if med_f1 == min_f1:
+            # Fallback: if we won't find
+            # a curve with a best op pt's f1 other
+            # than the curve with the lowest best-op-pt f1,
+            # use the curve above the lowest f1
+            middle_idx = 1
+            for idx in range(med_f1_idx, len(f1_scores)):
+                middle_f1 = f1_scores[idx]
+                if middle_f1 != min_f1:
+                    middle_idx = idx
+                    break
+        else:
+            # Median f1 is same as max f1; search backward:
+            # Fallback: if we won't find
+            # a curve with a best op pt's f1 other
+            # than the curve with the highest best-op-pt f1,
+            # use the curve below the lowest f1
+            middle_idx = -2
+            for idx in range(med_f1_idx, 0, -1):
+                middle_f1 = f1_scores[idx]
+                if middle_f1 != max_f1:
+                    middle_idx = idx
+                    break
+
+        return [min_best_f1_crv,
+                f1_sorted_curves[middle_idx],
+                max_best_f1_crv]
+
+    #------------------------------------
     # res_measures_to_df 
     #-------------------
     
@@ -952,11 +1051,13 @@ if __name__ == '__main__':
                         default=None 
                         )
     
-    parser.add_argument('model_paths',
+    parser.add_argument('--model_paths',
+                        required=True,
                         nargs='+',
                         help='path(s) to the saved Pytorch model(s); repeatable, if more than one, composites of results from all models. ',
                         default=None)
-    parser.add_argument('samples_path',
+    parser.add_argument('--samples_path',
+                        required=True,
                         help='path to samples to run through model',
                         default=None)
 
@@ -1061,5 +1162,6 @@ if __name__ == '__main__':
                             )
     result_collection = inferencer.go()
     #*************
-    print(f"Result collection: {result_collection}")
+    input("Hit Enter to quit")
+    #print(f"Result collection: {result_collection}")
     #*************
