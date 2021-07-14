@@ -651,6 +651,7 @@ class XenoCantoCollection:
                     num_to_download += len(self[species])
                 except KeyError:
                     self.log.err(f"Species {species} not represented in collection")
+                    continue
 
         downloaded = 1
         for rec in self(one_per_bird_phylo=one_per_species):
@@ -1512,10 +1513,20 @@ if __name__ == '__main__':
                 birds_scientific.append(bird_code_cnv[bird,
                                                       DIRECTION.FOUR_SCI 
                                                       ])
+                continue
             elif len(bird) == 6:
                 birds_scientific.append(bird_code_cnv[bird,
                                                       DIRECTION.SIX_SCI
                                                       ])
+                continue
+            else:
+                # Bird is already a scientific name.
+                # Replace underscores needed for
+                # not confusing bash with the '+' signs
+                # that are required in URLs:
+                birds_scientific.append(bird.replace('_', '+'))
+                birds_scientific.append(bird.replace(' ', '+'))
+            
         except KeyError:
             # Could not find scienfic name of a
             # 4-letter or 6-letter species. Since
@@ -1523,13 +1534,6 @@ if __name__ == '__main__':
             print(f"Could not convert {bird} into scientific name")
             sys.exit(-1)
             
-        else:
-            # Bird is already a scientific name.
-            # Replace underscores needed for
-            # not confusing bash with the '+' signs
-            # that are required in URLs:
-            birds_scientific.append(bird.replace('_', '+'))
-            birds_scientific.append(bird.replace(' ', '+'))
           
     if sound_collection is None and \
         (('collect_info' in  todo) or\
