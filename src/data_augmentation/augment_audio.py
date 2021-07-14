@@ -184,7 +184,7 @@ class AudioAugmenter:
         
         self.log.info(f"Total of {num_augmentations} new audio files")
         if failures > 0:
-            self.log.info(f"Grant total of audio augmentation failures: {len(failures)}")
+            self.log.info(f"Grant total of audio augmentation failures: {failures}")
         
         self.log.info("Done")
         
