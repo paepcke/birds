@@ -436,6 +436,12 @@ class AudioAugmenter:
     
     
 # ------------------------ Main ------------
+
+# NOTE: because the --species argument allows for repetition,
+#       must add "--" before the input dir. Else get:
+#       message that input_dir_path is required, even though
+#       it was provided on the cmd line.
+ 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
                                      formatter_class=argparse.RawTextHelpFormatter,
@@ -472,6 +478,10 @@ if __name__ == '__main__':
 
     # Ensure that the species are pairs like
     #   --species VASE 10 PATY 15
+    
+    # Build a dict of species name and requested
+        # number of augs:
+    species_filter = {}
     if len(args.species) > 0:
         species_specs = args.species
         # List length must be even:
@@ -479,9 +489,6 @@ if __name__ == '__main__':
             print(f"Species arg must be a series of species/num_augs pairs; given info misses some")
             sys.exit(1)
             
-        # Build a dict of species name and requested
-        # number of augs:
-        species_filter = {}
         for i in range(0,len(species_specs),2):
             species  = species_specs[i]
             # Ensure a species of that name is a
