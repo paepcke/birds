@@ -459,8 +459,6 @@ if __name__ == '__main__':
                         nargs='+',
                         help='Repeatable; must be pairs: <species> <num_of_augs>')
 
-    args = parser.parse_args()
-
     parser.add_argument('input_dir_path',
                         help='path to .wav files',
                         default=None)
