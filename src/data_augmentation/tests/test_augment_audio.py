@@ -40,9 +40,9 @@ class AudioAugmentationTester(unittest.TestCase):
 
     def setUp(self):
         species_root = Path(self.species2_dir).parent.stem
-        full_species_root = os.path.abspath(species_root)
+        self.full_species_root = os.path.abspath(species_root)
         self.aud_augmenter_median = AudioAugmenter (
-                full_species_root,
+                self.full_species_root,
                 plot=False,
                 overwrite_policy=WhenAlreadyDone.OVERWRITE,
                 aug_goals=AugmentationGoals.MEDIAN,
@@ -50,7 +50,7 @@ class AudioAugmentationTester(unittest.TestCase):
                 multiple_augs = False)
 
         self.aud_augmenter_max = AudioAugmenter (
-                full_species_root,
+                self.full_species_root,
                 plot=False,
                 overwrite_policy=WhenAlreadyDone.OVERWRITE,
                 aug_goals=AugmentationGoals.MAX,
@@ -58,7 +58,7 @@ class AudioAugmentationTester(unittest.TestCase):
                 multiple_augs = False)
 
         self.aud_augmenter_tenth = AudioAugmenter (
-                full_species_root,
+                self.full_species_root,
                 plot=False,
                 overwrite_policy=WhenAlreadyDone.OVERWRITE,
                 aug_goals=AugmentationGoals.TENTH,
@@ -150,10 +150,41 @@ class AudioAugmentationTester(unittest.TestCase):
         self.assertEqual(len(new_files), 2)
 
     #------------------------------------
+    # test_generate_all_augmentations_median_species_filter 
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_generate_all_augmentations_median_species_ilter (self):
+        
+        augmenter_median = AudioAugmenter (
+                self.full_species_root,
+                plot=False,
+                overwrite_policy=WhenAlreadyDone.OVERWRITE,
+                aug_goals=AugmentationGoals.MEDIAN,
+                random_augs = False,
+                multiple_augs = False,
+                species_filter = {'DYSMEN_S' : 4}
+                )
+        
+        augmenter_median.generate_all_augmentations()
+
+        # Only augs for DYSMEN_S should have been created,
+        # not for HENLES_S:
+        
+        dir_with_augs = os.path.join(self.curr_dir,
+                                      'Augmented_samples_-0.33n-0.33ts-0.33w-exc/'
+                                      )
+        self.assertEqual(len(os.listdir(dir_with_augs)), 1)
+                         
+        dysmen_aug_dir = os.path.join(dir_with_augs, 'DYSMEN_S')
+        new_files = os.listdir(dysmen_aug_dir)
+        self.assertEqual(len(new_files), 4)
+
+    #------------------------------------
     # test_generate_all_augmentations_max 
     #-------------------
     
-    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_generate_all_augmentations_max(self):
         self.aud_augmenter_max.generate_all_augmentations()
         dirs_with_augs = os.path.join(self.curr_dir,
@@ -187,7 +218,7 @@ class AudioAugmentationTester(unittest.TestCase):
     # test_compute_num_augs_per_species 
     #-------------------
     
-    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_compute_num_augs_per_species(self):
         
         # Get

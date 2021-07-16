@@ -13,6 +13,7 @@ from logging_service import LoggingService
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import AugmentationGoals, WhenAlreadyDone
 from data_augmentation.utils import Utils, AudAugMethod
+from pandas.core.sorting import nargminmax
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -20,13 +21,48 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 #---------------- Class AudioAugmenter ---------------
 
 class AudioAugmenter:
+    '''
+    Process a directory subtree of species recordings
+    to create new recordings with modifications. Those
+    include adding background noise, volume changes, and
+    time shifting.
+    
+    Starting point is always a directory tree whose
+    subdirectories are species names containing recordings
+    of that species.
+    
+              root
+                 CCRO
+                     recording ccro1
+                     recording ccro2
+                       ...
+                 PATY
+                     recording paty1
+                     recording paty2
+                       ...
+                 TRGN
+                      ...
+                 ...
+    
+    The species dirs may contain varying numbers of
+    recordings. Depending on goal settings, they are all
+    brought up to a given level in number of recordings. By
+    default, all species are augmented so that at least
+    the median number of the original recording number over
+    all species is reached.
+    
+    Command line users can specify the repeatable --species
+    command line option to specify particular species
+    and number of augmentations.  
+    
+    '''
 
     ADD_NOISE   = 1/3 # Add background noise, such as wind or water
     TIME_SHIFT  = 1/3 # Cut audio at random point into snippets A & B
     VOLUME      = 1/3 #    then create new audio: B-A
     
     NOISE_PATH = os.path.join(os.path.dirname(__file__),'lib')
-
+    
     #------------------------------------
     # Constructor 
     #-------------------
@@ -35,11 +71,21 @@ class AudioAugmenter:
                  input_dir_path,
                  plot=False,
                  overwrite_policy=False,
+                 species_filter=None,
                  aug_goals=AugmentationGoals.MEDIAN,
                  random_augs = False,
                  multiple_augs = False,):
 
         '''
+        If species_filter is provided, it is expected
+        to be a dict mapping species names to a number
+        of augmentations to perform. Only those species
+        will be augmented.
+        
+        Note: the species_filter feature was added. So
+             a number of unnecessary computations are performed
+             before the filtering occurs. Could be optimized,
+             but time performance is not an issue. 
         
         :param input_dir_path: directory holding .wav files
         :type input_dir_path: str
@@ -48,7 +94,10 @@ class AudioAugmenter:
         :type plot: bool
         :param overwrite_policy: if true, don't ask each time
             previously created work will be replaced
-        :type overwrite_policy: bool 
+        :type overwrite_policy: bool
+        :param species_filter, if provided is a dict mapping
+            species names to number of desired augmentations.
+        :type species_filter: {None | {str : int} 
         :param aug_goals: either an AugmentationGoals member,
                or a dict with a separate AugmentationGoals
                for each species: {species : AugmentationGoals}
@@ -74,6 +123,7 @@ class AudioAugmenter:
         self.multiple_augs    = multiple_augs
         self.plot             = plot
         self.overwrite_policy = overwrite_policy
+        self.species_filter   = species_filter
         
         self.species_names = Utils.find_species_names(self.input_dir_path)
 
@@ -166,8 +216,16 @@ class AudioAugmenter:
         
         for species, _rows in self.sample_distrib_df.iterrows():
             # For each species, create as many augmentations
-            # as was computed earlier:
-            num_needed_augs = self.augs_to_do[species]
+            # as was computed earlier, or was provided from
+            # the command line in the species filter option:
+            
+            if self.species_filter is not None:
+                if species not in list(self.species_filter.keys()):
+                    continue
+                num_needed_augs = self.species_filter[species]
+            else:
+                num_needed_augs = self.augs_to_do[species]
+
             if num_needed_augs == 0:
                 continue
             in_dir = os.path.join(self.input_dir_path, species)
@@ -395,6 +453,13 @@ if __name__ == '__main__':
                         action='store_true',
                         default=False
                         )
+    
+    parser.add_argument('-s', '--species',
+                        type=str,
+                        nargs='+',
+                        help='Repeatable; must be pairs: <species> <num_of_augs>')
+
+    args = parser.parse_args()
 
     parser.add_argument('input_dir_path',
                         help='path to .wav files',
@@ -407,6 +472,33 @@ if __name__ == '__main__':
         print(f"Wav file directory {args.input_dir_path} does not exist")
         sys.exit(1)
 
+    # Ensure that the species are pairs like
+    #   --species VASE 10 PATY 15
+    if len(args.species) > 0:
+        species_specs = args.species
+        # List length must be even:
+        if len(species_specs) % 2 != 0:
+            print(f"Species arg must be a series of species/num_augs pairs; given info misses some")
+            sys.exit(1)
+            
+        # Build a dict of species name and requested
+        # number of augs:
+        species_filter = {}
+        for i in range(0,len(species_specs),2):
+            species  = species_specs[i]
+            # Ensure a species of that name is a
+            # subdirectory of the root dir:
+            if not os.path.exists(os.path.join(args.input_dir_path, species)):
+                print(f"Species {species} is not among subdirs of {args.input_dir_path}")
+                sys.exit(1)
+            try:
+                num_augs = int(species_specs[i+1])
+            except ValueError:
+                print(f"Number of augmentations for {species} given as {species_specs[i+1]}, which is not an int.")
+                sys.exit(1)
+            
+            species_filter[species] = num_augs 
+
     # Turn the overwrite_policy arg into the
     # proper enum mem
     if args.overwrite_policy:
@@ -416,7 +508,8 @@ if __name__ == '__main__':
 
     augmenter = AudioAugmenter(args.input_dir_path,
                           plot=args.plot,
-                          overwrite_policy=overwrite_policy
+                          overwrite_policy=overwrite_policy,
+                          species_filter=species_filter if len(species_filter) > 0 else None
                           )
 
     augmenter.generate_all_augmentations()
