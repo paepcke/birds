@@ -482,7 +482,7 @@ if __name__ == '__main__':
     # Build a dict of species name and requested
         # number of augs:
     species_filter = {}
-    if len(args.species) > 0:
+    if args.species is not None:
         species_specs = args.species
         # List length must be even:
         if len(species_specs) % 2 != 0:
@@ -509,7 +509,8 @@ if __name__ == '__main__':
     if args.overwrite_policy:
         overwrite_policy = WhenAlreadyDone.OVERWRITE
     else:
-        overwrite_policy = WhenAlreadyDone.ASK
+        #overwrite_policy = WhenAlreadyDone.ASK
+        overwrite_policy = WhenAlreadyDone.SKIP
 
     augmenter = AudioAugmenter(args.input_dir_path,
                           plot=args.plot,
