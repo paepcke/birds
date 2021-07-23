@@ -130,6 +130,21 @@ class SpeciesNameConverter:
         cls.four_to_sci_dict['CHHU']   = 'AMAZILIA DECORA'
         cls.sci_to_four_dict['AMAXILIA DECORA'] = 'CHHU'
         
+        cls.six_to_four_dict['MOMLES'] = 'BCMM'
+        cls.four_to_six_dict['BCMM']   = 'MOMLES'
+        cls.four_to_sci_dict['BCMM']   = 'MOMOTUS LESSONII'
+        cls.sci_to_four_dict['MOMOTUS LESSONII'] = 'BCMM'
+
+        cls.six_to_four_dict['ZIMPAR'] = 'PATY'
+        cls.four_to_six_dict['PATY']   = 'ZIMPAR'
+        cls.four_to_sci_dict['PATY']   = 'ZIMMERIUS PARVUS'
+        cls.sci_to_four_dict['ZIMMERIUS PARVUS'] = 'PATY'
+
+        cls.six_to_four_dict['PHERUT'] = 'RBWR'
+        cls.four_to_six_dict['RBWR']   = 'PHERUT'
+        cls.four_to_sci_dict['RBWR']   = 'PHEUGOPEDIUS RUTILUS'
+        cls.sci_to_four_dict['PHEUGOPEDIUS RUTILUS'] = 'RBWR'
+
         cls.six_to_four_dict['HYLDEC'] = 'LESG'
         cls.four_to_six_dict['LESG']   = 'HYLDEC'
         cls.four_to_sci_dict['LESG']   = 'AMAZILIA DECORA'
