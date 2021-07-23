@@ -128,7 +128,7 @@ class SpeciesNameConverter:
         cls.six_to_four_dict['AMADEC'] = 'CHHU'
         cls.four_to_six_dict['CHHU']   = 'AMADEC'
         cls.four_to_sci_dict['CHHU']   = 'AMAZILIA DECORA'
-        cls.sci_to_four_dict['AMAXILIA DECORA'] = 'CHHU'
+        cls.sci_to_four_dict['AMAZILIA DECORA'] = 'CHHU'
         
         cls.six_to_four_dict['MOMLES'] = 'BCMM'
         cls.four_to_six_dict['BCMM']   = 'MOMLES'
@@ -144,6 +144,26 @@ class SpeciesNameConverter:
         cls.four_to_six_dict['RBWR']   = 'PHERUT'
         cls.four_to_sci_dict['RBWR']   = 'PHEUGOPEDIUS RUTILUS'
         cls.sci_to_four_dict['PHEUGOPEDIUS RUTILUS'] = 'RBWR'
+        
+        cls.six_to_four_dict['PYRHAE'] = 'BHPA'
+        cls.four_to_six_dict['BHPA']   = 'PYRHAE'
+        cls.four_to_sci_dict['BHPA']   = 'PYRILIA HAEMATOTIS'
+        cls.sci_to_four_dict['PYRILIA HAEMATOTIS'] = 'BHPA'
+
+        cls.six_to_four_dict['TURGRA'] = 'CCRO'
+        cls.four_to_six_dict['CCRO']   = 'TURGRA'
+        cls.four_to_sci_dict['CCRO']   = 'TURDUS GRAYI'
+        cls.sci_to_four_dict['TURDUS GRAYI'] = 'CCRO'
+
+        cls.six_to_four_dict['TURASS'] = 'WTRO'
+        cls.four_to_six_dict['WTRO']   = 'TURASS'
+        cls.four_to_sci_dict['WTRO']   = 'TURDUS ASSIMILIS'
+        cls.sci_to_four_dict['TURDUS ASSIMILIS'] = 'WTRO'
+
+        cls.six_to_four_dict['TODCIN'] = 'CTFL'
+        cls.four_to_six_dict['CTFL']   = 'TODCIN'
+        cls.four_to_sci_dict['CTFL']   = 'TODIROSTRUM CINEREUM'
+        cls.sci_to_four_dict['TODIROSTRUM CINEREUM'] = 'CTFL'
 
         cls.six_to_four_dict['HYLDEC'] = 'LESG'
         cls.four_to_six_dict['LESG']   = 'HYLDEC'
