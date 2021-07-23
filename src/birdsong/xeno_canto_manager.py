@@ -386,7 +386,7 @@ class XenoCantoCollection:
                                               dest_dir=self.dest_dir, 
                                               log=self.log)
                 try:
-                    phylo_name = rec_obj.phylo_name
+                    phylo_name = f"{rec_obj.genus.upper()} {rec_obj.species.upper()}"
                     self[phylo_name].append(rec_obj)
                 except KeyError:
                     # First time seen this species:
