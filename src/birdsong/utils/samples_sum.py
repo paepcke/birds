@@ -48,7 +48,7 @@ if __name__ == '__main__':
     parser.add_argument('root1',
                         help='Root of first directories of sample species')
 
-    parser.add_argument('root1',
+    parser.add_argument('root2',
                         help='Root of second directories of sample species')
 
 
