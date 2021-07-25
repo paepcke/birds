@@ -32,10 +32,17 @@ class SamplesInventory:
         root1   = '/home/data/birds/Soundfiles/XCForAllLabeledRecs/Augmented_samples_-0.33n-0.33ts-0.33w-exc'
         root2  = '/home/data/birds/Soundfiles/XCForAllLabeledRecs/AllFocusSpeciesXC'
         for species_dir in os.listdir(root2):
-            num_orig_files = len(os.listdir(os.path.join(root2, species_dir)))
-            augs_dir_species = os.path.join(root1, species_dir)
-            num_aug_files = len(os.listdir(augs_dir_species))
-            print(f"{species_dir}: {num_orig_files} + {num_aug_files} = {num_orig_files + num_aug_files}")
+
+            try:
+                num_root1_species = len(os.listdir(os.path.join(root1, species_dir)))
+            except FileNotFoundError:
+                num_root1_species = 0
+            try:
+                num_root2_species = len(os.listdir(os.path.join(root2, species_dir)))
+            except FileNotFoundError:
+                num_root2_species = 0
+
+            print(f"{species_dir}: {num_root1_species} + {num_root2_species} = {num_root1_species + num_root2_species}")
 
 # ------------------------ Main ------------
 if __name__ == '__main__':
