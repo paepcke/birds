@@ -8,6 +8,8 @@ import argparse
 import os
 import sys
 
+from statistics import median, mean
+
 class SamplesInventory:
     '''
     A samples management utility for use from the
@@ -29,8 +31,8 @@ class SamplesInventory:
         '''
         Constructor
         '''
-        root1   = '/home/data/birds/Soundfiles/XCForAllLabeledRecs/Augmented_samples_-0.33n-0.33ts-0.33w-exc'
-        root2  = '/home/data/birds/Soundfiles/XCForAllLabeledRecs/AllFocusSpeciesXC'
+        sums = []
+        
         for species_dir in os.listdir(root2):
 
             try:
@@ -41,8 +43,14 @@ class SamplesInventory:
                 num_root2_species = len(os.listdir(os.path.join(root2, species_dir)))
             except FileNotFoundError:
                 num_root2_species = 0
+                
+            species_sum = num_root1_species + num_root2_species
+            sums.append(species_sum)
+            print(f"{species_dir}: {num_root1_species} + {num_root2_species} = {species_sum}")
 
-            print(f"{species_dir}: {num_root1_species} + {num_root2_species} = {num_root1_species + num_root2_species}")
+        print()
+        print(f"Mean: {mean(sums)}; median: {median(sums)}")
+        
 
 # ------------------------ Main ------------
 if __name__ == '__main__':
