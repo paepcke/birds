@@ -44,11 +44,13 @@ momentum      = 0.9
 # Pseudo randomization must be the
 # same on all collaborating machines:
 seed          = 42
+# Whether to save all logits to a csv file in <proj-root>/src/birdsong/runs_raw_results
+save_logits   = False
 
 # Training images should be scaled to (in pixels),
 # and maybe transformed to 1-channel grayscale:
-sample_width  = 400
-sample_height = 400
+sample_width  = 256
+sample_height = 256
 to_grayscale  = False
 
 verbose       = yes

@@ -130,8 +130,8 @@ class BirdsBasicTrainerCV:
         self.num_folds  = self.config.Training.getint('num_folds')
         self.freeze     = self.config.Training.getint('freeze', 0)
         self.to_grayscale = self.config.Training.getboolean('to_grayscale', True)
-
-        self.set_seed(42)
+        self.save_logits  = self.config.Training.getboolean('save_logits', False)
+        self.set_seed(self.config.Training.getint('seed', 42))
         
         self.log.info("Parameter summary:")
         self.log.info(f"network     {self.net_name}")
@@ -235,6 +235,7 @@ class BirdsBasicTrainerCV:
                         # num of batches seen, and distribution
                         # of samples across classes: 
                         batch_num += 1
+                                                                        
                         total_batch_num += 1
                         
                         # Update sanity check records:
@@ -266,6 +267,7 @@ class BirdsBasicTrainerCV:
                         # must sit before deleting output and labels:
                         
                         step_num = self.step_number(epoch, split_num, self.num_folds)
+                        
                         self.remember_results(LearningPhase.TRAINING,
                                               step_num,
                                               outputs,
@@ -279,7 +281,20 @@ class BirdsBasicTrainerCV:
                         outputs = FileUtils.to_device(outputs, 'cpu')
                         labels  = FileUtils.to_device(labels, 'cpu')
                         loss    = FileUtils.to_device(loss, 'cpu')
-    
+
+                        # If want to save all logits, do that
+                        # for the entire batch at once, appending 
+                        # column vectors for the labels and the step
+                        # number:
+                        if self.save_logits:
+                            step_arr = np.atleast_2d(np.array([step_num]*self.batch_size,dtype=int)).T
+                            np.savetxt(self.logits_fd,
+                                       np.hstack((outputs.detach().numpy(), 
+                                                  np.atleast_2d(labels).T, 
+                                                  step_arr)),
+                                       fmt='%.4f',
+                                       delimiter=',')
+
                         del images
                         del outputs
                         del labels
@@ -759,12 +774,18 @@ class BirdsBasicTrainerCV:
         
         Method creates the dir if needed.
         
-        Additionally, sets self.csv_pred_writer and self.csv_label_writer
-        to None, or open CSV writers, depending on the value of raw_data_dir,
-        see create_csv_writer()
+        Additionally, sets self.csv_writer and self.logits_fd
+        to None, or open CSV writer/file-descriptor, respectively, 
+        depending on the value of raw_data_dir, see create_csv_writer()
         
         :param logdir: root for tensorboard events
         :type logdir: str
+        :param raw_data_dir: path to where raw data is to be saved 
+            during training; default is <proj_root>/src/birdsong/runs_raw_results
+        :type raw_data_dir: str
+        :param save_logits: whether or not to save all the logits and 
+            corresponding predictions during training.
+        :type save_logits: bool
         '''
         
         if not os.path.isdir(logdir):
@@ -773,7 +794,7 @@ class BirdsBasicTrainerCV:
         # For storing train/val preds/labels
         # for every epoch. Used to create charts
         # after run is finished:
-        self.csv_writer = self.create_csv_writer(raw_data_dir)
+        self.csv_writer, self.logits_fd = self.create_csv_writer(raw_data_dir)
         
         # Write the (ordered by ID!) class names
         # into file 'class_names':
@@ -833,23 +854,33 @@ class BirdsBasicTrainerCV:
         
         Then file name is created, again from the run
         hparam settings. If this file exists, user is asked whether
-        to remove or append. The inst var self.csv_writer is
-        initialized to:
+        to remove or append. The first of the two return values 
+        will be:
         
            o None if csv file exists, but is not to 
              be overwritten nor appended-to
-           o A filed descriptor for a file open for either
+           o A CSV writer for a file open for either
              'write' or 'append.
+             
+        The second return value is: 
+        
+           o None if self.save_logits is False, or a logits file already
+             exists and user decided to save it.
+           o A file descriptor in append mode 
         
         :param raw_data_dir: If simply True, create dir and file names
             from hparams, and create as needed. If a string, it is 
             assumed to be the directory where a .csv file is to be
             created. If None, self.csv_writer is set to None.
         :type raw_data_dir: {None | True | str|
-        :return: CSV writer ready for action. Set either to
+        :return: a 2-tuple; first element: CSV writer ready for action. Set either to
             write a fresh file, or append to an existing file.
-            Unless file exists, and user decided not to overwrite
-        :rtype: {None | csv.writer}
+            Unless file exists, and user decided not to overwrite.
+            Second element: None if self.save_logits is False, or an fd 
+            in append mode, with the logits header written to the
+            file.
+            
+        :rtype: ({None | csv.writer}, {None | fd})
         '''
 
         # Ensure the csv file root dir exists if
@@ -866,7 +897,7 @@ class BirdsBasicTrainerCV:
         # Can rely on raw_data_root being defined and existing:
         
         if raw_data_dir is None:
-            return None
+            return None, None
 
         # Create both a raw dir sub-directory and a .csv file
         # for this run:
@@ -890,7 +921,7 @@ class BirdsBasicTrainerCV:
             if not do_overwrite:
                 do_append = FileUtils.user_confirm(f"Append instead?", default='N')
                 if not do_append:
-                    return None
+                    return None, None
                 else:
                     mode = 'a'
         else:
@@ -903,8 +934,40 @@ class BirdsBasicTrainerCV:
         header = ['step', 'train_preds', 'train_labels', 'val_preds', 'val_labels']
         csv_writer.writerow(header)
 
+        # If we want to save all the logits to a csv file,
+        # create an open fd with append mode:
+        if self.save_logits:
+            csv_raw_file_nm = FileUtils.construct_filename(self.config.Training, 
+                                                           prefix='run_logits',
+                                                           suffix='.csv',
+                                                           incl_date=True)
+
+            csv_raw_path = os.path.join(raw_data_root, csv_raw_file_nm)
+
+            if os.path.exists(csv_raw_path):
+                do_overwrite = FileUtils.user_confirm(f"File {csv_raw_path} exists; overwrite?", default='N')
+                if not do_overwrite:
+                    do_append = FileUtils.user_confirm(f"Append instead?", default='N')
+                    if not do_append:
+                        return csv_writer, None
+                    else:
+                        mode = 'a'
+            else:
+                mode = 'w'
+
+            
+            logit_fd = open(csv_raw_path, mode)
+            # Header will be the list of class IDs,
+            # followed by columns for each row's label
+            # and step:
+            header = self.class_names
+            header.extend(['label', 'step'])
+            logit_fd.write(f"{','.join(header)}" + '\n')
+            logit_fd.flush()
+        else:
+            logit_fd = None
         
-        return csv_writer
+        return csv_writer, logit_fd
 
     #------------------------------------
     # create_model_archive 
@@ -946,6 +1009,9 @@ class BirdsBasicTrainerCV:
             self.log.warn("Method close_tensorboard() called before setup_tensorboard()?")
         except Exception as e:
             raise RuntimeError(f"Problem closing tensorboard: {repr(e)}") from e
+        
+        if self.logits_fd is not None:
+            self.logits_fd.close()
 
     #------------------------------------
     # get_optimizer 
