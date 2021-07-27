@@ -141,6 +141,7 @@ class BirdsBasicTrainerCV:
         self.log.info(f"min epochs  {self.min_epochs}")
         self.log.info(f"max epochs  {self.max_epochs}")
         self.log.info(f"batch_size  {self.batch_size}")
+        self.log.info(f"save_logits {self.save_logits}")
         
         self.fastest_device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.device = self.fastest_device
@@ -164,6 +165,11 @@ class BirdsBasicTrainerCV:
         
         log_dir      = os.path.join(self.curr_dir, 'runs')
         raw_data_dir = os.path.join(self.curr_dir, 'runs_raw_results')
+        
+        if self.save_logits:
+            self.log.info(f"Raw results of predictions and logits will be in {raw_data_dir}")
+        else:
+            self.log.info(f"Raw results of predictions will be in {raw_data_dir}")
         
         self.setup_tensorboard(log_dir, raw_data_dir=raw_data_dir)
 
