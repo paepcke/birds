@@ -966,7 +966,7 @@ class BirdsBasicTrainerCV:
             # Header will be the list of class IDs,
             # followed by columns for each row's label
             # and step:
-            header = self.class_names
+            header = self.class_names.copy()
             header.extend(['label', 'step'])
             logit_fd.write(f"{','.join(header)}" + '\n')
             logit_fd.flush()
