@@ -15,6 +15,7 @@ from pathlib import Path
 import re
 import sys
 import types
+from itertools import tee
 
 from logging_service.logging_service import LoggingService
 
@@ -22,7 +23,6 @@ from birdsong.utils.utilities import FileUtils
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import Utils, Interval
 import multiprocessing as mp
-
 
 # TODO
 #    - Snippets are loaded twice, which is slow!
@@ -165,7 +165,7 @@ class SnippetSelectionTableMapper:
             sys.exit(1)
 
         self.log = LoggingService()
-
+        
         # Is snippets path to an individual .png snippet file?
         if os.path.isfile(spectrogram_locs):
             snippet_paths = iter([spectrogram_locs])
@@ -503,7 +503,7 @@ class SnippetSelectionTableMapper:
         if sel_dict is None:
             # This snippet_path was not involved in
             # any of the human-created selection
-            # rectangles. ******* JUST RETURN IF MIX IS NON-EMPTY?
+            # rectangles.
             metadata['species'] = 'NOIS'
             self.save_updated_snippet(outdir, 
                                       'NOIS', 
@@ -874,8 +874,12 @@ class SnippetSelectionTableMapper:
         for table_path in sel_tables_src:
             recording_id = FileUtils.extract_recording_id(table_path)
             if recording_id is not None:
+                # Need to copy the snippets_src iterator
+                # so every process/thread will get their
+                # own:
+                snippets_src, snippets_src_copy = tee(snippets_src)
                 recording_selection_tables[recording_id] = \
-                    SelTblSnipsAssoc(table_path, snippets_src)
+                    SelTblSnipsAssoc(table_path, snippets_src_copy)
 
         return recording_selection_tables
 
