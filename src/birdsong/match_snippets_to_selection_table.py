@@ -377,7 +377,7 @@ class SnippetSelectionTableMapper:
         in the associated selection table. If a match is found,
         the snippet's metadata is augmented with the species label,
         and placed into the outdir. Else the snippet is labeled as
-        'noise' and also placed into the outdir.
+        'NOIS' and also placed into the outdir.
         
         When the snippet is processed, task_queue.task_done() is called,
         and the next item is taken from the queue.
@@ -504,9 +504,9 @@ class SnippetSelectionTableMapper:
             # This snippet_path was not involved in
             # any of the human-created selection
             # rectangles. ******* JUST RETURN IF MIX IS NON-EMPTY?
-            metadata['species'] = 'noise'
+            metadata['species'] = 'NOIS'
             self.save_updated_snippet(outdir, 
-                                      'noise', 
+                                      'NOIS', 
                                       Path(snippet_path).name, # without parents 
                                       spectro_arr, 
                                       metadata)
@@ -524,15 +524,15 @@ class SnippetSelectionTableMapper:
         # will be used as part of file names.
         # So ensure that they have no spaces.
         # Also: convert the "no bird" entries to
-        # 'noise':
+        # 'NOIS':
         
         if species == 'no bird':
-            species = 'noise'
+            species = 'NOIS'
         else:
             species = species.replace(' ', '_')
         new_multiple_species = []
         for entry in multiple_species:
-            if entry == 'no bird' or entry == 'noise':
+            if entry == 'no bird' or entry == 'NOIS':
                 # Don't add noise as "also-present":
                 continue
             else:
@@ -553,8 +553,8 @@ class SnippetSelectionTableMapper:
         # non-noise snippet; the second clause of the
         # 'or' says: this snippet truly is noise:
         
-        if species != 'noise' or \
-            (species == 'noise' and len(new_multiple_species) == 0):
+        if species != 'NOIS' or \
+            (species == 'NOIS' and len(new_multiple_species) == 0):
             self.save_updated_snippet(outdir, 
                                       species, 
                                       Path(snippet_path).name, # without parents 
@@ -578,7 +578,7 @@ class SnippetSelectionTableMapper:
                 # no need to create a phantom, b/c noise
                 # is everywhere anyway:
                 if overlap_species == 'no bird' or \
-                    overlap_species == 'noise':
+                    overlap_species == 'NOIS':
                     continue
                 metadata['species'] = overlap_species
                 # New name for a copy of this snippet_path:
@@ -731,10 +731,10 @@ class SnippetSelectionTableMapper:
                     other_sel_non_noise_species = [species
                                                    for species
                                                    in other_sel['mix'] + [other_sel['species']]
-                                                   if species not in ['noise', 'no_bird', 'no bird']
+                                                   if species not in ['NOIS', 'noise', 'no_bird', 'no bird']
                                                    ]
                     other_species  = set(other_species.union(other_sel_non_noise_species))
-                elif other_sel['species'] not in ['noise', 'no_bird', 'no bird']:
+                elif other_sel['species'] not in ['NOIS', 'noise', 'no_bird', 'no bird']:
                     other_species.add(other_sel['species'])
 
             # The new dict's species shouldn't be in
