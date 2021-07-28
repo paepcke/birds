@@ -117,6 +117,8 @@ class SnippetSelectionTableMapper:
     TASK_QUEUE_SIZE=1000
     '''Number of snippet matching tasks to submit before waiting for some to be finished'''
 
+    NOISE_LABELS = ['NOIS', 'noise', 'no bird', 'NO_BIRD', 'MOTORCYCLE', 'SHOUTING']
+
     #------------------------------------
     # Constructor 
     #-------------------
@@ -413,7 +415,7 @@ class SnippetSelectionTableMapper:
                     selections = selections_all_tables[sel_tbl_path]
                 except KeyError:
                     # Haven't encountered this sel table yet:
-                    self.log.info(f"Reading selection table {sel_tbl_path}...")
+                    #self.log.info(f"Reading selection table {sel_tbl_path}...")
                     selections = Utils.read_raven_selection_table(sel_tbl_path)
                     selections_all_tables[sel_tbl_path] = selections
     
@@ -526,13 +528,13 @@ class SnippetSelectionTableMapper:
         # Also: convert the "no bird" entries to
         # 'NOIS':
         
-        if species in ['no bird', 'NO_BIRD']:
+        if species in self.NOISE_LABELS:
             species = 'NOIS'
         else:
             species = species.replace(' ', '_')
         new_multiple_species = []
         for entry in multiple_species:
-            if entry in ['no bird', 'NO_BIRD'] or entry == 'NOIS':
+            if entry in self.NOISE_LABELS:
                 # Don't add noise as "also-present":
                 continue
             else:
@@ -577,8 +579,7 @@ class SnippetSelectionTableMapper:
                 # that simply records "no bird" or "noise",
                 # no need to create a phantom, b/c noise
                 # is everywhere anyway:
-                if overlap_species in ['no bird', 'NO_BIRD'] or \
-                    overlap_species == 'NOIS':
+                if overlap_species in self.NOISE_LABELS:
                     continue
                 metadata['species'] = overlap_species
                 # New name for a copy of this snippet_path:
@@ -731,10 +732,10 @@ class SnippetSelectionTableMapper:
                     other_sel_non_noise_species = [species
                                                    for species
                                                    in other_sel['mix'] + [other_sel['species']]
-                                                   if species not in ['NOIS', 'noise', 'no_bird', 'no bird', 'NO_BIRD']
+                                                   if species not in self.NOISE_LABELS
                                                    ]
                     other_species  = set(other_species.union(other_sel_non_noise_species))
-                elif other_sel['species'] not in ['NOIS', 'noise', 'no_bird', 'no bird', 'NO_BIRD']:
+                elif other_sel['species'] not in self.NOISE_LABELS:
                     other_species.add(other_sel['species'])
 
             # The new dict's species shouldn't be in
