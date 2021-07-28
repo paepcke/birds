@@ -578,6 +578,10 @@ class SnippetSelectionTableMapper:
             if len(new_multiple_species) == 0:
                 return
             for overlap_species in new_multiple_species:
+                # Some overlap species are empty strings:
+                if len(overlap_species) == 0:
+                    continue
+                
                 # If this snippet reaches into a selection
                 # that simply records "no bird" or "noise",
                 # no need to create a phantom, b/c noise
