@@ -526,13 +526,13 @@ class SnippetSelectionTableMapper:
         # Also: convert the "no bird" entries to
         # 'NOIS':
         
-        if species == 'no bird':
+        if species in ['no bird', 'NO_BIRD']:
             species = 'NOIS'
         else:
             species = species.replace(' ', '_')
         new_multiple_species = []
         for entry in multiple_species:
-            if entry == 'no bird' or entry == 'NOIS':
+            if entry in ['no bird', 'NO_BIRD'] or entry == 'NOIS':
                 # Don't add noise as "also-present":
                 continue
             else:
@@ -577,7 +577,7 @@ class SnippetSelectionTableMapper:
                 # that simply records "no bird" or "noise",
                 # no need to create a phantom, b/c noise
                 # is everywhere anyway:
-                if overlap_species == 'no bird' or \
+                if overlap_species in ['no bird', 'NO_BIRD'] or \
                     overlap_species == 'NOIS':
                     continue
                 metadata['species'] = overlap_species
@@ -731,10 +731,10 @@ class SnippetSelectionTableMapper:
                     other_sel_non_noise_species = [species
                                                    for species
                                                    in other_sel['mix'] + [other_sel['species']]
-                                                   if species not in ['NOIS', 'noise', 'no_bird', 'no bird']
+                                                   if species not in ['NOIS', 'noise', 'no_bird', 'no bird', 'NO_BIRD']
                                                    ]
                     other_species  = set(other_species.union(other_sel_non_noise_species))
-                elif other_sel['species'] not in ['NOIS', 'noise', 'no_bird', 'no bird']:
+                elif other_sel['species'] not in ['NOIS', 'noise', 'no_bird', 'no bird', 'NO_BIRD']:
                     other_species.add(other_sel['species'])
 
             # The new dict's species shouldn't be in
