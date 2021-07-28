@@ -908,7 +908,7 @@ class Utils:
         
         # Coerce types and unify keys:
         
-        species_spellings = ['species', 'Especie', 'Specie', 'SPECIE']
+        species_spellings = ['species', 'Especie', 'Specie', 'SPECIE', 'specie']
         
         for sel_dict in sel_dict_list:
             sel_dict['Selection'] = str(sel_dict['Selection'])
