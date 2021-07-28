@@ -935,7 +935,10 @@ class Utils:
             # Turn the comma-separated list of
             # overlapping vocalizations into
             # a (possibly empty) list of strings:
-            sel_dict['mix'] = [] if len(sel_dict['mix']) == 0 else sel_dict['mix'].split(',')
+            try:
+                sel_dict['mix'] = [] if len(sel_dict['mix']) == 0 else sel_dict['mix'].split(',')
+            except KeyError:
+                sel_dict['mix'] = []
             # Clean out spurious white space:
             sel_dict['mix'] = [mix_list_entry.strip().upper() 
                                for mix_list_entry
