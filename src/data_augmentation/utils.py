@@ -944,8 +944,12 @@ class Utils:
                                for mix_list_entry
                                in sel_dict['mix']
                                ]
-            # Remove empty mixes:
-            #**** 
+
+            # Make sure there is a 'type' column,
+            # the one that says 'call', 'song,' etc.:
+            if 'type' not in list(sel_dict.keys()):
+                sel_dict['type'] = ''
+
             sel_dict['time_interval'] = Interval(sel_dict['Begin Time (s)'],
                                                  sel_dict['End Time (s)'])
             sel_dict['freq_interval'] = Interval(sel_dict['Low Freq (Hz)'],
