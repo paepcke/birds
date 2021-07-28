@@ -180,13 +180,13 @@ class Utils:
 
            augmented is True:
            
-			                        add_bg  time_shift  volume  mask  noise original
-			   AMADEC                   17          12      19     0      1         0     
-			   ARRAUR_C                  0           0       0     0      2         0
-			   Automolusexsertus        17          17      17     0      3         0
-			   Brotogerisjugularis       0           0       0     0      6         0
-			   CORALT_C                 11          11      11     0      10        0           
-			           
+                                    add_bg  time_shift  volume  mask  noise original
+               AMADEC                   17          12      19     0      1         0     
+               ARRAUR_C                  0           0       0     0      2         0
+               Automolusexsertus        17          17      17     0      3         0
+               Brotogerisjugularis       0           0       0     0      6         0
+               CORALT_C                 11          11      11     0      10        0           
+
         :param path: root of species subdirs
         :type path: src
         :param augmented: whether or not to differentiate between
@@ -891,6 +891,9 @@ class Utils:
         
         The list will be sorted by ascending the 'Begin Time (s)'
         value.
+        
+        In the incoming selection tables, the header 'species' is sometimes called
+        any of 'species', 'Especie', 'Specie', 'SPECIE'
 
         :param tbl_path: full path to Raven selection table
         :type tbl_path: src
@@ -902,15 +905,33 @@ class Utils:
             reader = DictReader(sel_tbl_fd, delimiter='\t')
             sel_dict_list = [row_dict for row_dict in reader]
         
-        # Coerce types:
+        
+        # Coerce types and unify keys:
+        
+        species_spellings = ['species', 'Especie', 'Specie', 'SPECIE']
+        
         for sel_dict in sel_dict_list:
             sel_dict['Selection'] = str(sel_dict['Selection'])
             sel_dict['Begin Time (s)'] = float(sel_dict['Begin Time (s)'])
             sel_dict['End Time (s)'] = float(sel_dict['End Time (s)'])
             sel_dict['Low Freq (Hz)'] = float(sel_dict['Low Freq (Hz)'])
             sel_dict['High Freq (Hz)'] = float(sel_dict['High Freq (Hz)'])
-            # Make the four-letter species upper case:
-            sel_dict['species'] = sel_dict['species'].upper()
+            # Make the four-letter species names upper case:
+            try:
+                sel_dict['species'] = sel_dict['species'].upper()
+            except KeyError:
+                dict_keys = list(sel_dict.keys())
+                success = False
+                for key_alternative in species_spellings:
+                    if key_alternative in dict_keys:
+                        # Found the column name used for species in this tbl:
+                        sel_dict['species'] = sel_dict[key_alternative].upper()
+                        del sel_dict[key_alternative]
+                        success = True
+                        break
+                if not success:
+                    raise KeyError(f"Could not find species column selection table {tbl_path}")
+
             # Turn the comma-separated list of
             # overlapping vocalizations into
             # a (possibly empty) list of strings:
@@ -1034,7 +1055,7 @@ class Utils:
                                            ignore_index=True)
         else:
             # Pad on the left:
-            pad_val = the_series[0]
+            pad_val = the_series.iloc[0]
             # Append the_series to padding:
             new_series = pd.Series([pad_val]*num_pads_needed).append(the_series, 
                                                                      ignore_index=True)
