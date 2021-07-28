@@ -551,12 +551,11 @@ class SnippetSelectionTableMapper:
         # that the snippet juts into non-noise 
         # selections, don't save this snippet as noise
         # right here, but allow the loop over the
-        # muiltiple_species below to save it as a
+        # multiple_species below to save it as a
         # non-noise snippet; the second clause of the
         # 'or' says: this snippet truly is noise:
         
-        if species != 'NOIS' or \
-            (species == 'NOIS' and len(new_multiple_species) == 0):
+        if species not in self.NOISE_LABELS and len(new_multiple_species) == 0: 
             self.save_updated_snippet(outdir, 
                                       species, 
                                       Path(snippet_path).name, # without parents 
@@ -574,6 +573,10 @@ class SnippetSelectionTableMapper:
             except (IndexError, ValueError):
                 # All good, species wasn't in the list of additionals
                 pass
+            # Make sure that multiple species list is
+            # not empty now:
+            if len(new_multiple_species) == 0:
+                return
             for overlap_species in new_multiple_species:
                 # If this snippet reaches into a selection
                 # that simply records "no bird" or "noise",
