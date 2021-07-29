@@ -674,7 +674,7 @@ class FileUtils:
         with os.scandir(src_dir) as it:
             species_dir_obj = next(it)
             species         = species_dir_obj.name.upper()
-            if species not in self.FOCUS_SPECIES:
+            if species not in cls.FOCUS_SPECIES:
                 shutil.move(species_dir_obj.path, dst_dir)
 
     
