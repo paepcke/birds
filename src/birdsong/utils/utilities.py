@@ -671,9 +671,8 @@ class FileUtils:
             if not os.path.isdir(dst_dir):
                 raise ValueError(f"Destination dir must be a directory, not {dst_dir}")
 
-        with os.scandir(src_dir) as it:
-            species_dir_obj = next(it)
-            species         = species_dir_obj.name.upper()
+        for species_dir_obj in os.scandir(src_dir):
+            species = species_dir_obj.name.upper()
             if species not in cls.FOCUS_SPECIES:
                 shutil.move(species_dir_obj.path, dst_dir)
 
