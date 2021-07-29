@@ -58,6 +58,10 @@ class Inferencer:
     classdocs
     '''
 
+    #******REPORT_EVERY = 50
+    REPORT_EVERY = 4
+    '''How many inferences to make before writing to tensorboard and disk'''
+
     #------------------------------------
     # Constructor 
     #-------------------
@@ -285,60 +289,35 @@ class Inferencer:
 
         sko_net.initialize()  # This is important!
         sko_net.load_params(f_params=self.model_path)
-        truth = []
-        pred_logits = []
+        #**********
+        #truth = []
+        #pred_logits = []
+        #**********
+        start_idx = 0
+        res_coll = ResultCollection()
         for batch_num, (X,y) in enumerate(self.loader):
-            pred_logits.append(sko_net.predict(X))
-            truth.append(y)
-            #********
-            #if batch_num > 5:
-            #    break
-            #********
-            
-        # Preds are now a list of np-arrays, each
-        # of which has shape (batch_size, num_classes).
-        # The length of the list is the number of batches
-        # retrieved from the dataset. Use map() to
-        # turn the np arrays into tensors, and concatenate
-        # the rows (i.e. all the batches) into one tensor:
-        pred_logits_tn = torch.cat(list(map(torch.tensor, pred_logits)))
-        
-        # Get a tensor:
-        #    sample0  [prob_class0, prob_class1, ..., prob_class_n]
-        #    sample1  [prob_class0, prob_class1, ..., prob_class_n]
-        #                  ...
-        
-        pred_probs = torch.softmax(pred_logits_tn, dim=1)
-        
-        # Probabilities across one row must add to 1:
-        # But due to rounding they add to 0.99999999xyz
-        #assert(sum(pred_probs[0,:]) == 1)
-        
-        # Truth is a list of tensors, each of batch_size
-        # length. The length of the list (i.e. then number
-        # of tensors is the number of batches extracted from
-        # the dataset. Turn into a 1-D tensor of truth:
-        truth_tn = torch.cat(truth)
-        
-        # For each row in pred_probs, get the 
-        # most likely class; the position of the max
-        # probability is synonymous with the class ID.
-        # Get:
-        #    sample0 class3
-        #    sample1 class1
-        #       ...
-        pred_classes = pred_probs.argmax(dim=1)
+            outputs = sko_net.predict(X)
+            tally = ResultTally(batch_num,
+                                LearningPhase.TESTING,
+                                torch.tensor(outputs),
+                                y,  # Labels
+                                torch.tensor(0),  # Don't track loss
+                                self.class_names,
+                                self.batch_size
+                                )
+            res_coll.add(tally, batch_num)
 
-        # For evaluation the whole outcome, use
-        # Pandas data structures:
+            if batch_num > 0 and batch_num % self.REPORT_EVERY == 0:
+                end_idx   = 2 + start_idx + self.REPORT_EVERY
+                self.report_intermittent_results(res_coll, 
+                                                 start_idx, 
+                                                 end_idx,
+                                                 )
+                start_idx += self.REPORT_EVERY
+                 
+
         
-        truth_series  = pd.Series(truth_tn)
-        pred_probs_df = pd.DataFrame(pred_probs)
-        # Turn each of the df's one-element tensors
-        # into floats:
-        pred_probs_df = pred_probs_df.applymap(lambda el: el.item())
-        
-        self.report_results(truth_series, pred_probs_df, pred_classes)
+        # self.report_results(truth_series, pred_probs_df, pred_classes)
 
     #------------------------------------
     # run_inferencerOLD 
@@ -534,14 +513,73 @@ class Inferencer:
             
         return result_coll
     
+    
+    #------------------------------------
+    # report_intermittent_results 
+    #-------------------
+    
+    def report_intermittent_results(self, res_coll, start_idx, end_idx, show_in_tensorboard=True):
+        '''
+        Writes a portion of the given tally collection to disk.
+        Updates tensorboard with IR scalar values. 
+        
+        :param res_coll: collection of result tallies
+        :type res_coll: ResultCollection
+        :param start_idx: index into the collection to first tally to include
+            in the result report
+        :type start_idx: int
+        :param end_idx: one above the last tally to include
+        :type end_idx: int
+        '''
+
+        # Create one long Pandas series from the 
+        # predictions, and another from from the truths:
+        preds_arr = [tally.preds
+                     for tally
+                     in res_coll[start_idx:end_idx]
+                     ]
+        # Have an array of arrays; flatten:
+        preds      = pd.Series(np.array(preds_arr).flatten())
+        labels_arr = [tally.labels
+                     for tally
+                     in res_coll[start_idx:end_idx]
+                     ]
+        labels     = pd.Series(np.array(labels_arr).flatten())
+ 
+        
+        res_dict   = self._compute_ir_values(preds, labels)
+        
+        res_series = pd.Series(res_dict)
+        # Exclude the values that are arrays:
+        res_series = res_series.drop(['prec_by_class', 'recall_by_class', 'f1_by_class'])
+
+        # Specify bar colors for related quantities:
+        color_groups = {
+            'steelblue' : ['prec_macro', 'prec_micro', 'prec_weighted'],
+            'teal': ['recall_macro', 'recall_micro', 'recall_weighted'],
+            'slategrey' : ['f1_macro', 'f1_micro', 'f1_weighted'],
+            'saddlebrown' : ['accuracy', 'balanced_accuracy']
+            }
+        ax = Charter.barchart(res_series, 
+                              rotation=45,
+                              ylabel='Performance Measure', 
+                              color_groups=color_groups)
+        
+        if show_in_tensorboard:
+            self.writer.add_figure('Performance Measures', 
+                                   ax.get_figure(),
+                                   global_step=0)
+        
     #------------------------------------
     # report_results 
     #-------------------
     
-    def report_results(self, truth_series, pred_probs, predicted_classes):
+    #****def report_results(self, truth_series, pred_probs, predicted_classes):
+    def report_results(self, result_coll, batch_num):
         #self._report_textual_results(tally_coll, self.csv_dir)
-        Inferencer.conf_matrix_fig = self._report_conf_matrix(truth_series, predicted_classes, show_in_tensorboard=True)
-        Inferencer.pr_curve_fig = self._report_charted_results(truth_series, pred_probs, predicted_classes)
+        #Inferencer.conf_matrix_fig = self._report_conf_matrix(truth_series, predicted_classes, show_in_tensorboard=True)
+        #Inferencer.pr_curve_fig = self._report_charted_results(truth_series, pred_probs, predicted_classes)
+        pass
         
 
     #------------------------------------
@@ -730,10 +768,11 @@ class Inferencer:
     #------------------------------------
     # _report_textual_results 
     #-------------------
-    
+
+
     def _report_textual_results(self, tally_coll, res_dir):
         '''
-        Give a sequence of tallies with results
+        Given a sequence of tallies with results
         from a series of batches, create long
         outputs, and inputs lists from all tallies
         
@@ -770,60 +809,7 @@ class Inferencer:
             all_preds.extend(tally.preds)
             all_labels.extend(tally.labels)
         
-        res = OrderedDict({})
-        res['prec_macro']       = precision_score(all_labels, 
-                                           all_preds, 
-                                           average='macro',
-                                           zero_division=0)
-        res['prec_micro']       = precision_score(all_labels, 
-                                           all_preds, 
-                                           average='micro',
-                                           zero_division=0)
-        res['prec_weighted']    = precision_score(all_labels, 
-                                           all_preds, 
-                                           average='weighted',
-                                           zero_division=0)
-        res['prec_by_class']    = precision_score(all_labels, 
-                                           all_preds, 
-                                           average=None,
-                                           zero_division=0)
-        
-        res['recall_macro']     = recall_score(all_labels, 
-                                        all_preds, 
-                                        average='macro',
-                                        zero_division=0)
-        res['recall_micro']     = recall_score(all_labels, 
-                                        all_preds, 
-                                        average='micro',
-                                        zero_division=0)
-        res['recall_weighted'] = recall_score(all_labels, 
-                                       all_preds, 
-                                       average='weighted',
-                                       zero_division=0)
-        res['recall_by_class']  = recall_score(all_labels, 
-                                        all_preds, 
-                                        average=None,
-                                        zero_division=0)
-
-        res['f1_macro']         = f1_score(all_labels, 
-                                    all_preds, 
-                                    average='macro',
-                                    zero_division=0)
-        res['f1_micro']         = f1_score(all_labels, 
-                                    all_preds, 
-                                    average='micro',
-                                    zero_division=0)
-        res['f1_weighted']      = f1_score(all_labels, 
-                                    all_preds, 
-                                    average='weighted',
-                                    zero_division=0)
-        res['f1_by_class']      = f1_score(all_labels, 
-                                    all_preds, 
-                                    average=None,
-                                    zero_division=0)
-
-        res['accuracy']          = accuracy_score(all_labels, all_preds)
-        res['balanced_accuracy'] = balanced_accuracy_score(all_labels, all_preds)
+        res = self._compute_ir_values(all_preds, all_labels)
         
         res_series = pd.Series(list(res.values()),
                                index=list(res.keys())
@@ -851,7 +837,16 @@ class Inferencer:
         # and df as convenient intermediary:
         res_csv_path = os.path.join(res_dir, 'ir_results.csv')
         res_df = self.res_measures_to_df(res_series)
-        res_df.to_csv(res_csv_path, index=False)
+        
+        if os.path.getsize(res_csv_path) > 0:
+            append_to_csv = True
+        else:
+            append_to_csv = False
+        
+        if append_to_csv:
+            res_df.to_csv(res_csv_path, index=False, mode='a', header=False)
+        else:
+            res_df.to_csv(res_csv_path, index=False, mode='w', header=True)
 
         # Next, construct Tensorboard markup tables
         # for the same results:
@@ -897,6 +892,75 @@ class Inferencer:
         self.writer.add_text('Accuracy', accuracy_tbl, global_step=0)
         
         return res_series
+
+    #------------------------------------
+    # _compute_ir_values
+    #-------------------
+
+    def _compute_ir_values(self, all_preds, all_labels):
+        '''
+        Given class predictions and labels, compute the
+        typical information retrieval values: macro/micro
+        precision, recall, etc. Returns a dict with the 
+
+        :param all_preds: series of truth labels
+        :type all_preds: pd.Series(int)
+        :param all_labels: predictions
+        :type all_labels: pd.Series(int)
+        :return dict with measures
+        :rtype {src : float}
+        '''
+        res = OrderedDict({})
+        res['prec_macro'] = precision_score(all_labels, all_preds, 
+            average='macro', 
+            zero_division=0)
+        res['prec_micro'] = precision_score(all_labels, 
+            all_preds, 
+            average='micro', 
+            zero_division=0)
+        res['prec_weighted'] = precision_score(all_labels, 
+            all_preds, 
+            average='weighted', 
+            zero_division=0)
+        res['prec_by_class'] = precision_score(all_labels, 
+            all_preds, 
+            average=None, 
+            zero_division=0)
+        res['recall_macro'] = recall_score(all_labels, 
+            all_preds, 
+            average='macro', 
+            zero_division=0)
+        res['recall_micro'] = recall_score(all_labels, 
+            all_preds, 
+            average='micro', 
+            zero_division=0)
+        res['recall_weighted'] = recall_score(all_labels, 
+            all_preds, 
+            average='weighted', 
+            zero_division=0)
+        res['recall_by_class'] = recall_score(all_labels, 
+            all_preds, 
+            average=None, 
+            zero_division=0)
+        res['f1_macro'] = f1_score(all_labels, 
+            all_preds, 
+            average='macro', 
+            zero_division=0)
+        res['f1_micro'] = f1_score(all_labels, 
+            all_preds, 
+            average='micro', 
+            zero_division=0)
+        res['f1_weighted'] = f1_score(all_labels, 
+            all_preds, 
+            average='weighted', 
+            zero_division=0)
+        res['f1_by_class'] = f1_score(all_labels, 
+            all_preds, 
+            average=None, 
+            zero_division=0)
+        res['accuracy'] = accuracy_score(all_labels, all_preds)
+        res['balanced_accuracy'] = balanced_accuracy_score(all_labels, all_preds)
+        return res
 
     #------------------------------------
     # close 

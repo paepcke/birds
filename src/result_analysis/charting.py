@@ -44,6 +44,10 @@ class CELL_LABELING(Enum):
 # ----------------------- Class Charter --------------
 
 class Charter:
+
+    # The minimum threshold that is 
+    # included in PR curves:
+    PR_CURVE_MIN_THRESHOLD = 0.1
     
     # Value to assign to precision,
     # recall, or f1 when divide by 0
@@ -143,21 +147,13 @@ class Charter:
         # only two classes a column vector is returned instead.
         # It has a 1 when a sample is of the first class. When
         # the sample is of the second class, the col vec is 0.
-        # Change that singularity, so that code below can rely
-        # a consistent array width:
+        # Be sure to consider this in any code below.
         
-        if len(pred_class_ids) == 2:
-            bin_labels_df = pd.concat([pd.DataFrame(bin_labels), 
-                                       pd.Series(1-bin_labels[:,0])], 
-                                       axis=1)
-            bin_labels_df.columns=[0,1]
-        else:
-            bin_labels_df = pd.DataFrame(bin_labels, 
-                                         columns=list(range(len(pred_class_ids))))
+        bin_labels_df = pd.DataFrame(bin_labels) 
 
         pr_curve_specs = {}
 
-        # Go through each column, class_id.e. the
+        # Go through each column, class_id, i.e. the
         # 1/0 labels/preds for one class at
         # a time, and get the prec/rec numbers at different
         # thresholds.
@@ -272,38 +268,42 @@ class Charter:
                 # Add these f1s to the pr_curve info:
                 pr_curve_df['f1'] = f1_scores_series
                 
+                # There is always one fewer thresholds
+                # than precision/recall pairs (see above).
+                # Make handling the data easier by adding
+                # thresholds as a column to pr_curve_df,
+                # using NaN for the missing threshold in 
+                # the final position. Since by definition,
+                # in that row prec==1, rec==0, f1 will be 0,
+                # and not the optimal op pt.
+                # The ignore_index makes the row number match
+                # the row number of the df in the last position:
+                
+                pr_curve_df['Threshold'] = thresholds_series.append(pd.Series(np.nan), 
+                                                                    ignore_index=True)
+                
+                # Remove rows in which f1 is undefined,
+                # b/c both prec and rec were 0:
+                pr_curve_df = pr_curve_df.dropna(axis='index', subset=['f1'])
+
+                
             except Exception as e:
                 raise type(e)(f"Error during f1 computation: {e}") from e
 
-        # The [:-1] excludes the f1 computed from the
-        # prec/rec point artificially added by precision_recall_curve().
-        best_op_idx = pr_curve_df['f1'][:-1].argmax()
-        
-        try:
-            best_threshold    = thresholds[best_op_idx]
-        except IndexError as e:
-            raise IndexError(f"Best operating point's f1 is the last in pr_curve_df, so thresholds is 1 short.")\
-                from e
-        # Get row containing the optimal prec/recall/f1 triplet,
-        # and add the optimal threshold to that pd.Series:
-         
-        best_prec_recall_series = pr_curve_df.iloc[best_op_idx,:]
-        optimal_parms_series = \
-            best_prec_recall_series.append(pd.Series(best_threshold, index=['Threshold']))
-        
-        # A nice object containing all about the optimal point:
-        best_operating_pt = BestOperatingPoint(optimal_parms_series)
+        avg_prec = average_precision_score(truth_series, pred_probs_series)
 
-        avg_prec = average_precision_score(truth_series, pred_probs_series) 
+        # Create a crv spec instance, but in the 
+        # process, remove all rows with threshold
+        # values that are overly small, and therefore
+        # approach 0, and precision of 1:
+        
         res = CurveSpecification(pr_curve_df,
-                                 thresholds_series,
-                                 best_operating_pt,
                                  avg_prec,
-                                 class_id
+                                 class_id,
+                                 cull_threshold_value=cls.PR_CURVE_MIN_THRESHOLD
                                  )
-        
         return res
-
+    
     #------------------------------------
     # compute_confusion_matrix
     #-------------------
@@ -750,6 +750,91 @@ class Charter:
                                                  normalize))
         return results
 
+    #------------------------------------
+    # barchart 
+    #-------------------
+    
+    @classmethod
+    def barchart(cls, 
+                 data, 
+                 rotation=0,
+                 ylabel=None, 
+                 color_groups=None,
+                 ):
+        '''
+        Returns a matplotlib axes with a bar chart
+        that can be added to a figure. The data is
+        a pandas Series with column labels like:
+        
+                'prec_micro'
+                'prec_macro'
+                'f1'
+                'accuracy_balanced'
+                    ...
+                    
+        The axes used is the present matplotlib axes.
+        This may be the default axes that is implicitly
+        created by a simple:
+           
+           fig = plt.figure()
+           
+        Example:
+        
+           fig = plt.figure()
+           data = pd.Series([1,2,3], index=['foo','bar','fum'])
+           Charter.barchartdata) 
+           
+        The color_groups allows coloring related bars
+        the same. Example: if bars include micro-precision,
+        macro-precision, micro-recall, and macro-recall, one
+        might want the precisions bars to have the same color,
+        and a different color for the recalls. Example:
+        
+          color_groups: {'green' : ['micro_prec', macro_prec'],
+                         'brown' : ['micro_recall', macro_recall'],
+                         'blue'  : ['accuracy']
+                         }
+        
+        :param data: values to plot
+        :type data: ordinal values
+        :param rotation: rotation of x labels in degrees; ex: 45
+        :type rotation: int
+        :param ylabel: y axis label; None is OK
+        :type ylabel: str
+        :param color_groups: groupings of colors for the bars
+        :type color_groups: {str : [str]}
+        :return axes with chart
+        :rtype matplotlib.axes
+        '''
+        
+        ax = data.plot.bar()
+        plt.tight_layout()
+        if rotation != 0:
+            ax.set_xticklabels(data.index, rotation=rotation)
+            
+        if ylabel is not None:
+            ax.set_ylabel(ylabel)
+            
+        if color_groups is not None:
+            # Make the bars of related values the
+            # same color: the bar chart's X labels 
+            # are the names of the measures. They are
+            # each contained in a text object; got those
+            # out into a list: 
+            #   ['prec_macro', 'prec_micro', 'prec_weighted', 'recall_macro',...]
+            bars = ax.get_children()
+            measures = [txt_obj.get_text() for txt_obj in ax.get_xticklabels()]
+            for color in color_groups.keys():
+                for like_colored_meas in color_groups[color]:
+                    try:
+                        bar_idx = measures.index(like_colored_meas)
+                        bars[bar_idx].set_color(color)
+                    except ValueError:
+                        raise ValueError(f"Could not find {like_colored_meas} in barplot X labels")
+
+        return ax
+
+
 # ------------------ Class TrainHistoryCMs -----------
 
 class TrainHistoryCMs:
@@ -843,21 +928,58 @@ class CurveSpecification(dict):
     information is included to draw 
     a precision-recall curve.
     
-         best_operating_pt: {'threshold' : thresholds[best_op_idx],
+    Instances behave like dicts with keys:
+    
+         best_op_pt:        {'threshold' : thresholds[best_op_idx],
                              'f1'        : f1_scores[best_op_idx],
-                             'prec'      : precisions[best_op_idx],
-                             'rec'       : recalls[best_op_idx]
+                             'precision' : precisions[best_op_idx],
+                             'recall'    : recalls[best_op_idx]
                              }
          recalls          : list of recall values
          precisions       : list of precision values
          thresholds       : list of probability decision thresholds
                             at which precions/recall pairs were computed
+         f1               : list of f1 values
          avg_precision    : the Average Precision (AP) of all the points
          
          class_id         : ID (int or str) for which instances is a curve
          
-    The precisions and recalls array-likes form
-    the x/y pairs when zipped. 
+         curve_df         : all recall/precision/threshold/f1
+                            values in one dataframe
+         
+            
+        The best_op_pt is an instance of BestOperatingPoint, which
+        contains the precision, recall, f1, and threshold for 
+        which f1 is optimal.
+         
+        The curve_df holds for each decision threshold
+        the probability threshold value, the corresponding
+        precision and recall, and the f1 value:
+        
+            ['Threshold', 'Precision', 'Recall', 'f1']
+
+        The recalls/precision/threshold lists are extracted
+        from curve_df.
+
+        Instance initialization includes computation of the
+        best operating point, which is the threshold at which
+        the given class yields the best f1. 
+
+        In addition, methods:
+        
+            copy
+            undef_prec
+            undef_rec
+            undef_f1
+            
+        return the number of undefined (nan)
+        precisions, recalls, and f1 values, respectively.
+        These values can be use to discard curves that
+        include nan values.
+        	
+        It is recommended that the caller removes
+        such NaN rows ahead of time.
+
     
     NOTE: For now equality (__eq__) is implemented
           as 'identical'. I.e. the very same id number
@@ -869,59 +991,31 @@ class CurveSpecification(dict):
     
     def __init__(self,
                  pr_curve_df,
-                 thresholds,
-                 best_operating_pt,
                  avg_precision,
                  class_id,
+                 cull_threshold_value=False,
                  **kwargs
                  ):
         '''
-        The pr_curve_df holds for each decision threshold
-        the probability threshold value, the corresponding
-        precision and recall, and the f1 value:
-            ['Threshold', 'Precision', 'Recall', 'f1']
-            
-        Behaves like a dict.
+        The pr_curve_df's columns must be:
+        ['Threshold', 'Precision', 'Recall', 'f1']
+        
+        The avg_precision must be the AP computed from
+        the original data, for instance via sklearn.average_precision_score()
+        
+        The class_id is the integer target class ID for
+        which this curve is the PR-curve. 
 
-        The number of rows is one less than the number of samples
-        to make the curve start on the Y axis. The last-threshold's
-        prec value is implied to be 1, the recall value is implied
-        to be 0.
-        
-        Resulting instance will have the following dict keys
-        build in:
-        
-        	'best_op_pt',
-        	'recalls',
-        	'precisions',
-        	'f1_scores'
-        	'thresholds',
-        	'avg_prec',
-        	'class_id',
-        
-        In addition, methods:
-            undef_prec
-            undef_rec
-            undef_f1
-        return the number of undefined (nan)
-        precisions, recalls, and f1 values, respectively.
-        These values can be use to discard curves that
-        include nan values.
-        	
-        The best_op_pt's keys are:
-        
-            ['threshold', 'f1', 'precision', 'recall']
-        
+        If cull_threshold_value is provided, it must be a float. In that
+        case all rows for which threshold is less than the
+        given value are removed before the best operating
+        point is computed. Subsequent retrievals such as
+        crv_spec_inst['recalls'] will not include the culled
+        rows.
+
         :param pr_curve_df: dataframe with columns
-            ['Threshold', 'Precision', 'Recall', 'f1'] and 
-            shape (number-of-samples - 1, 4)
+            ['Precision', 'Recall', 'f1', 'Threshold']
         :type pr_curve_df: pd.DataFrame
-        :param thresholds: the probability decision thresholds
-            used for the given set of prec/rec pairs
-        :type thresholds: pd.Series
-        :param best_operating_pt: information where on the 
-            curve the optimal F1 score is achieved
-        :type best_operating_pt: BestOperatingPoint
         :param avg_precision: AP summarizes a precision-recall curve as 
             the weighted mean of precisions achieved at each threshold, 
             with the increase in recall from the previous threshold 
@@ -931,32 +1025,102 @@ class CurveSpecification(dict):
         :param class_id: class for which this obj
             is the pr-curve
         :type class_id: {int | str}
-        
+        :param cull_threshold_value: if True, all prec/recall pairs for
+            thresholds < the given value are removed.
+        :type cull_threshold_value: float
         '''
         
         super().__init__()
-        self.pr_curve_df = pr_curve_df
-        self.__setitem__('best_op_pt', best_operating_pt)
-        self.__setitem__('recalls', pr_curve_df['Recall'])
-        self.__setitem__('precisions', pr_curve_df['Precision'])
+        if cull_threshold_value is not None:
+            
+            if type(cull_threshold_value) != float:
+                raise TypeError(f"The culling threshold value must be a float, not {cull_threshold_value}")
+            
+            self.pr_curve_df = self._cull_low_thresholds(pr_curve_df)
+        else:
+            self.pr_curve_df = pr_curve_df
         
-        # Sklearn's precision_recall_curve computation
-        # adds an 'artificial' recall and precision point at the 
-        # end to force the precision vs. recall curves to start
-        # on the X axis. But if plotting precision and/or recall against
-        # threshold, then that point needs to be removed, b/c it does
-        # not have a corresponding threshold value:
-        self.__setitem__('recalls_sans_last', pr_curve_df['Recall'][:-1])
-        self.__setitem__('precisions_sans_last', pr_curve_df['Precision'][:-1])
-        
-        self.__setitem__('thresholds', thresholds)
+        self.__setitem__('curve_df', self.pr_curve_df)
+        self.__setitem__('best_op_pt', self._compute_best_op_pt())
         self.__setitem__('avg_prec', avg_precision)
-        self.__setitem__('f1_scores', pr_curve_df['f1'])
         self.__setitem__('class_id', class_id)
         self.update(**kwargs)
 
     #------------------------------------
-    # def undef_prec 
+    # _cull_low_thresholds
+    #-------------------
+    
+    def _cull_low_thresholds(self, crv_df):
+        '''
+        Takes a df ('Precision', 'Recall', 'f1', 'Threshold').
+        Removes rows with very low thresholds, subject to 
+        at least 10 rows left. 
+        
+        :param crv_df: curve information
+        :type crv_df: pd.DataFrame
+        :return: new dataframe with rows culled
+        :rtype: pd.DataFrame
+        '''
+        min_rows = 10
+        num_rows, _num_cols = crv_df.shape
+        if num_rows <= min_rows:
+            return crv_df
+        
+        new_df = crv_df.copy()
+        cur_cutoff = Charter.PR_CURVE_MIN_THRESHOLD
+        
+        while True:
+            candidate = new_df[new_df['Threshold'] >= cur_cutoff]
+            new_num_rows, _new_num_cols = candidate.shape 
+            if new_num_rows >= min_rows:
+                return candidate
+            # Getting too few rows; lower the cutoff a bit:
+            cur_cutoff -= 0.01
+
+    #------------------------------------
+    # copy 
+    #-------------------
+
+    def copy(self, pr_curve_df=None, **kwargs):
+        '''
+        Special copy method with an optional
+        replacement of pr_curve_df. The new
+        copy will contain all the same values,
+        except that the given pr_curve_df is
+        replaced. If none is provided, the copy
+        will contain a copy of the this instance's
+        pr_curve_df.
+        '''
+        
+        if pr_curve_df is None:
+            pr_curve_df = self.pr_curve_df.copy()
+
+        new_inst = CurveSpecification(pr_curve_df,
+                                      self['avg_precision'],
+                                      self['class_id'],
+                                      **kwargs
+                                      )
+    
+        return new_inst
+    
+    #------------------------------------
+    # __getitem__ 
+    #-------------------
+    
+    def __getitem__(self, key):
+        if key == 'recalls':
+            return self.pr_curve_df['Recall']
+        elif key == 'precisions':
+            return self.pr_curve_df['Precision']
+        elif key == 'thresholds':
+            return self.pr_curve_df['Threshold']
+        elif key == 'f1_scores' or key == 'f1':
+            return self.pr_curve_df['f1']
+        else:
+            return super().__getitem__(key)
+
+    #------------------------------------
+    # undef_prec 
     #-------------------
 
     def undef_prec(self):
@@ -1017,6 +1181,19 @@ class CurveSpecification(dict):
 
     def __neq__(self, other):
         return not self.__eq__(other)
+    
+    #------------------------------------
+    # _compute_best_op_pt 
+    #-------------------
+    
+    def _compute_best_op_pt(self):
+        best_op_idx = self.pr_curve_df['f1'].argmax()
+        optimal_parms_series = self.pr_curve_df.iloc[best_op_idx,:]
+        # A nice object containing all about the optimal point:
+        best_operating_pt = BestOperatingPoint(optimal_parms_series)
+        return best_operating_pt
+
+    
 
 # ---------------------- Classes to Specify Visualization Requests ------
 
@@ -1063,19 +1240,6 @@ if __name__ == '__main__':
                                      formatter_class=argparse.RawTextHelpFormatter,
                                      description="Charts and other analyses from inferencing."
                                      )
-
-    # parser.add_argument('-l', '--errLogFile',
-                        # help='fully qualified log file name to which info and error messages \n' +\
-                             # 'are directed. Default: stdout.',
-                        # dest='errLogFile',
-                        # default=None)
-    # parser.add_argument('-d', '--dryRun',
-                        # help='show what script would do if run normally; no actual downloads \nor other changes are performed.',
-                        # action='store_true')
-    # parser.add_argument('my_integers',
-                        # type=int,
-                        # nargs='+',
-                        # help='Repeatable: integers. Will show as list in my_integers')
 
     parser.add_argument('--supertitle',
                         help='title above the figure',
