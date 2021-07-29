@@ -11,6 +11,7 @@ import glob
 import os
 from pathlib import Path
 import re
+import shutil
 
 import natsort
 import torch
@@ -79,6 +80,15 @@ class FileUtils:
     date_at_start_pat = \
         re.compile(r'([^_]*)[_]{0,1}([\d]{4}-[\d]{2}-[\d]{2}T[\d]{2}_[\d]{2}_[\d]{2})')
 
+
+    # The species of interest to biologists, plus NOIS:
+    FOCUS_SPECIES = ['BANA','BBFL','BCMM','BHPA','BHTA',
+                     'BTSA','CCRO','CFPA','CMTO','CTFL',
+                     'DCFL','FBAR','GCFL','GHCH','GHTA',
+                     'GRHE','LEGR','NOIS','OBNT','OLPI',
+                     'PATY','RBWR','SHWC','SOFL','SPTA',
+                     'SQCU','STTA','TRGN','WCPA','WTDO',
+                     'WTRO','YCEU']
 
     #------------------------------------
     # ensure_directory_existence
@@ -630,6 +640,43 @@ class FileUtils:
                 coll.add(val_tally, epoch)
 
         return coll
+    
+    #------------------------------------
+    # move_species_to_noise 
+    #-------------------
+    
+    @classmethod
+    def mv_non_focus_species(cls, src_dir, dst_dir):
+        '''
+        Given the path to a species root directory, and
+        a destination directory, move all species under 
+        src_dir that are not focus species to dst_dir. 
+        
+        It is an error if the src_dir does not exist. The
+        dst_dir is created if needed. If the destination exists,
+        it must be a directory.
+            
+        :param src_dir: root directory with species subdirectories.
+        :type src_dir: str
+        :param dst_dir: destination directory
+        :type dst_dir: str
+        '''
+        
+        if not os.path.exists(src_dir):
+            raise FileNotFoundError(f"Source dir {src_dir} not found")
+        
+        if not os.path.exists(dst_dir):
+            os.makedirs(dst_dir)
+        else:
+            if not os.path.isdir(dst_dir):
+                raise ValueError(f"Destination dir must be a directory, not {dst_dir}")
+
+        with os.scandir(src_dir) as it:
+            species_dir_obj = next(it)
+            species         = species_dir_obj.name.upper()
+            if species not in self.FOCUS_SPECIES:
+                shutil.move(species_dir_obj.path, dst_dir)
+
     
     #------------------------------------
     # get_image_transforms 
