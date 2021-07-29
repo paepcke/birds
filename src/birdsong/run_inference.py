@@ -198,6 +198,11 @@ class Inferencer:
                                  )
         self.class_names = dataset.class_names()
         self.num_classes = len(self.class_names)
+        
+        csv_data_header = self.class_names + ['label']
+        self.csv_writer.writerow(csv_data_header)
+         
+
 
         # Get the right type of model,
         # Don't bother getting it pretrained,
@@ -282,9 +287,13 @@ class Inferencer:
         sko_net.load_params(f_params=self.model_path)
         truth = []
         pred_logits = []
-        for X,y in self.loader:
+        for batch_num, (X,y) in enumerate(self.loader):
             pred_logits.append(sko_net.predict(X))
             truth.append(y)
+            #********
+            #if batch_num > 5:
+            #    break
+            #********
             
         # Preds are now a list of np-arrays, each
         # of which has shape (batch_size, num_classes).
@@ -330,7 +339,6 @@ class Inferencer:
         pred_probs_df = pred_probs_df.applymap(lambda el: el.item())
         
         self.report_results(truth_series, pred_probs_df, pred_classes)
-        print('foo')
 
     #------------------------------------
     # run_inferencerOLD 
@@ -531,17 +539,24 @@ class Inferencer:
     #-------------------
     
     def report_results(self, truth_series, pred_probs, predicted_classes):
-        #*******self._report_textual_results(tally_coll, self.csv_dir)
-        #*******self._report_conf_matrix(tally_coll, show_in_tensorboard=True)
-        self._report_charted_results(truth_series, pred_probs, predicted_classes)
+        #self._report_textual_results(tally_coll, self.csv_dir)
+        Inferencer.conf_matrix_fig = self._report_conf_matrix(truth_series, predicted_classes, show_in_tensorboard=True)
+        Inferencer.pr_curve_fig = self._report_charted_results(truth_series, pred_probs, predicted_classes)
+        
 
     #------------------------------------
     # _report_conf_matrix 
     #-------------------
     
-    def _report_conf_matrix(self, tally_coll, show=True, show_in_tensorboard=None):
+    def _report_conf_matrix(self, 
+                            truth_series, 
+                            predicted_classes, 
+                            show=True, 
+                            show_in_tensorboard=None):
         '''
-        Computes the confusion matrix CM from tally collection.
+        Computes the confusion matrix CM from the truth/prediction
+        series.
+        
         Creates an image from CM, and displays it via matplotlib, 
         if show arg is True. If show_in_tensorboard is a Tensorboard
         SummaryWriter instance, the figure is posted to tensorboard,
@@ -549,9 +564,11 @@ class Inferencer:
         
         Returns the Figure object.
         
-        :param tally_coll: all ResultTally instances to be included
-            in the confusion matrix
-        :type tally_coll: result_tallying.ResultCollection
+        :param truth_series: true labels
+        :type truth_series: pd.Series
+        :param predicted_classes: the classes predicted by the 
+            classifier
+        :type predicted_classes: pd.Series
         :param show: whether or not to call show() on the
             confusion matrix figure, or only return the Figure instance
         :type show: bool
@@ -563,15 +580,8 @@ class Inferencer:
         :rtype: matplotlib.pyplot.Figure
         '''
 
-        all_preds   = []
-        all_labels  = []
-        
-        for tally in tally_coll.tallies(phase=LearningPhase.TESTING):
-            all_preds.extend(tally.preds)
-            all_labels.extend(tally.labels)
-        
-        conf_matrix = Charter.compute_confusion_matrix(all_labels,
-                                                       all_preds,
+        conf_matrix = Charter.compute_confusion_matrix(truth_series,
+                                                       predicted_classes,
                                                        self.class_names,
                                                        normalize=True
                                                        )
@@ -655,7 +665,7 @@ class Inferencer:
             return False
         
         # Too many curves are clutter. Only
-        # show the best, worst, and median by optimal f1:
+        # show the best, worst, and median by optimal f1;
         f1_sorted_curves = sorted(well_defined_curves,
                            key=lambda curve: curve['best_op_pt']['f1']
                            )
@@ -679,24 +689,40 @@ class Inferencer:
             if len(curves_to_show) == 2:
                 easiest_cl_id = curves_to_show[1]['class_id']
                 easiest_cl_nm = self.class_names[easiest_cl_id]
+            else:
+                # Only one curve:
+                easiest_cl_nm = None
             median_cl_nm = None
         else:
             hardest_cl_nm = self.class_names[hardest_cl_id]
             median_cl_nm  = self.class_names[median_cl_id]
             easiest_cl_nm = self.class_names[easiest_cl_id]
         
+        legend_cl_names = list(filter(lambda el: el is not None,
+                                      [hardest_cl_nm, 
+                                       median_cl_nm, 
+                                       easiest_cl_nm]))
+        legend_txts = []
+        if len(legend_cl_names) > 1:
+            legend_txts.append(f"Hardest: {hardest_cl_nm}")
+        else:
+            # Only one curve; just list the species name:
+            legend_txts.append(hardest_cl_nm)
+        if len(legend_cl_names) == 2:
+            legend_txts.append(f"Easiest: {easiest_cl_nm}")
+        elif len(legend_cl_names) > 2:
+            # Got three curves:
+            legend_txts.append(f"Medium: {median_cl_nm}")
+            legend_txts.append(f"Easiest: {easiest_cl_nm}")
+        
         legend = fig.axes[0].get_legend()
         # Get text lines:
         #    'class 0'
         #    'class 1'
         #    'Optimal operation'
-        texts  = legend.get_texts()
-        texts[0].set_text(f"Hardest: {hardest_cl_nm}")
-        texts[1].set_text(f"Median: {median_cl_nm}" \
-                          if median_cl_nm is not None \
-                          else f"Easiest: {easiest_cl_nm}")
-        if median_cl_nm is not None:
-            texts[2].set_text(f"Easiest: {easiest_cl_nm}")
+        existing_legend_texts  = legend.get_texts()
+        for i, txt in enumerate(legend_txts):
+            existing_legend_texts[i].set_text(txt)
 
         fig.show()
         return True
