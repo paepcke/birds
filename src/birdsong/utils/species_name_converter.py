@@ -78,6 +78,15 @@ class SpeciesNameConverter:
     '''
 
     initialized = False
+    
+    # List of species that are of interest:
+    FOCUS_SPECIES = ['BANA', 'BBFL','BCMM','BHPA','BHTA',
+                     'BTSA','CCRO','CFPA','CMTO','CTFL',
+                     'DCFL','FBAR','GCFL','GHCH','GHTA',
+                     'GRHE','LEGR','NOIS','OBNT','OLPI',
+                     'PATY','RBWR','SHWC','SOFL','SPTA',
+                     'SQCU','STTA','TRGN','WCPA','WTDO',
+                     'WTRO','YCEU'] 
 
     #------------------------------------
     # Constructor

@@ -231,7 +231,7 @@ class Inferencer:
     def __call__(self, gpu_id_model_path_pair):
         gpu_id, self.model_path = gpu_id_model_path_pair
         self.prep_model_inference(self.model_path)
-        self.log.info(f"Begining inference with model {FileUtils.ellipsed_file_path(self.model_path)} on gpu_id {gpu_id}")
+        self.log.info(f"Beginning inference with model {FileUtils.ellipsed_file_path(self.model_path)} on gpu_id {gpu_id}")
         #****************
         return self.run_inference(gpu_to_use=gpu_id)
         # dicts_from_runs = []
@@ -289,12 +289,11 @@ class Inferencer:
 
         sko_net.initialize()  # This is important!
         sko_net.load_params(f_params=self.model_path)
-        #**********
-        #truth = []
-        #pred_logits = []
-        #**********
-        start_idx = 0
+
         res_coll = ResultCollection()
+        display_counter = 0
+        # For keeping track what's been written to disk:
+        start_idx = 0
         for batch_num, (X,y) in enumerate(self.loader):
             outputs = sko_net.predict(X)
             tally = ResultTally(batch_num,
@@ -308,245 +307,67 @@ class Inferencer:
             res_coll.add(tally, batch_num)
 
             if batch_num > 0 and batch_num % self.REPORT_EVERY == 0:
-                end_idx   = 2 + start_idx + self.REPORT_EVERY
-                self.report_intermittent_results(res_coll, 
-                                                 start_idx, 
-                                                 end_idx,
-                                                 )
-                start_idx += self.REPORT_EVERY
-                 
+                self.report_intermittent_results(res_coll,
+                                                 start_idx=start_idx, # First tally to add to csv file
+                                                 display_counter=display_counter) # Overlay the charts in tensorboard
+                start_idx += len(res_coll) - start_idx
+                display_counter += 1
 
-        
-        # self.report_results(truth_series, pred_probs_df, pred_classes)
+        self.report_results(res_coll)
 
-    #------------------------------------
-    # run_inferencerOLD 
-    #-------------------
-    
-    def run_inferenceOLD(self, gpu_to_use=0):
-        '''
-        Runs model over dataloader. Along
-        the way: creates ResultTally for each
-        batch, and maintains dict instance variable
-        self.raw_results for later conversion of
-        logits to class IDs under different threshold
-        assumptions. 
-        
-        self.raw_results: 
-                {'all_outputs' : <arr>,
-                 'all_labels'  : <arr>
-                 }
-        
-        Returns a ResultCollection with the
-        ResultTally instances of each batch.
-
-        :param gpu_to_use: which GPU to deploy to (if it is available)
-        :type gpu_to_use: int
-        :return: collection of tallies, one for each batch,
-            or None if something went wrong.
-        :rtype: {None | ResultCollection}
-        '''
-        # Just in case the loop never runs:
-        batch_num   = -1
-        overall_start_time = datetime.datetime.now()
-
-        # Load the previously created model
-        # with the learned weights:
-        
-        try:
-            try:
-                if torch.cuda.is_available():
-                    self.model.load_state_dict(torch.load(self.model_path))
-                    self.model = FileUtils.to_device(self.model, 'gpu', gpu_to_use)
-                else:
-                    self.model.load_state_dict(torch.load(
-                        self.model_path,
-                        map_location=torch.device('cpu')
-                        ))
-            except RuntimeError as e:
-                emsg = repr(e)
-                if emsg.find("size mismatch for conv1") > -1:
-                    emsg += " Maybe model was trained with to_grayscale=False, but local net created for grayscale?"
-                raise RuntimeError(emsg) from e
-
-            loss_fn = nn.CrossEntropyLoss()
-    
-            result_coll = ResultCollection()
-            
-            # Save all per-class logits for ability
-            # later to use different thresholds for
-            # conversion to class IDs:
-            
-            all_outputs = []
-            all_labels  = []
-
-            self.model.eval()
-            num_test_samples  = len(self.loader.dataset)
-            self.log.info(f"Begin inference ({num_test_samples} test samples)...")
-
-            samples_processed = 0
-            
-            loop_start_time    = overall_start_time
-            with torch.no_grad():
-                
-                for batch_num, (batch, targets) in enumerate(self.loader):
-                    if torch.cuda.is_available():
-                        images = FileUtils.to_device(batch, 'gpu')
-                        labels = FileUtils.to_device(targets, 'gpu')
-                    else:
-                        images = batch
-                        labels = targets
-                    
-                    outputs = self.model(images)
-                    loss    = loss_fn(outputs, labels)
-                    
-                    images  = FileUtils.to_device(images, 'cpu')
-                    outputs = FileUtils.to_device(outputs, 'cpu')
-                    labels  = FileUtils.to_device(labels, 'cpu')
-                    loss    = FileUtils.to_device(loss, 'cpu')
-
-                    #**********
-                    # max_logit = outputs[0].max().item()
-                    # max_idxes = (outputs.squeeze() == max_logit).nonzero(as_tuple=False)
-                    # max_idx = max_idxes.amax().item()
-                    # smpl_id = torch.utils.data.dataloader.sample_id_seq[-1]
-                    # lbl     = labels[0].item()
-                    # pred_cl = max_idx
-                    #
-                    # try:
-                        # self.curr_dict[smpl_id] = (smpl_id, lbl, pred_cl)
-                    # except AttributeError:
-                        # self.curr_dict = {smpl_id : (smpl_id, lbl, pred_cl)}
-                    # #**********
-                    
-                    
-                    # Specify the batch_num in place
-                    # of an epoch, which is not applicatble
-                    # during testing:
-                    tally = ResultTally(batch_num,
-                                        LearningPhase.TESTING,
-                                        outputs, 
-                                        labels, 
-                                        loss,
-                                        self.class_names,
-                                        self.batch_size)
-                    result_coll.add(tally, step=None)
-                    
-                    all_outputs.append(outputs)
-                    all_labels.append(labels)
-                    
-                    samples_processed += len(labels)
-                    
-                    del images
-                    del outputs
-                    del labels
-                    del loss
-
-                    torch.cuda.empty_cache()
-                    
-                    time_now = datetime.datetime.now()
-                    # Sign of life every 6 seconds:
-                    if (time_now - loop_start_time).seconds >= 5:
-                        self.log.info(f"GPU{gpu_to_use} processed {samples_processed}/{num_test_samples} samples")
-                        loop_start_time = time_now 
-        except Exception as e:
-            # Print stack trace:
-            tb.print_exc()
-            self.log.err(f"Error during inference loop: {repr(e)}")
-            return
-        finally:
-            
-            time_now = datetime.datetime.now()
-            test_time_duration = time_now - overall_start_time
-            # A human readable duration st down to minutes:
-            duration_str = Utils.time_delta_str(test_time_duration, granularity=4)
-            self.log.info(f"Done with inference: {samples_processed} test samples; {duration_str}")
-            # Total number of batches we ran:
-            num_batches = 1 + batch_num # b/c of zero-base
-            
-            # If loader delivered nothing, the loop
-            # never ran; warn, and get out:
-            if num_batches == 0:
-                self.log.warn(f"Dataloader delivered no data from {self.samples_path}")
-                self.close()
-                return None
-            
-            # Var all_outputs is now:
-            #  [tensor([pred_cl0, pred_cl1, pred_cl<num_classes - 1>], # For sample0
-            #   tensor([pred_cl0, pred_cl1, pred_cl<num_classes - 1>], # For sample1
-            #                     ...
-            #   ]
-            # Make into one tensor: (num_batches, batch_size, num_classes),
-            # unless an exception was raised at some point,
-            # throwing us into this finally clause:
-            if len(all_outputs) == 0:
-                self.log.info(f"No outputs were produced; thus no results to report")
-                return None
-            
-            self.all_outputs_tn = torch.stack(all_outputs)
-            # Be afraid...be very afraid:
-            assert(self.all_outputs_tn.shape == \
-                   torch.Size([num_batches, 
-                               self.batch_size, 
-                               self.num_classes])
-                   )
-            
-            # Var all_labels is now num-batches tensors,
-            # each containing batch_size labels:
-            assert(len(all_labels) == num_batches)
-            
-            # list of single-number tensors. Make
-            # into one tensor:
-            self.all_labels_tn = torch.stack(all_labels)
-            assert(self.all_labels_tn.shape == \
-                   torch.Size([num_batches, self.batch_size])
-                   )
-            # And equivalently:
-            assert(self.all_labels_tn.shape == \
-                   (self.all_outputs_tn.shape[0], 
-                    self.all_outputs_tn.shape[1]
-                    )
-                   )
-            
-            self.report_results(result_coll)
-            self.close()
-            
-        return result_coll
-    
-    
     #------------------------------------
     # report_intermittent_results 
     #-------------------
     
-    def report_intermittent_results(self, res_coll, start_idx, end_idx, show_in_tensorboard=True):
+    def report_intermittent_results(self, 
+                                    res_coll, 
+                                    start_idx=0, 
+                                    end_idx=None,
+                                    show_in_tensorboard=True,
+                                    display_counter=0):
         '''
         Writes a portion of the given tally collection to disk.
-        Updates tensorboard with IR scalar values. 
+        Updates tensorboard with bar charts of IR values.
+        Each call results in an updated bar chart that reflects
+        the entire collection. Tenforboard will overlay them, and
+        provide a slider.
+        
+        The start_idx/end_idx define a slice of tallies whose
+        (partial) content is added to the csv file manage by
+        self.csv_writer. 
         
         :param res_coll: collection of result tallies
         :type res_coll: ResultCollection
         :param start_idx: index into the collection to first tally to include
             in the result report
         :type start_idx: int
-        :param end_idx: one above the last tally to include
-        :type end_idx: int
+        :param end_idx: one above the last tally to include; 
+            default: include all
+        :type end_idx: {int | None}
+        :param show_in_tensorboard: whether or not to transmit
+            the computed barchart to tensorboard.
+        :type show_in_tensorboard: bool
+        :param display_counter: if calling this method repeatedly, incrementing
+            this counter causes tensorflow to create a slider for overlays
+        :type display_counter: int
+            
         '''
 
-        # Create one long Pandas series from the 
-        # predictions, and another from from the truths:
-        preds_arr = [tally.preds
-                     for tally
-                     in res_coll[start_idx:end_idx]
-                     ]
-        # Have an array of arrays; flatten:
-        preds      = pd.Series(np.array(preds_arr).flatten())
-        labels_arr = [tally.labels
-                     for tally
-                     in res_coll[start_idx:end_idx]
-                     ]
-        labels     = pd.Series(np.array(labels_arr).flatten())
- 
+        if end_idx is None:
+            # Compute quantities across entire collection:
+            end_idx = len(res_coll)
+
+        # Update the precision/recall/accuracy bar chart:
         
+        # Create one long Pandas series from all 
+        # predictions, and another from all the corresponding
+        # truths:
+        preds_arr = [tally.preds for tally in res_coll.tallies()]
+        # That gave an array of arrays; flatten it:
+        preds      = pd.Series(np.array(preds_arr).flatten())
+        labels_arr = [tally.labels for tally in res_coll.tallies()]
+        labels     = pd.Series(np.array(labels_arr).flatten())
+
         res_dict   = self._compute_ir_values(preds, labels)
         
         res_series = pd.Series(res_dict)
@@ -568,8 +389,83 @@ class Inferencer:
         if show_in_tensorboard:
             self.writer.add_figure('Performance Measures', 
                                    ax.get_figure(),
-                                   global_step=0)
+                                   global_step=display_counter)
+
+
+        # Now add just the new preds/labels to the CSV file:
+        self._write_probability_rows(res_coll[start_idx:end_idx])
         
+ 
+    #------------------------------------
+    # _write_probability_rows 
+    #-------------------
+    
+    def _write_probability_rows(self, tally_list):
+        '''
+        Given a list of TallyResult, extract the probabilites
+        and labels. Write them to .csv. Each tally contains
+        results from one batch of inference results. Thus
+        we have one list of probabilities of length num_classes
+        for each inference result in that batch:
+        
+                                 NumClasses
+                     
+        res0    prob_0_class0  prob_0_class1, ... prob_0_class_(num_classes - 1)  
+        res1    prob_1_class0  prob_1_class1, ... prob_1_class_(num_classes - 1)  
+        res3               ...
+        res_(batch_size - 1)
+        
+        Assumption: self.csv_writer contains an open csv.Writer instance
+                    with header already written:
+                    
+                        Class0,Class1,...Classn,Label
+        
+        :param tally_list: list of results from batches
+        :type tally_list: [ResultTally]
+        '''
+
+        # Get the probabilities for each class for
+        # the entire batch for each tally as a list of data frames:
+        probs_tns_list = [pd.DataFrame(tally.probs, columns=tally.class_names)
+                          for tally
+                          in tally_list
+                          ]
+        
+        # Get a list of label arrays. Each arr
+        # is of length batch_size:
+        labels_arr = [tally.labels
+                     for tally
+                     in tally_list
+                     ]
+        
+        for batch_results, truths in zip(probs_tns_list, labels_arr):
+            # Each batch_results is a dataframe of
+            # probability results. Each row is the probs
+            # for each class of one sample. Like this:
+            #
+            #              BANA       PATY    ...      YCEU
+            #  sample0    prob_0_0  prob_0_1  ...  prob_0_numClasses 
+            #  sample1             ...
+            #
+            # Where each prob is a one-element float tensor.
+            # The df shape is (batch_size, num_classes).
+            # Each truths is an arr of length batch_size.
+             
+            # Add the truth labels as a column on the right
+            # of the df:
+            batch_results = batch_results.astype(float)
+            batch_results['label'] = pd.Series(truths)
+
+            # Write rows to CSV as floats:
+        
+            for i in range(len(batch_results)):
+                one_sample_probs = batch_results.iloc[i,:].values
+                
+                # Have a pd.Series  with the probabilities of 
+                # one sample for each class. Values are tensors
+                # of individual floats.
+                self.csv_writer.writerow(one_sample_probs)
+
     #------------------------------------
     # report_results 
     #-------------------
