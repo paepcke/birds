@@ -32,7 +32,9 @@ class ResultCollection(dict):
           Step could be an epoch, or one split fold 
           constellation having been processed and validated
           
-        o acts as a list as follows:
+        o acts as a list as documented in __getitem__
+          Supports simple indexing, and slicing. The
+          'virtual' list is ordered by step.  
 
     '''
     
@@ -104,7 +106,7 @@ class ResultCollection(dict):
           my_coll[-1] to get the latest-step tally
           my_col[3:5] get tallies of steps 3-5
           
-        The latter only if tallies of all step's
+        The latter only if tallies of all steps
         are present in this collection. Reality
         of the interface is a list of ResultTally
         sorted by step.
@@ -333,7 +335,25 @@ class ResultCollection(dict):
 class ResultTally:
     '''
     Instances of this class hold results from training,
-    validating, or testing.
+    validating, or testing for one batch.
+    
+    The following attributes are available on a ResultTally:
+    
+       o preds          List of predictions after softmax/argmax: 
+                        one prediction for each sample in the batch
+       o probs          Matrix of probabilities before argmax:
+                        a row of predictions, one for each class, for
+                        each element of the batch
+       o created_at     
+       o phase          The LearningPhase that produced the batch:
+                        TRAINING, VALIDATING, or TESTING
+       o step           The step (fold reconfiguration, or epoch) that
+                        produced that batch
+       o num_classes    Number of target classes
+       o class_names    Human readable names of the classes
+       o batch_size
+       o labels         The truth labels: one for each element in the batch
+
     '''
     
     #------------------------------------
@@ -619,7 +639,7 @@ class ResultTally:
         #
         # Turn into probabilities along each row:
         
-        pred_probs = torch.softmax(outputs, dim=1)
+        self.probs = torch.softmax(outputs, dim=1)
         
         # Now have:
         #
@@ -632,7 +652,7 @@ class ResultTally:
         #
         #  first to tensor([2,2]) then to [2,2]
         
-        pred_tensor = torch.argmax(pred_probs, dim=1)
+        pred_tensor = torch.argmax(self.probs, dim=1)
         self.preds = pred_tensor.tolist()
 
 
