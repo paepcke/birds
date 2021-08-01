@@ -14,10 +14,14 @@ from sklearn.metrics import confusion_matrix
 from sklearn.metrics import f1_score
 from sklearn.metrics import precision_score
 from sklearn.metrics import recall_score
+
+import pandas as pd
+
 import torch
 
 from birdsong.utils.learning_phase import LearningPhase
 from result_analysis.charting import Charter
+from birdsong.utils import learning_phase
 
 
 packet_root = os.path.abspath(__file__.split('/')[0])
@@ -42,10 +46,23 @@ class ResultCollection(dict):
     # Contructor
     #-------------------
     
-    def __init__(self):
+    def __init__(self, tally_list=None):
+        '''
+        Create an empty ResultCollection.
+        If list of existing tallies is provided,
+        the tallies are added as part of instance
+        creation. 
+        
+        :param tally_list: optional list of existing tallies
+        :type tally_list: {None | [ResultTally]}
+        '''
         self._sorted_tallies = []
         self._sorted_train_tallies = []
         self._sorted_val_tallies = []
+        
+        if tally_list is not None:
+            for tally in tally_list:
+                self.add(tally)
 
     #------------------------------------
     # tallies
@@ -142,7 +159,7 @@ class ResultCollection(dict):
         # As the iterator, return the 
         # sorted list of ResultTally instances:
         
-        return self._sorted_tallies
+        return iter(self._sorted_tallies)
 
     #------------------------------------
     # conf_matrix_aggregated 
@@ -253,6 +270,91 @@ class ResultCollection(dict):
         
         return new_inst
     
+    #------------------------------------
+    # flattened_predictions 
+    #-------------------
+    
+    def flattened_predictions(self, phase=LearningPhase.TESTING):
+        '''
+        Concatenates the predictions of all contained
+        ResultTally instances, and returns the result
+        as a flat array. Used with flattened_labels()
+        to get equal-sized arrays of precdictions and
+        labels across all batches. The length of the
+        return array will be:
+        
+            batch_size * num-tallies-in-collection
+        
+        :result array of all predicted classes
+        :rtype: [int]
+        '''
+        
+        res = []
+        for tally in self.tallies(phase=phase):
+            res.extend(tally.preds)
+        return res
+
+    #------------------------------------
+    # flattened_labels 
+    #-------------------
+    
+    def flattened_labels(self, phase=LearningPhase.TESTING):
+        '''
+        Concatenates the labels of all contained
+        ResultTally instances, and returns the result
+        as a flat array. Used with flattened_predictions()
+        to get equal-sized arrays of precdictions and
+        labels across all batches. The length of the
+        return array will be:
+        
+            batch_size * num-tallies-in-collection
+        
+        :result array of all truth labels
+        :rtype: [int]
+        '''
+        
+        res = []
+        for tally in self.tallies(phase=phase):
+            res.extend(tally.labels)
+        return res
+    
+    #------------------------------------
+    # flattened_probabilities 
+    #-------------------
+    
+    def flattened_probabilities(self, phase=LearningPhase.TESTING):
+        '''
+        Returns a dataframe of all probabilities of
+        all batches:
+        
+               class_0        class_1         class_2       ...  class_n
+              prob_b0_0_c0   prob_b0_0_c1    prob_b0_0_c2       prob_b0_0_cn  
+              prob_b0_1_c0   prob_b0_1_c1    prob_b0_1_c2       prob_b0_1_cn
+                  ...                            ...
+                    
+              prob_b1_0_c0   prob_b1_0_c1    prob_b1_0_c2       prob_b1_0_cn  
+              prob_b1_1_c0   prob_b1_1_c1    prob_b1_1_c2       prob_b1_1_cn
+                  ...                            ...              
+              
+              prob_bm_0_c0   prob_bm_0_c1    prob_bm_0_c2       prob_bm_0_cn  
+              prob_bm_1_c0   prob_bm_1_c1    prob_bm_1_c2       prob_bm_1_cn
+              
+        where n is the number of classes, and m is the number of tallies in 
+        the collection.
+        
+        I.e. get the probabilities for each class, removing the batch
+        boundaries
+        
+        :result array of all truth labels
+        :rtype: [int]
+        '''
+        
+        all_prob_dfs = [pd.DataFrame(tally.probs.numpy()) for tally in self.tallies(phase=phase)]
+        # Pandas concatenation by default appends rows (i.e. dim0),
+        # which is what we want:
+        res = pd.concat(all_prob_dfs, ignore_index=True)
+        return res
+
     #------------------------------------
     # _sort_tallies 
     #-------------------

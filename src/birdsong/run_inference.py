@@ -21,23 +21,17 @@ TODO:
 '''
 from _collections import OrderedDict
 import argparse
-import datetime
 from multiprocessing import Pool
 import os
 from pathlib import Path
 import sys
-import traceback as tb
 
 from logging_service.logging_service import LoggingService
 from sklearn.metrics import accuracy_score, balanced_accuracy_score
 from sklearn.metrics import f1_score
-from sklearn.metrics import precision_score, recall_score 
-from torch import nn
-import torch
-from torch.utils.data.dataloader import DataLoader
-
+from sklearn.metrics import precision_score, recall_score, classification_report 
 from skorch import NeuralNet
-from skorch.callbacks import EpochScoring
+from torch.utils.data.dataloader import DataLoader
 
 from birdsong.ml_plotting.classification_charts import ClassificationPlotter
 from birdsong.nets import NetUtils
@@ -50,8 +44,10 @@ from birdsong.utils.utilities import FileUtils, CSVWriterCloseable
 from data_augmentation.utils import Utils
 import numpy as np
 import pandas as pd
-from result_analysis.charting import Charter, CELL_LABELING
-from seaborn.matrix import heatmap
+import torch
+from result_analysis.charting import Charter, CELL_LABELING, CurveSpecification
+#import traceback as tb
+
 
 class Inferencer:
     '''
@@ -234,6 +230,7 @@ class Inferencer:
         self.log.info(f"Beginning inference with model {FileUtils.ellipsed_file_path(self.model_path)} on gpu_id {gpu_id}")
         #****************
         return self.run_inference(gpu_to_use=gpu_id)
+        # Parallelism:
         # dicts_from_runs = []
         # for _i in range(3):
         #     self.curr_dict = {}
@@ -307,12 +304,16 @@ class Inferencer:
             res_coll.add(tally, batch_num)
 
             if batch_num > 0 and batch_num % self.REPORT_EVERY == 0:
-                self.report_intermittent_results(res_coll,
-                                                 start_idx=start_idx, # First tally to add to csv file
+                tmp_coll = ResultCollection(res_coll[start_idx:])
+                self.report_intermittent_results(tmp_coll,
                                                  display_counter=display_counter) # Overlay the charts in tensorboard
                 start_idx += len(res_coll) - start_idx
                 display_counter += 1
 
+            #************
+            if batch_num >= 7:
+                break
+            #************            
         self.report_results(res_coll)
 
     #------------------------------------
@@ -321,8 +322,6 @@ class Inferencer:
     
     def report_intermittent_results(self, 
                                     res_coll, 
-                                    start_idx=0, 
-                                    end_idx=None,
                                     show_in_tensorboard=True,
                                     display_counter=0):
         '''
@@ -338,12 +337,6 @@ class Inferencer:
         
         :param res_coll: collection of result tallies
         :type res_coll: ResultCollection
-        :param start_idx: index into the collection to first tally to include
-            in the result report
-        :type start_idx: int
-        :param end_idx: one above the last tally to include; 
-            default: include all
-        :type end_idx: {int | None}
         :param show_in_tensorboard: whether or not to transmit
             the computed barchart to tensorboard.
         :type show_in_tensorboard: bool
@@ -353,26 +346,18 @@ class Inferencer:
             
         '''
 
-        if end_idx is None:
-            # Compute quantities across entire collection:
-            end_idx = len(res_coll)
-
         # Update the precision/recall/accuracy bar chart:
         
         # Create one long Pandas series from all 
         # predictions, and another from all the corresponding
         # truths:
-        preds_arr = [tally.preds for tally in res_coll.tallies()]
-        # That gave an array of arrays; flatten it:
-        preds      = pd.Series(np.array(preds_arr).flatten())
-        labels_arr = [tally.labels for tally in res_coll.tallies()]
-        labels     = pd.Series(np.array(labels_arr).flatten())
+        
+        preds_arr  = res_coll.flattened_predictions(phase=LearningPhase.TESTING)
+        labels_arr = res_coll.flattened_labels(phase=LearningPhase.TESTING)
 
-        res_dict   = self._compute_ir_values(preds, labels)
+        res_dict   = self._compute_ir_values(preds_arr, labels_arr)
         
         res_series = pd.Series(res_dict)
-        # Exclude the values that are arrays:
-        res_series = res_series.drop(['prec_by_class', 'recall_by_class', 'f1_by_class'])
 
         # Specify bar colors for related quantities:
         color_groups = {
@@ -393,14 +378,14 @@ class Inferencer:
 
 
         # Now add just the new preds/labels to the CSV file:
-        self._write_probability_rows(res_coll[start_idx:end_idx])
+        self._write_probability_rows(res_coll)
         
  
     #------------------------------------
     # _write_probability_rows 
     #-------------------
     
-    def _write_probability_rows(self, tally_list):
+    def _write_probability_rows(self, tally_coll):
         '''
         Given a list of TallyResult, extract the probabilites
         and labels. Write them to .csv. Each tally contains
@@ -420,22 +405,22 @@ class Inferencer:
                     
                         Class0,Class1,...Classn,Label
         
-        :param tally_list: list of results from batches
-        :type tally_list: [ResultTally]
+        :param tally_coll: list of results from batches
+        :type tally_coll: ResultCollection
         '''
 
         # Get the probabilities for each class for
         # the entire batch for each tally as a list of data frames:
         probs_tns_list = [pd.DataFrame(tally.probs, columns=tally.class_names)
                           for tally
-                          in tally_list
+                          in tally_coll
                           ]
         
         # Get a list of label arrays. Each arr
         # is of length batch_size:
         labels_arr = [tally.labels
                      for tally
-                     in tally_list
+                     in tally_coll
                      ]
         
         for batch_results, truths in zip(probs_tns_list, labels_arr):
@@ -470,13 +455,25 @@ class Inferencer:
     # report_results 
     #-------------------
     
-    #****def report_results(self, truth_series, pred_probs, predicted_classes):
-    def report_results(self, result_coll, batch_num):
-        #self._report_textual_results(tally_coll, self.csv_dir)
-        #Inferencer.conf_matrix_fig = self._report_conf_matrix(truth_series, predicted_classes, show_in_tensorboard=True)
-        #Inferencer.pr_curve_fig = self._report_charted_results(truth_series, pred_probs, predicted_classes)
-        pass
+    def report_results(self, result_coll):
+        predicted_classes = result_coll.flattened_predictions(phase=LearningPhase.TESTING)
+        truths = result_coll.flattened_labels(phase=LearningPhase.TESTING)
         
+        # Text tables results to tensoboard:
+        self._report_textual_results(predicted_classes, truths, self.csv_dir)
+        
+        # Confusion matrix to tensorboard and local figure, if possible:
+        Inferencer.conf_matrix_fig = self._report_conf_matrix(truths, 
+                                                              predicted_classes, 
+                                                              show_in_tensorboard=True)
+
+        pred_probs_df = result_coll.flattened_probabilities(phase=LearningPhase.TESTING)
+        Inferencer.pr_curve_fig = self._report_charted_results(truths, 
+                                                               pred_probs_df, 
+                                                               predicted_classes,
+                                                               show_in_tensorboard=True
+                                                               )
+
 
     #------------------------------------
     # _report_conf_matrix 
@@ -540,6 +537,9 @@ class Inferencer:
                                            subtitle='Normalized to percentages',
                                            write_in_fields=write_in_fields
                                            )
+        # Add gridlines:
+        ax = fig.axes[0]
+        ax.grid(b=True)
         if show_in_tensorboard:
             self.writer.add_figure('Inference Confusion Matrix', 
                                    fig,
@@ -557,7 +557,11 @@ class Inferencer:
     # _report_charted_results 
     #-------------------
     
-    def _report_charted_results(self, truth_series, pred_probs_df, predicted_classes):
+    def _report_charted_results(self, 
+                                truth_series, 
+                                pred_probs_df, 
+                                show=True,
+                                show_in_tensorboard=None):
         '''
         Computes and (pyplot-)shows a set of precision-recall
         curves in one plot. If precision and/or recall are 
@@ -585,14 +589,7 @@ class Inferencer:
         # ill defined prec, rec, or f1. Prec and
         # rec should have none, b/c NaNs were interpolated
         # out earlier.
-        well_defined_curves = list(filter(
-                    lambda crv_obj: crv_obj.undef_prec() + \
-                                    crv_obj.undef_rec() + \
-                                    crv_obj.undef_f1() \
-                                    == 0,
-                    pr_curves.values()
-                    )
-            )
+        well_defined_curves = list(filter(CurveSpecification.well_defined, pr_curves.values())) 
         
         if len(well_defined_curves) == 0:
             self.log.warn(f"For all thresholds, one or more of precision, recall or f1 are undefined. No p/r curves to show")
@@ -605,60 +602,15 @@ class Inferencer:
                            )
         curves_to_show = self.pick_pr_curve_classes(f1_sorted_curves)
 
-        fig = ClassificationPlotter.chart_pr_curves(curves_to_show)
+        fig = ClassificationPlotter.chart_pr_curves(curves_to_show, self.class_names)
 
-        # Get human readable name of hardest
-        # class (lowest average precision for 1-against-all),
-        # and easiest
-        # [the try/except/else, and legend texts
-        #    should be done way more elegantly!]:
-        try:
-            hardest_cl_id, median_cl_id, easiest_cl_id = [crv['class_id'] 
-                                                          for crv 
-                                                          in curves_to_show]
-        except ValueError:
-            # Happens when less than 3 classes are at play:
-            hardest_cl_id = curves_to_show[0]['class_id']
-            hardest_cl_nm = self.class_names[hardest_cl_id]
-            if len(curves_to_show) == 2:
-                easiest_cl_id = curves_to_show[1]['class_id']
-                easiest_cl_nm = self.class_names[easiest_cl_id]
-            else:
-                # Only one curve:
-                easiest_cl_nm = None
-            median_cl_nm = None
-        else:
-            hardest_cl_nm = self.class_names[hardest_cl_id]
-            median_cl_nm  = self.class_names[median_cl_id]
-            easiest_cl_nm = self.class_names[easiest_cl_id]
-        
-        legend_cl_names = list(filter(lambda el: el is not None,
-                                      [hardest_cl_nm, 
-                                       median_cl_nm, 
-                                       easiest_cl_nm]))
-        legend_txts = []
-        if len(legend_cl_names) > 1:
-            legend_txts.append(f"Hardest: {hardest_cl_nm}")
-        else:
-            # Only one curve; just list the species name:
-            legend_txts.append(hardest_cl_nm)
-        if len(legend_cl_names) == 2:
-            legend_txts.append(f"Easiest: {easiest_cl_nm}")
-        elif len(legend_cl_names) > 2:
-            # Got three curves:
-            legend_txts.append(f"Medium: {median_cl_nm}")
-            legend_txts.append(f"Easiest: {easiest_cl_nm}")
-        
-        legend = fig.axes[0].get_legend()
-        # Get text lines:
-        #    'class 0'
-        #    'class 1'
-        #    'Optimal operation'
-        existing_legend_texts  = legend.get_texts()
-        for i, txt in enumerate(legend_txts):
-            existing_legend_texts[i].set_text(txt)
+        if show_in_tensorboard:
+            self.writer.add_figure('Precision Recall Curves for Selected Classes', 
+                                   fig,
+                                   global_step=0)
 
-        fig.show()
+        if show:
+            fig.show()
         return True
 
     #------------------------------------
@@ -666,7 +618,7 @@ class Inferencer:
     #-------------------
 
 
-    def _report_textual_results(self, tally_coll, res_dir):
+    def _report_textual_results(self, all_preds, all_labels, res_dir):
         '''
         Given a sequence of tallies with results
         from a series of batches, create long
@@ -689,8 +641,10 @@ class Inferencer:
         
         Returns the results measures Series 
         
-        :param tally_coll: collect of tallies from batches
-        :type tally_coll: ResultCollection
+        :param all_preds: list of all predictions made
+        :type all_preds: [int]
+        :param all_labels: list of all truth labels
+        :type all_labels: [int]
         :param res_dir: directory where all .csv and other 
             result files are to be written
         :type res_dir: str
@@ -698,34 +652,42 @@ class Inferencer:
         :rtype: pandas.Series
         '''
         
-        all_preds   = []
-        all_labels  = []
-        
-        for tally in tally_coll.tallies(phase=LearningPhase.TESTING):
-            all_preds.extend(tally.preds)
-            all_labels.extend(tally.labels)
-        
         res = self._compute_ir_values(all_preds, all_labels)
+
+        # Get a Series looks like:
+        #    prec_macro,0.04713735383721669
+        #    prec_micro,0.0703125
+        #    prec_weighted,0.047204446832196136
+        #    recall_macro,0.07039151324865611
+        #    recall_micro,0.0703125
         
         res_series = pd.Series(list(res.values()),
                                index=list(res.keys())
                                )
-        # The series looks like:
-        #    prec_macro,0.04713735383721669
-        #    prec_micro,0.0703125
-        #    prec_weighted,0.047204446832196136
-        #    prec_by_class,"[0.         0.09278351 0.         0.         0.05747126 0.08133971
-        #        0.03971119 0.18181818 0.07194245 0.0877193  0.         0.
-        #        0.        ]"
-        #    recall_macro,0.07039151324865611
-        #    recall_micro,0.0703125
+        # Get the per-class prec/rec/f1/support:
+        per_class_report = classification_report(all_labels, 
+                                                 all_preds, 
+                                                 output_dict=True,
+                                                 zero_division=0)
+        # Turn into a df:
         #
-        # We want a df like:
-        #   prec_macro,prec_micro,...prec_GLDH, prec_VASE, ..., rec_GLDH, rec_VASE,...
-        #
-        # Expand the per-class-pred:
-        
-        
+        #             precision  recall  f1-score  support
+        #    label 1        0.5     1.0      0.67      1.0
+        #    label 2        0.6     0.2      0.88      1.0
+        #          ...                    ...
+        ir_per_cl_df = pd.DataFrame.from_dict(per_class_report)
+        # Have prec/rec/f1/support as rows/ want those as cols:
+        ir_per_cl_df = ir_per_cl_df.T
+        # Drop the accuracy and averages we already covered above:
+        ir_per_cl_df = ir_per_cl_df.drop(['accuracy', 'macro avg', 'weighted avg'])
+        # Replace the numeric species class IDs with
+        # their species. Note that the df may not contain
+        # data for all species, so we cannot count on using
+        # range():
+        new_row_labels = []
+        for index_entry in ir_per_cl_df.index:
+            new_row_labels.append(self.class_names[int(index_entry)])
+        ir_per_cl_df.index = new_row_labels
         
         
         # Write information retrieval type results
@@ -734,8 +696,12 @@ class Inferencer:
         res_csv_path = os.path.join(res_dir, 'ir_results.csv')
         res_df = self.res_measures_to_df(res_series)
         
-        if os.path.getsize(res_csv_path) > 0:
-            append_to_csv = True
+        # Should we append or create a new file?
+        try:
+            if os.path.getsize(res_csv_path) > 0:
+                append_to_csv = True
+        except FileNotFoundError:
+                append_to_csv = False
         else:
             append_to_csv = False
         
@@ -750,11 +716,8 @@ class Inferencer:
         for meas_nm, meas_val in res.items():
             
             # Measure results are either floats (precision, recall, etc.),
-            # or np arrays (e.g. precision-per-class). For both
-            # cases, round each measure to one digit:
-            
-            res_rnd[meas_nm] = round(meas_val,1) if type(meas_val) == float \
-                                                 else meas_val.round(1)
+            # Round each measure to one digit:
+            res_rnd[meas_nm] = round(meas_val,1)
         
         ir_measures_skel = {'col_header' : ['precision', 'recall', 'f1'], 
                             'row_labels' : ['macro','micro','weighted'],
@@ -764,13 +727,9 @@ class Inferencer:
                                            ]  
                            }
         
-        ir_per_class_rows = [[prec_class, recall_class, f1_class]
-                            for prec_class, recall_class, f1_class
-                            in zip(res_rnd['prec_by_class'], res_rnd['recall_by_class'], res_rnd['f1_by_class'])
-                            ]
-        ir_by_class_skel =  {'col_header' : ['precision','recall', 'f1'],
-                             'row_labels' : self.class_names,
-                             'rows'       : ir_per_class_rows
+        ir_by_class_skel =  {'col_header' : ir_per_cl_df.columns.to_list(),
+                             'row_labels' : ir_per_cl_df.index.to_list(),
+                             'rows'       : ir_per_cl_df.values.tolist()
                              }
         
         accuracy_skel = {'col_header' : ['accuracy', 'balanced_accuracy'],
@@ -818,10 +777,6 @@ class Inferencer:
             all_preds, 
             average='weighted', 
             zero_division=0)
-        res['prec_by_class'] = precision_score(all_labels, 
-            all_preds, 
-            average=None, 
-            zero_division=0)
         res['recall_macro'] = recall_score(all_labels, 
             all_preds, 
             average='macro', 
@@ -834,10 +789,6 @@ class Inferencer:
             all_preds, 
             average='weighted', 
             zero_division=0)
-        res['recall_by_class'] = recall_score(all_labels, 
-            all_preds, 
-            average=None, 
-            zero_division=0)
         res['f1_macro'] = f1_score(all_labels, 
             all_preds, 
             average='macro', 
@@ -849,10 +800,6 @@ class Inferencer:
         res['f1_weighted'] = f1_score(all_labels, 
             all_preds, 
             average='weighted', 
-            zero_division=0)
-        res['f1_by_class'] = f1_score(all_labels, 
-            all_preds, 
-            average=None, 
             zero_division=0)
         res['accuracy'] = accuracy_score(all_labels, all_preds)
         res['balanced_accuracy'] = balanced_accuracy_score(all_labels, all_preds)
@@ -905,14 +852,40 @@ class Inferencer:
             # Use all curves:
             return f1_sorted_curves
         
-        min_best_f1_crv = f1_sorted_curves[0]
-        max_best_f1_crv = f1_sorted_curves[-1]
-        med_f1_crv      = f1_sorted_curves[len(f1_sorted_curves) // 2]
+        # Only consider curves that have at least
+        # the median in the number of curve points.
+        # Else we end up with curves of only 2 points,
+        # or such (num of recalls and precisions points
+        # are the same, of course):
         
+        crv_lengths = [len(cs['recalls']) for cs in f1_sorted_curves]
+        # Veer on the 'more-points-is-better' side by
+        # rounding up:
+        med_len = round(np.median(crv_lengths) + 0.5)
+        
+        # Keep only the longer point series, and the curves
+        # where the average precision is not extreme:
+        crv_candidates = list(filter(lambda crv, med_len=med_len: 
+                                          len(crv['recalls']) >= med_len and \
+                                          crv['avg_prec'] > 0.0 and \
+                                          crv['avg_prec'] < 1.0,
+                                     f1_sorted_curves))
+
+        # Since curves are f1-sorted, easily ID
+        # the lowest, highest, and median:
+        min_best_f1_crv = crv_candidates[0]
+        max_best_f1_crv = crv_candidates[-1]
+        med_f1_crv      = crv_candidates[len(crv_candidates) // 2]
+        
+        # The corresponding f1 values at the best
+        # operating point for each of the three curves:
         min_f1 = min_best_f1_crv['best_op_pt']['f1']
         max_f1 = max_best_f1_crv['best_op_pt']['f1']
+
         med_f1 = med_f1_crv['best_op_pt']['f1']
         
+        # Only be happy if the median isn't identical
+        # to the min or max:
         if med_f1 not in (min_f1, max_f1):
             return [min_best_f1_crv, med_f1_crv, max_best_f1_crv] 
         
@@ -920,8 +893,8 @@ class Inferencer:
         # same as one of the extremes:
         
         f1_scores = [crv['best_op_pt']['f1'] 
-                     for crv in f1_sorted_curves]
-        med_f1_idx = f1_sorted_curves.index(med_f1_crv)
+                     for crv in crv_candidates]
+        med_f1_idx = crv_candidates.index(med_f1_crv)
         if med_f1 == min_f1:
             # Fallback: if we won't find
             # a curve with a best op pt's f1 other
@@ -947,7 +920,7 @@ class Inferencer:
                     break
 
         return [min_best_f1_crv,
-                f1_sorted_curves[middle_idx],
+                crv_candidates[middle_idx],
                 max_best_f1_crv]
 
     #------------------------------------

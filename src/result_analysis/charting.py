@@ -528,6 +528,8 @@ class Charter:
         heatmap_ax = sns.heatmap(
             conf_matrix,
             cmap=cmap,
+            xticklabels=True,
+            yticklabels=True,
             square=True,
             annot=annot,  # Cell labels
             mask=mask,
@@ -1047,6 +1049,31 @@ class CurveSpecification(dict):
         self.update(**kwargs)
 
     #------------------------------------
+    # well_defined 
+    #-------------------
+    
+    def well_defined(self):
+        '''
+        Returns true if all this curve's precision and recall
+        points are non-zero, and the best operating point is
+        well defined.
+        '''
+        
+        status_all_points = self.undef_prec() or \
+                            self.undef_rec() or \
+                            self.undef_f1() or \
+                            np.isnan(self['avg_prec'])
+        if status_all_points > 0:
+            return False
+        # For now, assume that the best operating
+        # point is well defined, b/c all precs/recs/f1
+        # values are OK. One alternative would be to
+        # declare BOPs with threshold 1 to be ill defined.
+        # But leaving that judgement up to clients.
+        
+        return True
+
+    #------------------------------------
     # _cull_low_thresholds
     #-------------------
     
@@ -1158,7 +1185,9 @@ class CurveSpecification(dict):
     
     def __repr__(self):
         uniq_id = hex(id(self))
-        rep = f"<CurveSpecification AP={self.__getitem__('avg_prec')} {uniq_id}>"
+        AP = self.__getitem__('avg_prec')
+        rounded_AP = round(AP, 2)
+        rep = f"<CurveSpecification AP={rounded_AP} {uniq_id}>"
         return(rep)
 
     #------------------------------------

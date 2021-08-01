@@ -9,6 +9,9 @@ from adjustText import adjust_text
 import natsort
 
 import matplotlib.pyplot as plt
+from matplotlib import  rcParams
+
+import pandas as pd
 
 from data_augmentation.utils import Utils
 
@@ -34,7 +37,7 @@ class ClassificationPlotter(object):
     #-------------------
     
     @classmethod
-    def chart_pr_curves(cls, curve_specs):
+    def chart_pr_curves(cls, curve_specs, class_names):
         '''
         Creates and returns a pyplot figure instance
         with one PR curve for each class. The returned
@@ -83,7 +86,6 @@ class ClassificationPlotter(object):
         :param curve_specs: info for drawing the curves.
         :type curve_specs: [CurveSpecification]
         '''
-
         # Leave the original curve spec instances alone:
         curve_specs = copy.deepcopy(curve_specs)
 
@@ -103,14 +105,22 @@ class ClassificationPlotter(object):
                            ]
         max_prec_rec_len = max(prec_rec_lengths)
 
+        new_data_series = {}
         for crv in curve_specs:
-            padded_preds = Utils.pad_series(crv['precisions'], 'left', max_prec_rec_len)
-            padded_recs = Utils.pad_series(crv['recalls'], 'left', max_prec_rec_len)
-            crv['precisions'] = padded_preds
-            crv['recalls'] = padded_recs
+            new_data_series['Precision']  = Utils.pad_series(crv['precisions'], 'left', max_prec_rec_len)
+            new_data_series['Recall']     = Utils.pad_series(crv['recalls'], 'left', max_prec_rec_len)
+            new_data_series['Threshold']  = Utils.pad_series(crv['thresholds'], 'left', max_prec_rec_len)            
+            new_data_series['f1']         = Utils.pad_series(crv['f1_scores'], 'left', max_prec_rec_len)            
+            crv.pr_curve_df               = pd.DataFrame.from_dict(new_data_series) 
 
-        fig = plt.figure()
+        # Make the figure 20% larger than 
+        # default to allow for the legend 
+        # being outside the chart axes:
+        def_fig_width, def_fig_height = rcParams['figure.figsize']
+        fig = plt.figure(dpi=150.0, figsize=[5*def_fig_width, 
+                                             5*def_fig_height])
         
+        # Single chart:
         ax = fig.subplots(nrows=1, ncols=1)
         ax.set_xlabel('Recall', size=cls.AXIS_TITLE_SIZE)
         ax.set_ylabel('Precision', size=cls.AXIS_TITLE_SIZE)
@@ -121,7 +131,9 @@ class ClassificationPlotter(object):
         ap_markers = '*'
         colors  = ['mediumblue', 'black', 'red', 'springgreen', 'magenta', 'chocolate']
         
-        for class_label, curve_obj in enumerate(curve_specs):
+        chart_artists = {}
+        for crv_idx, curve_obj in enumerate(curve_specs):
+            
             # Use plot idiom 
             #
             #  plot('<key_for_x_axis_data,
@@ -137,12 +149,13 @@ class ClassificationPlotter(object):
             # X-axis does not end at 1, unless recall
             # goes that far. But w/o the cutoff the chart
             # is confusing:
-            ax.plot(curve_obj['recalls'][1:],
-                    curve_obj['precisions'][1:],
-                    marker=markers[class_label],
-                    color=colors[class_label],
-                    label=f"Class {class_label}"
-                    ) 
+            class_name = class_names[curve_obj['class_id']]
+            line_artist_arr = ax.plot(curve_obj['recalls'][1:],
+                                      curve_obj['precisions'][1:],
+                            	      marker=markers[crv_idx],
+                            	      color=colors[crv_idx],
+                                      label=f"Class {class_name}"
+                        )
             # Highlight the optimal operating point:
             # if curve_obj has no BOP info, just
             # error out. Else: 'recall', 'precision' are the
@@ -151,12 +164,12 @@ class ClassificationPlotter(object):
             try:
                 bop_obj = curve_obj['best_op_pt']
                 bop_xy   = (bop_obj['recall'], bop_obj['precision'])
-                ax.plot(bop_xy[0], bop_xy[1],
-                        color=colors[class_label],
-                        marker=ap_markers,
-                        markersize=cls.BEST_OP_PT_SIZE,
-                        label=cls.BOP_LABEL
-                        )
+                bop_artist_arr = ax.plot(bop_xy[0], bop_xy[1],
+                                         color=colors[crv_idx],
+                                         marker=ap_markers,
+                                         markersize=cls.BEST_OP_PT_SIZE,
+                                         label=f"Best OP pt {class_name}"
+                                         )
                 # Next to the best op point, put
                 # the corresponding threshold and
                 # f1 value:
@@ -170,8 +183,12 @@ class ClassificationPlotter(object):
                 # No best operating point provided
                 pass
             
+            # Remember the line and start artists:
+            chart_artists[class_name] = (line_artist_arr[0], bop_artist_arr[0])
+            
             # Add the average precision (AP) and
-            # the threshold that generates the optimum:
+            # the threshold that generates the optimum
+            # as an annotation to the star:
             try:
                 avg_prec    = round(curve_obj['avg_prec'], 2)
                 crv_txt     = f"AP: {avg_prec.round(2)}\n{bop_txt}"
@@ -185,55 +202,13 @@ class ClassificationPlotter(object):
                 # No average precisions available.
                 pass
 
+        # Shrink current axis by 20%
+        box = ax.get_position()
+        ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
 
-        handles, legend_labels = ax.get_legend_handles_labels()
-        
-        # There may be as many entries for 
-        # the color of the best-operating-point
-        # dot in the legend as there are classes
-        # (i.e. curves). We only want one.
-
-        bop_handle = None
-        try:
-            bop_idx = legend_labels.index(cls.BOP_LABEL)
-            bop_handle = handles[bop_idx]
-
-            # Lambda will receive each legend
-            # (handle, label) tuple:
-            filtered = \
-              filter(lambda hand_lab_tup: hand_lab_tup[1] != cls.BOP_LABEL,
-                     zip(handles, legend_labels))
-
-            # The filtered var is an iterator
-            # feeding out [(h1,l1), (h2,l2),...]
-            # Unzip those into [(h1,h2,...), (l1,l2,...)]
-            # The '*' does the splitting:
-            handles, legend_labels = list(zip(*filtered))
-
-        except ValueError:
-            # No BOP was drawn in the above loop.
-            # So, nothing to fix:
-            pass
-        
-        # Now have legend entries without
-        # a BOP entry. Sort them:
-        legend_labels, handles = \
-           zip(*natsort.natsorted(zip(legend_labels, handles), 
-                                      key=lambda lab_hndl_tple: lab_hndl_tple[0]))
-
-        # Did we take out BOP legend entries?
-        
-        if bop_handle is not None:
-            # Turn the legend entry tuples into arrays
-            # so we can manipulate the content:
-            handles = list(handles)
-            legend_labels = list(legend_labels)
-            handles.append(bop_handle)
-            legend_labels.append(cls.BOP_LABEL)
-
-        
-        ax.legend(handles, legend_labels, loc='lower left')
-
+        # Put a legend to the right of the current axis,
+        # centered half way down:
+        _legend_obj = ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
         
         # Give the figure a title
         fig.suptitle("Precision-Recall Plot")
