@@ -113,6 +113,10 @@ class Charter:
         :param pred_probs: probabilities assigned for each 
             class_id
         :type pred_probs: pd.DataFrame
+        :return the mAP, the number of classes on which the 
+            mAP was computed, and a dict mapping class_ids
+            to of curve specification instances
+        :rtype: ((float, int), {int : CurveSpecification})
         '''
 
         # Find number of classes involved:
@@ -172,12 +176,16 @@ class Charter:
             
             pr_curve_specs[class_id] = pr_curve_spec
 
-        mAP = np.mean([pr_curve_spec['avg_prec']
-                       for pr_curve_spec
-                       in list(pr_curve_specs.values())
-                       ])
+        # Get list of all curves' average precision
+        # excluding the ones that are nan:
+        all_defined_APs = [pr_curve_spec['avg_prec']
+                           for pr_curve_spec
+                           in list(pr_curve_specs.values())
+                           if not np.isnan(pr_curve_spec['avg_prec'])
+                           ]
+        mAP = np.mean(all_defined_APs)
         
-        return (mAP, pr_curve_specs) 
+        return ((mAP, len(all_defined_APs)), pr_curve_specs) 
 
 # ----------------- Computations ---------------
 

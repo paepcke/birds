@@ -459,20 +459,26 @@ class Inferencer:
         predicted_classes = result_coll.flattened_predictions(phase=LearningPhase.TESTING)
         truths = result_coll.flattened_labels(phase=LearningPhase.TESTING)
         
-        # Text tables results to tensoboard:
-        self._report_textual_results(predicted_classes, truths, self.csv_dir)
-        
         # Confusion matrix to tensorboard and local figure, if possible:
         Inferencer.conf_matrix_fig = self._report_conf_matrix(truths, 
                                                               predicted_classes, 
                                                               show_in_tensorboard=True)
 
         pred_probs_df = result_coll.flattened_probabilities(phase=LearningPhase.TESTING)
-        Inferencer.pr_curve_fig = self._report_charted_results(truths, 
-                                                               pred_probs_df, 
-                                                               predicted_classes,
-                                                               show_in_tensorboard=True
-                                                               )
+        # Get mean average precision and the number
+        # of classes from which the value was computed.
+        # I.e. the classes for which AP was not NaN:
+        (mAP, num_classes), Inferencer.pr_curve_fig = self._report_charted_results(truths, 
+                                                                                   pred_probs_df, 
+                                                                                   show_in_tensorboard=True
+                                                                                   )
+
+        # Text tables results to tensoboard:
+        self._report_textual_results(predicted_classes, 
+                                     truths, 
+                                     (mAP,num_classes), 
+                                     self.csv_dir)
+        
 
 
     #------------------------------------
@@ -560,22 +566,24 @@ class Inferencer:
     def _report_charted_results(self, 
                                 truth_series, 
                                 pred_probs_df, 
-                                show=True,
-                                show_in_tensorboard=None):
+                                show_in_tensorboard=True):
         '''
-        Computes and (pyplot-)shows a set of precision-recall
-        curves in one plot. If precision and/or recall are 
-        undefined (b/c of division by zero) for all curves, then
-        returns False, else True. If no curves are defined,
-        logs a warning.
+        Computes a set of precision-recall curves in one plot. 
+        Writes figure to tensorboard writer in self.writer.
+        Returns the mean average precision, and the figure. 
         
-        :param thresholds: list of cutoff thresholds
-            for turning logits into class ID predictions.
-            If None, the default at Charters.compute_multiclass_pr_curves()
-            is used.
-        :type thresholds: [float]
-        :return: True if curves were computed and show. Else False
-        :rtype: bool
+        :param truth_series: truth labels
+        :type truth_series: pd.Series
+        :param pred_probs_df: probability for each class 
+            for each sample 
+        :type pred_probs_df: pd.DataFrame
+        :param show_in_tensorboard: whether or not to post
+            the computed figure to Tensorboard
+        :type show_in_tensorboard: bool
+        :return: a tuple and the figure. The tuple holds the
+            mAP, and the number of classes for which the avg prec
+            (AP) was well defined. I.e. that were included in the
+            mAP calculation
         '''
 
         # Obtain a dict of CurveSpecification instances,
@@ -583,7 +591,7 @@ class Inferencer:
         # across all curves. The dict will be keyed
         # by class ID:
         
-        mAP, pr_curves = Charter.visualize_testing_result(truth_series, pred_probs_df)
+        mAP_and_num_APs, pr_curves = Charter.visualize_testing_result(truth_series, pred_probs_df)
         
         # Separate out the curves without 
         # ill defined prec, rec, or f1. Prec and
@@ -609,27 +617,34 @@ class Inferencer:
                                    fig,
                                    global_step=0)
 
-        if show:
-            fig.show()
-        return True
+        return mAP_and_num_APs, fig
 
     #------------------------------------
     # _report_textual_results 
     #-------------------
 
 
-    def _report_textual_results(self, all_preds, all_labels, res_dir):
+    def _report_textual_results(self, 
+                                all_preds, 
+                                all_labels, 
+                                mAP_info, 
+                                res_dir):
         '''
-        Given a sequence of tallies with results
-        from a series of batches, create long
-        outputs, and inputs lists from all tallies
-        
-        Computes information retrieval type values:
+        Given sequences of predicted class IDs and 
+        corresponding truth labels, computes information 
+        retrieval type values:
+
              precision (macro/micro/weighted/by-class)
              recall    (macro/micro/weighted/by-class)
              f1        (macro/micro/weighted/by-class)
              acuracy
              balanced_accuracy
+             mAP       # the mean average precision
+             well_defined_APs
+             
+        The well_defined_APs is the number of classes for
+        which average precision (AP) was not NaN, i.e. the 
+        number of classes included in the mAP
         
         Combines these results into a Pandas series, 
         and writes them to a csv file. That file is constructed
@@ -645,6 +660,10 @@ class Inferencer:
         :type all_preds: [int]
         :param all_labels: list of all truth labels
         :type all_labels: [int]
+        :param mAP_info: the previously calculated mean average
+            precision, and the number of classes from which the
+            quantity was calculated
+        :type mAP: (float, int)
         :param res_dir: directory where all .csv and other 
             result files are to be written
         :type res_dir: str
@@ -696,6 +715,11 @@ class Inferencer:
         res_csv_path = os.path.join(res_dir, 'ir_results.csv')
         res_df = self.res_measures_to_df(res_series)
         
+        # Add the mAP and well_defined_APs values:
+        mAP, num_well_defined_APs = mAP_info
+        res_df['mAP'] = mAP
+        res_df['well_defined_APs'] = num_well_defined_APs
+        
         # Should we append or create a new file?
         try:
             if os.path.getsize(res_csv_path) > 0:
@@ -729,12 +753,17 @@ class Inferencer:
         
         ir_by_class_skel =  {'col_header' : ir_per_cl_df.columns.to_list(),
                              'row_labels' : ir_per_cl_df.index.to_list(),
-                             'rows'       : ir_per_cl_df.values.tolist()
+                             'rows'       : round(ir_per_cl_df,2).values.tolist()
                              }
         
-        accuracy_skel = {'col_header' : ['accuracy', 'balanced_accuracy'],
+        accuracy_skel = {'col_header' : ['accuracy', 
+                                         'balanced_accuracy', 
+                                         'mean avg precision (mAP)'],
                          'row_labels' : ['Overall'],
-                         'rows'       : [[res_rnd['accuracy'], res_rnd['balanced_accuracy']]]
+                         'rows'       : [[res_rnd['accuracy'], 
+                                          res_rnd['balanced_accuracy'], 
+                                          f"{round(mAP,2)} from {num_well_defined_APs}/{len(self.class_names)} classes"
+                                          ]]
                          }
 
         ir_measures_tbl  = GithubTableMaker.make_table(ir_measures_skel, sep_lines=False)
