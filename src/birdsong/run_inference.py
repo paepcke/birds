@@ -54,8 +54,8 @@ class Inferencer:
     classdocs
     '''
 
-    #******REPORT_EVERY = 50
-    REPORT_EVERY = 4
+    REPORT_EVERY = 50
+    #REPORT_EVERY = 4
     '''How many inferences to make before writing to tensorboard and disk'''
 
     #------------------------------------
@@ -311,8 +311,8 @@ class Inferencer:
                 display_counter += 1
 
             #************
-            if batch_num >= 7:
-                break
+            #if batch_num >= 7:
+            #    break
             #************            
         self.report_results(res_coll)
 
