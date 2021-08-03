@@ -269,7 +269,7 @@ class Inferencer:
             print(f"******Results: {results}")
 
     #------------------------------------
-    # run_inferencer 
+    # run_inference 
     #-------------------
     
     def run_inference(self, gpu_to_use=0):
@@ -534,12 +534,11 @@ class Inferencer:
                                                        self.class_names,
                                                        normalize=True
                                                        )
-        
-        # Normalization in compute_confusion_matrix() is
-        # to 0-1. Turn those values into percentages:
-        # conf_matrix_perc = (100 * conf_matrix).astype(int)
-        
-        
+
+        self.log.info(f"Writing conf_matrix.csv to {self.csv_dir}")
+        dst_path = os.path.join(self.csv_dir, 'conf_matrix.csv')
+        conf_matrix.to_csv(dst_path, index_label='True Class')
+
         fig = Charter.fig_black_white_from_conf_matrix(conf_matrix)
         if show_in_tensorboard:
             self.writer.add_figure('Inference Confusion Matrix', 
