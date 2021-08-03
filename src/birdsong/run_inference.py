@@ -217,8 +217,8 @@ class Inferencer:
             to_grayscale=self.model_props['to_grayscale']
             )
 
-        self.log.info(f"Tensorboard info written to {tensorboard_dest}")
-        self.log.info(f"Result measurement CSV file(s) written to {csv_path}")
+        self.log.info(f"Tensorboard info will be written to {tensorboard_dest}")
+        self.log.info(f"Result measurement CSV file(s) will be written to {csv_path}")
         
     #------------------------------------
     # __call__ 
@@ -313,8 +313,11 @@ class Inferencer:
             #************
             #if batch_num >= 7:
             #    break
-            #************            
-        self.report_results(res_coll)
+            #************
+        try:
+            self.report_results(res_coll)
+        finally:
+            self.writer.close()
 
     #------------------------------------
     # report_intermittent_results 
@@ -485,7 +488,7 @@ class Inferencer:
                              dpi=150
                              )
 
-        # Text tables results to tensoboard:
+        # Text tables results to tensorboard:
         self._report_textual_results(predicted_classes, 
                                      truths, 
                                      (mAP,num_classes), 
@@ -767,6 +770,8 @@ class Inferencer:
         ir_measures_tbl  = GithubTableMaker.make_table(ir_measures_skel, sep_lines=False)
         ir_by_class_tbl  = GithubTableMaker.make_table(ir_by_class_skel, sep_lines=False)
         accuracy_tbl     = GithubTableMaker.make_table(accuracy_skel, sep_lines=False)
+        
+        self.log.info("Writing IR measures to tensorflow Text tab")
         
         # Write the markup tables to Tensorboard:
         self.writer.add_text('Information retrieval measures', ir_measures_tbl, global_step=0)
