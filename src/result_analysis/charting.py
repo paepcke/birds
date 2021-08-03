@@ -704,8 +704,13 @@ class Charter:
                 # Leave all 0 and NaN valued cells blank:
                 if val == 0 or pd.isna(val):
                     continue
-                #val_str = str("{:.0%}".format(val))
-                val_str = str(int(100*val))
+                # If confusions are observed less than
+                # 1% of the time, use "<1":
+                val_perc = 100*val
+                if val_perc >= 1:
+                    val_str = str(int(val_perc))
+                else:
+                    val_str = '<1'
                 # Find the x/y equivalent in the axes
                 # coordinates to the confusion matrix
                 # position we are working on:
