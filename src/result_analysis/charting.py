@@ -705,12 +705,12 @@ class Charter:
                 if val == 0 or pd.isna(val):
                     continue
                 # If confusions are observed less than
-                # 1% of the time, use "<1":
+                # 1% of the time, leave the cell blank:
                 val_perc = 100*val
                 if val_perc >= 1:
                     val_str = str(int(val_perc))
                 else:
-                    val_str = '<1'
+                    continue
                 # Find the x/y equivalent in the axes
                 # coordinates to the confusion matrix
                 # position we are working on:
