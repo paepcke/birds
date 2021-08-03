@@ -6,11 +6,8 @@ Created on Mar 20, 2021
 import copy
 
 from adjustText import adjust_text
-import natsort
 
 import matplotlib.pyplot as plt
-from matplotlib import  rcParams
-
 import pandas as pd
 
 from data_augmentation.utils import Utils
@@ -116,9 +113,8 @@ class ClassificationPlotter(object):
         # Make the figure 20% larger than 
         # default to allow for the legend 
         # being outside the chart axes:
-        def_fig_width, def_fig_height = rcParams['figure.figsize']
-        fig = plt.figure(dpi=150.0, figsize=[5*def_fig_width, 
-                                             5*def_fig_height])
+        #def_fig_width, def_fig_height = rcParams['figure.figsize']
+        fig = plt.figure(dpi=150.0, figsize=[9,5])
         
         # Single chart:
         ax = fig.subplots(nrows=1, ncols=1)

@@ -311,8 +311,8 @@ class Inferencer:
                 display_counter += 1
 
             #************
-            #if batch_num >= 7:
-            #    break
+            if batch_num >= 7:
+                break
             #************            
         self.report_results(res_coll)
 
@@ -460,18 +460,30 @@ class Inferencer:
         truths = result_coll.flattened_labels(phase=LearningPhase.TESTING)
         
         # Confusion matrix to tensorboard and local figure, if possible:
-        Inferencer.conf_matrix_fig = self._report_conf_matrix(truths, 
-                                                              predicted_classes, 
-                                                              show_in_tensorboard=True)
+        conf_matrix_fig = self._report_conf_matrix(truths, 
+                                                   predicted_classes, 
+                                                   show_in_tensorboard=True)
+        self.log.info(f"Saving confusion matrix fig 'inference_conf_matrix.pdf' in {self.csv_dir}")
+        conf_matrix_fig.savefig(os.path.join(self.csv_dir, 'inference_conf_matrix.pdf'),
+                                format='pdf',
+                                dpi=150
+                                )
 
         pred_probs_df = result_coll.flattened_probabilities(phase=LearningPhase.TESTING)
         # Get mean average precision and the number
         # of classes from which the value was computed.
         # I.e. the classes for which AP was not NaN:
-        (mAP, num_classes), Inferencer.pr_curve_fig = self._report_charted_results(truths, 
-                                                                                   pred_probs_df, 
-                                                                                   show_in_tensorboard=True
-                                                                                   )
+        (mAP, num_classes), pr_curve_fig = self._report_charted_results(truths, 
+                                                                        pred_probs_df, 
+                                                                        show_in_tensorboard=True
+                                                                        )
+        
+        # Save pr_curve figure:
+        self.log.info(f"Saving PR curve pr_curve.pdf in {self.csv_dir}")
+        pr_curve_fig.savefig(os.path.join(self.csv_dir, 'pr_curve.pdf'),
+                             format='pdf',
+                             dpi=150
+                             )
 
         # Text tables results to tensoboard:
         self._report_textual_results(predicted_classes, 
@@ -527,25 +539,8 @@ class Inferencer:
         # to 0-1. Turn those values into percentages:
         # conf_matrix_perc = (100 * conf_matrix).astype(int)
         
-        # Decide whether or not to write 
-        # confusion cell values into the cells.
-        # The decision depends on how many species
-        # are represented in the conf matrix; too many,
-        # and having numbers in all cells is too cluttered:
         
-        if len(self.class_names) > CELL_LABELING.CONF_MATRIX_CELL_LABEL_LIMIT.value:
-            write_in_fields=CELL_LABELING.DIAGONAL
-        else:
-            write_in_fields=CELL_LABELING.ALWAYS
-            
-        fig = Charter.fig_from_conf_matrix(conf_matrix,
-                                           supertitle='Confusion Matrix\n',
-                                           subtitle='Normalized to percentages',
-                                           write_in_fields=write_in_fields
-                                           )
-        # Add gridlines:
-        ax = fig.axes[0]
-        ax.grid(b=True)
+        fig = Charter.fig_black_white_from_conf_matrix(conf_matrix)
         if show_in_tensorboard:
             self.writer.add_figure('Inference Confusion Matrix', 
                                    fig,
@@ -640,22 +635,23 @@ class Inferencer:
              acuracy
              balanced_accuracy
              mAP       # the mean average precision
-             well_defined_APs
+             number of well_defined_APs
+             number of classes
              
         The well_defined_APs is the number of classes for
         which average precision (AP) was not NaN, i.e. the 
         number of classes included in the mAP
         
-        Combines these results into a Pandas series, 
-        and writes them to a csv file. That file is constructed
-        from the passed-in res_dir, appended with 'ir_results.csv'.
+        Writes these results into three .csv files:
+
+           <res_dir>/accuracy_mAP.csv
+           <res_dir>/performance_per_class.csv
+           <res_dir>/ir_results.csv
         
         Finally, constructs Github flavored tables from the
         above results, and posts them to the 'text' tab of 
         tensorboard.
-        
-        Returns the results measures Series 
-        
+
         :param all_preds: list of all predictions made
         :type all_preds: [int]
         :param all_labels: list of all truth labels
@@ -667,12 +663,10 @@ class Inferencer:
         :param res_dir: directory where all .csv and other 
             result files are to be written
         :type res_dir: str
-        :return results of information retrieval-like measures
-        :rtype: pandas.Series
         '''
         
         res = self._compute_ir_values(all_preds, all_labels)
-
+        
         # Get a Series looks like:
         #    prec_macro,0.04713735383721669
         #    prec_micro,0.0703125
@@ -683,6 +677,18 @@ class Inferencer:
         res_series = pd.Series(list(res.values()),
                                index=list(res.keys())
                                )
+        
+        res_df = self.res_measures_to_df(res_series)
+        
+        # Add the mAP and well_defined_APs values:
+        mAP, num_well_defined_APs = mAP_info
+        res_df['mAP'] = mAP
+        res_df['well_defined_APs'] = num_well_defined_APs
+        res_df['num_classes_total'] = len(self.class_names)
+        
+        # Write to csv file:
+        self._ir_tbl_to_csv(res_dir, 'ir_results.csv', res_df)
+
         # Get the per-class prec/rec/f1/support:
         per_class_report = classification_report(all_labels, 
                                                  all_preds, 
@@ -707,42 +713,24 @@ class Inferencer:
         for index_entry in ir_per_cl_df.index:
             new_row_labels.append(self.class_names[int(index_entry)])
         ir_per_cl_df.index = new_row_labels
-        
-        
-        # Write information retrieval type results
-        # to a one-line .csv file, using pandas Series
-        # and df as convenient intermediary:
-        res_csv_path = os.path.join(res_dir, 'ir_results.csv')
-        res_df = self.res_measures_to_df(res_series)
-        
-        # Add the mAP and well_defined_APs values:
-        mAP, num_well_defined_APs = mAP_info
-        res_df['mAP'] = mAP
-        res_df['well_defined_APs'] = num_well_defined_APs
-        
-        # Should we append or create a new file?
-        try:
-            if os.path.getsize(res_csv_path) > 0:
-                append_to_csv = True
-        except FileNotFoundError:
-                append_to_csv = False
-        else:
-            append_to_csv = False
-        
-        if append_to_csv:
-            res_df.to_csv(res_csv_path, index=False, mode='a', header=False)
-        else:
-            res_df.to_csv(res_csv_path, index=False, mode='w', header=True)
 
-        # Next, construct Tensorboard markup tables
-        # for the same results:
+        # Write perfomance per class to file:
+        self._ir_tbl_to_csv(res_dir, 
+                            'performance_per_class.csv', 
+                            ir_per_cl_df,
+                            index_label='species')
+
+
         res_rnd = {}
         for meas_nm, meas_val in res.items():
             
             # Measure results are either floats (precision, recall, etc.),
             # Round each measure to one digit:
-            res_rnd[meas_nm] = round(meas_val,1)
-        
+            res_rnd[meas_nm] = round(meas_val,2)
+
+        # Next, construct Tensorboard markup tables
+        # for the same results:
+
         ir_measures_skel = {'col_header' : ['precision', 'recall', 'f1'], 
                             'row_labels' : ['macro','micro','weighted'],
                             'rows'       : [[res_rnd['prec_macro'],    res_rnd['recall_macro'],    res_rnd['f1_macro']],
@@ -756,12 +744,23 @@ class Inferencer:
                              'rows'       : round(ir_per_cl_df,2).values.tolist()
                              }
         
+        acc_mAP_df = pd.DataFrame.from_records([{
+            'accuracy' : res_rnd['accuracy'],
+            'balanced_accuracy' : res_rnd['balanced_accuracy'],
+            'mAP' : round(mAP,2),
+            'classes_in_mAP' : num_well_defined_APs,
+            'num_classes'    : len(self.class_names)
+            }]) 
+
+        self._ir_tbl_to_csv(res_dir, 'accuracy_mAP.csv', acc_mAP_df)
+        
         accuracy_skel = {'col_header' : ['accuracy', 
                                          'balanced_accuracy', 
-                                         'mean avg precision (mAP)'],
+                                         'mean avg precision (mAP)',
+                                         ],
                          'row_labels' : ['Overall'],
-                         'rows'       : [[res_rnd['accuracy'], 
-                                          res_rnd['balanced_accuracy'], 
+                         'rows'       : [[acc_mAP_df['accuracy'].item(), 
+                                          acc_mAP_df['balanced_accuracy'].item(), 
                                           f"{round(mAP,2)} from {num_well_defined_APs}/{len(self.class_names)} classes"
                                           ]]
                          }
@@ -776,6 +775,63 @@ class Inferencer:
         self.writer.add_text('Accuracy', accuracy_tbl, global_step=0)
         
         return res_series
+
+    #------------------------------------
+    # _ir_tbl_to_csv 
+    #-------------------
+    
+    def _ir_tbl_to_csv(self, res_dir, fname, df, index_label=None):
+        '''
+        Check whether fname exists in res_dir. If
+        so, append the dataframe df's values to the
+        file. Else, create the file, and write the df,
+        using columns as header.
+        
+        :param res_dir: destination directory
+        :type res_dir: str
+        :param fname: destination file name
+        :type fname: str
+        :param df: dataframe with column names set
+        :type df: pd.DataFrame
+        :param index_label: if the df's row labels are
+            to be included, set index_label to the column
+            name to use for those labels. If None, no
+            row labels are included
+        :type index_label: {None | str}
+        '''
+
+        res_csv_path = os.path.join(res_dir, fname)
+        
+        # Should we append or create a new file?
+        try:
+            if os.path.getsize(res_csv_path) > 0:
+                append_to_csv = True
+        except FileNotFoundError:
+                append_to_csv = False
+        else:
+            append_to_csv = False
+            
+        if index_label is None:
+            include_index = False
+        else:
+            include_index = True
+        
+        self.log.info(f"Writing {fname} to {res_dir}")
+
+        if append_to_csv:
+            df.to_csv(res_csv_path, 
+                      index=include_index,
+                      index_label=index_label, 
+                      mode='a', 
+                      header=False,
+                      )
+        else:
+            df.to_csv(res_csv_path, 
+                      index=include_index,
+                      index_label=index_label, 
+                      mode='w', 
+                      header=True)
+
 
     #------------------------------------
     # _compute_ir_values
@@ -794,44 +850,45 @@ class Inferencer:
         :return dict with measures
         :rtype {src : float}
         '''
-        res = OrderedDict({})
-        res['prec_macro'] = precision_score(all_labels, all_preds, 
-            average='macro', 
-            zero_division=0)
-        res['prec_micro'] = precision_score(all_labels, 
-            all_preds, 
-            average='micro', 
-            zero_division=0)
-        res['prec_weighted'] = precision_score(all_labels, 
-            all_preds, 
-            average='weighted', 
-            zero_division=0)
-        res['recall_macro'] = recall_score(all_labels, 
-            all_preds, 
-            average='macro', 
-            zero_division=0)
-        res['recall_micro'] = recall_score(all_labels, 
-            all_preds, 
-            average='micro', 
-            zero_division=0)
-        res['recall_weighted'] = recall_score(all_labels, 
-            all_preds, 
-            average='weighted', 
-            zero_division=0)
-        res['f1_macro'] = f1_score(all_labels, 
-            all_preds, 
-            average='macro', 
-            zero_division=0)
-        res['f1_micro'] = f1_score(all_labels, 
-            all_preds, 
-            average='micro', 
-            zero_division=0)
-        res['f1_weighted'] = f1_score(all_labels, 
-            all_preds, 
-            average='weighted', 
-            zero_division=0)
-        res['accuracy'] = accuracy_score(all_labels, all_preds)
-        res['balanced_accuracy'] = balanced_accuracy_score(all_labels, all_preds)
+        with np.errstate(divide='ignore',invalid='ignore'):
+            res = OrderedDict({})
+            res['prec_macro'] = precision_score(all_labels, all_preds, 
+                average='macro', 
+                zero_division=0)
+            res['prec_micro'] = precision_score(all_labels, 
+                all_preds, 
+                average='micro', 
+                zero_division=0)
+            res['prec_weighted'] = precision_score(all_labels, 
+                all_preds, 
+                average='weighted', 
+                zero_division=0)
+            res['recall_macro'] = recall_score(all_labels, 
+                all_preds, 
+                average='macro', 
+                zero_division=0)
+            res['recall_micro'] = recall_score(all_labels, 
+                all_preds, 
+                average='micro', 
+                zero_division=0)
+            res['recall_weighted'] = recall_score(all_labels, 
+                all_preds, 
+                average='weighted', 
+                zero_division=0)
+            res['f1_macro'] = f1_score(all_labels, 
+                all_preds, 
+                average='macro', 
+                zero_division=0)
+            res['f1_micro'] = f1_score(all_labels, 
+                all_preds, 
+                average='micro', 
+                zero_division=0)
+            res['f1_weighted'] = f1_score(all_labels, 
+                all_preds, 
+                average='weighted', 
+                zero_division=0)
+            res['accuracy'] = accuracy_score(all_labels, all_preds)
+            res['balanced_accuracy'] = balanced_accuracy_score(all_labels, all_preds)
         return res
 
     #------------------------------------
@@ -1150,6 +1207,6 @@ if __name__ == '__main__':
                             )
     result_collection = inferencer.go()
     #*************
-    input("Hit Enter to quit")
+    #input("Hit Enter to quit")
     #print(f"Result collection: {result_collection}")
     #*************

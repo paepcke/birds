@@ -836,7 +836,7 @@ class Utils:
     def add_pyplot_manager_to_fig(cls, fig):
         '''
         Sometimes, when pyplot figures are passed around,
-        the lose their association with their canvas manager.
+        they lose their association with their canvas manager.
         This method creates a dummy manager, then adds that
         manager to the passed-in Figure instance in place.
         
@@ -854,6 +854,7 @@ class Utils:
         # Create a dummy figure and use its
         # manager to display "fig"  
         dummy = plt.figure()
+        dummy.set_size_inches(fig.get_size_inches())
         new_manager = dummy.canvas.manager
         new_manager.canvas.figure = fig
         fig.set_canvas(new_manager.canvas)

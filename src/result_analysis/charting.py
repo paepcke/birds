@@ -39,8 +39,9 @@ class CELL_LABELING(Enum):
     ALWAYS = 0
     NEVER  = 1
     DIAGONAL = 2
+    NON_ZERO = 3
     AUTO = CONF_MATRIX_CELL_LABEL_LIMIT  # If dimension > this, no cell lables
-
+    
 # ----------------------- Class Charter --------------
 
 class Charter:
@@ -240,9 +241,15 @@ class Charter:
         # The last prec will be 1, the last rec will
         # be 0, and will not have a corresponding 
         # threshold. This ensures that the graph starts
-        # on the y axis:
-        precs_np, recs_np, thresholds = \
-            precision_recall_curve(truth_series, pred_probs_series)
+        # on the y axis. The suppression of warnings
+        # addresses the div-by-zero RuntimeWarning msgs
+        # from non-existent samples. We detect and
+        # deal with the resulting NaN values later:
+        
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            precs_np, recs_np, thresholds = \
+                precision_recall_curve(truth_series, pred_probs_series)
 
         # Remove NaNs by interpolating from neighboring
         # values. Works for all but NaN at position 0:
@@ -435,12 +442,16 @@ class Charter:
                              conf_matrix,
                              supertitle='Confusion Matrix\n',
                              subtitle='',
-                             write_in_fields=CELL_LABELING.DIAGONAL
+                             write_in_fields=CELL_LABELING.NON_ZERO
                              ):
         '''
+        NOTE: For number of classes > ~10 the method
+              fig_black_white_from_conf_matrix() produces
+              better results.
+        
         Given a confusion matrix, return a 
         matplotlib.pyplot Figure with a heatmap of the matrix.
-        
+        Only fills cells that are non-zero and not NaN.
         The write_in_fields arg controls whether or not
         each cell is filled with a label indicating its
         value. If:
@@ -448,6 +459,7 @@ class Charter:
             o CELL_LABELING.ALWAYS    : always write the labels
             o CELL_LABELING.NEVER     : never write the labels
             o CELL_LABELING.DIAGONAL  : only label the diagonals
+            o CELL_LABELING.NON_ZERO  : label diagonal and non-zero entries
             o CELL_LABELING.AUTO      : only write labels if number of classes
                                         is <= CELL_LABELING.AUTO.value
                 
@@ -483,6 +495,15 @@ class Charter:
         # is in position 1 (1-based):
         # Need figsize=(10, 5) somewhere
         fig, ax = plt.subplots()
+        
+        # Adjust the figure size by the number
+        # of species to show: result in inches.
+        # The 2.5 is empirical:
+        
+        fig_height = len(class_names) / 2.5
+        fig_width  = fig_height * 0.67
+        
+        fig.set_size_inches(fig_height, fig_width)
         # Make a copy of the cmap, so
         # we can modify it:
         cmap = copy.copy(col_map.Blues)
@@ -524,9 +545,18 @@ class Charter:
             mask.index    = conf_matrix.index
             mask.columns  = conf_matrix.columns
             np.fill_diagonal(mask.values, False)
-            
-            
             #**************
+        elif write_in_fields == CELL_LABELING.NON_ZERO:
+            annot = conf_matrix.copy()
+            mask = pd.DataFrame(np.array([True]*annot.size).reshape(annot.shape))
+            mask.index    = conf_matrix.index
+            mask.columns  = conf_matrix.columns
+            np.fill_diagonal(mask.values, False)
+            # Get rid of NaNs in the annotations:
+            annot[annot.isna()] = 0.0
+            # Have all non-zero values appear
+            mask[annot>0] = False
+            
         else:
             annot = None
             mask  = None
@@ -567,6 +597,7 @@ class Charter:
                                  },
                              pad=12 # Distance above matrix in pt
                              )
+        heatmap_ax.grid(b=True)
         
         # Label x and y to clarify what's predicted,
         # and what's truth; also: have the x-axis label
@@ -581,8 +612,144 @@ class Charter:
         
         return fig
     
+    
+    #------------------------------------
+    # fig_black_white_from_conf_matrix
+    #-------------------
+    
+    @classmethod
+    def fig_black_white_from_conf_matrix(cls,
+                                         conf_matrix, 
+                                         supertitle='Confusion Matrix (percentages)',
+                                         subtitle=''):
+        '''
+        Create a figure from the given conf_matrix
+        dataframe. Produces a non-nonsense chart without
+        color, but it handles larger numbers of classes
+        than other facilities. For example, 30+ classes
+        produce reasonable results.
+        
+        :param conf_matrix: the confusion matrix. Assumed
+            to be normalized to values 0-1
+        :type conf_matrix: pd.DataFrame
+        :param supertitle: optionally a title for the figure
+        :type supertitle: str
+        :param subtitle: optional subtitle
+        :type subtitle: str
+        :return: the generated figure
+        :rtype pyplot.Figure
+        '''
+
+        class_names = conf_matrix.columns.to_list()
+        fig, ax = plt.subplots()
+        
+        # Adjust the figure size by the number
+        # of species to show: result in inches.
+        # The 2.5 is empirical:
+        
+        fig_height = len(class_names) / 2.5
+        fig_width  = fig_height * 0.67
+        
+        fig.set_size_inches(fig_height, fig_width)
+        fig.suptitle(supertitle, fontsize='large', fontweight='extra bold')
+        
+        # X-Axis Labels:
+        # Later matplotlib versions want us
+        # to use the mticker axis tick locator
+        # machinery:
+        xaxis_labels = [' '] + class_names + [' ']
+        # Don't use the (0,0) lower left coordinate position:
+        ax.xaxis.set_major_locator(mticker.LinearLocator(numticks=len(xaxis_labels)))
+        # Though the following statement seems redundant, 
+        # it prevents the UserWarning:
+        #    "FixedFormatter should only be used together with FixedLocator"
+        ax.set_xticks(ax.get_xticks())
+        ax.set_xticklabels(xaxis_labels,  rotation=45)
+
+        # Y-Axis Labels:
+        yaxis_labels = xaxis_labels.copy()
+        ax.yaxis.set_major_locator(mticker.LinearLocator(numticks=len(yaxis_labels)))
+        # Though the following statement seems redundant, 
+        # it prevents the UserWarning:
+        #    "FixedFormatter should only be used together with FixedLocator"
+        ax.set_yticks(ax.get_yticks())
+        
+        # The cm_ylabel-labels need the first species at the top:
+        yaxis_labels.reverse()
+        ax.set_yticklabels(yaxis_labels)
+
+        ax.set_title(subtitle,
+                     fontdict={'fontsize'   : 'medium',
+                               'fontweight' : 'bold',
+                               },
+                     pad=12 # Distance above matrix in pt
+                     )
+
+        # Label cm_xlabel and cm_ylabel to clarify what's predicted,
+        # and what's truth; also: have the cm_xlabel-axis label
+        # at the top:
+        
+        ax.set_xlabel('True Classes', fontweight='bold')
+        ax.xaxis.set_label_position('top')
+        ax.set_ylabel('Predicted Classes', fontweight='bold')
+        
+        # Populate the cells from the dataframe
+        # using the actual column and index labels.
+        # The _cm2axCoords() method will find the 
+        # corresponding axes coordinates
+        
+        for cm_xlabel in conf_matrix.columns:
+            for cm_ylabel in conf_matrix.index:
+                val = conf_matrix.loc[cm_xlabel,cm_ylabel]
+                # Leave all 0 and NaN valued cells blank:
+                if val == 0 or pd.isna(val):
+                    continue
+                #val_str = str("{:.0%}".format(val))
+                val_str = str(int(100*val))
+                # Find the x/y equivalent in the axes
+                # coordinates to the confusion matrix
+                # position we are working on:
+                ax_xpos, ax_ypos = cls._cm2axCoords(cm_xlabel, cm_ylabel, ax)
+
+                # Bold-face the diagonal values:
+                if cm_xlabel == cm_ylabel:
+                    fontweight='bold'
+                else:
+                    fontweight='normal'
+                ax.annotate(val_str, 
+                            xy=(ax_xpos, ax_ypos), 
+                            ha='center', 
+                            va='center',
+                            fontsize='large',
+                            fontweight=fontweight)
+        
+        ax.grid(b=True)
+        ax.set_facecolor('lightgray')
+
+        return fig
+
 # -------------------- Utilities for Charter Class --------------
 
+    #------------------------------------
+    # _cm2axCoords 
+    #-------------------
+    
+    @classmethod
+    def _cm2axCoords(cls, cm_xlabel, cm_ylabel, ax):
+        xticks_locs = pd.Series(ax.get_xticks())
+        yticks_locs = pd.Series(ax.get_yticks())
+        
+        xlabels     = [txt_obj.get_text()
+                       for txt_obj in ax.get_xticklabels()]
+        ylabels     = [txt_obj.get_text()
+                       for txt_obj in ax.get_yticklabels()]
+        
+        xlabel_idx   = xlabels.index(cm_xlabel)
+        ylabel_idx   = ylabels.index(cm_ylabel)
+
+        ax_coords = (xticks_locs[xlabel_idx], yticks_locs[ylabel_idx])
+
+        return ax_coords
 
     #------------------------------------
     # read_conf_matrix_from_file
