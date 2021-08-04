@@ -5,6 +5,7 @@ Created on Jan 25, 2021
 '''
 import os
 import random
+import sys
 
 from PIL import Image, ImageDraw, ImageFont
 from logging_service.logging_service import LoggingService
@@ -618,7 +619,7 @@ class TensorBoardPlotter:
     #-------------------
     
     @classmethod
-    def print_onto_image(cls, img_src, txt, point=(10,10)):
+    def print_onto_image(cls, img_src, txt, point=(10,10), size=15):
         '''
         Given an image, writes given text onto the image.
         Returns a tensor of the new image. Acceptable as image
@@ -664,8 +665,15 @@ class TensorBoardPlotter:
         txt_img = Image.new(pil_img.mode, pil_img.size, 255)
         
         # get a font
-        fnt = ImageFont.load_default()
-        # get a drawing context
+        #
+        if sys.platform == 'darwin':
+            fnt = ImageFont.truetype('/Library/Fonts/Arial.ttf', size)
+        elif sys.platform == 'linux':
+            fnt = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', size)
+        else:
+            fnt = ImageFont.load_default()
+
+        # Get a drawing context
         drawing = ImageDraw.Draw(txt_img)
         
         # Draw text, half opacity
