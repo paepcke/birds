@@ -8,32 +8,26 @@ import argparse
 import os
 from pathlib import Path
 import random
+import subprocess
 import sys
 
 from logging_service import LoggingService
 from matplotlib import pyplot as plt
 import torch
 from torchvision import transforms
-from skorch import NeuralNet
 
 from birdsong.nets import NetUtils
+from birdsong.utils.tensorboard_plotter import TensorBoardPlotter
 from birdsong.utils.utilities import FileUtils
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import Utils
-from birdsong.utils.tensorboard_plotter import TensorBoardPlotter
+from skorch import NeuralNet
+
 
 class SaliencyMapper:
     '''
     classdocs
     '''
-    # Sorting such that numbers in strings
-    # do the right thing: "foo2" after "foo10": 
-    # Should actually be 1:3 but broke the system:
-    #SAMPLE_WIDTH  = 400 # pixels
-    #SAMPLE_HEIGHT = 400 # pixels
-    SAMPLE_WIDTH  = 215 # pixels
-    SAMPLE_HEIGHT = 128 # pixels
-    
 
     #------------------------------------
     # Constructor 
@@ -45,6 +39,7 @@ class SaliencyMapper:
                  in_img_or_dir,
                  outdir=None,
                  gpu_to_use=0,
+                 sample=0,
                  unittesting=False):
         '''
         Constructor
@@ -63,7 +58,7 @@ class SaliencyMapper:
             raise RuntimeError(msg) from e
         
         self.num_classes = self.config.getint('Testing', 'num_classes')
-        dataloader = SaliencyDataloader(in_img_or_dir, self.config)
+        dataloader = SaliencyDataloader(in_img_or_dir, self.config, sample=sample)
         
         self.prep_model_inference(model_path, gpu_to_use)
 
@@ -206,18 +201,19 @@ class SaliencyMapper:
 
 class SaliencyDataloader:
     
-    IMG_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif', '.tiff', '.webp')
+    IMG_EXTENSIONS    = ('.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif', '.tiff', '.webp')
+    SHELL_SCRIPT_DIR  = os.path.join(os.path.dirname(__file__), 'shell_scripts')
     
     #------------------------------------
     # Constructor 
     #-------------------
     
-    def __init__(self, img_or_dir_path, config, sample=None):
+    def __init__(self, img_or_dir_path, config, sample=0):
 
         if sample is not None and type(sample) != int:
             raise TypeError(f"Sample argument must be None or int, not {sample}")
 
-        self.sample = sample
+        self.sample = sample if sample > 0 else None
 
         self.SAMPLE_WIDTH  = config.getint('Training', 'sample_width')
         self.SAMPLE_HEIGHT = config.getint('Training', 'sample_height')
@@ -232,7 +228,7 @@ class SaliencyDataloader:
             else:
                 raise TypeError(f"File {img_or_dir_path} does not have a known image extension")
                 
-        elif sample is None:
+        elif self.sample is None:
             # Collect all the image files below given dir:
             for root, _dirs, files in os.walk(img_or_dir_path):
                 for file in files:
@@ -266,14 +262,14 @@ class SaliencyDataloader:
                     continue
                 # Fewer images than number of samples
                 # requested? 
-                if num_files <= sample:
+                if num_files <= self.sample:
                     # Yep, just use the ones we have:
                     sample_paths[species] = all_files
                     continue
                 # Do the sampling for one species subdir:
                 sample_paths[species] = [all_files[idx]
                                          for idx
-                                         in random.sample(range(0,num_files), sample)
+                                         in random.sample(range(0,num_files), self.sample)
                                          ]
             self.sample_paths = sample_paths
 
@@ -282,6 +278,28 @@ class SaliencyDataloader:
     #-------------------
     
     def _is_species_root_dir(self, path):
+        '''
+        Takes a guess whether the given path is
+        the root of a species directories tree.
+        I.e. whether:
+        
+           path
+               SPECIES1_DIR
+                   fname.<img-extension>
+               SPECIES2_DIR
+                   fname.<img-extension>
+                   ...
+                   
+        Ensures that path only includes directories,
+        and checks that the first file in each directory
+        is an image file.
+                   
+        :param path: absolute path to test
+        :type path: src
+        :return True if path is likely to be the root
+            of a species tree, else False
+        :rtype bool
+        '''
         
         if os.path.isfile(path):
             return False
@@ -289,7 +307,7 @@ class SaliencyDataloader:
         # All files in the given dir must
         # themselves be dirs for path to 
         # be a species root:
-        _root, dirs, files = os.walk(path)
+        root, dirs, files = next(os.walk(path))
         if len(files) > 0:
             return False
         
@@ -298,14 +316,27 @@ class SaliencyDataloader:
         # or the first file is an image file:
         
         for the_dir in dirs:
-            _root, dirs, files = os.walk(os.path.join(path, the_dir))
-            if len(files) > 1 and Path(files[0]).suffix in self.IMG_EXTENSIONS:
+            species_dir = os.path.join(root, the_dir)
+            first_file = self._call_bash_script('first_file.sh', species_dir)
+            if len(first_file) == 0 or Path(first_file).suffix in self.IMG_EXTENSIONS:
                 continue
             else:
                 return False
 
         return True
 
+    #------------------------------------
+    # _call_bash_script 
+    #-------------------
+    
+    def _call_bash_script(self, script, *args):
+        
+        if not os.path.isabs(script):
+            script_path = os.path.join(self.SHELL_SCRIPT_DIR, script)
+        call_parms = [script_path] + list(args)
+        proc = subprocess.run(call_parms, capture_output=True)
+        res = proc.stdout.strip().decode("utf-8")
+        return res
 
     #------------------------------------
     # __iter__ 
@@ -341,16 +372,16 @@ class SaliencyDataloader:
         if self.sample:
             have_fname = False
             while not have_fname:
-                species_to_serve = self.species[self.sample_rotation]
+                species_to_serve = self.species[self.species_rotation]
                 try:
                     fname = self.sample_paths[species_to_serve].pop()
                     have_fname = True
                     # Prepare for the next call to __next__():
-                    self.sample_rotation += 1
+                    self.species_rotation += 1
                 except IndexError:
                     # No more samples for this species.
                     # Try the next:
-                    self.sample_rotation += 1
+                    self.species_rotation += 1
                     if self.sample_rotation >= len(self.sample_paths):
                         # Exhausted the image samples of
                         # all species:
@@ -447,6 +478,11 @@ if __name__ == '__main__':
                         help='index number of GPU to use; default: 0, or CPU',
                         default=0)
     
+    parser.add_argument('-s', '--sample',
+                        type=int,
+                        help='number of samples to take from each species; default: no sampling',
+                        default=0)
+    
     parser.add_argument('-o', '--outdir',
                         help='directory for saving saliency figures',
                         default=None)
@@ -478,4 +514,5 @@ if __name__ == '__main__':
                    args.model, 
                    args.input,
                    outdir=args.outdir,
+                   sample=args.sample,
                    gpu_to_use=gpu)

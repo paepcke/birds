@@ -335,7 +335,7 @@ class Inferencer:
         provide a slider.
         
         The start_idx/end_idx define a slice of tallies whose
-        (partial) content is added to the csv file manage by
+        (partial) content is added to the csv file managed by
         self.csv_writer. 
         
         :param res_coll: collection of result tallies
