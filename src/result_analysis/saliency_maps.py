@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 '''
 Created on May 24, 2021
 
@@ -6,18 +7,20 @@ Created on May 24, 2021
 import argparse
 import os
 from pathlib import Path
+import random
 import sys
 
 from logging_service import LoggingService
 from matplotlib import pyplot as plt
 import torch
 from torchvision import transforms
+from skorch import NeuralNet
 
 from birdsong.nets import NetUtils
 from birdsong.utils.utilities import FileUtils
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import Utils
-from skorch import NeuralNet
+from birdsong.utils.tensorboard_plotter import TensorBoardPlotter
 
 class SaliencyMapper:
     '''
@@ -40,6 +43,7 @@ class SaliencyMapper:
                  config_info,
                  model_path, 
                  in_img_or_dir,
+                 outdir=None,
                  gpu_to_use=0,
                  unittesting=False):
         '''
@@ -64,7 +68,26 @@ class SaliencyMapper:
         self.prep_model_inference(model_path, gpu_to_use)
 
         for img, metadata in dataloader:
-            saliency_img = self.create_one_saliency_map(img, metadata)
+            saliency_fig = self.create_one_saliency_map(img, metadata)
+
+            saliency_fig.show()
+            if outdir is not None:
+                species_name = metadata['species']
+                path_not_found = True
+                i = 0
+                while path_not_found:
+                    out_path = os.path.join(outdir, f"{species_name}_{i}.pdf")
+                    if os.path.exists(out_path):
+                        i += 1
+                        continue
+                    path_not_found = False
+                saliency_fig.savefig(out_path, format='pdf', dpi=150)
+                
+            to_do = input("Hit ENTER for next img; q to quit: ")
+            plt.close(saliency_fig)
+            if to_do == 'q':
+                plt.close('all')
+                return
 
     #------------------------------------
     # create_one_saliency_map
@@ -105,11 +128,20 @@ class SaliencyMapper:
         # across all colour channels.
 
         saliency, _ = torch.max(img.grad.data.abs(),dim=1)
+        saliency_img = saliency.detach().squeeze()
+        img_3D = img.squeeze()
+        img_with_species_4D = TensorBoardPlotter.print_onto_image(img_3D, species, (210,220))
+        img_with_species_3D = img_with_species_4D.squeeze()
+         
+        fig, (ax_saliency, ax_orig) = plt.subplots(nrows=1, ncols=2)
         
-        # code to plot the saliency map as a heatmap
-        plt.imshow(saliency[0], cmap=plt.cm.hot)
-        plt.axis('off')
-        plt.show()
+        ax_saliency.imshow(saliency_img, cmap=plt.cm.hot)
+        ax_orig.imshow(img_with_species_3D, cmap='gray')
+
+        ax_saliency.axis('off')
+        ax_orig.axis('off')
+
+        return fig
 
     #------------------------------------
     # prep_model_inference 
@@ -180,8 +212,12 @@ class SaliencyDataloader:
     # Constructor 
     #-------------------
     
-    def __init__(self, img_or_dir_path, config, sample=False):
+    def __init__(self, img_or_dir_path, config, sample=None):
 
+        if sample is not None and type(sample) != int:
+            raise TypeError(f"Sample argument must be None or int, not {sample}")
+
+        self.sample = sample
 
         self.SAMPLE_WIDTH  = config.getint('Training', 'sample_width')
         self.SAMPLE_HEIGHT = config.getint('Training', 'sample_height')
@@ -193,23 +229,92 @@ class SaliencyDataloader:
             # Just a single sample file to process:
             if Path(img_or_dir_path).suffix.lower() in self.IMG_EXTENSIONS:
                 self.files_to_show.append(img_or_dir_path)
-        else:
-            # Was given a directory; does it have only
-            # (hopefully) species subdirectories?
+            else:
+                raise TypeError(f"File {img_or_dir_path} does not have a known image extension")
+                
+        elif sample is None:
+            # Collect all the image files below given dir:
             for root, _dirs, files in os.walk(img_or_dir_path):
                 for file in files:
                     if Path(file).suffix.lower() in self.IMG_EXTENSIONS: 
                         self.files_to_show.append(os.path.join(root, file))
+            # Reverse so we can use pop()
+            # and preserve order of files:
+            self.files_to_show.reverse()
+
+        else:
+            # We are to show a sample of images from each species 
+            # below the directory.
+            # In this case, make reasonably sure that we are pointing to
+            # the root of a species tree:
+            
+            if not(self._is_species_root_dir(img_or_dir_path)):
+                raise ValueError("Can sample images only from species root directory")
+
+            # Go through each subdir, and pick a random
+            # sample of images. Keep the full paths as 
+            # lists, separately by species:
+            
+            sample_paths = {}
+            species_dirs = Utils.listdir_abs(img_or_dir_path)
+            for species_dir in species_dirs:
+                species   = Path(species_dir).stem
+                all_files = Utils.listdir_abs(species_dir)
+                num_files = len(all_files)
+                if num_files == 0:
+                    sample_paths['species'] = []
+                    continue
+                # Fewer images than number of samples
+                # requested? 
+                if num_files <= sample:
+                    # Yep, just use the ones we have:
+                    sample_paths[species] = all_files
+                    continue
+                # Do the sampling for one species subdir:
+                sample_paths[species] = [all_files[idx]
+                                         for idx
+                                         in random.sample(range(0,num_files), sample)
+                                         ]
+            self.sample_paths = sample_paths
+
+    #------------------------------------
+    # _is_species_root_dir 
+    #-------------------
+    
+    def _is_species_root_dir(self, path):
         
-        # Reverse so we can use pop()
-        # and preserve order of files:
-        self.files_to_show.reverse()
+        if os.path.isfile(path):
+            return False
+        
+        # All files in the given dir must
+        # themselves be dirs for path to 
+        # be a species root:
+        _root, dirs, files = os.walk(path)
+        if len(files) > 0:
+            return False
+        
+        # Check each of the directories
+        # to ensure that it is either empty,
+        # or the first file is an image file:
+        
+        for the_dir in dirs:
+            _root, dirs, files = os.walk(os.path.join(path, the_dir))
+            if len(files) > 1 and Path(files[0]).suffix in self.IMG_EXTENSIONS:
+                continue
+            else:
+                return False
+
+        return True
+
 
     #------------------------------------
     # __iter__ 
     #-------------------
     
     def __iter__(self):
+        if self.sample:
+            self.species_rotation = 0
+            self.species = list(self.sample_paths.keys())
         return self
 
     #------------------------------------
@@ -219,6 +324,13 @@ class SaliencyDataloader:
     def __next__(self):
         '''
         Returns a two-tuple: image tensor, img metadata
+        Behavior depends on whether we are feeding out
+        a complete list of image files, or were asked to
+        sample from multiple species. 
+        
+        If the latter, alternately feed out from the
+        different species, which are in the self.sample_paths
+        dict. 
         
         :return Image loaded as a PIL, then downsized,
             and transformed to a tensor. Plus any metadata
@@ -226,16 +338,39 @@ class SaliencyDataloader:
         :rtype (torch.Tensor, {str : str})
         '''
         
-        try:
-            fname = self.files_to_show.pop()
-        except IndexError:
-            raise StopIteration()
+        if self.sample:
+            have_fname = False
+            while not have_fname:
+                species_to_serve = self.species[self.sample_rotation]
+                try:
+                    fname = self.sample_paths[species_to_serve].pop()
+                    have_fname = True
+                    # Prepare for the next call to __next__():
+                    self.sample_rotation += 1
+                except IndexError:
+                    # No more samples for this species.
+                    # Try the next:
+                    self.sample_rotation += 1
+                    if self.sample_rotation >= len(self.sample_paths):
+                        # Exhausted the image samples of
+                        # all species:
+                        raise StopIteration()
+
+        else:
+            # No sampling, just a fixed set of image file
+            # in self.files_to_show:
+            try:
+                fname = self.files_to_show.pop()
+            except IndexError:
+                raise StopIteration()
+
         img_obj_pil, metadata = SoundProcessor.load_spectrogram(fname, to_nparray=False)
-        img_obj_tns = self.transform_img(img_obj_pil)
-        #*****new_img_obj = self.transform_img(img_obj_np)
-        img_obj_tns = torch.tensor(img_obj_tns).unsqueeze(dim=0)
+        img_obj_tns_almost = self.transform_img(img_obj_pil)
+        img_obj_tns = img_obj_tns_almost.clone().detach().unsqueeze(dim=0)
 
         return img_obj_tns, metadata
+
+        
         
     #------------------------------------
     # transform_img 
@@ -311,6 +446,10 @@ if __name__ == '__main__':
                         type=int,
                         help='index number of GPU to use; default: 0, or CPU',
                         default=0)
+    
+    parser.add_argument('-o', '--outdir',
+                        help='directory for saving saliency figures',
+                        default=None)
 
     parser.add_argument('config_info',
                         help='path to config file',
@@ -335,4 +474,8 @@ if __name__ == '__main__':
         sys.exit(1)
     
     gpu = args.gpu if torch.cuda.is_available() else 'cpu'
-    SaliencyMapper(args.config_info, args.model, args.input, gpu_to_use=gpu)
+    SaliencyMapper(args.config_info, 
+                   args.model, 
+                   args.input,
+                   outdir=args.outdir,
+                   gpu_to_use=gpu)
