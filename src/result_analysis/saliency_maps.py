@@ -134,8 +134,12 @@ class SaliencyMapper:
         saliency, _ = torch.max(img.grad.data.abs(),dim=1)
         saliency_img = saliency.detach().squeeze()
         img_3D = img.squeeze()
-        img_with_species_4D = TensorBoardPlotter.print_onto_image(img_3D, species, (210,220))
-        img_with_species_3D = img_with_species_4D.squeeze()
+        if species is not None:
+            # Only write species onto the image if we know it:
+            img_with_species_4D = TensorBoardPlotter.print_onto_image(img_3D, species, (210,220))
+            img_with_species_3D = img_with_species_4D.squeeze()
+        else:
+            img_with_species_3D = img_3D.detach()
          
         fig, (ax_saliency, ax_orig) = plt.subplots(nrows=1, ncols=2)
         
@@ -436,6 +440,11 @@ class SaliencyDataloader:
         if to_grayscale and not is_grayscale:
             # Need to transform to grayscale:
             try:
+                # If the image is RGBA, then the conversion to
+                # grayscale fails. In that case, convert to RGB
+                # first:
+                if img_obj.mode == 'RGBA':
+                    img_obj = img_obj.convert(mode='RGB')
                 new_img = self._composed_transform_to_grayscale(img_obj)
                 return new_img
             except AttributeError:
