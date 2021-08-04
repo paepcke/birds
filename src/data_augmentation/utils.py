@@ -7,18 +7,18 @@ import random
 import shutil
 import warnings
 
-
 import librosa
+from matplotlib import MatplotlibDeprecationWarning
 from natsort import natsorted
 from torch import cuda
 import torch
 
-from matplotlib import MatplotlibDeprecationWarning
-import multiprocessing as mp
-
+from birdsong.utils.dottable_config import DottableConfigParser
 import matplotlib.pyplot as plt
+import multiprocessing as mp
 import numpy as np
 import pandas as pd
+
 
 #-------------------------- Enum for Policy When Output Files Exist -----------
 class WhenAlreadyDone(Enum):
@@ -961,6 +961,99 @@ class Utils:
         sel_dict_list_sorted = natsorted(sel_dict_list, 
                                          key=lambda row_dict: row_dict['Begin Time (s)'])
         return sel_dict_list_sorted
+
+    #------------------------------------
+    # read_configuration 
+    #-------------------
+
+    @classmethod
+    def read_configuration(cls, conf_file):
+        '''
+        Parses config file that describes training parameters,
+        various file paths, and how many GPUs different machines have.
+        Syntax follows Python's configfile package, which includes
+        sections, and attr/val pairs in each section.
+        
+        Expected sections:
+
+           o Paths: various file paths for the application
+           o Training: holds batch sizes, number of epochs, etc.
+           o Parallelism: holds number of GPUs on different machines
+        
+        For Parallelism, expect entries like:
+        
+           foo.bar.com  = 4
+           127.0.0.1    = 5
+           localhost    = 3
+           172.12.145.1 = 6
+           
+        Method identifies which of the entries is
+        'localhost' by comparing against local hostname.
+        Though 'localhost' or '127.0.0.1' may be provided.
+        
+        Returns a dict of dicts: 
+            config[section-names][attr-names-within-section]
+            
+        Types of standard entries, such as epochs, batch_size,
+        etc. are coerced, so that, e.g. config['Training']['epochs']
+        will be an int. Clients may add non-standard entries.
+        For those the client must convert values from string
+        (the type in which values are stored by default) to the
+        required type. This can be done the usual way: int(...),
+        or using one of the configparser's retrieval methods
+        getboolean(), getint(), and getfloat():
+        
+            config['Training'].getfloat('learning_rate')
+        
+        :param other_gpu_config_file: path to configuration file
+        :type other_gpu_config_file: str
+        :return: a dict of dicts mirroring the config file sections/entries
+        :rtype: dict[dict]
+        :raises ValueErr
+        :raises TypeError
+        '''
+        
+        if conf_file is None:
+            return self.init_defaults()
+        
+        config = DottableConfigParser(conf_file)
+        
+        if len(config.sections()) == 0:
+            # Config file exists, but empty:
+            return(self.init_defaults(config))
+    
+        # Do type conversion also in other entries that 
+        # are standard:
+        
+        types = {'epochs' : int,
+                 'batch_size' : int,
+                 'kernel_size' : int,
+                 'sample_width' : int,
+                 'sample_height' : int,
+                 'seed' : int,
+                 'pytorch_comm_port' : int,
+                 'num_pretrained_layers' : int,
+                 
+                 'root_train_test_data': str,
+                 'net_name' : str,
+                 }
+        for section in config.sections():
+            for attr_name in config[section].keys():
+                try:
+                    str_val = config[section][attr_name]
+                    required_type = types[attr_name]
+                    config[section][attr_name] = required_type(str_val)
+                except KeyError:
+                    # Current attribute is not standard;
+                    # users of the corresponding value need
+                    # to do their own type conversion when
+                    # accessing this configuration entry:
+                    continue
+                except TypeError:
+                    raise ValueError(f"Config file error: {section}.{attr_name} should be convertible to {required_type}")
+    
+        return config
+
 
     #------------------------------------
     # time_delta_str 

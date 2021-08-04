@@ -80,3 +80,8 @@ independent_runs = True
 # 5678 is the default pytorch port:
 
 master_port = 5678
+
+[Testing]
+
+# For saliency image creation
+num_classes = 32
