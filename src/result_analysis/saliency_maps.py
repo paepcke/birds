@@ -34,9 +34,9 @@ class SaliencyMapper:
     #-------------------
 
     def __init__(self,
-                 config_info,
                  model_path, 
                  in_img_or_dir,
+                 config_info=None,
                  outdir=None,
                  gpu_to_use=0,
                  sample=0,
@@ -49,7 +49,12 @@ class SaliencyMapper:
 
         self.log = LoggingService()
         self.samples_path = in_img_or_dir
-        
+
+        # If no config file pt, assume it's in the usual place:
+        if config_info is None:
+            proj_root_dir = os.path.join(os.path.dirname(__file__), '../..')
+            config_info = os.path.join(proj_root_dir, 'config.cfg')
+
         try:
             self.config = Utils.read_configuration(config_info)
         except Exception as e:
@@ -62,6 +67,10 @@ class SaliencyMapper:
         
         self.prep_model_inference(model_path, gpu_to_use)
 
+        if outdir is not None:
+            # Create dir if not exists:
+            os.makedirs(outdir, exist_ok=True)
+            
         for img, metadata in dataloader:
             saliency_fig = self.create_one_saliency_map(img, metadata)
 
@@ -487,8 +496,8 @@ if __name__ == '__main__':
                         help='directory for saving saliency figures',
                         default=None)
 
-    parser.add_argument('config_info',
-                        help='path to config file',
+    parser.add_argument('-c', '--config_info',
+                        help='path to config file; default: config.cfg in proj root',
                         default=None)
 
     parser.add_argument('model',
@@ -510,9 +519,9 @@ if __name__ == '__main__':
         sys.exit(1)
     
     gpu = args.gpu if torch.cuda.is_available() else 'cpu'
-    SaliencyMapper(args.config_info, 
-                   args.model, 
+    SaliencyMapper(args.model, 
                    args.input,
                    outdir=args.outdir,
+                   config_info=args.config_info,
                    sample=args.sample,
                    gpu_to_use=gpu)
