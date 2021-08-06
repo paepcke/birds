@@ -64,6 +64,7 @@ class SaliencyMapper:
         
         self.num_classes = self.config.getint('Testing', 'num_classes')
         dataloader = SaliencyDataloader(in_img_or_dir, self.config, sample=sample)
+        self.class_names = dataloader.class_names
         
         self.prep_model_inference(model_path, gpu_to_use)
 
@@ -72,7 +73,12 @@ class SaliencyMapper:
             os.makedirs(outdir, exist_ok=True)
             
         for img, metadata in dataloader:
-            saliency_fig = self.create_one_saliency_map(img, metadata)
+            saliency_fig, pred_class_id = self.create_one_saliency_map(img, metadata)
+
+            if self.class_names is None or len(self.class_names) < pred_class_id:
+                saliency_fig.text(.5,.1, f"Predicted: {pred_class_id}")
+            else:
+                saliency_fig.text(.5,.1, f"Predicted: {self.class_names[pred_class_id]}")
 
             saliency_fig.show()
             if outdir is not None:
@@ -114,6 +120,10 @@ class SaliencyMapper:
         # scores 
 
         scores = self.model(img)
+        
+        # Just for information: get winning prediction:
+        probs = scores.softmax(dim=1).squeeze()
+        pred_class_id = probs.argmax()
 
         # Get the index corresponding to the maximum score and the maximum score itself.
         score_max_index = scores.argmax()
@@ -149,7 +159,7 @@ class SaliencyMapper:
         ax_saliency.axis('off')
         ax_orig.axis('off')
 
-        return fig
+        return fig, pred_class_id
 
     #------------------------------------
     # prep_model_inference 
@@ -259,13 +269,16 @@ class SaliencyDataloader:
             
             if not(self._is_species_root_dir(img_or_dir_path)):
                 raise ValueError("Can sample images only from species root directory")
-
+            
             # Go through each subdir, and pick a random
             # sample of images. Keep the full paths as 
             # lists, separately by species:
             
             sample_paths = {}
             species_dirs = Utils.listdir_abs(img_or_dir_path)
+
+            self.class_names = [Path(full_path).stem for full_path in species_dirs] 
+            
             for species_dir in species_dirs:
                 species   = Path(species_dir).stem
                 all_files = Utils.listdir_abs(species_dir)

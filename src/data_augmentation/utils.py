@@ -665,7 +665,8 @@ class Utils:
         '''
         Returns a file name unique in the
         given directory. I.e. NOT globally unique.
-        
+        Keeps adding '_<i>' to end of file name.
+
         :param out_dir: directory for which fname is to 
             be uniquified
         :type out_dir: str
@@ -677,15 +678,18 @@ class Utils:
         '''
         
         full_path   = os.path.join(out_dir, fname)
-        fname_dict = Utils.path_elements(full_path)
+        fname_dict  = Utils.path_elements(full_path)
+        i = 1
 
         while True:
             try:
                 new_path = os.path.join(fname_dict['root'], fname_dict['fname']+fname_dict['suffix'])
                 with open(new_path, 'r') as _fd:
                     # Succeed in opening, so file exists.
-                    fname_dict['fname'] += '_'
+                    fname_dict['fname'] += f'_{i}'
+                    i += 1
             except:
+                # Couldn't open, so doesn't exist:
                 return new_path
 
     #------------------------------------
