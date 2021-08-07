@@ -12,13 +12,19 @@ import unittest
 import zlib
 
 import torch
+import pandas as pd
 
-from birdsong.utils.experiment import Experiment
+from birdsong.utils.experiment_manager import ExperimentManager
 
 
-#*********TEST_ALL = True
+#******TEST_ALL = True
 TEST_ALL = False
 
+'''
+TODO:
+   o test moving the experiment: ensure relative addressing!
+   o deleting an item
+'''
 
 class TestExperiment(unittest.TestCase):
 
@@ -58,8 +64,16 @@ class TestExperiment(unittest.TestCase):
         os.makedirs(figs_dir)
         with open(os.path.join(figs_dir, "tiny_png.png") ,"wb") as fd:
             fd.write(self.makeGrayPNG([[0,255,0],[255,255,255],[0,255,0]]))
+            
+        hparams_dir = os.path.join(self.prefab_exp_root,'hparams')
+        os.makedirs(hparams_dir)
+        self.hparams_path = self.make_neural_net_config_file(hparams_dir)
         
     def tearDown(self):
+        try:
+            self.exp.close()
+        except:
+            pass
         shutil.rmtree(self.exp_root)
         shutil.rmtree(self.prefab_exp_root)
 
@@ -71,7 +85,7 @@ class TestExperiment(unittest.TestCase):
 
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_creation(self):
-        exp = Experiment(self.exp_root)
+        exp = ExperimentManager(self.exp_root)
         self.assertEqual(exp['root_path'], self.exp_root)
         self.assertEqual(exp['_models_path'], os.path.join(self.exp_root, 'models'))
         self.assertTrue(exp.csv_writers == {})
@@ -80,8 +94,12 @@ class TestExperiment(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(self.exp_root, 'experiment.json')))
         
         # Delete and restore the experiment:
+        exp.close()
         del exp
-        exp1 = Experiment.load(self.exp_root)
+        
+        exp1 = ExperimentManager.load(self.exp_root)
+        # For cleanup in tearDown():
+        self.exp = exp1
         self.assertEqual(exp1['root_path'], self.exp_root)
         self.assertEqual(exp1['_models_path'], os.path.join(self.exp_root, 'models'))
         self.assertTrue(exp1.csv_writers == {})
@@ -93,7 +111,9 @@ class TestExperiment(unittest.TestCase):
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_dict_addition(self):
         
-        exp = Experiment(self.exp_root)
+        exp = ExperimentManager(self.exp_root)
+        # For cleanup in tearDown():
+        self.exp = exp
 
         tst_dict = {'foo' : 10, 'bar' : 20}
         csv_file_path = exp.save(tst_dict, 'first_dict')
@@ -136,16 +156,14 @@ class TestExperiment(unittest.TestCase):
             self.assertEqual(list(row_dict1.values()), ['100','200'])
             row_dict2 = next(reader)
             self.assertEqual(list(row_dict2.values()), ['1000','2000'])
-
-        exp.close()
         
     #------------------------------------
-    # test_saving
+    # test_saving_csv
     #-------------------
     
-    #*******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    def test_saving(self):
-        exp = Experiment(self.exp_root)
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_saving_csv(self):
+        exp = ExperimentManager(self.exp_root)
 
         tst_dict = {'foo' : 10, 'bar' : 20}
         csv_file_path = exp.save(tst_dict, 'first_dict')
@@ -154,10 +172,12 @@ class TestExperiment(unittest.TestCase):
         del exp
         
         # Reconstitute the same experiment:
-        exp = Experiment.load(self.exp_root)
+        exp = ExperimentManager.load(self.exp_root)
+        # For cleanup in tearDown():
+        self.exp = exp
         
         # First, ensure that the test dict 
-        # is unharmed without using the Experiment
+        # is unharmed without using the ExperimentManager
         # instance:
         with open(csv_file_path, 'r') as fd:
             reader = csv.DictReader(fd)
@@ -169,6 +189,163 @@ class TestExperiment(unittest.TestCase):
         # Now treat the experiment
         writers_dict = exp.csv_writers
         self.assertEqual(len(writers_dict), 1)
+
+    #------------------------------------
+    # test_saving_hparams
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_saving_hparams(self):
+        
+        exp = ExperimentManager(self.exp_root)
+
+        exp.add_hparams(self.hparams_path)
+        config_obj = exp['config']
+        
+        # The config instance should be available
+        # via the config key:
+        self.assertEqual(config_obj, exp['config'])
+        self.assertEqual(config_obj['Training']['net_name'], 'resnet18')
+        self.assertEqual(config_obj.getint('Parallelism', 'master_port'), 5678)
+
+        exp.close()
+        
+        del exp
+        
+        # Reconstitute the same experiment:
+        exp1 = ExperimentManager.load(self.exp_root)
+        # For cleanup in tearDown():
+        self.exp = exp1
+        
+        config_obj = exp1['config']
+        self.assertEqual(config_obj['Training']['net_name'], 'resnet18')
+        self.assertEqual(config_obj.getint('Parallelism', 'master_port'), 5678)
+
+    #------------------------------------
+    # test_saving_dataframes
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_saving_dataframes(self):
+        
+        exp = ExperimentManager(self.exp_root)
+
+        df = pd.DataFrame([[1,2,3],
+                           [4,5,6],
+                           [7,8,9]], 
+                           columns=['foo','bar','fum'], 
+                           index= ['row1','row2','row3'])
+
+        # Save without the row labels (i.e w/o the index):
+        dst_without_idx = exp.save(df, 'mydf')
+        self.assertEqual(dst_without_idx, exp.csv_writers['mydf'].fd.name)
+
+        df_retrieved_no_idx_saved = pd.read_csv(dst_without_idx)
+        # Should have:
+        #        foo  bar  fum
+        #    0    1    2    3
+        #    1    4    5    6
+        #    2    7    8    9
+        
+        df_true_no_idx = pd.DataFrame.from_dict({'foo' : [1,4,7], 'bar' : [2,5,8], 'fum' : [3,6,9]})
+        self.assertTrue((df_retrieved_no_idx_saved == df_true_no_idx).all().all())
+
+        # Now save with index:
+        dst_with_idx = exp.save(df, 'mydf_with_idx', index_col='My Col Labels')
+        df_true_with_idx = df_true_no_idx.copy()
+        df_true_with_idx.index = ['row1', 'row2', 'row3']
+        df_retrieved_with_idx_saved = pd.read_csv(dst_with_idx, index_col='My Col Labels')
+        # Should have:
+        #           foo  bar  fum
+        #    row1    1    2    3
+        #    row2    4    5    6
+        #    row3    7    8    9
+        self.assertTrue((df_retrieved_with_idx_saved == df_true_with_idx).all().all())
+        exp.close()
+        
+        del exp
+        
+        # Reconstitute the same experiment:
+        exp1 = ExperimentManager.load(self.exp_root)
+        # For cleanup in tearDown():
+        self.exp = exp1
+        
+        # All the above tests should work again:
+        
+        df_no_idx   = pd.read_csv(exp1.abspath('mydf', 'csv'))
+        df_with_idx = pd.read_csv(exp1.abspath('mydf_with_idx', 'csv'), 
+                                  index_col='My Col Labels')
+        self.assertTrue((df_no_idx == df_true_no_idx).all().all())
+        self.assertTrue((df_with_idx == df_true_with_idx).all().all())
+
+    #------------------------------------
+    # test_saving_series
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_saving_series(self):
+        
+        exp = ExperimentManager(self.exp_root)
+        # For cleanup in tearDown():
+        self.exp = exp
+        my_series = pd.Series([1,2,3], index=['One', 'Two', 'Three'])
+        
+        dst = exp.save(my_series, 'series_test')
+        # Get a dataframe whose first row is the series:
+        series_read = pd.read_csv(dst)
+        first_row   = series_read.iloc[0,:] 
+        self.assertTrue((first_row == my_series).all())
+
+        exp.close()
+        
+    #------------------------------------
+    # test_saving_mem_items
+    #-------------------
+    
+    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_saving_mem_items(self):
+        
+        exp = ExperimentManager(self.exp_root)
+        # For cleanup in tearDown():
+        self.exp = exp
+        
+        my_dict = {'foo' : 10, 'bar' : 20}
+        exp['my_dict'] = my_dict
+        self.assertDictEqual(exp['my_dict'], my_dict)
+        
+        exp.save()
+        
+        exp1 = ExperimentManager.load(self.exp_root)
+        self.assertDictEqual(exp['my_dict'], my_dict)
+
+        animal_dict = {'horse' : 'big', 'mouse' : 'small'}
+        exp1['my_dict'] = animal_dict
+        self.assertDictEqual(exp['my_dict'], my_dict)
+        self.assertDictEqual(exp1['my_dict'], animal_dict)
+
+        exp1.save()
+
+        # Without loading, exp still has my_dict:
+        self.assertDictEqual(exp['my_dict'], my_dict)
+        
+        # But after reloading exp, the value should change:
+        exp = ExperimentManager.load(self.exp_root)
+        self.assertDictEqual(exp['my_dict'], animal_dict)
+
+    #------------------------------------
+    # test_abspath
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_abspath(self):
+        exp = ExperimentManager(self.exp_root)
+        # For cleanup in tearDown():
+        self.exp = exp
+
+        tst_dict = {'foo' : 10, 'bar' : 20}
+        csv_file_path = exp.save(tst_dict, 'first_dict')
+
+        self.assertEqual(exp.abspath('first_dict', 'csv'), csv_file_path)
 
 # -------------------- Utilities --------------
 
@@ -204,6 +381,7 @@ class TestExperiment(unittest.TestCase):
             with open("/tmp/tiny_png.png","wb") as f:
                 f.write(makeGrayPNG([[0,255,0],[255,255,255],[0,255,0]]))
         
+        :return a png structure
         '''
         
         def I1(value):
@@ -252,7 +430,57 @@ class TestExperiment(unittest.TestCase):
             block = "IEND".encode('ascii')
             png += I4(0) + block + I4(zlib.crc32(block))
         return png
+
+    #------------------------------------
+    # make_neural_net_config_file
+    #-------------------
     
+    def make_neural_net_config_file(self, dst_dir):
+        '''
+        Create a fake neural net configurations file.
+        
+        :param dst_dir: where to put the 'config.cfg' file
+        :type dst_dir: src
+        :return full path to new config file
+        :rtype src
+        '''
+        txt = '''
+            [Paths]
+            
+            # Root of the data/test files:
+            root_train_test_data = /foo/bar
+            
+            [Training]
+            
+            net_name      = resnet18
+            # Some comment
+            pretrained     = True
+            freeze         = 0
+            min_epochs    = 2
+            max_epochs    = 2
+            batch_size    = 2
+            num_folds     = 2
+            opt_name      = Adam
+            loss_fn       = CrossEntropyLoss
+            weighted      = True
+            kernel_size   = 7
+            lr            = 0.01
+            momentum      = 0.9
+            
+            [Parallelism]
+            
+            independent_runs = True
+            master_port = 5678
+            
+            [Testing]
+            
+            num_classes = 32
+            '''
+        hparams_path = os.path.join(dst_dir, 'config.cfg')
+        with open(hparams_path, 'w') as fd:
+            fd.write(txt)
+            
+        return hparams_path
 
 # -------------------- TinyModel --------------
 class TinyModel(torch.nn.Module):
