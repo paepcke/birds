@@ -3,20 +3,6 @@ Created on Aug 5, 2021
 
 @author: paepcke
 '''
-import csv
-import json 
-import os
-from pathlib import Path
-import shutil
-
-import torch
-
-import matplotlib.pyplot as plt
-import pandas as pd
-import torch.nn as nn
-
-from birdsong.utils.neural_net_config import NeuralNetConfig, ConfigError
-
 '''
 TODO:
    o Doc that you can store hparams individually as dict,
@@ -26,6 +12,22 @@ TODO:
        when using pd.read_csv(fname, index_col) to get the
        index installed
 '''
+
+import csv
+import json 
+import os
+from pathlib import Path
+import shutil
+import threading
+import time
+
+import torch
+
+from birdsong.utils.neural_net_config import NeuralNetConfig, ConfigError
+import matplotlib.pyplot as plt
+import pandas as pd
+import torch.nn as nn
+
 
 class ExperimentManager(dict):
     '''
@@ -80,6 +82,9 @@ class ExperimentManager(dict):
         if not os.path.isdir(root_path):
             raise ValueError(f"Root path arg must be a dir, not {root_path}")
 
+        self.root              = root_path
+        self.auto_save_thread  = None
+        
         # No csv writers yet; will be a dict
         # of CSV writer instances keyed by file
         # names (without directories):
@@ -90,6 +95,17 @@ class ExperimentManager(dict):
             if not type(initial_info) == dict:
                 raise TypeError(f"Arg initial_info must be a dict, not {initial_info}")
             init_info_keys = list(initial_info.keys())
+            # If we have csv_writer_names, initialize
+            # the self.csv_writers dict to have those
+            # names as keys, though values will still be
+            # None:
+            try:
+                for csv_writer_fname in initial_info['csv_writer_names']:
+                    self.csv_writers[csv_writer_fname] = None
+            except KeyError:
+                # No csv_writer_names; that's ok:
+                pass
+            
             # Add passed-in info to what we know:
             self.update(initial_info)
         else:
@@ -98,11 +114,6 @@ class ExperimentManager(dict):
         if 'class_names' not in init_info_keys:
             self['class_names'] = None
 
-        # External info
-        self['root_path'] = self.root
-
-
-        self.root              = root_path
         self.models_path       = os.path.join(self.root, 'models')
         self.figs_path         = os.path.join(self.root, 'figs')
         self.csv_files_path    = os.path.join(self.root, 'csv_files')
@@ -116,6 +127,8 @@ class ExperimentManager(dict):
         self._create_dir_if_not_exists(self.tensorboard_path)
         self._create_dir_if_not_exists(self.hparams_path)
         
+        # External info
+        self['root_path'] = self.root
         
         # Add internal info so it will be saved
         # by _save_self():
@@ -126,7 +139,6 @@ class ExperimentManager(dict):
         self['_tensorboard_files_path'] = self.tensorboard_path
         self['_hparams_path']           = self.hparams_path
 
-        
         return self
 
     #------------------------------------
@@ -370,8 +382,7 @@ class ExperimentManager(dict):
         :type item: any
         '''
         super().__setitem__(key, item)
-        # **** SCHEDULE THE SAVE     MUST 
-        #self.save()
+        self._schedule_save()
 
     #------------------------------------
     # update
@@ -390,7 +401,8 @@ class ExperimentManager(dict):
     
     def __delitem__(self, key):
         
-        # Allow KeyError to bubble up to client:
+        # Allow KeyError to bubble up to client,
+        # if the key doesn't exist:
         item = self[key]
         
         # If this is a file in the experiment
@@ -404,8 +416,8 @@ class ExperimentManager(dict):
             item.fd.close()
             os.remove(path)
 
-        self.save()
-        super().__delete__(key)
+        super().__delitem__(key)
+        self._schedule_save()
 
     #------------------------------------
     # abspath
@@ -473,6 +485,40 @@ class ExperimentManager(dict):
 
 
     # --------------- Private Methods --------------------
+
+    #------------------------------------
+    # _schedule_save 
+    #-------------------
+    
+    def _schedule_save(self):
+        '''
+        If no self-save task is scheduled yet,
+        schedule one:
+        '''
+        try:
+            # Only schedule a save if none
+            # is scheduled yet:
+            if self.auto_save_thread is not None and \
+                not self.auto_save_thread.cancelled():
+                return
+            self.auto_save_thread = AutoSaveThread(self.save)
+            self.auto_save_thread.start()
+        except Exception as e:
+            raise ValueError(f"Could not schedule an experiment save: {repr(e)}")
+
+    #------------------------------------
+    # _cancel_save 
+    #-------------------
+    
+    def _cancel_save(self):
+        '''
+        Cancel all self-save tasks:
+        '''
+        try:
+            if self.auto_save_thread is not None:
+                self.auto_save_thread.cancel()
+        except Exception as e:
+            raise ValueError(f"Could not cancel an experiment save: {repr(e)}")
 
     #------------------------------------
     #_save_records 
@@ -691,6 +737,28 @@ class ExperimentManager(dict):
         
         with open(os.path.join(self.root, 'experiment.json'), 'w') as fd:
             json.dump(self, fd)
+            
+        self._cancel_save()
+
+    #------------------------------------
+    # _is_experiment_file 
+    #-------------------
+    
+    def _is_experiment_file(self, path):
+        '''
+        Return True if the given path is 
+        below the experiment root directory
+        
+        :param path: absolute path to check
+        :type path: str
+        :return whether or not path is below root
+        :rtype bool
+        '''
+        if type(path) == str and path.startswith(self.root):
+            return True
+        else:
+            return False
+
 
     #------------------------------------
     # _create_dir_if_not_exists 
@@ -797,3 +865,93 @@ class ExperimentManager(dict):
             except:
                 # Couldn't open, so doesn't exist:
                 return new_path
+
+
+# ------------------- Class AutoSaveThread -----------------
+
+class AutoSaveThread(threading.Thread):
+    '''
+    Used to save an experiment after a delay. Operations
+    on AutoSaveThread instances:
+    
+        o start()
+        o cancel()
+        o cancelled()
+        
+    The class can actually be used with any callable.
+    Functionality is like the built-in sched, but
+    the action is one-shot. After the function has
+    been called, the thread terminates.
+    
+    Usage examples:
+            AutoSaveThread(experiment.save).start()
+            AutoSaveThread(experiment.save, time_delay=5).start()
+            
+    '''
+    
+    DEFAULT_DELAY = 2 # seconds
+    
+    #------------------------------------
+    # Constructor 
+    #-------------------
+    
+    def __init__(self, call_target, *args, time_delay=None, **kwargs):
+        '''
+        Setup the action. The call_target can be
+        any callable. It will be called with *args
+        and **kwargs.
+         
+        :param call_target: a callable that will be 
+            invoked with *args and **kwargs
+        :type call_target: callable
+        :param time_delay: number of seconds to wait
+            before action
+        :type time_delay: int
+        '''
+        super().__init__()
+        if time_delay is None:
+            self.time_delay = self.DEFAULT_DELAY
+        else:
+            self.time_delay = time_delay
+            
+        self.call_target = call_target
+        self.args   = args
+        self.kwargs = kwargs
+        
+        self._canceled = threading.Event()
+        
+    #------------------------------------
+    # run 
+    #-------------------
+    
+    def run(self):
+        time.sleep(self.time_delay)
+        if not self.cancelled():
+            self.call_target(*self.args, **self.kwargs)
+
+    #------------------------------------
+    # cancel
+    #-------------------
+    
+    def cancel(self):
+        self._canceled.set()
+        
+    #------------------------------------
+    # cancelled 
+    #-------------------
+    
+    def cancelled(self):
+        return self._canceled.is_set()
+    
+    #------------------------------------
+    # delay 
+    #-------------------
+    
+    def delay(self):
+        '''
+        Returns the delay set for the
+        action
+        '''
+        return self.time_delay
+        
+

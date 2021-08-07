@@ -10,15 +10,16 @@ import shutil
 import struct
 import unittest
 import zlib
+import json
 
 import torch
+
+from birdsong.utils.experiment_manager import ExperimentManager, AutoSaveThread
 import pandas as pd
 
-from birdsong.utils.experiment_manager import ExperimentManager
 
-
-#******TEST_ALL = True
-TEST_ALL = False
+TEST_ALL = True
+#*****TEST_ALL = False
 
 '''
 TODO:
@@ -26,7 +27,7 @@ TODO:
    o deleting an item
 '''
 
-class TestExperiment(unittest.TestCase):
+class ExperimentManagerTest(unittest.TestCase):
 
 
     @classmethod
@@ -74,8 +75,14 @@ class TestExperiment(unittest.TestCase):
             self.exp.close()
         except:
             pass
-        shutil.rmtree(self.exp_root)
-        shutil.rmtree(self.prefab_exp_root)
+        try:
+            shutil.rmtree(self.exp_root)
+        except:
+            pass
+        try:
+            shutil.rmtree(self.prefab_exp_root)
+        except:
+            pass
 
 # ------------------- Tests --------------
 
@@ -297,12 +304,12 @@ class TestExperiment(unittest.TestCase):
         self.assertTrue((first_row == my_series).all())
 
         exp.close()
-        
+
     #------------------------------------
     # test_saving_mem_items
     #-------------------
     
-    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_saving_mem_items(self):
         
         exp = ExperimentManager(self.exp_root)
@@ -310,27 +317,55 @@ class TestExperiment(unittest.TestCase):
         self.exp = exp
         
         my_dict = {'foo' : 10, 'bar' : 20}
+
+        # Get the current json representation of
+        # the experiment from disk:
+        with open(os.path.join(exp.root, 'experiment.json'), 'r') as fd:
+            exp_json = json.load(fd)
+            
+        try:
+            exp_json['my_dic']
+            self.fail("Should have received KeyError")
+        except KeyError:
+            # Good! Shouldn't have my_dict yet:
+            pass
+
+        # Set the in-memory dict value:
         exp['my_dict'] = my_dict
+        
+        # Make sure it took:
         self.assertDictEqual(exp['my_dict'], my_dict)
         
-        exp.save()
-        
+        # Get a second experiment manager pointing 
+        # to the same experiment dir tree (not a usual
+        # situation, but could happen):
         exp1 = ExperimentManager.load(self.exp_root)
+        
+        # The exp should still have my_dict in memory:
         self.assertDictEqual(exp['my_dict'], my_dict)
 
+        # Set the 'my_dict' key in exp1 to a new dict:
         animal_dict = {'horse' : 'big', 'mouse' : 'small'}
         exp1['my_dict'] = animal_dict
+        
+        # And *still*, the exp in-memory version would not
+        # have seen this change, b/c there is no automatic
+        # refresh from the json representation on disk: 
         self.assertDictEqual(exp['my_dict'], my_dict)
+        # But exp1 should see the assignment:
         self.assertDictEqual(exp1['my_dict'], animal_dict)
 
-        exp1.save()
+        # After reloading exp, the value should change.
+        # But we have to give the auto-save a chance first.
+        # This is not something regular users would need
+        # to do:
+        exp.auto_save_thread.join()
+        exp1.auto_save_thread.join()
 
-        # Without loading, exp still has my_dict:
-        self.assertDictEqual(exp['my_dict'], my_dict)
-        
-        # But after reloading exp, the value should change:
         exp = ExperimentManager.load(self.exp_root)
         self.assertDictEqual(exp['my_dict'], animal_dict)
+        
+        exp.auto_save_thread.cancel()
 
     #------------------------------------
     # test_abspath
@@ -347,9 +382,47 @@ class TestExperiment(unittest.TestCase):
 
         self.assertEqual(exp.abspath('first_dict', 'csv'), csv_file_path)
 
+    #------------------------------------
+    # test_AutoSaveThread
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_AutoSaveThread(self):
+        
+        self.was_called = False
+        thread = AutoSaveThread(self.set_true, 'mandatory is given', optional=20)
+        thread.start()
+        thread.join()
+        self.assertTrue(self.was_called)
+        self.assertEqual(self.mandatory, 'mandatory is given')
+        self.assertEqual(self.optional, 20)
+
 # -------------------- Utilities --------------
 
+
+    #------------------------------------
+    # set_true
+    #-------------------
+
+    def set_true(self, mandatory, optional=10):
+        '''
+        Used in testing AutoSaveThread
+        '''
+        self.mandatory = mandatory
+        self.optional  = optional
+        self.was_called = True
+
+    #------------------------------------
+    # make_csv_files
+    #-------------------
+
     def make_csv_files(self, dst_dir):
+        '''
+        Create example csv files
+        
+        :param dst_dir:
+        :type dst_dir:
+        '''
         csv1 = os.path.join(dst_dir, 'tiny_csv1.csv')
         csv2 = os.path.join(dst_dir, 'tiny_csv2.csv')
         
