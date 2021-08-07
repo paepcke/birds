@@ -361,6 +361,11 @@ class ExperimentManagerTest(unittest.TestCase):
         # to do:
         exp.auto_save_thread.join()
         exp1.auto_save_thread.join()
+        
+        #***********
+        #import time
+        #time.sleep(3)
+        #***********
 
         exp = ExperimentManager.load(self.exp_root)
         self.assertDictEqual(exp['my_dict'], animal_dict)

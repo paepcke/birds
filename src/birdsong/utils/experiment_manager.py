@@ -19,7 +19,6 @@ import os
 from pathlib import Path
 import shutil
 import threading
-import time
 
 import torch
 
@@ -891,6 +890,9 @@ class AutoSaveThread(threading.Thread):
     
     DEFAULT_DELAY = 2 # seconds
     
+    # Condition shared by all AutoSaveThread threads:
+    _CANCEL_CONDITION = threading.Condition()
+
     #------------------------------------
     # Constructor 
     #-------------------
@@ -925,7 +927,9 @@ class AutoSaveThread(threading.Thread):
     #-------------------
     
     def run(self):
-        time.sleep(self.time_delay)
+        self._CANCEL_CONDITION.acquire()
+        self._CANCEL_CONDITION.wait_for(self.cancelled, timeout=self.time_delay)
+        self._CANCEL_CONDITION.release()
         if not self.cancelled():
             self.call_target(*self.args, **self.kwargs)
 
@@ -935,7 +939,12 @@ class AutoSaveThread(threading.Thread):
     
     def cancel(self):
         self._canceled.set()
-        
+        try:
+            self._CANCEL_CONDITION.notify_all()
+        except RuntimeError:
+            # Nobody was waiting
+            pass
+
     #------------------------------------
     # cancelled 
     #-------------------
