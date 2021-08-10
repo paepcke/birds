@@ -42,6 +42,7 @@ setup(
                         'discrete-differentiator>=0.1',
                         'scikit-image>=0.18.1',
                         'skorch>=0.10.0',
+                        'ml-experiment-manager>=0.1.1',
                         ],
 
     tests_require    =[
