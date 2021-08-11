@@ -7,13 +7,13 @@ import random
 import shutil
 import warnings
 
+from experiment_manager.neural_net_config import NeuralNetConfig
 import librosa
 from matplotlib import MatplotlibDeprecationWarning
 from natsort import natsorted
 from torch import cuda
 import torch
 
-from birdsong.utils.dottable_config import DottableConfigParser
 import matplotlib.pyplot as plt
 import multiprocessing as mp
 import numpy as np
@@ -1020,7 +1020,7 @@ class Utils:
         if conf_file is None:
             return self.init_defaults()
         
-        config = DottableConfigParser(conf_file)
+        config = NeuralNetConfig(conf_file)
         
         if len(config.sections()) == 0:
             # Config file exists, but empty:
