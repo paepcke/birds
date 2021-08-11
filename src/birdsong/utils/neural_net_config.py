@@ -334,6 +334,12 @@ class NeuralNetConfig(DottableConfigParser):
         
         return is_eq
 
+    #------------------------------------
+    # __hash__
+    #-------------------
+    
+    def __hash__(self):
+        return(hash(repr(self)))
 
     #------------------------------------
     # __str__ 
