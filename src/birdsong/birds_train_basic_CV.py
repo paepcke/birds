@@ -12,11 +12,17 @@ import os
 import random
 import sys
 
+import numpy as np
+import pandas as pd
+
 from logging_service.logging_service import LoggingService
 from torch import cuda, unsqueeze
 from torch import nn
 from torch import optim
 import torch
+
+#from ml_experiment_manager.experiment_manager import ExperimentManager
+from experiment_manager.experiment_manager import ExperimentManager
 
 from birdsong.cross_validation_dataloader import CrossValidatingDataLoader, \
     EndOfSplit
@@ -24,14 +30,12 @@ from birdsong.nets import NetUtils
 from birdsong.result_tallying import ResultTally, ResultCollection
 from birdsong.rooted_image_dataset import SingleRootImageDataset
 from birdsong.samplers import SKFSampler
-from birdsong.utils.dottable_config import DottableConfigParser
 from birdsong.utils.learning_phase import LearningPhase
 from birdsong.utils.model_archive import ModelArchive
 from birdsong.utils.neural_net_config import NeuralNetConfig, ConfigError
 from birdsong.utils.tensorboard_plotter import SummaryWriterPlus, TensorBoardPlotter
 from birdsong.utils.utilities import FileUtils, CSVWriterCloseable  # , Differentiator
 from data_augmentation.utils import Utils
-import numpy as np
 
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
@@ -163,15 +167,19 @@ class BirdsBasicTrainerCV:
         
         self.class_names = self.train_loader.dataset.class_names()
         
-        log_dir      = os.path.join(self.curr_dir, 'runs')
-        raw_data_dir = os.path.join(self.curr_dir, 'runs_raw_results')
+        exp_dir  = os.path.join(self.curr_dir, f"experiment_{FileUtils.file_timestamp()}")
         
-        if self.save_logits:
-            self.log.info(f"Raw results of predictions and logits will be in {raw_data_dir}")
-        else:
-            self.log.info(f"Raw results of predictions will be in {raw_data_dir}")
+        self.exp = ExperimentManager(exp_dir)
+        self.log.info(f"Results will be under {self.exp.root}")
         
-        self.setup_tensorboard(log_dir, raw_data_dir=raw_data_dir)
+        # Save a copy of the configuration:
+        self.exp.save('hparams', self.config)
+        # Save the class names just as a regular
+        # persistent attr/val pair in the experiment
+        # manager:
+        self.exp['class_names'] = self.class_names
+        
+        self.setup_data_logging()
 
         # Log a few example spectrograms to tensorboard;
         # one per class:
@@ -192,6 +200,7 @@ class BirdsBasicTrainerCV:
             self.visualize_final_epoch_results(final_step)
         finally:
             self.close_tensorboard()
+            self.log.info(f"Experiment data under {self.exp.root}")
         
     #------------------------------------
     # train
@@ -294,13 +303,14 @@ class BirdsBasicTrainerCV:
                         # number:
                         if self.save_logits:
                             step_arr = np.atleast_2d(np.array([step_num]*self.batch_size,dtype=int)).T
-                            np.savetxt(self.logits_fd,
-                                       np.hstack((outputs.detach().numpy(), 
-                                                  np.atleast_2d(labels).T, 
-                                                  step_arr)),
-                                       fmt='%.4f',
-                                       delimiter=',')
-
+                            logits_fld_names = self.exp.col_names('logits')
+                            self.exp.save('logits',
+                                          pd.DataFrame(
+                                              np.hstack((outputs.detach().numpy(), 
+                                                         np.atleast_2d(labels).T, 
+                                                         step_arr)),
+                                              columns=logits_fld_names)
+                                         )
                         del images
                         del outputs
                         del labels
@@ -329,8 +339,8 @@ class BirdsBasicTrainerCV:
                         # does not throw us:
                         self.log.err(f"While viz for step {step_num} {repr(e)}; continuing training")
                         
-                    # Save model, keeping self.model_archive_size models: 
-                    self.model_archive.save_model(self.model, epoch)
+                    # Save model, keeping self.model_archive_size models:
+                    self.exp.save(f"model_{epoch}", self.model) 
     
                     self.log.debug(f"After eval: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
                     
@@ -524,14 +534,13 @@ class BirdsBasicTrainerCV:
         # If we are to write preds and labels to
         # .csv for later additional processing:
 
-        if self.csv_writer is not None:
-            self.csv_writer.writerow(
-                [step, 
-                 train_tally.preds,
-                 train_tally.labels,
-                 val_tally.preds,
-                 val_tally.labels
-                 ])
+        self.exp.save('predictions', 
+                      {'step'        : step, 
+                       'train_preds' : train_tally.preds,
+                       'train_labels': train_tally.labels,
+                       'val_preds'   : val_tally.preds,
+                       'val_labels'  : val_tally.labels
+                       })
 
         TensorBoardPlotter.visualize_step(result_coll,
                                            self.writer, 
@@ -770,66 +779,50 @@ class BirdsBasicTrainerCV:
         return len(self.classes)
 
     #------------------------------------
-    # setup_tensorboard 
+    # setup_data_logging 
     #-------------------
     
-    def setup_tensorboard(self, logdir, raw_data_dir=True):
+    def setup_data_logging(self):
         '''
         Initialize tensorboard. To easily compare experiments,
         use runs/exp1, runs/exp2, etc.
         
-        Method creates the dir if needed.
+        Additionally, sets self.experiment for logging
+        predictions and logits (if requested in config file) 
         
-        Additionally, sets self.csv_writer and self.logits_fd
-        to None, or open CSV writer/file-descriptor, respectively, 
-        depending on the value of raw_data_dir, see create_csv_writer()
-        
-        :param logdir: root for tensorboard events
-        :type logdir: str
-        :param raw_data_dir: path to where raw data is to be saved 
-            during training; default is <proj_root>/src/birdsong/runs_raw_results
-        :type raw_data_dir: str
-        :param save_logits: whether or not to save all the logits and 
-            corresponding predictions during training.
-        :type save_logits: bool
         '''
         
-        if not os.path.isdir(logdir):
-            os.makedirs(logdir)
 
-        # For storing train/val preds/labels
-        # for every epoch. Used to create charts
-        # after run is finished:
-        self.csv_writer, self.logits_fd = self.create_csv_writer(raw_data_dir)
+        tb_path = self.exp.save(f"tensorboard_{FileUtils.file_timestamp()}")
+        self.log.info(f"Tensorboard data will be written to {tb_path}")
         
-        # Write the (ordered by ID!) class names
-        # into file 'class_names':
-        with open(os.path.join(raw_data_dir, 'class_names.txt'), 'w') as fd:
-            fd.write(f"{self.class_names}\n")
-            
-        
-        # Place to store intermediate models:
-        self.model_archive = \
-            self.create_model_archive(self.config, 
-                                      self.num_classes
-                                      )
-
         # Use SummaryWriterPlus to avoid confusing
         # directory creations when calling add_hparams()
         # on the writer:
         
-        self.writer = SummaryWriterPlus(log_dir=logdir)
+        self.writer = SummaryWriterPlus(log_dir=tb_path)
+
+        # Start experiment saving of predictions:
+        header   = ['step', 'train_preds', 'train_labels', 'val_preds', 'val_labels']
+        self.exp.save('predictions', header=header)
         
+        if self.save_logits:
+            header = self.class_names.copy()
+            header.extend(['label', 'step'])
+        self.exp.save('logits', header=header)
+
         # Intermediate storage for train and val results:
         self.results = ResultCollection()
 
-        self.log.info(f"To view tensorboard charts: in shell: tensorboard --logdir {logdir}; then browser: localhost:6006")
+        self.log.info(f"To view tensorboard charts: in shell: tensorboard --logdir {tb_path}; then browser: localhost:6006")
 
     #------------------------------------
     # create_csv_writer 
     #-------------------
     
-    def create_csv_writer(self, raw_data_dir):
+    #*******************
+    def create_csv_writerDISABLED(self, raw_data_dir):
+    #*******************        
         '''
         Create a csv_writer that will fill a csv
         file during training/validation as follows:
@@ -1004,20 +997,17 @@ class BirdsBasicTrainerCV:
     #-------------------
     
     def close_tensorboard(self):
-        if self.csv_writer is not None:
-            try:
-                self.csv_writer.close()
-            except Exception as e:
-                self.log.warn(f"Could not close csv file: {repr(e)}")
+        try:
+            self.exp.close()
+        except Exception as e:
+            self.log.warn(f"Could not close experiment instance: {repr(e)}")
+
         try:
             self.writer.close()
         except AttributeError:
-            self.log.warn("Method close_tensorboard() called before setup_tensorboard()?")
+            self.log.warn("Method close_tensorboard() called before setup_data_logging()?")
         except Exception as e:
             raise RuntimeError(f"Problem closing tensorboard: {repr(e)}") from e
-        
-        if self.logits_fd is not None:
-            self.logits_fd.close()
 
     #------------------------------------
     # get_optimizer 
