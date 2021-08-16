@@ -6,7 +6,7 @@ Created on Jun 7, 2021
 import unittest
 
 from birdsong.utils.species_name_converter import SpeciesNameConverter, \
-    DIRECTION
+    DIRECTION, ConversionError
 
 
 TEST_ALL = True
@@ -32,7 +32,7 @@ class SpeciesNameConverterTester(unittest.TestCase):
         'shwc','snhu','sofl','srta','stsa','vase',
         'wcpa','wtdo','yceu','yofl'
         ]
-
+    
     @classmethod
     def setUpClass(cls):
         cls.cnv = SpeciesNameConverter()
@@ -78,6 +78,31 @@ class SpeciesNameConverterTester(unittest.TestCase):
             self.assertEqual(len(key), 4)
             self.assertGreater(len(val), 6)
             break
+
+        # Test four to five for species without song/call split:
+        for five_code in self.cnv.ALL_OCCURRING_SPECIES:
+            four_code = self.cnv[five_code, DIRECTION.FIVE_FOUR]
+            self.assertEqual(four_code, five_code[:4])
+            
+        # Going four to five should yield 4-code with 'G' appended,
+        # BUT: all species that must be split into call/song should
+        # generate a ConversionError:
+
+        for five_code in self.cnv.ALL_OCCURRING_SPECIES:
+            # All should work, as tested above...
+            four_code = self.cnv[five_code, DIRECTION.FIVE_FOUR]
+            self.assertEqual(len(four_code), 4)
+            # but:
+            try:
+                looked_up_five_code = self.cnv[four_code, DIRECTION.FOUR_FIVE]
+                self.assertEqual(looked_up_five_code, five_code)
+            except ConversionError as e:
+                if isinstance(e, ConversionError) and four_code in self.cnv.SPLIT_SPECIES:
+                    # Great, wanted the exception:
+                    pass
+                else:
+                    raise e
+
 
     #------------------------------------
     # test_from_six

@@ -24,6 +24,8 @@ as a library.
             ---> 'PIOSEN'
 
 '''
+class ConversionError(Exception):
+    pass
 
 class DIRECTION(Enum):
     '''
@@ -33,23 +35,27 @@ class DIRECTION(Enum):
     name, or in reverse. The conversions are
     implemented as lookup functions.
     The following table shows the conversions 
-    and responsible methods.
+    and responsible methods that accomplish the
+    corresponding conversions:
 
-	            4-Letter            6-Letter              SCINAME
+	            4-Letter            6-Letter              SCINAME            5-Letter
 	
-	4-Letter        X            cls.four_to_six       cls.four_to_sci
-	6-Letter  cls.six_to_four         X                cls.six_to_sci
-	SCINAME   cls.sci_to_four    cls.sci_to_six              X
+	4-Letter        X            cls.four_to_six       cls.four_to_sci     cls.four_to_five
+	6-Letter  cls.six_to_four         X                cls.six_to_sci            X
+	SCINAME   cls.sci_to_four    cls.sci_to_six              X                   X
+	5-Letter  cls.five_to_four        X                      X                   X
 
     The values of this enumerations are indices into
     the above dict table:
     '''
-    FOUR_SIX = (0,1)
-    FOUR_SCI = (0,2)
-    SIX_FOUR = (1,0)
-    SIX_SCI  = (1,2)
-    SCI_FOUR = (2,0)
-    SCI_SIX  = (2,1)
+    FOUR_SIX  = (0,1)
+    FOUR_SCI  = (0,2)
+    SIX_FOUR  = (1,0)
+    SIX_SCI   = (1,2)
+    SCI_FOUR  = (2,0)
+    SCI_SIX   = (2,1)
+    FOUR_FIVE = (0,3)
+    FIVE_FOUR = (3,0)
 
 class SpeciesNameConverter:
     '''
@@ -80,13 +86,41 @@ class SpeciesNameConverter:
     initialized = False
     
     # List of species that are of interest:
-    FOCUS_SPECIES = ['BANA', 'BBFL','BCMM','BHPA','BHTA',
-                     'BTSA','CCRO','CFPA','CMTO','CTFL',
-                     'DCFL','FBAR','GCFL','GHCH','GHTA',
-                     'GRHE','LEGR','NOIS','OBNT','OLPI',
-                     'PATY','RBWR','SHWC','SOFL','SPTA',
-                     'SQCU','STTA','TRGN','WCPA','WTDO',
-                     'WTRO','YCEU'] 
+    FOCUS_SPECIES = ['BANAG','BBFLG','BCMMG','BHPAG','BHTAG',
+                     'BTSAS','BTSAC','CCROS','CCROS','CCROC','CFPAG','CMTOG','CTFLG',
+                     'DCFLS','DCFLC','FBARG','GCFLG','GHCHG','GHTAG',
+                     'GRHEG','LEGRG','NOISG','OBNTS','OBNTC','OLPIG',
+                     'PATYG','RBWRG','SHWCG','SOFLG','SPTAG',
+                     'SQCUS','SQCUC','STTAG','TRGNS','TRGNC','WCPAG','WTDOG',
+                     'WTROS','WTROC','YCEUG']
+
+    # All occurring species, i.e. heard by humans in
+    # study area:
+
+    ALL_OCCURRING_SPECIES = [
+        'BAFFG','BANAG','BBFLG','BBSBG','BCMMG',
+        'BEHUG','BGTAG','BHPAG','BHTAG','BLGDG',
+        'BLPAG','BSSPG','BTSAC','BTSAS','BWSWG',
+        'CCROC','CCROS','CFPAG','CMTOG','CTFLG',
+        'DCFLC','DCFLS','EAMEG','ERFBG','FBARG',
+        'GCFLG','GCYTG','GHCHG','GHTAG','GNWRG',
+        'GRASG','GRHEG','GRHOG','GRKIG','GRTIG',
+        'GTGRG','GUANG','HOWPG','HOWRG','LEGRG',
+        'NOISG','OBNTC','OBNTS','OLPIG','PATYG',
+        'PIFLG','PLAVG','RBPSG','RBWRC','RBWRS',
+        'RCSPG','RCWPG','RGDOG','RLPAG','ROHAG',
+        'RTHUG','SCPIG','SHWCG','SNHUG','SOFLG',
+        'SPTAG','SQCUC','SQCUS','SRTAG','STCUG',
+        'STSAG','STTAG','TRGNC','TRGNS','TRKIG',
+        'VASEG','WCPAG','WTDOG','WTROC','WTROS',
+        'YBELG','YCEUG','YOFLG']
+    
+
+    SPLIT_SPECIES = ['BTSA','CCRO','DCFL','OBNT','RBWR','SQCU','TRGN','WTRO']
+    
+    # 4-letter species that human labelers have
+    # used as 'species'. They will be translated as 'NOISG':
+    NOISE_SPECIES = ['unk1', 'UNK1']
 
     #------------------------------------
     # Constructor
@@ -99,8 +133,15 @@ class SpeciesNameConverter:
         and save it in a class variable. Needs 
         to be called only once per session.
         
-        Also adds translations that are not in 
+        Adds translations that are not in 
         the table.
+        
+        Adds a 5-letter code for each species to
+        accommodate Song (S), Call (C), and General (G) distinctions.
+        By default every 5-letter code has 'G' appended
+        to the 4-letter code to indicate no distinction. Then
+        that last letter is modified for the species we need
+        to split by song and call.
         '''
         
         # Already initialized:
@@ -226,12 +267,42 @@ class SpeciesNameConverter:
         # tuples that index into the following table. Thereby
         # the proper conversion dict can be retrieved:
         cls.conv_func_matrix = [
-            [     None,         cls.four_to_six,     cls.four_to_sci],
-            [cls.six_to_four,         None,          cls.six_to_sci ],
-            [cls.sci_to_four,   cls.sci_to_six,          None       ],
+            [     None,         cls.four_to_six,     cls.four_to_sci,   cls.four_to_five ],
+            [cls.six_to_four,         None,          cls.six_to_sci ,        None        ],
+            [cls.sci_to_four,   cls.sci_to_six,          None       ,        None        ],
+            [cls.five_to_four,        None,              None       ,        None        ],
             ]
         
         cls.initialized = True
+
+    #------------------------------------
+    # song_call_species 
+    #-------------------
+    
+    @classmethod
+    def song_call_species(cls):
+        '''
+        Return a list of 4-letter codes for species
+        that distinguish between Song and Call. The
+        list is derived from cls.FOCUS_SPECIES: included 
+        are the 4-letter versions of focal species that 
+        do not end with 'G' for 'General'
+
+        :return list of 4-letter species that require
+            distinction between call and song.
+        :rtype [str]
+        '''
+        # List is computed once, and cached:
+        try:
+            return cls.song_call_species_cache
+        except:
+            # Never derived the song/call species,
+            # so no cache:
+            cls.song_call_species_cache = [species[:4]
+                                           for species in cls.FOCUS_SPECIES
+                                           if species[4] in ['S', 'C']
+                                           ]
+            return cls.song_call_species_cache
 
     #------------------------------------
     # __getitem__
@@ -274,9 +345,14 @@ class SpeciesNameConverter:
 
         if len(nm_given) == 4 and \
             direction not in [DIRECTION.FOUR_SCI,
-                              DIRECTION.FOUR_SIX
+                              DIRECTION.FOUR_SIX,
+                              DIRECTION.FOUR_FIVE
                               ]:
-            raise ValueError(f"For 4-letter codes, direction must be 6-letter or scienfic name")
+            raise ValueError(f"For 4-letter codes, direction must be 5-letter, 6-letter, or scienfic name")
+        elif len(nm_given) == 5 and \
+            direction not in [DIRECTION.FIVE_FOUR,
+                              ]:
+            raise ValueError(f"For 5-letter codes, direction must be 4-letter")
         elif len(nm_given) == 6 and \
             direction not in [DIRECTION.SIX_FOUR,
                               DIRECTION.SIX_SCI
@@ -304,7 +380,7 @@ class SpeciesNameConverter:
     @classmethod
     def four_to_six(cls, nm):
         return cls.four_to_six_dict[nm]
-    
+
     #------------------------------------
     # four_to_sci
     #-------------------
@@ -312,7 +388,56 @@ class SpeciesNameConverter:
     @classmethod
     def four_to_sci(cls, nm):
         return cls.four_to_sci_dict[nm]
+
+    #------------------------------------
+    # four_to_five
+    #-------------------
     
+    @classmethod
+    def four_to_five(cls, nm):
+        '''
+        Returns the 5-letter code for the given
+        4-letter code for species that are not 
+        split into call and song. For those, the
+        method raises a ConversionError, b/c the
+        mapping is 1-to-2, and therefore not decidable
+        in isolation.
+
+        :param nm: 4-letter code to convert.
+        :type nm: str
+        :return 5-letter code, which is always the
+            'G' (general) version for non-split species
+        :raises ConversionError if asked to convert one
+            of the species that are split into Call/Song
+        
+        '''
+        if nm in cls.SPLIT_SPECIES:
+            raise ConversionError(f"Four-letter code {nm} is split into Song and Call")
+        elif nm in cls.NOISE_SPECIES or nm == 'NOIS':
+            # An annoying invented name by the human
+            # labeler that is exactly 4 letters, but
+            # is not a real species. Or the legitimate,
+            # but still non-existing NOIS:
+            return 'NOISG'
+        return nm+'G'
+
+    #------------------------------------
+    # five_to_four
+    #-------------------
+    
+    @classmethod
+    def five_to_four(cls, nm):
+        '''
+        Requires no lookup; just chop off the
+        S/C/G from nm
+        
+        :param nm: 5-letter code to convert
+        :type nm: str
+        :return 4-letter code
+        :rtype str
+        '''
+        return nm[:4]
+
     #------------------------------------
     # six_to_four
     #-------------------

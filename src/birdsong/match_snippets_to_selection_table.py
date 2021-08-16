@@ -117,7 +117,7 @@ class SnippetSelectionTableMapper:
     TASK_QUEUE_SIZE=1000
     '''Number of snippet matching tasks to submit before waiting for some to be finished'''
 
-    NOISE_LABELS = ['NOIS', 'noise', 'no bird', 'NO_BIRD', 'MOTORCYCLE', 'SHOUTING']
+    NOISE_LABELS = ['NOIS', 'noise', 'no bird', 'NO_BIRD', 'MOTORCYCLE', 'SHOUTING', 'unk1']
 
     #------------------------------------
     # Constructor 
@@ -379,7 +379,7 @@ class SnippetSelectionTableMapper:
         in the associated selection table. If a match is found,
         the snippet's metadata is augmented with the species label,
         and placed into the outdir. Else the snippet is labeled as
-        'NOIS' and also placed into the outdir.
+        'NOISG' and also placed into the outdir.
         
         When the snippet is processed, task_queue.task_done() is called,
         and the next item is taken from the queue.
@@ -416,6 +416,7 @@ class SnippetSelectionTableMapper:
                 except KeyError:
                     # Haven't encountered this sel table yet:
                     #self.log.info(f"Reading selection table {sel_tbl_path}...")
+                    # Selections will be in 5-letter code:
                     selections = Utils.read_raven_selection_table(sel_tbl_path)
                     selections_all_tables[sel_tbl_path] = selections
     
@@ -506,9 +507,9 @@ class SnippetSelectionTableMapper:
             # This snippet_path was not involved in
             # any of the human-created selection
             # rectangles.
-            metadata['species'] = 'NOIS'
+            metadata['species'] = 'NOISG'
             self.save_updated_snippet(outdir, 
-                                      'NOIS', 
+                                      'NOISG', 
                                       Path(snippet_path).name, # without parents 
                                       spectro_arr, 
                                       metadata)
@@ -526,10 +527,10 @@ class SnippetSelectionTableMapper:
         # will be used as part of file names.
         # So ensure that they have no spaces.
         # Also: convert the "no bird" entries to
-        # 'NOIS':
+        # 'NOISG':
         
         if species in self.NOISE_LABELS:
-            species = 'NOIS'
+            species = 'NOISG'
         else:
             species = species.replace(' ', '_')
         new_multiple_species = []

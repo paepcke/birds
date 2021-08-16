@@ -162,7 +162,7 @@ class BirdsTrainBasic:
         log_dir      = os.path.join(self.curr_dir, 'runs')
         raw_data_dir = os.path.join(self.curr_dir, 'runs_raw_results')
         
-        self.setup_tensorboard(log_dir, raw_data_dir=raw_data_dir)
+        self.setup_data_logging(log_dir, raw_data_dir=raw_data_dir)
 
         # Log a few example spectrograms to tensorboard;
         # one per class:
@@ -599,10 +599,10 @@ class BirdsTrainBasic:
         return len(self.classes)
 
     #------------------------------------
-    # setup_tensorboard 
+    # setup_data_logging 
     #-------------------
     
-    def setup_tensorboard(self, logdir, raw_data_dir=True):
+    def setup_data_logging(self, logdir, raw_data_dir=True):
         '''
         Initialize tensorboard. To easily compare experiments,
         use runs/exp1, runs/exp2, etc.
@@ -787,7 +787,7 @@ class BirdsTrainBasic:
         try:
             self.writer.close()
         except AttributeError:
-            self.log.warn("Method close_tensorboard() called before setup_tensorboard()?")
+            self.log.warn("Method close_tensorboard() called before setup_data_logging()?")
         except Exception as e:
             raise RuntimeError(f"Problem closing tensorboard: {repr(e)}") from e
 

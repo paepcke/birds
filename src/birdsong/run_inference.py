@@ -26,11 +26,12 @@ import os
 from pathlib import Path
 import sys
 
+from experiment_manager.experiment_manager import ExperimentManager, Datatype
 from logging_service.logging_service import LoggingService
 from sklearn.metrics import accuracy_score, balanced_accuracy_score
 from sklearn.metrics import f1_score
 from sklearn.metrics import precision_score, recall_score, classification_report 
-from skorch import NeuralNet
+import torch
 from torch.utils.data.dataloader import DataLoader
 
 from birdsong.ml_plotting.classification_charts import ClassificationPlotter
@@ -40,15 +41,15 @@ from birdsong.rooted_image_dataset import SingleRootImageDataset
 from birdsong.utils.github_table_maker import GithubTableMaker
 from birdsong.utils.learning_phase import LearningPhase
 from birdsong.utils.tensorboard_plotter import SummaryWriterPlus
-from birdsong.utils.utilities import FileUtils, CSVWriterCloseable
+from birdsong.utils.utilities import FileUtils
 from data_augmentation.utils import Utils
 import numpy as np
 import pandas as pd
-import torch
-from result_analysis.charting import Charter, CELL_LABELING, CurveSpecification
+from result_analysis.charting import Charter, CurveSpecification
+from skorch import NeuralNet
+
+
 #import traceback as tb
-
-
 class Inferencer:
     '''
     classdocs
@@ -63,10 +64,10 @@ class Inferencer:
     #-------------------
 
     def __init__(self, 
-                 model_paths, 
+                 exp_path,
                  samples_path,
+                 model_names, 
                  batch_size=1, 
-                 labels_path=None,
                  gpu_ids=0,
                  sampling=None,
                  unittesting=False
@@ -75,11 +76,6 @@ class Inferencer:
         Given the path to a trained model,
         and the path to the root of a set
         of data, compute predictions.
-        
-        If labels_path is None, the subdirectory
-        names between the samples_path root,
-        and the samples themselves are used as
-        the ground truth labels.
         
         By default: run batches of size 1,
         because we always have drop_last set
@@ -90,10 +86,12 @@ class Inferencer:
         not inferencing on up to batch_size - 1 
         samples is OK
         
-        :param model_paths:
-        :type model_paths:
+        :param exp_path: path to ExperimentManager experiment root
+        :type exp_path: src
         :param samples_path:
         :type samples_path:
+        :param model_names: list of models to try
+        :type model_names: [str]
         :param batch_size:
         :type batch_size:
         :param labels_path:
@@ -111,9 +109,18 @@ class Inferencer:
         if unittesting:
             return
 
-        self.model_paths  = model_paths
+        self.exp = ExperimentManager(exp_path)
+
+        # Check that all requested models exist:
+        for model_name in model_names:
+            # Remove any extension, such as .pth that
+            # the caller may have included
+            model_key = Path(model_name).stem
+            if not os.path.exists(self.exp.abspath(model_key, Datatype.model)):
+                raise FileNotFoundError(f"Model {model_key} does not exist")
+
+        self.model_names  = model_names
         self.samples_path = samples_path
-        self.labels_path  = labels_path
         self.gpu_ids      = gpu_ids if type(gpu_ids) == list else [gpu_ids]
         self.sampling     = sampling
         if batch_size is not None:
@@ -129,12 +136,9 @@ class Inferencer:
     # prep_model_inference 
     #-------------------
 
-    def prep_model_inference(self, model_path):
+    def prep_model_inference(self, model_name):
         '''
-        1. Parses model_path into its components, and 
-            creates a dict: self.model_props, which 
-            contains the network type, grayscale or not,
-            whether pretrained, etc.
+        1. Loads experiment configuration from self.exp
         2. Creates self.csv_writer to write results measures
             into csv files. The destination file is determined
             as follows:
@@ -150,45 +154,24 @@ class Inferencer:
             inference by this instance of Inferencer
         :type model_path: str
         '''
-        
-        self.model_path = model_path
-        model_fname = os.path.basename(model_path)
-        
-        # Extract model properties
-        # from the model filename:
-        self.model_props  = FileUtils.parse_filename(model_fname)
-        
-        csv_results_root = os.path.join(self.curr_dir, 'runs_raw_inferences')
-        #self.csv_dir = os.path.join(csv_results_root, f"inf_csv_results_{uuid.uuid4().hex}")
-        ts = FileUtils.file_timestamp()
-        self.csv_dir = os.path.join(csv_results_root, f"inf_csv_results_{ts}")
-        os.makedirs(self.csv_dir, exist_ok=True)
 
-        csv_file_nm = FileUtils.construct_filename(
-            self.model_props,
-            prefix='inf',
-            suffix='.csv', 
-            incl_date=True)
-        csv_path = os.path.join(self.csv_dir, csv_file_nm)
+        # Get the experiment configuration used
+        # for training:
+        self.config = self.exp.read('hparams', Datatype.hparams)
         
-        self.csv_writer = CSVWriterCloseable(csv_path)
-        
-        ts = FileUtils.file_timestamp()
-        tensorboard_root = os.path.join(self.curr_dir, 'runs_inferences')
-        tensorboard_dest = os.path.join(tensorboard_root,
-                                        f"inf_results_{ts}"
-                                        )
-                                        #f"inf_results_{ts}{uuid.uuid4().hex}")
-        os.makedirs(tensorboard_dest, exist_ok=True)
-        
-        self.writer = SummaryWriterPlus(log_dir=tensorboard_dest)
+        # Add a separate tensorboard directory 
+        # for testing this model:
+        tb_name = f"tensorboardTesting_{model_name}"
+        self.exp.save(tb_name)
+        tb_dir = self.exp.abspath(tb_name, Datatype.tensorboard)
+        self.writer = SummaryWriterPlus(log_dir=tb_dir)
         
         dataset = SingleRootImageDataset(
             self.samples_path,
-            to_grayscale=self.model_props['to_grayscale'],
+            to_grayscale=self.config.getboolean('Training', 'to_grayscale'),
             percentage=self.sampling
             )
-        
+
         # Make reproducible:
         Utils.set_seed(42)
         self.loader = DataLoader(dataset,
@@ -196,13 +179,37 @@ class Inferencer:
                                  shuffle=True, 
                                  drop_last=True 
                                  )
-        self.class_names = dataset.class_names()
+        # During training, the training software leaves
+        # the human-readable labels with which the model
+        # was trained in two places as in the experiment manager
+        # dict as key 'class_label_names' and as a header-only
+        # csv file under the key 'class_names':
+
+        self.class_names = self.exp['class_label_names']
         self.num_classes = len(self.class_names)
         
-        csv_data_header = self.class_names + ['label']
-        self.csv_writer.writerow(csv_data_header)
-         
+        # Build translation dict between the numeric
+        # class IDs built by the SingleRootImageDataset from
+        # the samples directory hierarchy, and the (possibly)
+        # super set of the class IDs over which the model was
+        # trained. Setting unknown_species_class forces a
+        # ValueError if any species is in the samples, but not
+        # in the classes over which the model was trained. 
+        # To tolerate this situation, set unknown_species_class to 'NOIS'
+        # so that such classes will be mapped to the NOIS model 
+        # class ID species:
+        self.sample_cid_to_model_cid,  _unmatched_sample_classes = \
+            self._build_class_id_xlation(dataset.class_names(), 
+                                         self.class_names,
+                                         unknown_species_class=None
+                                         )
 
+        csv_data_header = self.class_names + ['label']
+        try:
+            self.exp.save('predictionsTesting', header=csv_data_header)
+        except ValueError:
+            # File may already exist, which is fine:
+            pass
 
         # Get the right type of model,
         # Don't bother getting it pretrained,
@@ -210,15 +217,16 @@ class Inferencer:
         # the weights:
         
         self.model = NetUtils.get_net(
-            self.model_props['net_name'],
+            self.config.Training.net_name,
             num_classes=self.num_classes,
             pretrained=False,
             freeze=0,
-            to_grayscale=self.model_props['to_grayscale']
+            to_grayscale=self.config.Training.getboolean('to_grayscale', True)
             )
 
-        self.log.info(f"Tensorboard info will be written to {tensorboard_dest}")
-        self.log.info(f"Result measurement CSV file(s) will be written to {csv_path}")
+        self.log.info(f"Tensorboard info will be written to {tb_dir}")
+        predictions_path = self.exp.abspath('predictionsTesting', Datatype.tabular)
+        self.log.info(f"Result measurement CSV file(s) will be written to {predictions_path}")
         
     #------------------------------------
     # __call__ 
@@ -248,12 +256,16 @@ class Inferencer:
         # self.gpu_ids == [0,4], and three models:
         #    [(gpu0, model0) (gpu4, model1), (gpu0, model3)]
         
-        repeats = int(np.ceil(len(self.model_paths) / len(self.gpu_ids)))
-        gpu_model_pairings = list(zip(self.gpu_ids*repeats, self.model_paths))
+        repeats = int(np.ceil(len(self.model_names) / len(self.gpu_ids)))
+        gpu_model_pairings = list(zip(self.gpu_ids*repeats, self.model_names))
         
         #************* No parallelism for debugging
-        result_collection = self(gpu_model_pairings[0])
-        return result_collection
+        result_collections = {}
+        for gpu_model_pairing in gpu_model_pairings:
+            result_collection = self(gpu_model_pairings[0])
+            _gpu, model_name = gpu_model_pairing
+            result_collections[model_name] = result_collection
+        return result_collections
         #************* END No parallelism for debugging
         
         with Pool(len(self.gpu_ids)) as inf_pool:
@@ -285,18 +297,27 @@ class Inferencer:
             )
 
         sko_net.initialize()  # This is important!
-        sko_net.load_params(f_params=self.model_path)
+        # Init the model from the requested model's
+        # state dict. The path to that data is available
+        # from the experiment instance:
+        sko_net.load_params(self.exp.abspath(self.model_path, Datatype.model))
 
         res_coll = ResultCollection()
         display_counter = 0
         # For keeping track what's been written to disk:
         start_idx = 0
         for batch_num, (X,y) in enumerate(self.loader):
+            # Convert the list of truth labels from the
+            # dataloaders class IDs to the corresponding
+            # model class IDs:
+            y_model = [torch.tensor(self.sample_cid_to_model_cid[t.item])
+                       for t in y
+                       ]
             outputs = sko_net.predict(X)
             tally = ResultTally(batch_num,
                                 LearningPhase.TESTING,
                                 torch.tensor(outputs),
-                                y,  # Labels
+                                y_model,  # Labels
                                 torch.tensor(0),  # Don't track loss
                                 self.class_names,
                                 self.batch_size
@@ -311,8 +332,8 @@ class Inferencer:
                 display_counter += 1
 
             #************
-            #if batch_num >= 7:
-            #    break
+            if batch_num >= 7:
+                break
             #************
         try:
             self.report_results(res_coll)
@@ -1072,6 +1093,82 @@ class Inferencer:
         df = pd.DataFrame([col_vals], columns=col_names)
         return df
 
+    #------------------------------------
+    # _build_class_id_xlation
+    #-------------------
+    
+    def _build_class_id_xlation(self, 
+                                sample_class_names, 
+                                model_class_names,
+                                unknown_species_class=None
+                                ):
+        '''
+        
+        Create dict to map model class IDs to sample class IDs.
+        
+        Models are training on a set C_m of target classes.
+        Those classes each have names, whose position in a list,
+        when sorted alphabetically, are their model class IDs. Call
+        those the "model space class IDs".
+        
+        However, a given set to samples from a different source
+        than the training set (e.g. field recordings) will not necessarily
+        contain all samples of all C_m. They may have their own sample 
+        subset of classes C_s. When a pytorch dataset/dataloader yield
+        truth values, they will be numeric IDs derived from the list C_s.
+        Those are the "sample space class IDs". 
+        
+        This method creates a dict that maps C_s class IDs to C_m class
+        IDs. The translation is created by matching the class names in 
+        both spaces, and thereby finding the class IDs that correspond
+        to each other.
+
+        :param sample_class_names: list of classes as derived by the
+            pytorch dataset/dataloader from the samples directory.
+            Sorted alphabetically so as to reveal corresponding sample space
+            class IDs
+        :type sample_class_names: [str]
+        :param model_class_names: list of all class names known at 
+            training time, sorted by class ID. This means alpha sorted
+        :type model_class_names: [str]
+        :param unknown_species_class: name of model space class to which
+            to assign species found in sample space, but not in model space
+            If None, raise ValueError if such a mismatch occurs. By convention,
+            NOIS is the species used for unknown (stands for 'NOISE')
+        :type unknown_species_class: {None | str}
+        :return a tuple whose first element is a dictionary mapping numeric sample 
+            space class IDs to numeric model space class IDs. The second
+            element is a list of sample space class names that were not
+            found in model space, and were therefore assigned to the unknown_species_class 
+        :rtype ({int : int},[str])
+        '''
+        sample_class_id_to_model_class_id = {}
+        unmatched_sample_classes = []
+        
+        # Find the model space class ID of the unknown_species_class,
+        # if unknown_species_class was provided:
+        if unknown_species_class is not None:
+            try:
+                model_space_unknown_id = model_class_names.index(unknown_species_class)
+            except ValueError:
+                raise ValueError(f"Model class names do not include the 'no species match' {unknown_species_class}; specify the 'unknown' class in unknown_species_class") 
+        
+        for sample_class_id, sample_class_name in enumerate(sample_class_names):
+            try:
+                model_class_id = model_class_names.index(sample_class_name)
+                sample_class_id_to_model_class_id[sample_class_id] = model_class_id
+            except ValueError as _e:
+                # No model space class corresponds to the 
+                # sample space class. If unknown_species_class was
+                # provided, use it, also bubble the error up:
+                if unknown_species_class is not None:
+                    sample_class_id_to_model_class_id[sample_class_id] = model_space_unknown_id
+                    unmatched_sample_classes.append(sample_class_name)
+                else:
+                    raise ValueError(f"Sample target class {sample_class_name} not in model classes; specify unknown_species_class to fix.")
+
+        return sample_class_id_to_model_class_id, unmatched_sample_classes
+
 # ------------------------ Main ------------
 if __name__ == '__main__':
     
@@ -1080,9 +1177,6 @@ if __name__ == '__main__':
                                      description="Run inference on given model"
                                      )
     
-    parser.add_argument('-l', '--labels_path',
-                        help='optional path to labels for use in measures calcs; default: no measures',
-                        default=None)
     parser.add_argument('-b', '--batch_size',
                         type=int,
                         help='batch size to use; default: 1',
@@ -1099,16 +1193,21 @@ if __name__ == '__main__':
                         help='optional: only use given percentage of samples in each class; default: all',
                         default=None 
                         )
-    
-    parser.add_argument('--model_paths',
+
+    parser.add_argument('--model_name',
                         required=True,
                         nargs='+',
-                        help='path(s) to the saved Pytorch model(s); repeatable, if more than one, composites of results from all models. ',
+                        help='file name(s) from among the saved Pytorch model(s); repeatable, if more than one, composites of results from all models. ',
                         default=None)
-    parser.add_argument('--samples_path',
-                        required=True,
+    
+    parser.add_argument('experiment_path',
+                        help="path to an ExperimentManager's experiment root",
+                        default=None)
+        
+    parser.add_argument('samples_path',
                         help='path to samples to run through model',
                         default=None)
+
 
     args = parser.parse_args();
 
@@ -1116,55 +1215,18 @@ if __name__ == '__main__':
         args.device = [args.device]
     
     # Expand Unix wildcards, tilde, and env 
-    # vars in the model paths:
+    # vars in the experiment_path
     
-    if args.model_paths is None:
-        print("Must provide --model_paths: path(s) to models over which to inference")
-        sys.exit(1)
+    exp_path = os.path.expanduser(os.path.expandvars(args.experiment_path))
     
-    if type(args.model_paths) != list:
-        model_paths_raw = [args.model_paths]
+    if type(args.model_name) != list:
+        model_names = [args.model_name]
     else:
-        model_paths_raw = args.model_paths
+        model_names = args.model_name
         
-    model_paths = []
-    # For each model path, determine whether 
-    # it is a dir, has tilde or $HOME, etc.
-    # and create a flat list of full paths
-    # to models:
-    
-    for fname in model_paths_raw:
-        # If fname is a file name (i.e. in our context has an extension):
-        if len(Path(fname).suffix) > 0:
-            # Resolve tilde and env vars:
-            model_paths.append(os.path.expanduser(os.path.expandvars(fname)))
-            continue
-        # fname is a directory:
-        for root, dirs, files in os.walk(fname):
-            # For files in this dir, expand them,...
-            expanded_fnames = [os.path.expanduser(os.path.expandvars(one_fname))
-                                for one_fname
-                                in files
-                                ]
-            #... and prepend the root before adding
-            # as a full model path:
-            model_paths.extend([os.path.join(root, fname)
-                                for fname in
-                                expanded_fnames
-                                ])
-
-    # Ensure the all model paths exist:
-    for model_path in model_paths:
-        if not os.path.exists(model_path):
-            print(f"Cannot find model {model_path}")
-            sys.exit(1)
-
-    # Same for samples path, though we only allow
-    # one of those paths.
-    if args.samples_path is None:
-        print(f"Must provide --samples_path: directory with subdirs of spectrogram snippets")
-        sys.exit(1)
+    # Ensure samples path is OK:
     samples_path = os.path.expanduser(os.path.expandvars(args.samples_path))
+    
     if not os.path.exists(samples_path):
         print(f"Samples path {samples_path} does not exist")
         sys.exit(1)
@@ -1202,9 +1264,9 @@ if __name__ == '__main__':
         # No need to walk deeper:
         break
 
-    inferencer = Inferencer(model_paths,
+    inferencer = Inferencer(exp_path,
                             samples_path,
-                            labels_path=None,
+                            model_names,
                             gpu_ids=args.device if type(args.device) == list else [args.device],
                             sampling=args.sampling,
                             batch_size=args.batch_size

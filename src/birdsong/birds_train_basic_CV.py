@@ -177,7 +177,10 @@ class BirdsBasicTrainerCV:
         # Save the class names just as a regular
         # persistent attr/val pair in the experiment
         # manager:
-        self.exp['class_names'] = self.class_names
+        self.exp['class_label_names'] = self.class_names
+        # But also more visibly for posterity
+        # as a csv file with just a header:
+        self.exp.save('class_names', header=self.class_names)
         
         self.setup_data_logging()
 

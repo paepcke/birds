@@ -19,6 +19,7 @@ import multiprocessing as mp
 import numpy as np
 import pandas as pd
 
+from birdsong.utils.species_name_converter import SpeciesNameConverter, DIRECTION, ConversionError
 
 #-------------------------- Enum for Policy When Output Files Exist -----------
 class WhenAlreadyDone(Enum):
@@ -921,6 +922,12 @@ class Utils:
             sel_dict['End Time (s)'] = float(sel_dict['End Time (s)'])
             sel_dict['Low Freq (Hz)'] = float(sel_dict['Low Freq (Hz)'])
             sel_dict['High Freq (Hz)'] = float(sel_dict['High Freq (Hz)'])
+            
+            # Make sure there is a 'type' column,
+            # the one that says 'call', 'song,' etc.:
+            if 'type' not in list(sel_dict.keys()):
+                sel_dict['type'] = ''
+            
             # Make the four-letter species names upper case:
             try:
                 sel_dict['species'] = sel_dict['species'].upper()
@@ -941,7 +948,8 @@ class Utils:
             # overlapping vocalizations into
             # a (possibly empty) list of strings:
             try:
-                sel_dict['mix'] = [] if len(sel_dict['mix']) == 0 else sel_dict['mix'].split(',')
+                sel_dict['mix'] = [] if (sel_dict['mix'] is None or len(sel_dict['mix']) == 0) \
+                                     else sel_dict['mix'].split(',')
             except KeyError:
                 sel_dict['mix'] = []
             # Clean out spurious white space:
@@ -949,22 +957,77 @@ class Utils:
                                for mix_list_entry
                                in sel_dict['mix']
                                ]
-
-            # Make sure there is a 'type' column,
-            # the one that says 'call', 'song,' etc.:
-            if 'type' not in list(sel_dict.keys()):
-                sel_dict['type'] = ''
+            # Convert all mix 4-letter codes into 5-letter codes:
+            new_mix = []
+            for mix_species in sel_dict['mix']:
+                new_mix.append(cls._four_to_five_from_sel_row_dict(mix_species, sel_dict, tbl_path))
+            sel_dict['mix'] = new_mix
+            
+            # Same for the single (4-letter) species:
+            try:
+                sel_dict['species'] = cls._four_to_five_from_sel_row_dict(sel_dict['species'], 
+                                                                          sel_dict, 
+                                                                          tbl_path)
+            except ValueError:
+                # Likely the species was entered as something 
+                # like 'Motorcycle' or 'thunder' or 'NO BIRD':
+                sel_dict['species'] = 'NOISG'
 
             sel_dict['time_interval'] = Interval(sel_dict['Begin Time (s)'],
                                                  sel_dict['End Time (s)'])
             sel_dict['freq_interval'] = Interval(sel_dict['Low Freq (Hz)'],
                                                  sel_dict['High Freq (Hz)'])
+
             
         # Make sure the list is sorted by 
         # ascending start time:
         sel_dict_list_sorted = natsorted(sel_dict_list, 
                                          key=lambda row_dict: row_dict['Begin Time (s)'])
         return sel_dict_list_sorted
+
+    #------------------------------------
+    # _four_to_five_from_sel_row_dict
+    #-------------------
+    
+    @classmethod
+    def _four_to_five_from_sel_row_dict(cls, four_code, sel_row_dict, tbl_path):
+        '''
+        Given a 4-letter species code, use SpeciesNameConverter to
+        a convert to 5-letter coded. That conversion failing with a
+        ConversionError means that the species needs to be split into
+        song/call. In that case, checks whether the 'Type' entry in the
+        given sel_row_dict contains 'SONG' or 'CALL'. If so, accomplish
+        the code conversion by adding 'S' or 'C'. Else raise a ConversionError.
+        
+        The sel_row_dict is a dict containing all info from one row
+        in one selection table. The tbl_path is used to provide good error
+        messages.
+
+        :param four_code: 4-letter species code to convert to 5-letter code
+        :type four_code: str
+        :param sel_row_dict: map generated from one row in one Raven selection table
+        :type sel_row_dict: {str : {str | [str]}}
+        :param tbl_path: full path to selection table from which 
+            sel_row_dict was generated
+        :type tbl_path: str
+        :return 5-letter species code
+        :rtype str
+        :raise ConversionError if 5-letter code unknown for 4-letter code,
+            or when given species must be split into SONG/CALL, but the
+            'Type' entry in sel_row_dict does not contain 'SONG' or 'CALL.
+        '''
+        try: 
+            five_code = SpeciesNameConverter()[four_code, DIRECTION.FOUR_FIVE]
+        except ConversionError:
+            # Species is split by song/call, so get the type:
+            species_type = sel_row_dict['type'].upper()
+            if species_type not in ['SONG', 'CALL']:
+                raise ConversionError(f"Selection table {tbl_path}, selection# {sel_row_dict['Selection']} mix species {four_code} needs song/call info")
+            # We have the required info:
+            five_code = four_code + ('S' if species_type == 'SONG' else 'C')
+
+        return five_code
+
 
     #------------------------------------
     # read_configuration 

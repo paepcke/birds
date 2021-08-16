@@ -5,6 +5,7 @@ Created on May 13, 2021
 '''
 from _collections import OrderedDict
 from _collections_abc import Iterable
+import csv
 import os
 from pathlib import Path
 import shutil
@@ -72,169 +73,169 @@ the species.
 
 snippet_matching_truth = \
 OrderedDict([('AM01_20190711_170000_sw-start0_wcpa',
-              {'species': 'wcpa',
+              {'species': 'WCPA',
                'start_time': 0.0,
                'end_time': 5.944272445820434}),
              ('AM01_20190711_170000_sw-start2_wcpa',
-              {'species': 'wcpa',
+              {'species': 'WCPA',
                'start_time': 1.996904024767802,
                'end_time': 7.9411764705882355}),
              ('AM01_20190711_170000_sw-start4_wcpa',
-              {'species': 'wcpa',
+              {'species': 'WCPA',
                'start_time': 3.993808049535604,
                'end_time': 9.938080495356038}),
              ('AM01_20190711_170000_sw-start6',
-              {'species': 'noise',
+              {'species': 'NOISG',
                'start_time': 5.9907120743034055,
                'end_time': 11.93498452012384}),
              ('AM01_20190711_170000_sw-start8',
-              {'species': 'noise',
+              {'species': 'NOISG',
                'start_time': 7.987616099071208,
                'end_time': 13.931888544891642}),
              ('AM01_20190711_170000_sw-start10',
-              {'species': 'noise',
+              {'species': 'NOISG',
                'start_time': 9.98452012383901,
                'end_time': 15.928792569659443}),
              ('AM01_20190711_170000_sw-start12',
-              {'species': 'noise',
+              {'species': 'NOISG',
                'start_time': 11.981424148606811,
                'end_time': 17.925696594427244}),
              ('AM01_20190711_170000_sw-start14',
-              {'species': 'noise',
+              {'species': 'NOISG',
                'start_time': 13.978328173374614,
                'end_time': 19.922600619195048}),
              ('AM01_20190711_170000_sw-start16',
-              {'species': 'noise',
+              {'species': 'NOISG',
                'start_time': 15.975232198142416,
                'end_time': 21.91950464396285}),
              ('AM01_20190711_170000_sw-start18',
-              {'species': 'noise',
+              {'species': 'NOISG',
                'start_time': 17.97213622291022,
                'end_time': 23.916408668730654}),
              ('AM01_20190711_170000_sw-start20',
-              {'species': 'noise',
+              {'species': 'NOISG',
                'start_time': 19.96904024767802,
                'end_time': 25.913312693498455}),
              ('AM01_20190711_170000_sw-start22_shwc',
-              {'species': 'shwc',
+              {'species': 'SHWC',
                'start_time': 21.96594427244582,
                'end_time': 27.910216718266255}),
              ('AM01_20190711_170000_sw-start24_shwc',
-              {'species': 'shwc',
+              {'species': 'SHWC',
                'start_time': 23.962848297213622,
                'end_time': 29.907120743034056}),
              ('AM01_20190711_170000_sw-start26_shwc',
-              {'species': 'shwc',
+              {'species': 'SHWC',
                'start_time': 25.959752321981426,
                'end_time': 31.90402476780186}),
              ('AM01_20190711_170000_sw-start26_unk1',
-              {'species': 'unk1',
+              {'species': 'NOISG',
                'start_time': 25.959752321981426,
                'end_time': 31.90402476780186}),
              ('AM01_20190711_170000_sw-start28',
-              {'species': 'shwc',
+              {'species': 'SHWC',
                'start_time': 27.956656346749227,
                'end_time': 33.90092879256966}),
              ('AM01_20190711_170000_sw-start28_unk1',
-              {'species': 'unk1',
+              {'species': 'NOISG',
                'start_time': 27.956656346749227,
                'end_time': 33.90092879256966}),
              ('AM01_20190711_170000_sw-start30_wcpa',
-              {'species': 'wcpa',
+              {'species': 'WCPA',
                'start_time': 29.953560371517028,
                'end_time': 35.89783281733746}),
              ('AM01_20190711_170000_sw-start30_shwc',
-              {'species': 'shwc',
+              {'species': 'SHWC',
                'start_time': 29.953560371517028,
                'end_time': 35.89783281733746}),
              ('AM01_20190711_170000_sw-start30_unk1',
-              {'species': 'unk1',
+              {'species': 'NOISG',
                'start_time': 29.953560371517028,
                'end_time': 35.89783281733746}),
              ('AM01_20190711_170000_sw-start32',
-              {'species': 'unk1',
+              {'species': 'NOISG',
                'start_time': 31.950464396284833,
                'end_time': 37.89473684210527}),
              ('AM01_20190711_170000_sw-start34',
-              {'species': 'noise',
+              {'species': 'NOISG',
                'start_time': 33.94736842105263,
                'end_time': 39.89164086687306}),
              ('AM01_20190711_170000_sw-start36',
-              {'species': 'noise',
+              {'species': 'NOISG',
                'start_time': 35.94427244582044,
                'end_time': 41.88854489164087}),
              ('AM01_20190711_170000_sw-start38',
-              {'species': 'noise',
+              {'species': 'NOISG',
                'start_time': 37.94117647058824,
                'end_time': 43.88544891640867}),
              ('AM01_20190711_170000_sw-start40',
-              {'species': 'noise',
+              {'species': 'NOISG',
                'start_time': 39.93808049535604,
                'end_time': 45.88235294117647}),
              ('AM01_20190711_170000_sw-start42',
-              {'species': 'noise',
+              {'species': 'NOISG',
                'start_time': 41.93498452012384,
                'end_time': 47.87925696594427}),
              ('AM01_20190711_170000_sw-start44',
-              {'species': 'noise',
+              {'species': 'NOISG',
                'start_time': 43.93188854489164,
                'end_time': 49.87616099071207}),
              ('AM01_20190711_170000_sw-start46',
-              {'species': 'noise',
+              {'species': 'NOISG',
                'start_time': 45.92879256965944,
                'end_time': 51.873065015479874}),
              ('AM01_20190711_170000_sw-start48',
-              {'species': 'noise',
+              {'species': 'NOISG',
                'start_time': 47.925696594427244,
                'end_time': 53.869969040247675}),
              ('AM01_20190711_170000_sw-start50',
-              {'species': 'noise',
+              {'species': 'NOISG',
                'start_time': 49.92260061919505,
                'end_time': 55.86687306501548}),
              ('AM01_20190711_170000_sw-start52',
-              {'species': 'noise',
+              {'species': 'NOISG',
                'start_time': 51.91950464396285,
                'end_time': 57.863777089783284}),
              ('AM01_20190711_170000_sw-start54',
-              {'species': 'wcpa',
+              {'species': 'WCPA',
                'start_time': 53.916408668730654,
                'end_time': 59.860681114551085})])
 
 '''
 The above in summary:
-'species': 'wcpa',
-'species': 'wcpa',
-'species': 'wcpa',
-'species': 'wcpa',
+'species': 'WCPA',
+'species': 'WCPA',
+'species': 'WCPA',
+'species': 'WCPA',
 
-'species': 'shwc',
-'species': 'shwc',
-'species': 'shwc',
-'species': 'shwc',
+'species': 'SHWC',
+'species': 'SHWC',
+'species': 'SHWC',
+'species': 'SHWC',
 
-'species': 'noise',
-'species': 'noise',
-'species': 'noise',
-'species': 'noise',
-'species': 'noise',
-'species': 'noise',
-'species': 'noise',
-'species': 'noise',
-'species': 'noise',
-'species': 'noise',
-'species': 'noise',
-'species': 'noise',
-'species': 'noise',
-'species': 'noise',
-'species': 'noise',
-'species': 'noise',
-'species': 'noise',
-'species': 'noise',
+'species': 'NOISG',
+'species': 'NOISG',
+'species': 'NOISG',
+'species': 'NOISG',
+'species': 'NOISG',
+'species': 'NOISG',
+'species': 'NOISG',
+'species': 'NOISG',
+'species': 'NOISG',
+'species': 'NOISG',
+'species': 'NOISG',
+'species': 'NOISG',
+'species': 'NOISG',
+'species': 'NOISG',
+'species': 'NOISG',
+'species': 'NOISG',
+'species': 'NOISG',
+'species': 'NOISG',
 
-'species': 'unk1',
-'species': 'unk1',
-'species': 'unk1',
-'species': 'unk1'
+'species': 'NOISG',
+'species': 'NOISG',
+'species': 'NOISG',
+'species': 'NOISG'
 '''
 
 class TestSnippetMatcher(unittest.TestCase):
@@ -548,7 +549,7 @@ class TestSnippetMatcher(unittest.TestCase):
     # test_whole_thing
     #-------------------
 
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #*********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_whole_thing(self):
         # Integration test:
 
@@ -585,6 +586,54 @@ class TestSnippetMatcher(unittest.TestCase):
     
     def check_whole_thing_outcome(self, root_dir):
 
+
+        # Read the start and end times from the
+        # test selection tables. Build a dict mapping
+        # each species to a list of (start_time, end_time)
+        # pairs. We'll compare that later to the metadata
+        # in the snippets that were found by the mapper:
+        
+        truth_start_end_times = {}
+        for sel_tbl_fname in os.listdir(self.sel_tbl_dir):
+            sel_tbl_path = os.path.join(self.sel_tbl_dir, sel_tbl_fname)
+            with open(sel_tbl_path, 'r') as fd:
+                reader = csv.DictReader(fd, delimiter='\t')
+                for sel_entry in reader:
+                    # Combine the 'species' column entry
+                    # with the comma separated list of 'mix' 
+                    # col entries into one list:
+                    all_species       = [sel_entry['species']]
+                    mix_species_dirty = sel_entry['mix'].split(',')
+                    # Now have for mix_species like ['BCMM', '', 'btsa',...]
+                    # The empty strings are from sel tbl entries
+                    # that do not have a mix of sounds:
+                    # Remove empty strings:
+                    mix_species = [species.strip() 
+                                   for species 
+                                   in mix_species_dirty 
+                                   if len(species) > 0]
+                    
+                    all_species.extend(mix_species)
+
+                    # Turn any "this is noise" species entries
+                    # used by human labelers into 'NOIS':
+                    all_species_canonical = []
+                    for species in all_species:
+                        all_species_canonical.append(self.canonicalize_species(species))
+                            
+                    # Now have like ['BCMMG', 'NOISG', ...] for
+                    # the current selection table entry. They all
+                    # share one begin/end time pair:
+                    start_time = float(sel_entry['Begin Time (s)'])
+                    end_time   = float(sel_entry['End Time (s)'])
+                    # For each canonicalized species, make 
+                    # truth dict addition:
+                    for species in all_species_canonical:
+                        try:
+                            truth_start_end_times[species].append((start_time, end_time))
+                        except KeyError:
+                            truth_start_end_times[species] = [(start_time, end_time)]
+
         # Set of species represented in the 
         # selections:
         all_species = {truth_dict['species']
@@ -595,11 +644,24 @@ class TestSnippetMatcher(unittest.TestCase):
         # First: does the given dir include one subdir
         # for each species in table snippet_matching_truth?
 
-        subdirs = os.listdir(root_dir)
-        self.assertEqual(len(all_species), len(subdirs))
-        
-        self.assertSetEqual(set(subdirs), all_species)
+#************************
+        # subdirs = os.listdir(root_dir)
+        # self.assertEqual(len(all_species), len(subdirs))
+        #
+        # self.assertSetEqual(set(subdirs), all_species)
+#************************
 
+        # Get set of directories created for
+        # snippets: one for each species:
+
+        subdirs = set(os.listdir(root_dir))
+        
+        # The subdirectories and the keys (i.e. distinct species)
+        # in the truth dict should now match:
+        self.assertListEqual(sorted(subdirs), 
+                             sorted(list(truth_start_end_times.keys()))
+                             )
+        
         # Get a list of metadata from all snippets:
         # We will receive:
         #    [(<absolute-snippet-path>, <metadata>),
@@ -607,6 +669,7 @@ class TestSnippetMatcher(unittest.TestCase):
         #       ...
         #    ]
         all_snip_metadata = list(PNGMetadataManipulator.metadata_list(root_dir))
+        
         # Get dict
         #   {<snippet-file-name> : <metadata>,
         #    <snippet-file-name> : <metadata>,
@@ -617,85 +680,167 @@ class TestSnippetMatcher(unittest.TestCase):
                         in all_snip_metadata
                         }
         
-        noise_start_times = [md['start_time(secs)']
-                             for md
-                             in snip_md_dict.values()
-                             if md['species'] == 'noise'
-                             ]
-        noise_end_times = [md['end_time(secs)']
-                             for md
-                             in snip_md_dict.values()
-                             if md['species'] == 'noise'
-                             ]
-        
-        shwc_start_times = [md['start_time(secs)']
-                             for md
-                             in snip_md_dict.values()
-                             if md['species'] == 'shwc'
-                             ]
-        shwc_end_times = [md['end_time(secs)']
-                             for md
-                             in snip_md_dict.values()
-                             if md['species'] == 'shwc'
-                             ]
-        
-        wcpa_start_times = [md['start_time(secs)']
-                             for md
-                             in snip_md_dict.values()
-                             if md['species'] == 'wcpa'
-                             ]
-        wcpa_end_times = [md['end_time(secs)']
-                             for md
-                             in snip_md_dict.values()
-                             if md['species'] == 'wcpa'
-                             ]
+        # Get set of all species in the snippet
+        # metadata:
+        snip_species_set = set([d['species'] 
+                                for d in 
+                                list(snip_md_dict.values())]
+                                )
 
-        unk1_start_times = [md['start_time(secs)']
-                             for md
-                             in snip_md_dict.values()
-                             if md['species'] == 'unk1'
-                             ]
-        unk1_end_times = [md['end_time(secs)']
-                             for md
-                             in snip_md_dict.values()
-                             if md['species'] == 'unk1'
-                             ]
+        # Should have created one subdirectory of root_dir
+        # for each distinct species in the snippets metadata:
+        self.assertSetEqual(subdirs, snip_species_set)
+
+        # For each species get a list of start and
+        # end times as recorded in the snippet metadata:
         
-        for _fname, md in PNGMetadataManipulator.metadata_list(root_dir):
+        matched_start_end_times = {}
+        for md in snip_md_dict.values():
             species = md['species']
-            if species == 'noise':
-                self.assertIn(md['start_time(secs)'], noise_start_times)
-                self.assertIn(md['end_time(secs)'], noise_end_times)
-            elif species == 'shwc':
-                self.assertIn(md['start_time(secs)'], shwc_start_times)
-                self.assertIn(md['end_time(secs)'], shwc_end_times)
-            elif species == 'wcpa':
-                self.assertIn(md['start_time(secs)'], wcpa_start_times)
-                self.assertIn(md['end_time(secs)'], wcpa_end_times)
-            elif species == 'unk1':
-                self.assertIn(md['start_time(secs)'], unk1_start_times)
-                self.assertIn(md['end_time(secs)'], unk1_end_times)
+            try:
+                time_interval = (float(md['start_time(secs)']),
+                                 float(md['end_time(secs)'])
+                                 )
+                matched_start_end_times[species].append(time_interval)
+            except KeyError:
+                matched_start_end_times[species] = [(time_interval)]
+        
+        # Every matched snippet's start and end times must
+        # lie within the time interval of one of the truth
+        # time intervals of the same species:
+        
+        for species, matched_start_end_tuples_list in matched_start_end_times.items():
+            # Have like: 'NOISG', [(0.123, 2.453), (30.654, 54.123), ...]
+            # Get time intervals list of the same species
+            # from the truth:
+            truth_time_intervals = truth_start_end_times[species]
+            
+            # Ensure that every snippet's start and also end time
+            # is enclosed in one of the selection table entries' 
+            # start/end intervals (i.e. the truth):
+            for start_time, end_time in matched_start_end_tuples_list:
+                containment = self.isInAnyTimeInterval(start_time, truth_time_intervals) or \
+                              self.isInAnyTimeInterval(end_time, truth_time_intervals)
+                if containment:
+                    continue
+                straddling = self.straddled_by_any((start_time, end_time), truth_time_intervals)
+                if straddling:
+                    continue
+                # Neither containment nor straddling:
+                self.fail(f"Neither {start_time} nor {end_time} in {truth_time_intervals} for {species}")
+                 
+    #------------------------------------
+    # is_in_time_interval
+    #-------------------
+    
+    def is_in_time_interval(self, time_val, time_interval):
+        '''
+        Test whether time_val (in seconds) is >= to lower bound
+        of time_interval and also < upper bound of time_interval. Both
+        values in the time_interval tuple are floats (in seconds) 
 
-        num_noise_snips = len(os.listdir(os.path.join(root_dir, 'noise')))
-        self.assertEqual(num_noise_snips, 18)
-        self.assertEqual(len(noise_start_times), 18)
-        self.assertEqual(len(noise_end_times), 18)
-        
-        num_shwc_snips = len(os.listdir(os.path.join(root_dir, 'shwc')))
-        self.assertEqual(num_shwc_snips, 4)
-        self.assertEqual(len(shwc_start_times), 4)
-        self.assertEqual(len(shwc_end_times), 4)
-        
-        num_wcpa_snips = len(os.listdir(os.path.join(root_dir, 'wcpa')))
-        self.assertEqual(num_wcpa_snips, 4)
-        self.assertEqual(len(wcpa_start_times), 4)
-        self.assertEqual(len(wcpa_end_times), 4)
+        :param time_val: time value to check
+        :type time_val: float
+        :param time_interval: lower and upper bounds of 
+            range to check
+        :type time_interval: (float)
+        :return True if time_val is in the interval, else False
+        :rtype bool
+        '''
+        low_bound, high_bound = time_interval
+        if time_val < low_bound or time_val >= high_bound:
+            return False
+        else:
+            return True
 
-        num_unk1_snips = len(os.listdir(os.path.join(root_dir, 'unk1')))
-        self.assertEqual(num_unk1_snips, 4)
-        self.assertEqual(len(unk1_start_times), 4)
-        self.assertEqual(len(unk1_end_times), 4)
+    #------------------------------------
+    # straddles_time_interval
+    #-------------------
+    
+    def straddles_time_interval(self, time_interval_to_examine, time_interval):
+        low_bound, high_bound = time_interval
+        low_candidate, high_candidate = time_interval_to_examine
+        straddles = low_candidate > low_bound and high_candidate <= high_bound
+        return straddles
+
+    #------------------------------------
+    # straddled_by_any
+    #-------------------
+    
+    def straddled_by_any(self, interval_to_examine, time_interval_list):
+        '''
+        Return True if any of intervals in time_interval_list
+        completely straddle the interval_to_examine
+         
+        :param interval_to_examine: time interval looking for 
+            containment in any of time_interval_list
+        :type interval_to_examine: (float, float)
+        :param time_interval_list: list of time intervals to check
+        :type time_interval_list: ((float, float))
+        '''
+        for interval in time_interval_list:
+            if self.straddles_time_interval(interval, interval_to_examine):
+                return True
+        return False
+
+    #------------------------------------
+    # isInAnyTimeInterval
+    #-------------------
+    
+    def isInAnyTimeInterval(self, time_val, time_interval_list):
+        '''
+        Raise AssertionError if time_val is in none of the
+        list of time interval 2-tuples given in time_interval_list.
+        All times are in fractional seconds
         
+        :param time_val: value to test
+        :type time_val: float
+        :param time_interval_list: list of 2-tuple time bounds
+        :type time_interval_list: [(float)]
+        :return returns False if time_val is not contained in
+            any of the intervals, else returns True
+        :rtype bool
+        '''
+        for interval in time_interval_list:
+            if self.is_in_time_interval(time_val, interval):
+                return True
+        # None of the intervals worked:
+        return False
+
+
+    #------------------------------------
+    # canonicalize_species
+    #-------------------
+    
+    def canonicalize_species(self, species):
+        '''
+        Given a 4-letter coded species, make it upper case,
+        and convert to a 5-letter code. That conversion
+        follows the type column in our test selection tables.
+        
+        :param species: 4-letter species code to canonicalize
+        :type species: str
+        :return: 5-letter equivalent, with BTSA and CCRO converted
+            as Song, TRGN converted as Call, and all others converted
+            as General
+        :rtype str 
+        '''
+        
+        if species in SnippetSelectionTableMapper.NOISE_LABELS:
+            species = 'NOIS'
+        species = species.upper()
+        # Every species is 'general', 
+        # except for two of them:
+        
+        if species in ['BTSA', 'CCRO']:
+            species = species + 'S'
+        elif species == 'TRGN':
+            species = species + 'C'
+        else:
+            species = species.upper()+'G'
+
+        return species
+
 
 # ---------------------- Main ------------
 if __name__ == "__main__":

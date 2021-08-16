@@ -66,11 +66,15 @@ class Charter:
         
         if actions is None:
             return
-        
+
+        errors = []
         for action in actions:
             try:
                 if type(action) == VizConfMatrixReq:
-                    cm = Charter.read_conf_matrix_from_file(action.path)
+                    if action.from_raw_results:
+                        cm = Charter.confusion_matrices_from_raw_results(action.path, normalize=True)
+                    else:
+                        cm = Charter.read_conf_matrix_from_file(action.path)
                     fig = self.fig_from_conf_matrix(cm,
                                                     supertitle=action.supertitle,
                                                     title=action.title,
@@ -80,8 +84,18 @@ class Charter:
                     
                 elif action == 'pr_curves':
                     pass #data = 0 #********************
-            except Exception as _e:
-                pass
+            except Exception as e:
+                # Don't have one error kill all actions, but take note:
+                errors.append({action:  e})
+            finally:
+                if len(errors) > 0:
+                    for err_dict in errors:
+                        action, err = list(err_dict.items())[0]
+                        print(f"Error during action {action.name}({action.path}): {repr(err)}") 
+                # Re-raise the first of the errors:
+                first_err = list(errors[0].values())[0]
+                #****raise RuntimeError(f"Action error (1 of {len(errors)})") from first_err
+                raise first_err
 
     #------------------------------------
     # visualize_testing_result
@@ -824,8 +838,7 @@ class Charter:
     def confusion_matrices_from_raw_results(cls, fname, class_names=None, normalize=False):
         '''
         Read csv prediction/truth files created by the training 
-        process. The files are by default written to
-        src/birdsong/runs_raw_results.
+        process. The files are by default written to <experiment_root>/csv_files/predictions.csv
         
         File format:
         
@@ -837,10 +850,10 @@ class Charter:
         Target cass names: if provided, the value should be an 
         array of strings with human-readable class names, or a list 
         of integers that correspond to target classes. If None, the
-        method looks for a file class_names.txt in fname's directory,
+        method looks for a file class_names.csv in fname's directory,
         where it expects to find a single row like:
         
-           ['DYSMEN_S', 'HENLES_S', 'audi', 'bmw', 'diving_gear', 'office_supplies']
+           'DYSMEN_S', 'HENLES_S', 'audi', 'bmw', 'diving_gear', 'office_supplies'
             
         If that file is unavailable, and class_names is None: ValueError.
         
@@ -873,22 +886,14 @@ class Charter:
         if class_names is None:
             # Get class names from file, if available:
             class_name_file = os.path.join(os.path.dirname(fname), 
-                                           'class_names.txt')
+                                           'class_names.csv')
             if os.path.exists(class_name_file):
                 with open(class_name_file, 'r') as fd:
-                    class_names_str = fd.read()
+                    class_names = csv.DictReader(fd).fieldnames
                 # Now have something like:
                 #
-                #   "['DYSMEN_S', 'HENLES_S', 'audi', 'bmw', 'diving_gear', 'office_supplies']\n"
+                #   ['DYSMEN_S', 'HENLES_S', 'audi', 'bmw', 'diving_gear', 'office_supplies']
                 #
-                # Use eval to retrieve the list, but 
-                # do it safely to avoid attacks by content
-                # placed in the class_names.txt file:
-    
-                class_names = eval(class_names_str,
-                   {"__builtins__":None},    # No built-ins at all
-                   {}                        # No additional func
-                   )
             else:
                 raise ValueError("Must provide class names as argument, or in class_name.txt file")
 
@@ -896,8 +901,9 @@ class Charter:
         # Get one row with step, train-preds, train_labels,
         # val_preds, and val_labels at a time:
         with open(fname, 'r') as data_fd:
-            reader = csv.DictReader(data_fd)
-            for outcome_dict in reader:
+            # Skip the header row:
+            data_fd.readline()
+            for line in data_fd:
                 # Safely turn string formatted
                 # lists into lists of ints:
                 train_labels = eval(outcome_dict['train_labels'],
@@ -1413,33 +1419,69 @@ class CurveSpecification(dict):
 class VizRequest:
     
     def __init__(self, path):
-        if not os.path.exists(path):
-            raise FileNotFoundError(f"File {path} does not exist")
+        if path is None or not os.path.exists(path) or not os.path.isfile(path):
+            raise FileNotFoundError(f"Path must be to a an existing csv, not {path}")
         
         self.path = path
         
 class VizConfMatrixReq(VizRequest):
+    '''
+    Request for a confusion matrix (CM) visualization. 
+    Two cases: the CM data already exist in a csv file,
+    or a predictions.csv file in the csv_files subdirectory
+    of an ExperimentManager's dir tree provides:
+    
+        step,train_preds,train_labels,val_preds,val_labels
+        
+    The second case is signaled by setting from_raw_results
+    to True (the default).
+    '''
     
     def __init__(self, 
-                 path, 
+                 path,
+                 from_raw_results=True,
                  write_in_fields=CELL_LABELING.DIAGONAL, 
                  supertitle='Confusion Matrix', 
                  title=''):
+        '''
+
+        :param path: csv file from which to retrieve confusion matrix
+            related data
+        :type path: str
+        :param from_raw_results: if True, csv in path is assumed to hold
+            data headed [step,train_preds,train_labels,val_preds,val_labels].
+            Else data is assumed to be the Pandas export of an already
+            computed CM 
+        :type from_raw_results: bool
+        :param write_in_fields: how to handle populating the CM cells
+            with text. See enum CELL_LABELING
+        :type write_in_fields: CELL_LABELING
+        :param supertitle: Title above the CM figure
+        :type supertitle: str
+        :param title: subtitle
+        :type title: str
+        '''
         
         super().__init__(path)
         
         if type(write_in_fields) != CELL_LABELING:
             raise TypeError(f"Confusion matrix cell label handling specification must be a CELL_LABELING, not {type(write_in_fields)}")
+
+        self.name = "ConfMatrixVizRequest"
+
         self.write_in_fields = write_in_fields
         
         self.supertitle = str(supertitle)
         self.title = str(title)
+        self.from_raw_results = from_raw_results
         
 class VizPRCurvesReq(VizRequest):
     def __init__(self, 
                  path
                  ): 
         super().__init__(path)
+        
+        self.name = "PRCurvesVizRequest"
 
 # --------------- Main -------------
 
@@ -1459,9 +1501,14 @@ if __name__ == '__main__':
                         help='title just above the main chart of the figure',
                         default=None
                         )
+
+    parser.add_argument('--make_conf_matrix',
+                        help='heatmap confusion matrix; value: path to raw predictions.csv file',
+                        default=None
+                        )
     
     parser.add_argument('--conf_matrix',
-                        help='heatmap confusion matrix; value: path to csv file',
+                        help='heatmap confusion matrix; value: path to *existing matrix values* csv file',
                         default=None
                         )
     parser.add_argument('--pr_curves',
@@ -1474,10 +1521,19 @@ if __name__ == '__main__':
     actions = []
     if args.conf_matrix is not None:
         actions.append(VizConfMatrixReq(path=args.conf_matrix,
+                                        from_raw_results=False,
                                         supertitle=args.supertitle,
                                         title=args.title,
                                         write_in_fields=CELL_LABELING.DIAGONAL
                                         ))
+    if args.make_conf_matrix is not None:
+        actions.append(VizConfMatrixReq(path=args.make_conf_matrix,
+                                        from_raw_results=True,
+                                        supertitle=args.supertitle,
+                                        title=args.title,
+                                        write_in_fields=CELL_LABELING.DIAGONAL
+                                        ))
+        
     if args.pr_curves is not None:
         actions.append(VizPRCurvesReq(path=args.pr_curves))
         

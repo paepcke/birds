@@ -210,7 +210,82 @@ class InferenceTester(unittest.TestCase):
         for i, true_crv in enumerate([crv_specs[0], crv_specs[3], crv_specs[3]]):
             self.assertEqual(crvs[i], true_crv)
 
+    #------------------------------------
+    # test_build_class_id_xlation
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_build_class_id_xlation(self):
+        # This instance won't do anything,
+        # due to unittesting == True:
+        inferencer = Inferencer(
+            None, # experiment root path
+            self.samples_path,
+            None, # model names
+            batch_size=16,
+            unittesting=True
+            )
+        # All class names for which samples exist to 
+        # be inferenced. Note that 'foo3' has 
+        # class I of 1 due to its position in the list:
         
+        sample_class_names = ['foo1', 'foo3']
+        
+        # And the classes the model was trained on.
+        # Here, 'foo3' is ID 2: 
+        model_class_names  = ['foo1', 'foo2', 'foo3']
+        
+        xlate_dict, unknown_assignment = inferencer._build_class_id_xlation(sample_class_names, 
+                                                                            model_class_names
+                                                                            )
+        expected = {0 : 0,
+                    1 : 2,
+                    } 
+        self.assertDictEqual(xlate_dict, expected)
+        self.assertTrue(len(unknown_assignment) == 0)
+        
+        # Test samples having a class that model was
+        # not trained for:
+        model_class_names  = ['foo1', 'foo2', 'NOIS']
+
+        xlate_dict, unknown_assignment = inferencer._build_class_id_xlation(sample_class_names, 
+                                                                            model_class_names,
+                                                                            unknown_species_class='NOIS'
+                                                                            )
+        expected = {0 : 0,
+                    1 : 2,
+                    } 
+        self.assertDictEqual(xlate_dict, expected)
+        self.assertTrue(unknown_assignment == ['foo3'])
+
+        # Move the 'unknown' bucket to a different position
+        # in model space:
+        
+        model_class_names  = ['ABCD', 'foo1', 'foo2', 'foo4']
+
+        # Model class names does not include the 
+        # 'NOIS' class. Expect a value error:
+        try:
+            xlate_dict, unknown_assignment = inferencer._build_class_id_xlation(sample_class_names, 
+                                                                                model_class_names
+                                                                                )
+            self.fail("Should have received ValueError b/c NOIS not in model space")
+        except ValueError:
+            # Great, got the expected exception
+            pass
+
+        
+        xlate_dict, unknown_assignment = inferencer._build_class_id_xlation(sample_class_names, 
+                                                                            model_class_names,
+                                                                            unknown_species_class='ABCD'
+                                                                            )
+        expected = {0 : 1,
+                    1 : 0,
+                    } 
+        self.assertDictEqual(xlate_dict, expected)
+        self.assertTrue(unknown_assignment == ['foo3'])
+
+
 # -------------------- Utilities --------------
 
     #------------------------------------

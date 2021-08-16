@@ -11,6 +11,8 @@ import pandas as pd
 from data_augmentation.utils import AugmentationGoals
 from data_augmentation.utils import Utils, Interval
 
+from birdsong.utils.species_name_converter import ConversionError
+
 TEST_ALL = True
 #TEST_ALL = False
 
@@ -23,7 +25,11 @@ class Test(unittest.TestCase):
         cls.spectros_dir = os.path.join(cls.cur_dir, 'spectro_data')
         # A small Raven selection table with its
         # row ordering intentionally scrambled: 
-        cls.raven_sel_tbl_path = os.path.join(cls.data_dir, 'raven_sel_tbl_unsorted.csv')
+        cls.raven_sel_tbl_path = os.path.join(cls.data_dir, 
+                                              'raven_sel_tbl_unsorted.csv')
+        cls.raven_sel_tbl_missing_type_path = os.path.join(cls.data_dir, 
+                                                           'raven_sel_tbl_missing_type_info.csv'
+                                                           )
 
     def setUp(self):
         pass
@@ -181,10 +187,10 @@ class Test(unittest.TestCase):
                 'End Time (s)': 6.23740263,
                 'Low Freq (Hz)': 2088.175,
                 'High Freq (Hz)': 8538.314,
-                'species': 'VASE',
+                'species': 'VASEG',
                 'type': 'song',
                 'number': '1',
-                'mix': ['RBPS','BGTA','RCWP'],
+                'mix': ['RBPSG','BGTAG','WTROS'],
                 'time_interval': {'low_val': 0.0,'high_val': 6.23740263},
                 'freq_interval': {'low_val': 2088.175,'high_val': 8538.314}
                 },
@@ -196,10 +202,10 @@ class Test(unittest.TestCase):
                 'End Time (s)': 3.294473531,
                 'Low Freq (Hz)': 2161.467,
                 'High Freq (Hz)': 4492.937,
-                'species': 'HOWP',
+                'species': 'HOWPG',
                 'type': 'call-1',
                 'number': '1',
-                'mix': ['RBPS','VASE'],
+                'mix': ['RBPSG','VASEG'],
                 'time_interval': {'low_val': 1.024500915,'high_val': 3.294473531},
                 'freq_interval': {'low_val': 2161.467,'high_val': 4492.937}
                 },
@@ -211,8 +217,8 @@ class Test(unittest.TestCase):
                 'End Time (s)': 3.231216904,
                 'Low Freq (Hz)': 1564.1,
                 'High Freq (Hz)': 3519.1,
-                'species': 'RBPS',
-                'type': 'song',
+                'species': 'LEGRG',
+                'type': '',
                 'number': '1',
                 'mix': [],
                 'time_interval': {'low_val': 2.390074726,'high_val': 3.231216904},
@@ -226,14 +232,20 @@ class Test(unittest.TestCase):
                 'End Time (s)': 7.964992409,
                 'Low Freq (Hz)': 3944.33,
                 'High Freq (Hz)': 9791.219,
-                'species': 'BGTA',
+                'species': 'BTSAC',
                 'type': 'call',
                 'number': '1',
-                'mix': ['HOWP'],
+                'mix': ['HOWPG'],
                 'time_interval': {'low_val': 5.926034705, 'high_val': 7.964992409},
                 'freq_interval': {'low_val': 3944.33,'high_val': 9791.219}
                 }]
         self.assertEqual(dict_list, desired)
+        
+        # Case when song/call split is required, but
+        # selection table's Type column is empty:
+        
+        with self.assertRaises(ConversionError): 
+            Utils.read_raven_selection_table(self.raven_sel_tbl_missing_type_path)
 
     #------------------------------------
     # test_pad_series 

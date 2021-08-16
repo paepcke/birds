@@ -418,7 +418,7 @@ class BirdTrainer(object):
                         )
 
             # Tensorboard initialization:
-            # The setup_tensorboard() method will create
+            # The setup_data_logging() method will create
             # the directory if needed:
             
             if logdir is None:
@@ -428,7 +428,7 @@ class BirdTrainer(object):
             # This process will log all Tensorboard events under
             # this dir:
             exp_logdir = os.path.join(logdir, exp_info)
-            self.setup_tensorboard(logdir=exp_logdir)
+            self.setup_data_logging(logdir=exp_logdir)
 
             # Log a few example spectrograms to tensorboard;
             # one per class:
@@ -2481,10 +2481,10 @@ class BirdTrainer(object):
             else self.tally_collection 
 
     #------------------------------------
-    # setup_tensorboard 
+    # setup_data_logging 
     #-------------------
     
-    def setup_tensorboard(self, logdir):
+    def setup_data_logging(self, logdir):
         '''
         Initialize tensorboard. To easily compare experiments,
         use runs/exp1, runs/exp2, etc.
