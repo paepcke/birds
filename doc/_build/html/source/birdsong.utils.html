@@ -1,0 +1,2476 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>birdsong.utils package &mdash; Birdsong  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home"> Birdsong
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <!-- Local TOC -->
+              <div class="local-toc"><ul>
+<li><a class="reference internal" href="#">birdsong.utils package</a><ul>
+<li><a class="reference internal" href="#subpackages">Subpackages</a></li>
+<li><a class="reference internal" href="#submodules">Submodules</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils.dottable_config">birdsong.utils.dottable_config module</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils.dottable_map">birdsong.utils.dottable_map module</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils.github_table_maker">birdsong.utils.github_table_maker module</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils.learning_phase">birdsong.utils.learning_phase module</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils.match_snippets_to_selection_table">birdsong.utils.match_snippets_to_selection_table module</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils.minimal_across_two_gpus_ddp">birdsong.utils.minimal_across_two_gpus_ddp module</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils.minimal_ddp_launcher">birdsong.utils.minimal_ddp_launcher module</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils.minimal_within_two_gpus_ddp">birdsong.utils.minimal_within_two_gpus_ddp module</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils.model_archive">birdsong.utils.model_archive module</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils.move_random_perc_of_files">birdsong.utils.move_random_perc_of_files module</a></li>
+<li><a class="reference internal" href="#birdsong-utils-multi-class-pr-curves-module">birdsong.utils.multi_class_pr_curves module</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils.neural_net_config">birdsong.utils.neural_net_config module</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils.remove_bad_bird_recordings">birdsong.utils.remove_bad_bird_recordings module</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils.tensorboard_manager">birdsong.utils.tensorboard_manager module</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils.tensorboard_plotter">birdsong.utils.tensorboard_plotter module</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils.tiny_one_gpu_ddp">birdsong.utils.tiny_one_gpu_ddp module</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils.tiny_one_gpu_no_ddp">birdsong.utils.tiny_one_gpu_no_ddp module</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils.trash">birdsong.utils.trash module</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils.utilities">birdsong.utils.utilities module</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils.xeno_canto_download_cleaning">birdsong.utils.xeno_canto_download_cleaning module</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</div>
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Birdsong</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+      <li>birdsong.utils package</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+          
+            <a href="../_sources/source/birdsong.utils.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="birdsong-utils-package">
+<h1>birdsong.utils package<a class="headerlink" href="#birdsong-utils-package" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="subpackages">
+<h2>Subpackages<a class="headerlink" href="#subpackages" title="Permalink to this headline">¶</a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="birdsong.utils.tests.html">birdsong.utils.tests package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="birdsong.utils.tests.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="birdsong.utils.tests.html#module-birdsong.utils.tests.test_dottable_config_parser">birdsong.utils.tests.test_dottable_config_parser module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="birdsong.utils.tests.html#module-birdsong.utils.tests.test_dottable_map">birdsong.utils.tests.test_dottable_map module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="birdsong.utils.tests.html#module-birdsong.utils.tests.test_match_snippets_to_selection_table">birdsong.utils.tests.test_match_snippets_to_selection_table module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="birdsong.utils.tests.html#module-birdsong.utils.tests.test_move_random_perc_of_files">birdsong.utils.tests.test_move_random_perc_of_files module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="birdsong.utils.tests.html#module-birdsong.utils.tests.test_multiclass_pr_curve">birdsong.utils.tests.test_multiclass_pr_curve module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="birdsong.utils.tests.html#module-birdsong.utils.tests.test_neural_net_config">birdsong.utils.tests.test_neural_net_config module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="birdsong.utils.tests.html#module-birdsong.utils.tests.test_tensorboard_manager">birdsong.utils.tests.test_tensorboard_manager module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="birdsong.utils.tests.html#module-birdsong.utils.tests.test_tensorboard_plotter">birdsong.utils.tests.test_tensorboard_plotter module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="birdsong.utils.tests.html#module-birdsong.utils.tests.test_utilities">birdsong.utils.tests.test_utilities module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="birdsong.utils.tests.html#module-birdsong.utils.tests">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<div class="section" id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
+</div>
+<div class="section" id="module-birdsong.utils.dottable_config">
+<span id="birdsong-utils-dottable-config-module"></span><h2>birdsong.utils.dottable_config module<a class="headerlink" href="#module-birdsong.utils.dottable_config" title="Permalink to this headline">¶</a></h2>
+<p>Created on Dec 19, 2020</p>
+<p>&#64;author: paepcke</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.dottable_config.DottableConfigParser">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.dottable_config.</span></span><span class="sig-name descname"><span class="pre">DottableConfigParser</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">conf_src</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.dottable_config.DottableConfigParser" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#birdsong.utils.dottable_map.DottableMap" title="birdsong.utils.dottable_map.DottableMap"><code class="xref py py-class docutils literal notranslate"><span class="pre">birdsong.utils.dottable_map.DottableMap</span></code></a></p>
+<p>Like the Python 3 configparser, with the
+following additions:</p>
+<blockquote>
+<div><p>o Dot notation. In addition to</p>
+<blockquote>
+<div><blockquote>
+<div><p>config[‘my_section][‘my_option’]</p>
+</div></blockquote>
+<p>can write:</p>
+<blockquote>
+<div><p>config.my_section.my_option</p>
+</div></blockquote>
+</div></blockquote>
+<dl>
+<dt>o Additonal method getarray(section, option, default),</dt><dd><p>which handles option values that are a comma separated
+list:</p>
+<blockquote>
+<div><p>my_option = /usr/lib/file.txt, [bluebell], 10</p>
+</div></blockquote>
+<p>with config.my_section.getarray(my_option)
+returning:</p>
+<blockquote>
+<div><p>[‘/usr/lib/file.txt’,’[bluebell]’,’10’]</p>
+</div></blockquote>
+</dd>
+</dl>
+<p>o Additional method getpathname(section, option, relative_to, default)</p>
+<blockquote>
+<div><p>Resolves relative paths (those containing ‘.’/’..’)
+in the given path.</p>
+<blockquote>
+<div><dl class="simple">
+<dt>Examples:</dt><dd><dl class="simple">
+<dt>os.path.abspath(os.path.join(‘/Users/doe/code’, ‘./src’))</dt><dd><p>–&gt; ‘/Users/doe/code/src’</p>
+</dd>
+<dt>os.path.abspath(os.path.join(‘/Users/doe/code’, ‘./src/.’))</dt><dd><p>–&gt; ‘/Users/doe/code/src’</p>
+</dd>
+<dt>os.path.abspath(os.path.join(‘/Users/doe/code’, ‘./src/..’))</dt><dd><p>–&gt; ‘/Users/doe/code’</p>
+</dd>
+<dt>os.path.abspath(os.path.join(‘/Users/doe/code’, ‘./../src/..’))</dt><dd><p>–&gt; ‘/Users/doe’</p>
+</dd>
+<dt>os.path.abspath(os.path.join(‘/Users/doe/code’, ‘/Users/doe/code’))                  </dt><dd><p>–&gt; ‘/Users/doe/code’</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</div></blockquote>
+</div></blockquote>
+<dl class="simple">
+<dt>o Methods getint(), getboolean(), getfloat() and others, </dt><dd><p>which convert the strings in config options to the desired
+types.</p>
+</dd>
+</dl>
+</div></blockquote>
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.dottable_config.DottableConfigParser.expand_path">
+<span class="sig-name descname"><span class="pre">expand_path</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dotted_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relative_to_path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.dottable_config.DottableConfigParser.expand_path" title="Permalink to this definition">¶</a></dt>
+<dd><p>Resolves relative paths (those containing ‘.’/’..’)
+in the given path.</p>
+<dl class="simple">
+<dt>Examples:</dt><dd><dl class="simple">
+<dt>os.path.abspath(os.path.join(‘/Users/doe/code’, ‘./src’))</dt><dd><p>–&gt; ‘/Users/doe/code/src’</p>
+</dd>
+<dt>os.path.abspath(os.path.join(‘/Users/doe/code’, ‘./src/.’))</dt><dd><p>–&gt; ‘/Users/doe/code/src’</p>
+</dd>
+<dt>os.path.abspath(os.path.join(‘/Users/doe/code’, ‘./src/..’))</dt><dd><p>–&gt; ‘/Users/doe/code’</p>
+</dd>
+<dt>os.path.abspath(os.path.join(‘/Users/doe/code’, ‘./../src/..’))</dt><dd><p>–&gt; ‘/Users/doe’</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dotted_path</strong> – path to expand, such as ../src</p></li>
+<li><p><strong>relative_to_path</strong> (<em>str</em>) – path to which dotted_path
+is to be resolved</p></li>
+</ul>
+</dd>
+</dl>
+<p>:return absolute, combined path
+:rtype: str</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.dottable_config.DottableConfigParser.false_values">
+<span class="sig-name descname"><span class="pre">false_values</span></span><em class="property"> <span class="pre">=</span> <span class="pre">['0',</span> <span class="pre">'no',</span> <span class="pre">'No',</span> <span class="pre">'false',</span> <span class="pre">'False',</span> <span class="pre">'Off',</span> <span class="pre">'off']</span></em><a class="headerlink" href="#birdsong.utils.dottable_config.DottableConfigParser.false_values" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.dottable_config.DottableConfigParser.getarray">
+<span class="sig-name descname"><span class="pre">getarray</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">section</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">option</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.dottable_config.DottableConfigParser.getarray" title="Permalink to this definition">¶</a></dt>
+<dd><p>Expect an option that is a comma separated list of
+items.</p>
+<blockquote>
+<div><p>my_list = /foo/bar, 5, [abc]</p>
+</div></blockquote>
+<p>returns for the my_list option:</p>
+<blockquote>
+<div><p>[‘/foo/bar’, ‘5’, ‘[abc]’]</p>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>section</strong> (<em>str</em>) – config file section</p></li>
+<li><p><strong>option</strong> (<em>str</em>) – option name</p></li>
+<li><p><strong>default</strong> (<em>Any</em>) – return value if option does not exist</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.dottable_config.DottableConfigParser.getboolean">
+<span class="sig-name descname"><span class="pre">getboolean</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">section</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">option</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.dottable_config.DottableConfigParser.getboolean" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.dottable_config.DottableConfigParser.getfloat">
+<span class="sig-name descname"><span class="pre">getfloat</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">section</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">option</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.dottable_config.DottableConfigParser.getfloat" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.dottable_config.DottableConfigParser.getint">
+<span class="sig-name descname"><span class="pre">getint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">section</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">option</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.dottable_config.DottableConfigParser.getint" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.dottable_config.DottableConfigParser.getpath">
+<span class="sig-name descname"><span class="pre">getpath</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">section</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">option</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relative_to</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.dottable_config.DottableConfigParser.getpath" title="Permalink to this definition">¶</a></dt>
+<dd><p>Access configuration section/option. The value is
+understood to be a path. If relative_to is a path,
+the relative_to path is path-joined with the
+config value</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>section</strong> (<em>str</em>) – config section</p></li>
+<li><p><strong>option</strong> (<em>str</em>) – config option within the section</p></li>
+<li><p><strong>relative_to</strong> (<em>{str | None}</em>) – a path or None</p></li>
+<li><p><strong>default</strong> (<em>{None | str}</em>) – if section and/or option do not exist</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.dottable_config.DottableConfigParser.legal_bools">
+<span class="sig-name descname"><span class="pre">legal_bools</span></span><em class="property"> <span class="pre">=</span> <span class="pre">['1',</span> <span class="pre">'yes',</span> <span class="pre">'Yes',</span> <span class="pre">'true',</span> <span class="pre">'True',</span> <span class="pre">'On',</span> <span class="pre">'on',</span> <span class="pre">'0',</span> <span class="pre">'no',</span> <span class="pre">'No',</span> <span class="pre">'false',</span> <span class="pre">'False',</span> <span class="pre">'Off',</span> <span class="pre">'off']</span></em><a class="headerlink" href="#birdsong.utils.dottable_config.DottableConfigParser.legal_bools" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.dottable_config.DottableConfigParser.sections">
+<span class="sig-name descname"><span class="pre">sections</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.dottable_config.DottableConfigParser.sections" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.dottable_config.DottableConfigParser.truth_values">
+<span class="sig-name descname"><span class="pre">truth_values</span></span><em class="property"> <span class="pre">=</span> <span class="pre">['1',</span> <span class="pre">'yes',</span> <span class="pre">'Yes',</span> <span class="pre">'true',</span> <span class="pre">'True',</span> <span class="pre">'On',</span> <span class="pre">'on']</span></em><a class="headerlink" href="#birdsong.utils.dottable_config.DottableConfigParser.truth_values" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-birdsong.utils.dottable_map">
+<span id="birdsong-utils-dottable-map-module"></span><h2>birdsong.utils.dottable_map module<a class="headerlink" href="#module-birdsong.utils.dottable_map" title="Permalink to this headline">¶</a></h2>
+<p>Created on Dec 19, 2020</p>
+<p>&#64;author: Based on Stackoverflow answer by epool:
+<a class="reference external" href="https://stackoverflow.com/questions/2352181/how-to-use-a-dot-to-access-members-of-dictionary">https://stackoverflow.com/questions/2352181/how-to-use-a-dot-to-access-members-of-dictionary</a></p>
+<p>Extends dictionaries so that dot notation can be
+used.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.dottable_map.DottableMap">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.dottable_map.</span></span><span class="sig-name descname"><span class="pre">DottableMap</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.dottable_map.DottableMap" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code></p>
+<p>Flattens dicts; adds entries to resulting single dict with
+the kwargs.</p>
+<p>Example:
+m = DottableMap({‘first_name’: ‘Eduardo’}, last_name=’Pool’, age=24, sports=[‘Soccer’])</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.dottable_map.DottableMap.getboolean">
+<span class="sig-name descname"><span class="pre">getboolean</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.dottable_map.DottableMap.getboolean" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.dottable_map.DottableMap.getfloat">
+<span class="sig-name descname"><span class="pre">getfloat</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.dottable_map.DottableMap.getfloat" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.dottable_map.DottableMap.getint">
+<span class="sig-name descname"><span class="pre">getint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.dottable_map.DottableMap.getint" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-birdsong.utils.github_table_maker">
+<span id="birdsong-utils-github-table-maker-module"></span><h2>birdsong.utils.github_table_maker module<a class="headerlink" href="#module-birdsong.utils.github_table_maker" title="Permalink to this headline">¶</a></h2>
+<p>Created on Mar 12, 2021</p>
+<p>&#64;author: paepcke</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.github_table_maker.GithubTableMaker">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.github_table_maker.</span></span><span class="sig-name descname"><span class="pre">GithubTableMaker</span></span><a class="headerlink" href="#birdsong.utils.github_table_maker.GithubTableMaker" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>classdocs</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.github_table_maker.GithubTableMaker.make_table">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">make_table</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">content_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sep_lines</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.github_table_maker.GithubTableMaker.make_table" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create github markdown table.
+Content dict must be like:</p>
+<blockquote>
+<div><p>‘col_header’ : [‘foo’, ‘bar’],
+‘row_labels’ : [‘row1’, ‘row2’, ‘row3’],
+‘rows’       ; [[1,2],</p>
+<blockquote>
+<div><p>[3,4],
+[5,6]
+]</p>
+</div></blockquote>
+</div></blockquote>
+<p>Output would be (the string):</p>
+<blockquote>
+<div><div class="line-block">
+<div class="line">|    foo   |    bar   |</div>
+</div>
+<p><a href="#id1"><span class="problematic" id="id2">|--------|</span></a>———-<a href="#id3"><span class="problematic" id="id4">|----------|</span></a>
+|  row1  |     1    |     2    |
+<a href="#id5"><span class="problematic" id="id6">|--------|</span></a>———-<a href="#id7"><span class="problematic" id="id8">|----------|</span></a>
+|  row2  |     3    |     4    |
+<a href="#id9"><span class="problematic" id="id10">|--------|</span></a>———-<a href="#id11"><span class="problematic" id="id12">|----------|</span></a>
+|  row3  |     5    |     6    |
+<a href="#id13"><span class="problematic" id="id14">|--------|</span></a>———-<a href="#id15"><span class="problematic" id="id16">|----------|</span></a></p>
+</div></blockquote>
+<p>Setting sep_lines to False will leave out the 
+row separator lines.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>content_dict</strong> (<em>{str |</em><em> [</em><em>Any</em><em>]</em><em>}</em>) – content information</p></li>
+<li><p><strong>sep_lines</strong> (<em>bool</em>) – whether or not to include 
+dashed separation lines between the rows. 
+Default is True; set False if using for 
+Tensorboard tables.</p></li>
+</ul>
+</dd>
+</dl>
+<p>:return the markdown table text
+:rtype str</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-birdsong.utils.learning_phase">
+<span id="birdsong-utils-learning-phase-module"></span><h2>birdsong.utils.learning_phase module<a class="headerlink" href="#module-birdsong.utils.learning_phase" title="Permalink to this headline">¶</a></h2>
+<p>Created on Dec 24, 2020</p>
+<p>Used as indicator of whether an action
+is taken within the context of training, 
+validation, or testing.</p>
+<p>&#64;author: paepcke</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.learning_phase.LearningPhase">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.learning_phase.</span></span><span class="sig-name descname"><span class="pre">LearningPhase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.learning_phase.LearningPhase" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">enum.Enum</span></code></p>
+<p>An enumeration.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.learning_phase.LearningPhase.TESTING">
+<span class="sig-name descname"><span class="pre">TESTING</span></span><em class="property"> <span class="pre">=</span> <span class="pre">3</span></em><a class="headerlink" href="#birdsong.utils.learning_phase.LearningPhase.TESTING" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.learning_phase.LearningPhase.TRAINING">
+<span class="sig-name descname"><span class="pre">TRAINING</span></span><em class="property"> <span class="pre">=</span> <span class="pre">1</span></em><a class="headerlink" href="#birdsong.utils.learning_phase.LearningPhase.TRAINING" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.learning_phase.LearningPhase.VALIDATING">
+<span class="sig-name descname"><span class="pre">VALIDATING</span></span><em class="property"> <span class="pre">=</span> <span class="pre">2</span></em><a class="headerlink" href="#birdsong.utils.learning_phase.LearningPhase.VALIDATING" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-birdsong.utils.match_snippets_to_selection_table">
+<span id="birdsong-utils-match-snippets-to-selection-table-module"></span><h2>birdsong.utils.match_snippets_to_selection_table module<a class="headerlink" href="#module-birdsong.utils.match_snippets_to_selection_table" title="Permalink to this headline">¶</a></h2>
+<p>Created on May 13, 2021</p>
+<p>&#64;author: paepcke</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.match_snippets_to_selection_table.SnippetSelectionTableMapper">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.match_snippets_to_selection_table.</span></span><span class="sig-name descname"><span class="pre">SnippetSelectionTableMapper</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">selection_tbl_csv</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">snippets_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_dir</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.match_snippets_to_selection_table.SnippetSelectionTableMapper" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Matches and labels spectrogram snippets with 
+entries in a Raven selection table. ‘Matching’
+means a time overlap between the snippet’s beging
+and end times, and a selection table row’s begin
+and end time.</p>
+<p>In case of a match, the row’s species determination S is 
+noted. For snippets that do not match any selection table
+row, S is set to be ‘noise’.</p>
+<p>Each snippet’s png metadata will receive an additional 
+key called ‘confirmed_content’ that will contain S.</p>
+<p>In addition, snippets that do match receive two additional
+key/val pairs: freq_low and freq_high. These values are
+taken from the matching selection table row:</p>
+<p>Raven selection tables for birds are csv files:</p>
+<blockquote>
+<div><p>Selection           row number
+View                not used
+Channel             not used
+Begin Time (s)      begin of vocalization in fractional seconds
+End Time (s)        end of vocalization in fractional seconds
+Low Freq (Hz)       lowest frequency within the lassoed vocalization
+High Freq (Hz)      highest frequency within the lassoed vocalization
+species             four-letter species name
+type                {song, call, call-1, call-trill}
+number              not used
+mix                 comma separated list of other audible species</p>
+</div></blockquote>
+<p>When a row that matches a snippet contains species in the ‘mix’ column,
+copies of the snippets are made, and each is labeled with
+one of those species.</p>
+<p>Snippet metadata is expected to look like this:</p>
+<blockquote>
+<div><p>sr : 22050
+duration : 115.0
+species : batpig1
+duration(secs) : 4.990916431166734
+start_time(secs) : 61.8873637464675
+end_time(secs) : 66.87828017763424</p>
+</div></blockquote>
+<p>Snippet metadata added in case of a match:</p>
+<blockquote>
+<div><p>‘confirmed_content’ : &lt;species from the selection table row; may be ‘noise’&gt;
+‘low_freq’          : &lt;low bound of frequency involved in vocalization
+‘high_freq’         : &lt;high bound of frequency involved in vocalization
+‘multiple_species’  : &lt;comma-separated list of species heard simultaneously&gt;
+‘type’              : &lt;whether Song/Call/Call-1/Call-Trill…&gt;</p>
+</div></blockquote>
+<dl class="simple">
+<dt>IMPORTANT: procedures rely on each spectrogram</dt><dd><p>snippet’s metadata to include the time range
+that the snippet covers in the larger spectrogram
+from which it is snipped. This metadata is added
+to the .png files created by chop_spectrograms.py</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.match_snippets_to_selection_table.SnippetSelectionTableMapper.match_snippets">
+<span class="sig-name descname"><span class="pre">match_snippets</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">selections</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">snippets_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outdir</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.match_snippets_to_selection_table.SnippetSelectionTableMapper.match_snippets" title="Permalink to this definition">¶</a></dt>
+<dd><p>For each snippet S, examines the time span covered by S.
+Finds the selection table row (if any) whose begin/end
+times overlap with S’s time span.</p>
+<p>Modifies the snippet’s metadata as per this class’ 
+header comment.</p>
+<p>The selections are expected to be a list of dicts as
+produced by Utils.read_raven_selection_table(). This
+means:</p>
+<blockquote>
+<div><p>o Dicts are sorted by selection start time
+o the d[‘mix’] is a possibly empty list of species</p>
+<blockquote>
+<div><p>names.</p>
+</div></blockquote>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>selections</strong> (<em>{str : str}</em>) – list of dicts, each containing the 
+information of one selection table row.</p></li>
+<li><p><strong>snippets_path</strong> (<em>str</em>) – path to directory with spectrogram
+snippets</p></li>
+<li><p><strong>outdir</strong> (<em>str</em>) – directory where to write the updated
+snippets. Value is allowed to be same as snippets_path,
+but then the snippets will be updated in place</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-birdsong.utils.minimal_across_two_gpus_ddp">
+<span id="birdsong-utils-minimal-across-two-gpus-ddp-module"></span><h2>birdsong.utils.minimal_across_two_gpus_ddp module<a class="headerlink" href="#module-birdsong.utils.minimal_across_two_gpus_ddp" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.minimal_across_two_gpus_ddp.MinimalDDP">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.minimal_across_two_gpus_ddp.</span></span><span class="sig-name descname"><span class="pre">MinimalDDP</span></span><a class="headerlink" href="#birdsong.utils.minimal_across_two_gpus_ddp.MinimalDDP" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test whether DDP really does something</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.minimal_across_two_gpus_ddp.MinimalDDP.batches">
+<span class="sig-name descname"><span class="pre">batches</span></span><em class="property"> <span class="pre">=</span> <span class="pre">3</span></em><a class="headerlink" href="#birdsong.utils.minimal_across_two_gpus_ddp.MinimalDDP.batches" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.minimal_across_two_gpus_ddp.MinimalDDP.cleanup">
+<span class="sig-name descname"><span class="pre">cleanup</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.minimal_across_two_gpus_ddp.MinimalDDP.cleanup" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.minimal_across_two_gpus_ddp.MinimalDDP.demo_basic">
+<span class="sig-name descname"><span class="pre">demo_basic</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rank</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">world_size</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.minimal_across_two_gpus_ddp.MinimalDDP.demo_basic" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.minimal_across_two_gpus_ddp.MinimalDDP.epochs">
+<span class="sig-name descname"><span class="pre">epochs</span></span><em class="property"> <span class="pre">=</span> <span class="pre">2</span></em><a class="headerlink" href="#birdsong.utils.minimal_across_two_gpus_ddp.MinimalDDP.epochs" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.minimal_across_two_gpus_ddp.MinimalDDP.setup">
+<span class="sig-name descname"><span class="pre">setup</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rank</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">world_size</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.minimal_across_two_gpus_ddp.MinimalDDP.setup" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.minimal_across_two_gpus_ddp.ToyModel">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.minimal_across_two_gpus_ddp.</span></span><span class="sig-name descname"><span class="pre">ToyModel</span></span><a class="headerlink" href="#birdsong.utils.minimal_across_two_gpus_ddp.ToyModel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.minimal_across_two_gpus_ddp.ToyModel.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.minimal_across_two_gpus_ddp.ToyModel.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.minimal_across_two_gpus_ddp.ToyModel.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="pre">:</span> <span class="pre">bool</span></em><a class="headerlink" href="#birdsong.utils.minimal_across_two_gpus_ddp.ToyModel.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="birdsong.utils.minimal_across_two_gpus_ddp.randn">
+<span class="sig-prename descclassname"><span class="pre">birdsong.utils.minimal_across_two_gpus_ddp.</span></span><span class="sig-name descname"><span class="pre">randn</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">*size</span></em>, <em class="sig-param"><span class="pre">*</span></em>, <em class="sig-param"><span class="pre">out=None</span></em>, <em class="sig-param"><span class="pre">dtype=None</span></em>, <em class="sig-param"><span class="pre">layout=torch.strided</span></em>, <em class="sig-param"><span class="pre">device=None</span></em>, <em class="sig-param"><span class="pre">requires_grad=False</span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">Tensor</span><a class="headerlink" href="#birdsong.utils.minimal_across_two_gpus_ddp.randn" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a tensor filled with random numbers from a normal distribution
+with mean <cite>0</cite> and variance <cite>1</cite> (also called the standard normal
+distribution).</p>
+<div class="math notranslate nohighlight">
+\[\text{out}_{i} \sim \mathcal{N}(0, 1)\]</div>
+<p>The shape of the tensor is defined by the variable argument <code class="xref py py-attr docutils literal notranslate"><span class="pre">size</span></code>.</p>
+<dl>
+<dt>Args:</dt><dd><dl class="simple">
+<dt>size (int…): a sequence of integers defining the shape of the output tensor.</dt><dd><p>Can be a variable number of arguments or a collection like a list or tuple.</p>
+</dd>
+</dl>
+</dd>
+<dt>Keyword args:</dt><dd><p>out (Tensor, optional): the output tensor.
+dtype (<code class="xref py py-class docutils literal notranslate"><span class="pre">torch.dtype</span></code>, optional): the desired data type of returned tensor.</p>
+<blockquote>
+<div><p>Default: if <code class="docutils literal notranslate"><span class="pre">None</span></code>, uses a global default (see <code class="xref py py-func docutils literal notranslate"><span class="pre">torch.set_default_tensor_type()</span></code>).</p>
+</div></blockquote>
+<dl class="simple">
+<dt>layout (<code class="xref py py-class docutils literal notranslate"><span class="pre">torch.layout</span></code>, optional): the desired layout of returned Tensor.</dt><dd><p>Default: <code class="docutils literal notranslate"><span class="pre">torch.strided</span></code>.</p>
+</dd>
+<dt>device (<code class="xref py py-class docutils literal notranslate"><span class="pre">torch.device</span></code>, optional): the desired device of returned tensor.</dt><dd><p>Default: if <code class="docutils literal notranslate"><span class="pre">None</span></code>, uses the current device for the default tensor type
+(see <code class="xref py py-func docutils literal notranslate"><span class="pre">torch.set_default_tensor_type()</span></code>). <code class="xref py py-attr docutils literal notranslate"><span class="pre">device</span></code> will be the CPU
+for CPU tensor types and the current CUDA device for CUDA tensor types.</p>
+</dd>
+<dt>requires_grad (bool, optional): If autograd should record operations on the</dt><dd><p>returned tensor. Default: <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+<span class="go">tensor([-2.1436,  0.9966,  2.3426, -0.6366])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+<span class="go">tensor([[ 1.5954,  2.8929, -1.0923],</span>
+<span class="go">        [ 1.1719, -0.4709, -0.1996]])</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</div>
+<div class="section" id="module-birdsong.utils.minimal_ddp_launcher">
+<span id="birdsong-utils-minimal-ddp-launcher-module"></span><h2>birdsong.utils.minimal_ddp_launcher module<a class="headerlink" href="#module-birdsong.utils.minimal_ddp_launcher" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.minimal_ddp_launcher.MinimalDDPLauncher">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.minimal_ddp_launcher.</span></span><span class="sig-name descname"><span class="pre">MinimalDDPLauncher</span></span><a class="headerlink" href="#birdsong.utils.minimal_ddp_launcher.MinimalDDPLauncher" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.minimal_ddp_launcher.MinimalDDPLauncher.run_demo">
+<span class="sig-name descname"><span class="pre">run_demo</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">demo_script</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">world_size</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.minimal_ddp_launcher.MinimalDDPLauncher.run_demo" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-birdsong.utils.minimal_within_two_gpus_ddp">
+<span id="birdsong-utils-minimal-within-two-gpus-ddp-module"></span><h2>birdsong.utils.minimal_within_two_gpus_ddp module<a class="headerlink" href="#module-birdsong.utils.minimal_within_two_gpus_ddp" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.minimal_within_two_gpus_ddp.MinimalDDP">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.minimal_within_two_gpus_ddp.</span></span><span class="sig-name descname"><span class="pre">MinimalDDP</span></span><a class="headerlink" href="#birdsong.utils.minimal_within_two_gpus_ddp.MinimalDDP" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test whether DDP really does something</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.minimal_within_two_gpus_ddp.MinimalDDP.batches">
+<span class="sig-name descname"><span class="pre">batches</span></span><em class="property"> <span class="pre">=</span> <span class="pre">3</span></em><a class="headerlink" href="#birdsong.utils.minimal_within_two_gpus_ddp.MinimalDDP.batches" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.minimal_within_two_gpus_ddp.MinimalDDP.cleanup">
+<span class="sig-name descname"><span class="pre">cleanup</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.minimal_within_two_gpus_ddp.MinimalDDP.cleanup" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.minimal_within_two_gpus_ddp.MinimalDDP.demo_basic">
+<span class="sig-name descname"><span class="pre">demo_basic</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rank</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">world_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_save_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'/tmp'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.minimal_within_two_gpus_ddp.MinimalDDP.demo_basic" title="Permalink to this definition">¶</a></dt>
+<dd><p>The action: train model; save intermediate states</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.minimal_within_two_gpus_ddp.MinimalDDP.epochs">
+<span class="sig-name descname"><span class="pre">epochs</span></span><em class="property"> <span class="pre">=</span> <span class="pre">2</span></em><a class="headerlink" href="#birdsong.utils.minimal_within_two_gpus_ddp.MinimalDDP.epochs" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.minimal_within_two_gpus_ddp.MinimalDDP.setup">
+<span class="sig-name descname"><span class="pre">setup</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rank</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">world_size</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.minimal_within_two_gpus_ddp.MinimalDDP.setup" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.minimal_within_two_gpus_ddp.ToyModel">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.minimal_within_two_gpus_ddp.</span></span><span class="sig-name descname"><span class="pre">ToyModel</span></span><a class="headerlink" href="#birdsong.utils.minimal_within_two_gpus_ddp.ToyModel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.minimal_within_two_gpus_ddp.ToyModel.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.minimal_within_two_gpus_ddp.ToyModel.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.minimal_within_two_gpus_ddp.ToyModel.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="pre">:</span> <span class="pre">bool</span></em><a class="headerlink" href="#birdsong.utils.minimal_within_two_gpus_ddp.ToyModel.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-birdsong.utils.model_archive">
+<span id="birdsong-utils-model-archive-module"></span><h2>birdsong.utils.model_archive module<a class="headerlink" href="#module-birdsong.utils.model_archive" title="Permalink to this headline">¶</a></h2>
+<p>Created on Mar 7, 2021</p>
+<p>&#64;author: paepcke</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.model_archive.ModelArchive">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.model_archive.</span></span><span class="sig-name descname"><span class="pre">ModelArchive</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_classes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">history_len</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_root</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.model_archive.ModelArchive" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>classdocs</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.model_archive.ModelArchive.restore_model">
+<span class="sig-name descname"><span class="pre">restore_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.model_archive.ModelArchive.restore_model" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given the path to a saved model, 
+load and return it. The saved file
+is the saved model’s state_dict. 
+So, the method must first create a
+model instance of the correct type.
+Then the state is loaded into that
+instance.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model_path</strong> – </p></li>
+<li><p><strong>config</strong> (<a class="reference internal" href="#birdsong.utils.neural_net_config.NeuralNetConfig" title="birdsong.utils.neural_net_config.NeuralNetConfig"><em>NeuralNetConfig</em></a>) – a config structure that will be
+use to decide which model class to instantiate.
+If None, attempts to reconstruct the 
+information from the model_path.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>loaded model</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>torch.nn.module</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.model_archive.ModelArchive.save_model">
+<span class="sig-name descname"><span class="pre">save_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">epoch</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.model_archive.ModelArchive.save_model" title="Permalink to this definition">¶</a></dt>
+<dd><p>Saves and retains trained models
+on disk.</p>
+<p>Within a subdir the method maintains a queue
+of files of len history_len:</p>
+<blockquote>
+<div><p>fname_1_ep_0.pth
+fname_2_ep_1.pth</p>
+<blockquote>
+<div><p>…</p>
+</div></blockquote>
+<p>fname_&lt;history_len&gt;.pth</p>
+</div></blockquote>
+<p>where ep_&lt;n&gt; is the epoch during training
+where the model of that moment is being 
+saved.</p>
+<p>When history_len model files are already present, 
+removes the oldest.</p>
+<dl>
+<dt>Assumptions: </dt><dd><dl>
+<dt>o self.fname_els_dict contains prop/value</dt><dd><dl>
+<dt>pairs for use in FileUtils.construct_filename()</dt><dd><dl class="simple">
+<dt>{‘bs’<span class="classifier">32,</span></dt><dd><dl class="simple">
+<dt>‘lr’<span class="classifier">0.001,</span></dt><dd><p>…</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>}</p>
+</dd>
+</dl>
+</dd>
+<dt>o self model_fnames is a deque the size of</dt><dd><p>which indicates how many models to save
+before discarding the oldest one as new
+ones are added</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> (<em>nn.module</em>) – model to save</p></li>
+<li><p><strong>epoch</strong> (<em>int</em>) – the epoch that created the model</p></li>
+<li><p><strong>history_len</strong> (<em>int</em>) – number of snapshot to retain</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-birdsong.utils.move_random_perc_of_files">
+<span id="birdsong-utils-move-random-perc-of-files-module"></span><h2>birdsong.utils.move_random_perc_of_files module<a class="headerlink" href="#module-birdsong.utils.move_random_perc_of_files" title="Permalink to this headline">¶</a></h2>
+<p>Created on Jan 15, 2021</p>
+<p>&#64;author: paepcke</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.move_random_perc_of_files.FileMover">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.move_random_perc_of_files.</span></span><span class="sig-name descname"><span class="pre">FileMover</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">srcdir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dstdir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">perc</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.move_random_perc_of_files.FileMover" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Moves a given percentage of files below
+a given directory to a target directory.</p>
+<p>Used to separate test sets</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.move_random_perc_of_files.FileMover.move">
+<span class="sig-name descname"><span class="pre">move</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">move_fn=&lt;function</span> <span class="pre">move&gt;</span></em>, <em class="sig-param"><span class="pre">testing=False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.move_random_perc_of_files.FileMover.move" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes random sequence of indices into
+the result of walking the srcdir subtree.
+The lenght of this sequence correspondes 
+to desired percentage of files to move.</p>
+<p>Moves files, and returns number of files 
+moved.</p>
+<p>The optional move function will be used to 
+execute a move. Args must be (src_path, dst_dir).</p>
+<p>If testing is True, the following intermediate
+results will be available as instance variables
+after execution:</p>
+<blockquote>
+<div><p>num_to_move
+file_indices   # Indices into list of files</p>
+<blockquote>
+<div><p># as discovered by os.walk</p>
+</div></blockquote>
+<p>files_moved    # List of the files moved</p>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>move_fn</strong> (<em>Function</em><em>(</em><em>src_file</em><em>, </em><em>dst_dir</em><em>)</em>) – function to use when moving files.
+Primarily for testing without actually moving
+files</p></li>
+<li><p><strong>testing</strong> (<em>bool</em>) – if True, store intermediates in self</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>number of files moved</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="birdsong-utils-multi-class-pr-curves-module">
+<h2>birdsong.utils.multi_class_pr_curves module<a class="headerlink" href="#birdsong-utils-multi-class-pr-curves-module" title="Permalink to this headline">¶</a></h2>
+</div>
+<div class="section" id="module-birdsong.utils.neural_net_config">
+<span id="birdsong-utils-neural-net-config-module"></span><h2>birdsong.utils.neural_net_config module<a class="headerlink" href="#module-birdsong.utils.neural_net_config" title="Permalink to this headline">¶</a></h2>
+<p>Created on Feb 4, 2021</p>
+<p>&#64;author: paepcke</p>
+<dl class="py exception">
+<dt class="sig sig-object py" id="birdsong.utils.neural_net_config.ConfigError">
+<em class="property"><span class="pre">exception</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.neural_net_config.</span></span><span class="sig-name descname"><span class="pre">ConfigError</span></span><a class="headerlink" href="#birdsong.utils.neural_net_config.ConfigError" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Exception</span></code></p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.neural_net_config.NeuralNetConfig">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.neural_net_config.</span></span><span class="sig-name descname"><span class="pre">NeuralNetConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">conf_src</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.neural_net_config.NeuralNetConfig" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#birdsong.utils.dottable_config.DottableConfigParser" title="birdsong.utils.dottable_config.DottableConfigParser"><code class="xref py py-class docutils literal notranslate"><span class="pre">birdsong.utils.dottable_config.DottableConfigParser</span></code></a></p>
+<p>A configuration with special knowledge
+(and expectations) of neural net training
+procedures.</p>
+<p>Adds setters for (example values just for
+guidance)</p>
+<blockquote>
+<div><dl class="simple">
+<dt>Training.</dt><dd><p>net_name      = resnet18
+min_epochs    = 15
+max_epochs    = 100
+batch_size    = 32
+num_folds     = 10
+seed          = 42
+opt_name      = SGD
+loss_fn       = CrossEntropyLoss
+weighted      = True
+kernel_size   = 7
+lr            = 0.001
+momentum      = 0.9</p>
+</dd>
+</dl>
+</div></blockquote>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.neural_net_config.NeuralNetConfig.NEURAL_NET_ATTRS">
+<span class="sig-name descname"><span class="pre">NEURAL_NET_ATTRS</span></span><em class="property"> <span class="pre">=</span> <span class="pre">{'all_procs_log':</span> <span class="pre">'Parallelism',</span> <span class="pre">'batch_size':</span> <span class="pre">'Training',</span> <span class="pre">'freeze':</span> <span class="pre">'Training',</span> <span class="pre">'kernel_size':</span> <span class="pre">'Training',</span> <span class="pre">'loss_fn':</span> <span class="pre">'Training',</span> <span class="pre">'lr':</span> <span class="pre">'Training',</span> <span class="pre">'max_epochs':</span> <span class="pre">'Training',</span> <span class="pre">'min_epochs':</span> <span class="pre">'Training',</span> <span class="pre">'momentum':</span> <span class="pre">'Training',</span> <span class="pre">'net_name':</span> <span class="pre">'Training',</span> <span class="pre">'num_folds':</span> <span class="pre">'Training',</span> <span class="pre">'opt_name':</span> <span class="pre">'Training',</span> <span class="pre">'seed':</span> <span class="pre">'Parallelism',</span> <span class="pre">'to_grayscale':</span> <span class="pre">'Training',</span> <span class="pre">'weighted':</span> <span class="pre">'Training'}</span></em><a class="headerlink" href="#birdsong.utils.neural_net_config.NeuralNetConfig.NEURAL_NET_ATTRS" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.neural_net_config.NeuralNetConfig.add_neural_net_parm">
+<span class="sig-name descname"><span class="pre">add_neural_net_parm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">parm_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parm_val</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.neural_net_config.NeuralNetConfig.add_neural_net_parm" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.neural_net_config.NeuralNetConfig.add_section">
+<span class="sig-name descname"><span class="pre">add_section</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sec_name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.neural_net_config.NeuralNetConfig.add_section" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add a new section, initializing
+it to an empty DottableMap</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>sec_name</strong> (<em>str</em>) – name of new config section</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.neural_net_config.NeuralNetConfig.copy">
+<span class="sig-name descname"><span class="pre">copy</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; <span class="pre">a</span> <span class="pre">shallow</span> <span class="pre">copy</span> <span class="pre">of</span> <span class="pre">D</span><a class="headerlink" href="#birdsong.utils.neural_net_config.NeuralNetConfig.copy" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.neural_net_config.NeuralNetConfig.define_nn_properties">
+<span class="sig-name descname"><span class="pre">define_nn_properties</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.neural_net_config.NeuralNetConfig.define_nn_properties" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.neural_net_config.NeuralNetConfig.from_json">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">from_json</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">json_str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.neural_net_config.NeuralNetConfig.from_json" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given a json string that represents
+a NeuralNetConfig instance, reconstitute
+that instance and return it.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>json_str</strong> (<em>str</em>) – json string</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>a reconsituted NeuralNetConfig instance</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="#birdsong.utils.neural_net_config.NeuralNetConfig" title="birdsong.utils.neural_net_config.NeuralNetConfig">NeuralNetConfig</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.neural_net_config.NeuralNetConfig.json_human_readable">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">json_human_readable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">json_str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.neural_net_config.NeuralNetConfig.json_human_readable" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given a config in json format, return
+a human readable string, listing neural-net
+relevant parameters in their respective sections</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>json_str</strong> (<em>str</em>) – string to humanize</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>printable string with vals for nn parameters</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.neural_net_config.NeuralNetConfig.process_init_info">
+<span class="sig-name descname"><span class="pre">process_init_info</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">conf_src</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.neural_net_config.NeuralNetConfig.process_init_info" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given config information in one of several
+formats, create an intermediate representation
+that the __init__() method can then turn into
+a true NeuralNetConfig instance. Input options:</p>
+<blockquote>
+<div><dl class="simple">
+<dt>1 Filename, which is expected to point to</dt><dd><p>a valid config file</p>
+</dd>
+<dt>2 A dict structure that mimics the internal</dt><dd><dl class="simple">
+<dt>struct of a NeuralNetConfig instance:</dt><dd><dl class="simple">
+<dt>{&lt;section_name1&gt;<span class="classifier">{param_name</span><span class="classifier">param_val,…}</span></dt><dd><p>&lt;section_name2&gt; : {param_name : param_val,…}
+}</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>3 An existing NeuralNetConfig instance</p>
+<p>4 A JSON string containing the config info</p>
+</div></blockquote>
+<p>Returns a structure that behaves as in 2 above,
+and a list of section names. Often those will
+be the same as the keys of the returned outer dict.
+But not always.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>conf_src</strong> (<em>{str | dict | NeuralNetConfig}</em>) – configuration content</p>
+</dd>
+</dl>
+<dl class="simple">
+<dt>:return dict of dict with outer dict being</dt><dd><p>section names</p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.neural_net_config.NeuralNetConfig.run_name">
+<span class="sig-name descname"><span class="pre">run_name</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.neural_net_config.NeuralNetConfig.run_name" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create name for use in tensorboard to identify
+a run that uses the nn settings of this configuration.</p>
+<blockquote>
+<div><p>Exp_lr&lt;num&gt;bs&lt;num&gt;kern&lt;num&gt;opt&lt;optimizer&gt;</p>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.neural_net_config.NeuralNetConfig.sections">
+<span class="sig-name descname"><span class="pre">sections</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.neural_net_config.NeuralNetConfig.sections" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.neural_net_config.NeuralNetConfig.set_all_procs_log">
+<span class="sig-name descname"><span class="pre">set_all_procs_log</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">new_val</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.neural_net_config.NeuralNetConfig.set_all_procs_log" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.neural_net_config.NeuralNetConfig.set_batch_size">
+<span class="sig-name descname"><span class="pre">set_batch_size</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">new_val</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.neural_net_config.NeuralNetConfig.set_batch_size" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.neural_net_config.NeuralNetConfig.set_freeze">
+<span class="sig-name descname"><span class="pre">set_freeze</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">new_name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.neural_net_config.NeuralNetConfig.set_freeze" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.neural_net_config.NeuralNetConfig.set_kernel_size">
+<span class="sig-name descname"><span class="pre">set_kernel_size</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">new_val</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.neural_net_config.NeuralNetConfig.set_kernel_size" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.neural_net_config.NeuralNetConfig.set_loss_fn">
+<span class="sig-name descname"><span class="pre">set_loss_fn</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">new_val</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.neural_net_config.NeuralNetConfig.set_loss_fn" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.neural_net_config.NeuralNetConfig.set_lr">
+<span class="sig-name descname"><span class="pre">set_lr</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">new_val</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.neural_net_config.NeuralNetConfig.set_lr" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.neural_net_config.NeuralNetConfig.set_max_epochs">
+<span class="sig-name descname"><span class="pre">set_max_epochs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">new_val</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.neural_net_config.NeuralNetConfig.set_max_epochs" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.neural_net_config.NeuralNetConfig.set_min_epochs">
+<span class="sig-name descname"><span class="pre">set_min_epochs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">new_val</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.neural_net_config.NeuralNetConfig.set_min_epochs" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.neural_net_config.NeuralNetConfig.set_momentum">
+<span class="sig-name descname"><span class="pre">set_momentum</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">new_val</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.neural_net_config.NeuralNetConfig.set_momentum" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.neural_net_config.NeuralNetConfig.set_net_name">
+<span class="sig-name descname"><span class="pre">set_net_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">new_name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.neural_net_config.NeuralNetConfig.set_net_name" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.neural_net_config.NeuralNetConfig.set_num_folds">
+<span class="sig-name descname"><span class="pre">set_num_folds</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">new_val</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.neural_net_config.NeuralNetConfig.set_num_folds" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.neural_net_config.NeuralNetConfig.set_opt_name">
+<span class="sig-name descname"><span class="pre">set_opt_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">new_val</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.neural_net_config.NeuralNetConfig.set_opt_name" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.neural_net_config.NeuralNetConfig.set_seed">
+<span class="sig-name descname"><span class="pre">set_seed</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">new_val</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.neural_net_config.NeuralNetConfig.set_seed" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.neural_net_config.NeuralNetConfig.set_to_grayscale">
+<span class="sig-name descname"><span class="pre">set_to_grayscale</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">new_val</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.neural_net_config.NeuralNetConfig.set_to_grayscale" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.neural_net_config.NeuralNetConfig.set_weighted">
+<span class="sig-name descname"><span class="pre">set_weighted</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">new_val</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.neural_net_config.NeuralNetConfig.set_weighted" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.neural_net_config.NeuralNetConfig.to_json">
+<span class="sig-name descname"><span class="pre">to_json</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file_info</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">check_file_exists</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.neural_net_config.NeuralNetConfig.to_json" title="Permalink to this definition">¶</a></dt>
+<dd><p>Convert this NeuralNetConfig structure
+to JSON, write:</p>
+<blockquote>
+<div><p>o to a string and return or
+o write to a provided IOStream handle
+o write to a provided file path</p>
+</div></blockquote>
+<p>When writing to a file, intermediate directories
+are created if necessary.</p>
+<p>If a file path is provided, check_file_exists
+is True, and the file already exists, FileExistsError
+is raised. If the file exists, and check_file_exists
+is False, the existing file is overwritten.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>file_info</strong> (<em>{None | str | StringIO}</em>) – If None, return a json string.
+If a StringIO handle, fill the stream and 
+return it. Else, must be a file path where to
+write the JSON</p></li>
+<li><p><strong>check_file_exists</strong> (<em>bool</em>) – whether or not to raise
+exception upon destination file existence</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>JSON string, a StringIO filled with the
+JSON, or None if writing to a file</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>{str | StringIO | None}</p>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><p><strong>FileExistsError</strong> – if file exists and check_file_exists
+is True</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-birdsong.utils.remove_bad_bird_recordings">
+<span id="birdsong-utils-remove-bad-bird-recordings-module"></span><h2>birdsong.utils.remove_bad_bird_recordings module<a class="headerlink" href="#module-birdsong.utils.remove_bad_bird_recordings" title="Permalink to this headline">¶</a></h2>
+<p>Created on May 22, 2021</p>
+<p>&#64;author: paepcke</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.remove_bad_bird_recordings.BirdRecordingCuller">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.remove_bad_bird_recordings.</span></span><span class="sig-name descname"><span class="pre">BirdRecordingCuller</span></span><a class="headerlink" href="#birdsong.utils.remove_bad_bird_recordings.BirdRecordingCuller" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Cull bad recordings from Costa Rica bird
+call collection.</p>
+<p>Some of the recordings are bad, and must be 
+ignored. This facitlity automates removal for
+these audio files, and also of inadvertently
+generated associated spectrograms.</p>
+<p>Kelley Langhans’ Costa Rica recordings 
+have file format:</p>
+<blockquote>
+<div><blockquote>
+<div><p>AM02_20190715_090204.wav</p>
+</div></blockquote>
+<p>AudioMoth&lt;recorder_id&gt;_yyyymmdd_rrrrrr.wav</p>
+<p>where rrrrrr are recording IDs.</p>
+</div></blockquote>
+<p>Good recording ID ranges are:</p>
+<blockquote>
+<div><p>(50000, 70001),</p>
+</div></blockquote>
+<p>and  (170000, 180001),</p>
+<p>both exclusive on the right.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.remove_bad_bird_recordings.BirdRecordingCuller.cull">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">cull</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dir_root</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fextension</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.remove_bad_bird_recordings.BirdRecordingCuller.cull" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.remove_bad_bird_recordings.BirdRecordingCuller.extract_ser_num">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">extract_ser_num</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fpath</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.remove_bad_bird_recordings.BirdRecordingCuller.extract_ser_num" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-birdsong.utils.tensorboard_manager">
+<span id="birdsong-utils-tensorboard-manager-module"></span><h2>birdsong.utils.tensorboard_manager module<a class="headerlink" href="#module-birdsong.utils.tensorboard_manager" title="Permalink to this headline">¶</a></h2>
+<p>Created on Feb 12, 2021</p>
+<p>&#64;author: paepcke</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.tensorboard_manager.TensorBoardManager">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.tensorboard_manager.</span></span><span class="sig-name descname"><span class="pre">TensorBoardManager</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">logdir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">new_tensorboard_server</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tensorboard_manager.TensorBoardManager" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Clients can start and stop the tensorboard
+service for any port/event-root-dir.</p>
+<p>Instances of Chrome or Firefox can be started
+and stopped, and pointed to the tensorboard
+manager.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tensorboard_manager.TensorBoardManager.close">
+<span class="sig-name descname"><span class="pre">close</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tensorboard_manager.TensorBoardManager.close" title="Permalink to this definition">¶</a></dt>
+<dd><p>Free resources. Stop web and tensorboard 
+servers if they are running</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tensorboard_manager.TensorBoardManager.find_browser">
+<span class="sig-name descname"><span class="pre">find_browser</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tensorboard_manager.TensorBoardManager.find_browser" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tensorboard_manager.TensorBoardManager.find_executable">
+<span class="sig-name descname"><span class="pre">find_executable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">application_name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tensorboard_manager.TensorBoardManager.find_executable" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given an application name, such as 
+‘chrome’, ‘firefox’, ‘safari’, or
+‘tensorboard, return the path to the
+respective executable.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>application_name</strong> (<em>str</em>) – name of application to find</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>full path to application, or None if not found</p>
+</dd>
+</dl>
+<p>:rtype {str | None}</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tensorboard_manager.TensorBoardManager.find_in_applications">
+<span class="sig-name descname"><span class="pre">find_in_applications</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">application_name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tensorboard_manager.TensorBoardManager.find_in_applications" title="Permalink to this definition">¶</a></dt>
+<dd><p>Find application by name below the 
+/Applications directory on MacOS. Return
+the name of the executable. If none found,
+return None; if more than one found, raise
+ValueError</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>application_name</strong> (<em>str</em>) – name of application executable to find</p>
+</dd>
+</dl>
+<p>:return path to executable or None
+:rtype {None | str}
+:raise ValueError: if multiple executables are found</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tensorboard_manager.TensorBoardManager.start_tensorboard_server">
+<span class="sig-name descname"><span class="pre">start_tensorboard_server</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">logdir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tensorboard_manager.TensorBoardManager.start_tensorboard_server" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tensorboard_manager.TensorBoardManager.start_webbrowser">
+<span class="sig-name descname"><span class="pre">start_webbrowser</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">port</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tensorboard_manager.TensorBoardManager.start_webbrowser" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tensorboard_manager.TensorBoardManager.stop_tensorboard_server">
+<span class="sig-name descname"><span class="pre">stop_tensorboard_server</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tensorboard_manager.TensorBoardManager.stop_tensorboard_server" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tensorboard_manager.TensorBoardManager.stop_webbrowser">
+<span class="sig-name descname"><span class="pre">stop_webbrowser</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tensorboard_manager.TensorBoardManager.stop_webbrowser" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.tensorboard_manager.TensorBoardManager.tensorboard_port_default">
+<span class="sig-name descname"><span class="pre">tensorboard_port_default</span></span><em class="property"> <span class="pre">=</span> <span class="pre">6007</span></em><a class="headerlink" href="#birdsong.utils.tensorboard_manager.TensorBoardManager.tensorboard_port_default" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.tensorboard_manager.TensorBoardManager.tensorboard_server">
+<span class="sig-name descname"><span class="pre">tensorboard_server</span></span><em class="property"> <span class="pre">=</span> <span class="pre">None</span></em><a class="headerlink" href="#birdsong.utils.tensorboard_manager.TensorBoardManager.tensorboard_server" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.tensorboard_manager.TensorBoardManager.web_browser">
+<span class="sig-name descname"><span class="pre">web_browser</span></span><em class="property"> <span class="pre">=</span> <span class="pre">None</span></em><a class="headerlink" href="#birdsong.utils.tensorboard_manager.TensorBoardManager.web_browser" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-birdsong.utils.tensorboard_plotter">
+<span id="birdsong-utils-tensorboard-plotter-module"></span><h2>birdsong.utils.tensorboard_plotter module<a class="headerlink" href="#module-birdsong.utils.tensorboard_plotter" title="Permalink to this headline">¶</a></h2>
+<p>Created on Jan 25, 2021</p>
+<p>&#64;author: paepcke</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.tensorboard_plotter.SummaryWriterPlus">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.tensorboard_plotter.</span></span><span class="sig-name descname"><span class="pre">SummaryWriterPlus</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">log_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">comment</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">purge_step</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_queue</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flush_secs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">120</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename_suffix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tensorboard_plotter.SummaryWriterPlus" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.utils.tensorboard.writer.SummaryWriter</span></code></p>
+<p>Identical to the standard Pytorch SummaryWriter,
+except that it does not add an additional subdirectory
+when add_hparams is called</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tensorboard_plotter.SummaryWriterPlus.add_hparams">
+<span class="sig-name descname"><span class="pre">add_hparams</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hparam_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metric_dict</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tensorboard_plotter.SummaryWriterPlus.add_hparams" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add a set of hyperparameters to be compared in TensorBoard.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><dl class="simple">
+<dt>hparam_dict (dict): Each key-value pair in the dictionary is the</dt><dd><p>name of the hyper parameter and it’s corresponding value.
+The type of the value can be one of <cite>bool</cite>, <cite>string</cite>, <cite>float</cite>,
+<cite>int</cite>, or <cite>None</cite>.</p>
+</dd>
+<dt>metric_dict (dict): Each key-value pair in the dictionary is the</dt><dd><p>name of the metric and it’s corresponding value. Note that the key used
+here should be unique in the tensorboard record. Otherwise the value
+you added by <code class="docutils literal notranslate"><span class="pre">add_scalar</span></code> will be displayed in hparam plugin. In most
+cases, this is unwanted.</p>
+</dd>
+<dt>hparam_domain_discrete: (Optional[Dict[str, List[Any]]]) A dictionary that</dt><dd><p>contains names of the hyperparameters and all discrete values they can hold</p>
+</dd>
+<dt>run_name (str): Name of the run, to be included as part of the logdir.</dt><dd><p>If unspecified, will use current timestamp.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>Examples:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torch.utils.tensorboard</span> <span class="kn">import</span> <span class="n">SummaryWriter</span>
+<span class="k">with</span> <span class="n">SummaryWriter</span><span class="p">()</span> <span class="k">as</span> <span class="n">w</span><span class="p">:</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">):</span>
+        <span class="n">w</span><span class="o">.</span><span class="n">add_hparams</span><span class="p">({</span><span class="s1">&#39;lr&#39;</span><span class="p">:</span> <span class="mf">0.1</span><span class="o">*</span><span class="n">i</span><span class="p">,</span> <span class="s1">&#39;bsize&#39;</span><span class="p">:</span> <span class="n">i</span><span class="p">},</span>
+                      <span class="p">{</span><span class="s1">&#39;hparam/accuracy&#39;</span><span class="p">:</span> <span class="mi">10</span><span class="o">*</span><span class="n">i</span><span class="p">,</span> <span class="s1">&#39;hparam/loss&#39;</span><span class="p">:</span> <span class="mi">10</span><span class="o">*</span><span class="n">i</span><span class="p">})</span>
+</pre></div>
+</div>
+<p>Expected result:</p>
+<a class="reference internal image-reference" href="source/_static/img/tensorboard/add_hparam.png"><img alt="source/_static/img/tensorboard/add_hparam.png" src="source/_static/img/tensorboard/add_hparam.png" /></a>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.tensorboard_plotter.TensorBoardPlotter">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.tensorboard_plotter.</span></span><span class="sig-name descname"><span class="pre">TensorBoardPlotter</span></span><a class="headerlink" href="#birdsong.utils.tensorboard_plotter.TensorBoardPlotter" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Support functionality for creating custom 
+graphs and images for submission to Tensorboard.
+Services include:</p>
+<blockquote>
+<div><p>o Create confusion matrix images
+o Bar charts for number of samples in each class
+o Placing a grid of images on Tensorboard
+o Writing (i.e. overlaying) text onto images</p>
+</div></blockquote>
+<p>No SummaryWriter is created. A writer is always
+passed in</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.tensorboard_plotter.TensorBoardPlotter.DISPLAY_HISTORY_LEN">
+<span class="sig-name descname"><span class="pre">DISPLAY_HISTORY_LEN</span></span><em class="property"> <span class="pre">=</span> <span class="pre">8</span></em><a class="headerlink" href="#birdsong.utils.tensorboard_plotter.TensorBoardPlotter.DISPLAY_HISTORY_LEN" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tensorboard_plotter.TensorBoardPlotter.add_image">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">add_image</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">writer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tag</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">img_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">step</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">to_grayscale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">img_height</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">200</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">img_width</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">400</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tensorboard_plotter.TensorBoardPlotter.add_image" title="Permalink to this definition">¶</a></dt>
+<dd><p>Writes a single image to tensorboard.
+Can resize image or turn to grayscale
+if requested. If img_width or img_height
+is None, no scaling is done.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>writer</strong> (<em>SummaryWriter</em>) – the SummaryWriter to use</p></li>
+<li><p><strong>tag</strong> (<em>str</em>) – the name of the image in 
+tensorboard display</p></li>
+<li><p><strong>img_path</strong> (<em>str</em>) – full path to image</p></li>
+<li><p><strong>step</strong> (<em>int</em>) – step</p></li>
+<li><p><strong>to_grayscale</strong> (<em>bool</em>) – whether or not to conver
+to grayscale</p></li>
+<li><p><strong>img_height</strong> (<em>int</em>) – desired image height</p></li>
+<li><p><strong>img_width</strong> (<em>int</em>) – desired image width</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tensorboard_plotter.TensorBoardPlotter.class_support_to_tensorboard">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">class_support_to_tensorboard</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data_src</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">writer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">step</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'Class</span> <span class="pre">Support'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tensorboard_plotter.TensorBoardPlotter.class_support_to_tensorboard" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create a barchart showing number of training samples
+in each class. The chart is converted to
+a tensor, and submitted to tensorboard.</p>
+<p>The data_src may be:</p>
+<blockquote>
+<div><p>o a dataset in the pytorch sense, or 
+o a full path the root of a training data directory, or</p>
+</div></blockquote>
+<p>If custom_data is None, a barchart with number of samples
+in each class is created. Else custom_data is expected
+to be a dict mapping class-id =&gt; num-samples in that class.
+If provided, this data is bar-charted instead of the
+entire dataset’s distribution</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data_src</strong> (<em>{str | {int : int} | torch.utils.data.Dataset}</em>) – either a path to samples,
+or a dataset</p></li>
+<li><p><strong>writer</strong> (<em>tensorboard.SummaryWriter</em>) – a tensorboard summary writer</p></li>
+<li><p><strong>step</strong> (<em>int</em>) – step for which support is shown</p></li>
+<li><p><strong>custom_data</strong> (<em>{int : int}</em>) – an optional dict {class-id : sample-count} whose
+per-class count is to be bar-charted instead of the entire
+dataset</p></li>
+<li><p><strong>title</strong> (<em>str</em>) – optional title above the figure</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>dict {&lt;class_name&gt; : &lt;num_samples_for_class_name&gt;}
+i.e. number of samples in each class.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>{str : int}</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tensorboard_plotter.TensorBoardPlotter.collection_to_tensorboard">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">collection_to_tensorboard</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tally_coll</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">writer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">phases</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">step</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tensorboard_plotter.TensorBoardPlotter.collection_to_tensorboard" title="Permalink to this definition">¶</a></dt>
+<dd><p>Reports standard results from all tallies
+in the given collection to a tensorboard.
+Included are:</p>
+<blockquote>
+<div><p>o Various charts
+o Result text tables
+o hparams</p>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>tally_coll</strong> – </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tensorboard_plotter.TensorBoardPlotter.conf_matrix_to_tensorboard">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">conf_matrix_to_tensorboard</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">writer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">conf_matrix</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">step</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'Confusion</span> <span class="pre">Matrix'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tensorboard_plotter.TensorBoardPlotter.conf_matrix_to_tensorboard" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add confusion matrix to tensorboard as an
+image. Multiple conf matrices (from multiple steps)
+maybe be overlaid. Tensorboard will add a slider to 
+run through them.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>writer</strong> (<em>tensorboard.SummaryWriter</em>) – tensorboard writer</p></li>
+<li><p><strong>conf_matrix</strong> (<em>pd.DataFrame</em>) – confusion matrix to draw as heatmap</p></li>
+<li><p><strong>step</strong> (<em>int</em>) – the step number that generated the matrix</p></li>
+<li><p><strong>title</strong> (<em>str</em>) – title to add at the image</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.tensorboard_plotter.TensorBoardPlotter.log">
+<span class="sig-name descname"><span class="pre">log</span></span><em class="property"> <span class="pre">=</span> <span class="pre">&lt;LoggingService</span> <span class="pre">0x7f9668b70970&gt;</span></em><a class="headerlink" href="#birdsong.utils.tensorboard_plotter.TensorBoardPlotter.log" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tensorboard_plotter.TensorBoardPlotter.make_all_classes_f1_table">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">make_all_classes_f1_table</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">latest_result</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">class_names</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tensorboard_plotter.TensorBoardPlotter.make_all_classes_f1_table" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return a github flavored table with
+with train and val f1 values for every
+class:</p>
+<blockquote>
+<div><p><a href="#id17"><span class="problematic" id="id18">|class|weighted mean f1 train|weighted mean f1 val|</span></a>
+<a href="#id19"><span class="problematic" id="id20">|-----|</span></a>———————-<a href="#id21"><span class="problematic" id="id22">|--------------------|</span></a>
+|  c1 |     0.1              |   0.6              |
+|  c2 |     0.1              |   0.6              |
+|  c3 |     0.1              |   0.6              |
+—————————————————</p>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tensorboard_plotter.TensorBoardPlotter.make_f1_train_val_table">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">make_f1_train_val_table</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">res_list</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tensorboard_plotter.TensorBoardPlotter.make_f1_train_val_table" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="simple">
+<dt>Return a github flavored table:</dt><dd><p><a href="#id23"><span class="problematic" id="id24">|phase|ep0  |ep1 |ep2 |
+|-----|</span></a>—–<a href="#id25"><span class="problematic" id="id26">|----|</span></a>—-|
+<a href="#id27"><span class="problematic" id="id28">|train|</span></a> f1_0|f1_1|f1_2|
+|  val| f1_0|f1_1|f1_2|</p>
+</dd>
+</dl>
+<p>for half as many steps back as there are
+tallies available in the list of ResultTally
+instances in step_results.</p>
+<p>Assumption: exactly two ResultTallies are provided
+in res_list. One each for train and validation 
+results.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>res_list</strong> (<em>[</em><a class="reference internal" href="birdsong.html#birdsong.result_tallying.ResultTally" title="birdsong.result_tallying.ResultTally"><em>ResultTally</em></a><em>]</em>) – list of ResultTally
+instances in oldest-step-first order</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>a table</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tensorboard_plotter.TensorBoardPlotter.print_onto_image">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">print_onto_image</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">img_src</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">txt</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">point</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(10,</span> <span class="pre">10)</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tensorboard_plotter.TensorBoardPlotter.print_onto_image" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given an image, writes given text onto the image.
+Returns a tensor of the new image. Acceptable as image
+sources are:</p>
+<blockquote>
+<div><p>o File path to jpg, png, etc.
+o A tensor
+o A PIL image</p>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>img_src</strong> (<em>{str | Tensor | PIL}</em>) – image, or a way to get the image</p></li>
+<li><p><strong>txt</strong> (<em>str</em>) – text to be printed onto the image</p></li>
+<li><p><strong>point</strong> (<em>[</em><em>int</em><em>,</em><em>int</em><em>]</em>) – where to place the text. In pixels,
+origin upper left</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>new image with text ‘burned’ onto it</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tensorboard_plotter.TensorBoardPlotter.visualize_step">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">visualize_step</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tally_coll</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">writer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">phases</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">step</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">class_names</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tensorboard_plotter.TensorBoardPlotter.visualize_step" title="Permalink to this definition">¶</a></dt>
+<dd><p>Take the ResultTally instances from
+the same step from the tally_coll, 
+and report appropriate aggregates to 
+tensorboard.</p>
+<p>Computes f1 scores, accuracies, etc. for 
+given step.</p>
+<p>Separately for train and validation
+results: build one long array 
+of predictions, and a corresponding
+array of labels. Also, average the
+loss across all instances.</p>
+<p>The the preds and labels as rows to csv 
+files.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>a ResultTally instance with all
+metrics computed for display</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p><a class="reference internal" href="birdsong.html#birdsong.result_tallying.ResultTally" title="birdsong.result_tallying.ResultTally">ResultTally</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tensorboard_plotter.TensorBoardPlotter.write_img_grid">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">write_img_grid</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">writer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">img_root_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_imgs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">4</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">class_sample_file_pairs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">img_height</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">200</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">img_width</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">400</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">to_grayscale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">unittesting</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tensorboard_plotter.TensorBoardPlotter.write_img_grid" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create and log a Tensorboard ‘grid’ of
+example train images. The img_root_dir must
+be the ‘data root’: the dir holding one subdir
+per class.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>writer</strong> (<em>SummaryWriter</em>) – a Tensorboard Pytorch SummaryWriter</p></li>
+<li><p><strong>img_root_dir</strong> (<em>str</em>) – directory 
+that contains sub-directories with samples. The 
+sub-directory names are taken to be class names.</p></li>
+<li><p><strong>num_imgs</strong> (<em>{None | int}</em>) – total number of images to
+include in the grid. If None: all images</p></li>
+<li><p><strong>class_sample_file_pairs</strong> (<em>{None | str |</em><em> [</em><em>str</em><em>]</em><em>}</em>) – &lt;class&gt;/&lt;img_file_name&gt; for
+individual images if random choice is not wanted.</p></li>
+<li><p><strong>img_height</strong> (<em>int</em><em> (</em><em>pixels</em><em>)</em>) – height of all images</p></li>
+<li><p><strong>img_width</strong> (<em>int</em><em> (</em><em>pixels</em><em>)</em>) – width of all images</p></li>
+<li><p><strong>to_grayscale</strong> (<em>bool</em>) – whether or not to convert 
+images to grayscale upon import</p></li>
+<li><p><strong>unittesting</strong> (<em>bool</em>) – controls whether grid is
+actually created, or the img tensor that
+would be contained in the grid is returned
+for testing dimensions.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-birdsong.utils.tiny_one_gpu_ddp">
+<span id="birdsong-utils-tiny-one-gpu-ddp-module"></span><h2>birdsong.utils.tiny_one_gpu_ddp module<a class="headerlink" href="#module-birdsong.utils.tiny_one_gpu_ddp" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.tiny_one_gpu_ddp.MinimalDDP">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.tiny_one_gpu_ddp.</span></span><span class="sig-name descname"><span class="pre">MinimalDDP</span></span><a class="headerlink" href="#birdsong.utils.tiny_one_gpu_ddp.MinimalDDP" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test whether DDP really does something</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tiny_one_gpu_ddp.MinimalDDP.cleanup">
+<span class="sig-name descname"><span class="pre">cleanup</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tiny_one_gpu_ddp.MinimalDDP.cleanup" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tiny_one_gpu_ddp.MinimalDDP.demo_basic">
+<span class="sig-name descname"><span class="pre">demo_basic</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rank</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">world_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_save_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'/tmp'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tiny_one_gpu_ddp.MinimalDDP.demo_basic" title="Permalink to this definition">¶</a></dt>
+<dd><p>The action: train model; save intermediate states</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.tiny_one_gpu_ddp.MinimalDDP.epochs">
+<span class="sig-name descname"><span class="pre">epochs</span></span><em class="property"> <span class="pre">=</span> <span class="pre">2</span></em><a class="headerlink" href="#birdsong.utils.tiny_one_gpu_ddp.MinimalDDP.epochs" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.tiny_one_gpu_ddp.MinimalDDP.samples">
+<span class="sig-name descname"><span class="pre">samples</span></span><em class="property"> <span class="pre">=</span> <span class="pre">3</span></em><a class="headerlink" href="#birdsong.utils.tiny_one_gpu_ddp.MinimalDDP.samples" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tiny_one_gpu_ddp.MinimalDDP.setup">
+<span class="sig-name descname"><span class="pre">setup</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rank</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">world_size</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tiny_one_gpu_ddp.MinimalDDP.setup" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.tiny_one_gpu_ddp.ToyModel">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.tiny_one_gpu_ddp.</span></span><span class="sig-name descname"><span class="pre">ToyModel</span></span><a class="headerlink" href="#birdsong.utils.tiny_one_gpu_ddp.ToyModel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tiny_one_gpu_ddp.ToyModel.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tiny_one_gpu_ddp.ToyModel.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.tiny_one_gpu_ddp.ToyModel.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="pre">:</span> <span class="pre">bool</span></em><a class="headerlink" href="#birdsong.utils.tiny_one_gpu_ddp.ToyModel.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="birdsong.utils.tiny_one_gpu_ddp.randn">
+<span class="sig-prename descclassname"><span class="pre">birdsong.utils.tiny_one_gpu_ddp.</span></span><span class="sig-name descname"><span class="pre">randn</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">*size</span></em>, <em class="sig-param"><span class="pre">*</span></em>, <em class="sig-param"><span class="pre">out=None</span></em>, <em class="sig-param"><span class="pre">dtype=None</span></em>, <em class="sig-param"><span class="pre">layout=torch.strided</span></em>, <em class="sig-param"><span class="pre">device=None</span></em>, <em class="sig-param"><span class="pre">requires_grad=False</span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">Tensor</span><a class="headerlink" href="#birdsong.utils.tiny_one_gpu_ddp.randn" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a tensor filled with random numbers from a normal distribution
+with mean <cite>0</cite> and variance <cite>1</cite> (also called the standard normal
+distribution).</p>
+<div class="math notranslate nohighlight">
+\[\text{out}_{i} \sim \mathcal{N}(0, 1)\]</div>
+<p>The shape of the tensor is defined by the variable argument <code class="xref py py-attr docutils literal notranslate"><span class="pre">size</span></code>.</p>
+<dl>
+<dt>Args:</dt><dd><dl class="simple">
+<dt>size (int…): a sequence of integers defining the shape of the output tensor.</dt><dd><p>Can be a variable number of arguments or a collection like a list or tuple.</p>
+</dd>
+</dl>
+</dd>
+<dt>Keyword args:</dt><dd><p>out (Tensor, optional): the output tensor.
+dtype (<code class="xref py py-class docutils literal notranslate"><span class="pre">torch.dtype</span></code>, optional): the desired data type of returned tensor.</p>
+<blockquote>
+<div><p>Default: if <code class="docutils literal notranslate"><span class="pre">None</span></code>, uses a global default (see <code class="xref py py-func docutils literal notranslate"><span class="pre">torch.set_default_tensor_type()</span></code>).</p>
+</div></blockquote>
+<dl class="simple">
+<dt>layout (<code class="xref py py-class docutils literal notranslate"><span class="pre">torch.layout</span></code>, optional): the desired layout of returned Tensor.</dt><dd><p>Default: <code class="docutils literal notranslate"><span class="pre">torch.strided</span></code>.</p>
+</dd>
+<dt>device (<code class="xref py py-class docutils literal notranslate"><span class="pre">torch.device</span></code>, optional): the desired device of returned tensor.</dt><dd><p>Default: if <code class="docutils literal notranslate"><span class="pre">None</span></code>, uses the current device for the default tensor type
+(see <code class="xref py py-func docutils literal notranslate"><span class="pre">torch.set_default_tensor_type()</span></code>). <code class="xref py py-attr docutils literal notranslate"><span class="pre">device</span></code> will be the CPU
+for CPU tensor types and the current CUDA device for CUDA tensor types.</p>
+</dd>
+<dt>requires_grad (bool, optional): If autograd should record operations on the</dt><dd><p>returned tensor. Default: <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+<span class="go">tensor([-2.1436,  0.9966,  2.3426, -0.6366])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+<span class="go">tensor([[ 1.5954,  2.8929, -1.0923],</span>
+<span class="go">        [ 1.1719, -0.4709, -0.1996]])</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</div>
+<div class="section" id="module-birdsong.utils.tiny_one_gpu_no_ddp">
+<span id="birdsong-utils-tiny-one-gpu-no-ddp-module"></span><h2>birdsong.utils.tiny_one_gpu_no_ddp module<a class="headerlink" href="#module-birdsong.utils.tiny_one_gpu_no_ddp" title="Permalink to this headline">¶</a></h2>
+<p>Created on Jan 22, 2021</p>
+<p>&#64;author: paepcke</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.tiny_one_gpu_no_ddp.TinyNoDDP">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.tiny_one_gpu_no_ddp.</span></span><span class="sig-name descname"><span class="pre">TinyNoDDP</span></span><a class="headerlink" href="#birdsong.utils.tiny_one_gpu_no_ddp.TinyNoDDP" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test whether DDP really does something</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.tiny_one_gpu_no_ddp.TinyNoDDP.batches">
+<span class="sig-name descname"><span class="pre">batches</span></span><em class="property"> <span class="pre">=</span> <span class="pre">3</span></em><a class="headerlink" href="#birdsong.utils.tiny_one_gpu_no_ddp.TinyNoDDP.batches" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tiny_one_gpu_no_ddp.TinyNoDDP.demo_basic">
+<span class="sig-name descname"><span class="pre">demo_basic</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tiny_one_gpu_no_ddp.TinyNoDDP.demo_basic" title="Permalink to this definition">¶</a></dt>
+<dd><p>The action: train model; save intermediate states</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.tiny_one_gpu_no_ddp.TinyNoDDP.epochs">
+<span class="sig-name descname"><span class="pre">epochs</span></span><em class="property"> <span class="pre">=</span> <span class="pre">2</span></em><a class="headerlink" href="#birdsong.utils.tiny_one_gpu_no_ddp.TinyNoDDP.epochs" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.tiny_one_gpu_no_ddp.ToyModel">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.tiny_one_gpu_no_ddp.</span></span><span class="sig-name descname"><span class="pre">ToyModel</span></span><a class="headerlink" href="#birdsong.utils.tiny_one_gpu_no_ddp.ToyModel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tiny_one_gpu_no_ddp.ToyModel.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tiny_one_gpu_no_ddp.ToyModel.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.tiny_one_gpu_no_ddp.ToyModel.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="pre">:</span> <span class="pre">bool</span></em><a class="headerlink" href="#birdsong.utils.tiny_one_gpu_no_ddp.ToyModel.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="birdsong.utils.tiny_one_gpu_no_ddp.randn">
+<span class="sig-prename descclassname"><span class="pre">birdsong.utils.tiny_one_gpu_no_ddp.</span></span><span class="sig-name descname"><span class="pre">randn</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">*size</span></em>, <em class="sig-param"><span class="pre">*</span></em>, <em class="sig-param"><span class="pre">out=None</span></em>, <em class="sig-param"><span class="pre">dtype=None</span></em>, <em class="sig-param"><span class="pre">layout=torch.strided</span></em>, <em class="sig-param"><span class="pre">device=None</span></em>, <em class="sig-param"><span class="pre">requires_grad=False</span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">Tensor</span><a class="headerlink" href="#birdsong.utils.tiny_one_gpu_no_ddp.randn" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a tensor filled with random numbers from a normal distribution
+with mean <cite>0</cite> and variance <cite>1</cite> (also called the standard normal
+distribution).</p>
+<div class="math notranslate nohighlight">
+\[\text{out}_{i} \sim \mathcal{N}(0, 1)\]</div>
+<p>The shape of the tensor is defined by the variable argument <code class="xref py py-attr docutils literal notranslate"><span class="pre">size</span></code>.</p>
+<dl>
+<dt>Args:</dt><dd><dl class="simple">
+<dt>size (int…): a sequence of integers defining the shape of the output tensor.</dt><dd><p>Can be a variable number of arguments or a collection like a list or tuple.</p>
+</dd>
+</dl>
+</dd>
+<dt>Keyword args:</dt><dd><p>out (Tensor, optional): the output tensor.
+dtype (<code class="xref py py-class docutils literal notranslate"><span class="pre">torch.dtype</span></code>, optional): the desired data type of returned tensor.</p>
+<blockquote>
+<div><p>Default: if <code class="docutils literal notranslate"><span class="pre">None</span></code>, uses a global default (see <code class="xref py py-func docutils literal notranslate"><span class="pre">torch.set_default_tensor_type()</span></code>).</p>
+</div></blockquote>
+<dl class="simple">
+<dt>layout (<code class="xref py py-class docutils literal notranslate"><span class="pre">torch.layout</span></code>, optional): the desired layout of returned Tensor.</dt><dd><p>Default: <code class="docutils literal notranslate"><span class="pre">torch.strided</span></code>.</p>
+</dd>
+<dt>device (<code class="xref py py-class docutils literal notranslate"><span class="pre">torch.device</span></code>, optional): the desired device of returned tensor.</dt><dd><p>Default: if <code class="docutils literal notranslate"><span class="pre">None</span></code>, uses the current device for the default tensor type
+(see <code class="xref py py-func docutils literal notranslate"><span class="pre">torch.set_default_tensor_type()</span></code>). <code class="xref py py-attr docutils literal notranslate"><span class="pre">device</span></code> will be the CPU
+for CPU tensor types and the current CUDA device for CUDA tensor types.</p>
+</dd>
+<dt>requires_grad (bool, optional): If autograd should record operations on the</dt><dd><p>returned tensor. Default: <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+<span class="go">tensor([-2.1436,  0.9966,  2.3426, -0.6366])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+<span class="go">tensor([[ 1.5954,  2.8929, -1.0923],</span>
+<span class="go">        [ 1.1719, -0.4709, -0.1996]])</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</div>
+<div class="section" id="module-birdsong.utils.trash">
+<span id="birdsong-utils-trash-module"></span><h2>birdsong.utils.trash module<a class="headerlink" href="#module-birdsong.utils.trash" title="Permalink to this headline">¶</a></h2>
+<p>Created on May 13, 2021</p>
+<p>&#64;author: paepcke</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.trash.Interval">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.trash.</span></span><span class="sig-name descname"><span class="pre">Interval</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">low_val</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">high_val</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.trash.Interval" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code></p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="birdsong.utils.trash.binary_in_interval_search">
+<span class="sig-prename descclassname"><span class="pre">birdsong.utils.trash.</span></span><span class="sig-name descname"><span class="pre">binary_in_interval_search</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">intervals</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interval_start</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">low_key</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">high_key</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.trash.binary_in_interval_search" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="birdsong.utils.trash.binary_search">
+<span class="sig-prename descclassname"><span class="pre">birdsong.utils.trash.</span></span><span class="sig-name descname"><span class="pre">binary_search</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">arr</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.trash.binary_search" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</div>
+<div class="section" id="module-birdsong.utils.utilities">
+<span id="birdsong-utils-utilities-module"></span><h2>birdsong.utils.utilities module<a class="headerlink" href="#module-birdsong.utils.utilities" title="Permalink to this headline">¶</a></h2>
+<p>Created on Jan 21, 2021</p>
+<p>&#64;author: paepcke</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.utilities.CSVWriterCloseable">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.utilities.</span></span><span class="sig-name descname"><span class="pre">CSVWriterCloseable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fname</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'w'</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.utilities.CSVWriterCloseable" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Wrapper around csv writer: takes a 
+file name to use and:</p>
+<blockquote>
+<div><p>o Creates intermediate dirs if needed,
+o Opens the file in the given mode
+o Adds close() method which closes that</p>
+<blockquote>
+<div><p>underlying fd.</p>
+</div></blockquote>
+<p>o Creates a writer object into an inst var.</p>
+</div></blockquote>
+<p>Only supports the writerow() method of
+csv writers.</p>
+<p>This class should inherit from a csv.Writer
+class if it existed. But as of Python 3.9 it
+does not.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.utilities.CSVWriterCloseable.close">
+<span class="sig-name descname"><span class="pre">close</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.utilities.CSVWriterCloseable.close" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="birdsong.utils.utilities.CSVWriterCloseable.fd">
+<em class="property"><span class="pre">property</span> </em><span class="sig-name descname"><span class="pre">fd</span></span><a class="headerlink" href="#birdsong.utils.utilities.CSVWriterCloseable.fd" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="birdsong.utils.utilities.CSVWriterCloseable.fname">
+<em class="property"><span class="pre">property</span> </em><span class="sig-name descname"><span class="pre">fname</span></span><a class="headerlink" href="#birdsong.utils.utilities.CSVWriterCloseable.fname" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.utilities.CSVWriterCloseable.writerow">
+<span class="sig-name descname"><span class="pre">writerow</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">seq</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.utilities.CSVWriterCloseable.writerow" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.utilities.FileUtils">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.utilities.</span></span><span class="sig-name descname"><span class="pre">FileUtils</span></span><a class="headerlink" href="#birdsong.utils.utilities.FileUtils" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>classdocs</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.utilities.FileUtils.IMG_EXTENSIONS">
+<span class="sig-name descname"><span class="pre">IMG_EXTENSIONS</span></span><em class="property"> <span class="pre">=</span> <span class="pre">('.jpg',</span> <span class="pre">'.jpeg',</span> <span class="pre">'.png',</span> <span class="pre">'.ppm',</span> <span class="pre">'.bmp',</span> <span class="pre">'.pgm',</span> <span class="pre">'.tif',</span> <span class="pre">'.tiff',</span> <span class="pre">'.webp')</span></em><a class="headerlink" href="#birdsong.utils.utilities.FileUtils.IMG_EXTENSIONS" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.utilities.FileUtils.construct_filename">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">construct_filename</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">props_info</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">suffix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">incl_date</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.utilities.FileUtils.construct_filename" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="simple">
+<dt>NOTE: if changes are made to how filenames</dt><dd><p>are constructed, check method parse_filename()
+for needed mods</p>
+</dd>
+</dl>
+<p>Given either:</p>
+<blockquote>
+<div><dl class="simple">
+<dt>o a dict of property names and</dt><dd><p>associated values, or</p>
+</dd>
+<dt>o an object with instance vars </dt><dd><p>named all the long names in
+fname_short_2_long</p>
+</dd>
+</dl>
+</div></blockquote>
+<p>create a filename that includes all 
+the information held in the keys and 
+values of the dict/obj:</p>
+<dl>
+<dt>Ex props_info is a dict:</dt><dd><dl class="simple">
+<dt>{</dt><dd><p>‘lr’ : 0.001,
+‘bs’ : 32,
+optimizer : ‘Adam’</p>
+</dd>
+</dl>
+<p>}</p>
+</dd>
+</dl>
+<p>would return the string:</p>
+<blockquote>
+<div><p>‘lr_0.001_bs_32_optimizer_Adam’</p>
+</div></blockquote>
+<p>Ex props_info is an object:</p>
+<blockquote>
+<div><p>‘net_resnet18_pre_False_lr_0.01_opt_SGD_bs_2_ks_7_folds_3_gray_True_classes_None</p>
+</div></blockquote>
+<p>I.e. all file elements in fname_short_2_long
+are included in the returned file name.</p>
+<p>If obj.num_classes is unavailable, the
+‘classes’ part of the fname will be ‘None’</p>
+<p>If a prefix is provided, it will lead the
+string. Example: “Exp” would yield:</p>
+<blockquote>
+<div><p>‘EXP_lr_0.001_bs_32_optimizer_Adam’</p>
+</div></blockquote>
+<p>If suffix is provided, it will be appended to the
+name: Example, suffix=’.csv’:</p>
+<blockquote>
+<div><p>‘EXP_lr_0.001_bs_32_optimizer_Adam.csv’</p>
+</div></blockquote>
+<p>Finally, if incl_date is True, a timestamp is added
+at the start of the returned name, or right after
+the prefix</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>props_info</strong> (<em>{str : Any}</em>) – names and values to include,
+or an object that provides all needed values
+as attributes (instance vars)</p></li>
+<li><p><strong>prefix</strong> (<em>str</em>) – leading part of file name</p></li>
+<li><p><strong>suffix</strong> (<em>str</em>) – trailing part of file name</p></li>
+<li><p><strong>incl_date</strong> (<em>bool</em>) – whether or not to include current
+data in the file name</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>a string appropriate for use as a filename</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.utilities.FileUtils.date_at_start_pat">
+<span class="sig-name descname"><span class="pre">date_at_start_pat</span></span><em class="property"> <span class="pre">=</span> <span class="pre">re.compile('([^_]*)[_]{0,1}([\\d]{4}-[\\d]{2}-[\\d]{2}T[\\d]{2}_[\\d]{2}_[\\d]{2})')</span></em><a class="headerlink" href="#birdsong.utils.utilities.FileUtils.date_at_start_pat" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.utilities.FileUtils.ellipsed_file_path">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">ellipsed_file_path</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">acceptable_len</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">25</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.utilities.FileUtils.ellipsed_file_path" title="Permalink to this definition">¶</a></dt>
+<dd><p>If a path is very long, return
+a string with some of the intermediate
+dirs replaced by ellipses. Used in 
+messages and log entries when the entire
+path is not needed.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>path</strong> (<em>int</em>) – </p></li>
+<li><p><strong>acceptable_len</strong> – number of letters
+acceptable to keep in the result</p></li>
+</ul>
+</dd>
+</dl>
+<p>:return shortened path for printing in messages
+:rtype: str</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.utilities.FileUtils.ensure_directory_existence">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">ensure_directory_existence</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">the_path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.utilities.FileUtils.ensure_directory_existence" title="Permalink to this definition">¶</a></dt>
+<dd><p>Ensures that all directories in the given
+path exist. If the_path ‘looks like’ a file, the 
+existence of all directories leading to (and including) 
+its parents is ensured. If the_path looks like a 
+directory, ensures that all paths (and including) 
+the_path exist.</p>
+<p>Whether or not the_path seems to be a file is 
+naively determined by whether or not the_path 
+has an extension. Not perfect, but will do.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>the_path</strong> (<em>str</em>) – file or directory path whose
+directories are to be ensured</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.utilities.FileUtils.expand_filename">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">expand_filename</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fname</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">expand_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.utilities.FileUtils.expand_filename" title="Permalink to this definition">¶</a></dt>
+<dd><p>Resolves Unix filenames with tilde, environment vars,
+and/or wildcards, such as</p>
+<blockquote>
+<div><p>~/tmp/foo.*
+$HOME/tmp/*</p>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>fname</strong> (<em>str</em>) – file name with Unix-like name features</p></li>
+<li><p><strong>expand_dir</strong> (<em>bool</em>) – If true, and the fully expanded
+fname is a directory, return a list of that directory’s
+content (non-recursively)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>expanded file name(s), with tilde, env vars, and
+wildcards expanded.</p>
+</dd>
+</dl>
+<p>:rtype [str]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.utilities.FileUtils.file_timestamp">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">file_timestamp</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.utilities.FileUtils.file_timestamp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Finds current time, removes milliseconds,
+and replaces colons with underscores. The
+returned string is fit for inclusion in a
+filename.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>string for inclusion in filename</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.utilities.FileUtils.find_class_names">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">find_class_names</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dir_name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.utilities.FileUtils.find_class_names" title="Permalink to this definition">¶</a></dt>
+<dd><p>Like find_class_paths(), but only 
+the trailing directory names of the 
+paths, i.e. the class names, are
+returned.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>dir_name</strong> (<em>str</em>) – root of dir to search</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>naturally sorted list of class names</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>[str]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.utilities.FileUtils.find_class_paths">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">find_class_paths</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data_root</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.utilities.FileUtils.find_class_paths" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given a root directory, return an Ordered dict
+mapping class names to lists of directories
+that contain at least one sample of that class.</p>
+<p>Both the class names (i.e. keys), and the
+lists of directories (i.e. values) will be
+naturally sorted, and absolute.</p>
+<p>Directory names that begin with a period (‘.’)
+are excluded.</p>
+<p>The assumption is that the names of the last
+path element of the returned directories are 
+class names. This assumption is often made in 
+torchvision packages.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>data_root</strong> (<em>str</em>) – root directory for search</p>
+</dd>
+</dl>
+<dl class="simple">
+<dt>:return dict mapping target classes to a list</dt><dd><p>of directories that contain samples of that
+class. The directories will be Path objs</p>
+</dd>
+</dl>
+<p>:rtype Ordered{str : [Path]}</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.utilities.FileUtils.fname_el_types">
+<span class="sig-name descname"><span class="pre">fname_el_types</span></span><em class="property"> <span class="pre">=</span> <span class="pre">{'bs':</span> <span class="pre">&lt;class</span> <span class="pre">'int'&gt;,</span> <span class="pre">'classes':</span> <span class="pre">&lt;class</span> <span class="pre">'int'&gt;,</span> <span class="pre">'folds':</span> <span class="pre">&lt;class</span> <span class="pre">'int'&gt;,</span> <span class="pre">'frz':</span> <span class="pre">&lt;class</span> <span class="pre">'int'&gt;,</span> <span class="pre">'gray':</span> <span class="pre">&lt;function</span> <span class="pre">FileUtils.&lt;lambda&gt;&gt;,</span> <span class="pre">'ks':</span> <span class="pre">&lt;class</span> <span class="pre">'int'&gt;,</span> <span class="pre">'lr':</span> <span class="pre">&lt;class</span> <span class="pre">'float'&gt;,</span> <span class="pre">'net':</span> <span class="pre">&lt;class</span> <span class="pre">'str'&gt;,</span> <span class="pre">'opt':</span> <span class="pre">&lt;class</span> <span class="pre">'str'&gt;,</span> <span class="pre">'pre':</span> <span class="pre">&lt;function</span> <span class="pre">FileUtils.&lt;lambda&gt;&gt;}</span></em><a class="headerlink" href="#birdsong.utils.utilities.FileUtils.fname_el_types" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.utilities.FileUtils.fname_long_2_short">
+<span class="sig-name descname"><span class="pre">fname_long_2_short</span></span><em class="property"> <span class="pre">=</span> <span class="pre">{'batch_size':</span> <span class="pre">'bs',</span> <span class="pre">'freeze':</span> <span class="pre">'frz',</span> <span class="pre">'kernel_size':</span> <span class="pre">'ks',</span> <span class="pre">'lr':</span> <span class="pre">'lr',</span> <span class="pre">'net_name':</span> <span class="pre">'net',</span> <span class="pre">'num_classes':</span> <span class="pre">'classes',</span> <span class="pre">'num_folds':</span> <span class="pre">'folds',</span> <span class="pre">'opt_name':</span> <span class="pre">'opt',</span> <span class="pre">'pretrained':</span> <span class="pre">'pre',</span> <span class="pre">'to_grayscale':</span> <span class="pre">'gray'}</span></em><a class="headerlink" href="#birdsong.utils.utilities.FileUtils.fname_long_2_short" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.utilities.FileUtils.fname_short_2_long">
+<span class="sig-name descname"><span class="pre">fname_short_2_long</span></span><em class="property"> <span class="pre">=</span> <span class="pre">{'bs':</span> <span class="pre">'batch_size',</span> <span class="pre">'classes':</span> <span class="pre">'num_classes',</span> <span class="pre">'folds':</span> <span class="pre">'num_folds',</span> <span class="pre">'frz':</span> <span class="pre">'freeze',</span> <span class="pre">'gray':</span> <span class="pre">'to_grayscale',</span> <span class="pre">'ks':</span> <span class="pre">'kernel_size',</span> <span class="pre">'lr':</span> <span class="pre">'lr',</span> <span class="pre">'net':</span> <span class="pre">'net_name',</span> <span class="pre">'opt':</span> <span class="pre">'opt_name',</span> <span class="pre">'pre':</span> <span class="pre">'pretrained'}</span></em><a class="headerlink" href="#birdsong.utils.utilities.FileUtils.fname_short_2_long" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.utilities.FileUtils.get_image_transforms">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">get_image_transforms</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sample_width</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">400</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_height</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">400</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">to_grayscale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.utilities.FileUtils.get_image_transforms" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a transformation that is applied
+to all images in the application. Always
+get the transforms from here.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sample_width</strong> (<em>int</em>) – desired resize width</p></li>
+<li><p><strong>sample_height</strong> (<em>int</em>) – desired resize height</p></li>
+<li><p><strong>to_grayscale</strong> (<em>bool</em>) – whether or not to convert
+images to 1-channel grayscale during load</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>transform composite</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>whatever torchvision.transforms.Compose returns</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.utilities.FileUtils.gpu_memory_report">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">gpu_memory_report</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">printout</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.utilities.FileUtils.gpu_memory_report" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.utilities.FileUtils.load_preds_and_labels">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">load_preds_and_labels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">csv_path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.utilities.FileUtils.load_preds_and_labels" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a ResultCollection. Each 
+ResultTally in the collection holds
+the outcomes of one epoch:</p>
+<blockquote>
+<div><p>created_at
+phase
+epoch
+num_classes
+batch_size
+preds
+labels
+mean_loss
+losses</p>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>csv_path</strong> (<em>str</em>) – path to CSV file with info
+from a past run</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.utilities.FileUtils.make_run_props_dict">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">make_run_props_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">inst</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.utilities.FileUtils.make_run_props_dict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given an instance of any class that
+guarantees the presence of instance
+variables named as specified in 
+the fname_short_2_long dict.</p>
+<dl class="simple">
+<dt>Return a dict mapping         </dt><dd><p>file_element —&gt; value</p>
+</dd>
+</dl>
+<p>where value is the value of the instance
+var named file_element.</p>
+<dl>
+<dt>Ex return:</dt><dd><dl class="simple">
+<dt>{‘net’<span class="classifier">obj.net_name,</span></dt><dd><dl class="simple">
+<dt>‘pre’<span class="classifier">obj.pretrained,</span></dt><dd><p>…</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>}</p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>inst</strong> (<em>Any</em>) – instance from which to 
+draw values for each file element</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Dict mapping file elements 
+to values.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>{str : Any}</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.utilities.FileUtils.parse_filename">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">parse_filename</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fname</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.utilities.FileUtils.parse_filename" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given a file name produced by 
+construct_filename(), return a dict
+with the constituent elements and their
+values. The keys are not the abbreviations
+in the filename, but the expanded names
+used in the rest of the code:</p>
+<p>Ex:
+From</p>
+<blockquote>
+<div><p>pred_2021-03-11T10_59_02_net_resnet18_pretrain_0_lr_0.01_opt_SGD_bs_64_ks_7_folds_0_gray_True_classes_10.csv</p>
+</div></blockquote>
+<dl>
+<dt>return</dt><dd><dl>
+<dt>{net_name<span class="classifier">‘resnet18’,</span></dt><dd><dl class="simple">
+<dt>batch_size<span class="classifier">64</span></dt><dd><p>…</p>
+</dd>
+</dl>
+<p>}</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>fname</strong> (<em>str</em>) – file name to parse</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>dict with the elements and their values</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>{str : {int|float|str}}</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.utilities.FileUtils.str2bool">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">str2bool</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">the_str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.utilities.FileUtils.str2bool" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.utilities.FileUtils.time_delta_str">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">time_delta_str</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">epoch_delta</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">granularity</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.utilities.FileUtils.time_delta_str" title="Permalink to this definition">¶</a></dt>
+<dd><p>Takes the difference between two datetime times:</p>
+<blockquote>
+<div><p>start_time = datetime.datetime.now()
+&lt;some time elapses&gt;
+end_time = datetime.datetime.now()</p>
+<p>delta = end_time - start_time
+time_delta_str(delta</p>
+</div></blockquote>
+<p>Depending on granularity, returns a string like:</p>
+<blockquote>
+<div><dl class="simple">
+<dt>Granularity:</dt><dd><p>1  ‘160.0 weeks’
+2  ‘160.0 weeks, 4.0 days’
+3  ‘160.0 weeks, 4.0 days, 6.0 hours’
+4  ‘160.0 weeks, 4.0 days, 6.0 hours, 42.0 minutes’
+5  ‘160.0 weeks, 4.0 days, 6.0 hours, 42.0 minutes, 13.0 seconds’</p>
+</dd>
+</dl>
+<p>For smaller time deltas, such as 10 seconds,
+does not include leading zero times. For
+any granularity:</p>
+<blockquote>
+<div><p>‘10.0 seconds’</p>
+</div></blockquote>
+<p>If duration is less than second, returns ‘&lt; 1sec&gt;’</p>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>epoch_delta</strong> – </p></li>
+<li><p><strong>granularity</strong> – </p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.utilities.FileUtils.to_device">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">to_device</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gpu_id</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.utilities.FileUtils.to_device" title="Permalink to this definition">¶</a></dt>
+<dd><p>Moves item to the specified device.
+device may be ‘cpu’, or ‘gpu’</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>cls</strong> – </p></li>
+<li><p><strong>item</strong> (<em>pytorch.Tensor</em>) – tensor to move to device</p></li>
+<li><p><strong>device</strong> (<em>str</em>) – one of ‘cpu’, or ‘gpu’</p></li>
+<li><p><strong>gpu_id</strong> (<em>int</em>) – if device is ‘gpu’, then 
+gpu_id is the ID of the GPU to use,
+zero-origin.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>the moved item</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>pytorch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.utilities.FileUtils.user_confirm">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">user_confirm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prompt_for_yes_no</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'Y'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.utilities.FileUtils.user_confirm" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-birdsong.utils.xeno_canto_download_cleaning">
+<span id="birdsong-utils-xeno-canto-download-cleaning-module"></span><h2>birdsong.utils.xeno_canto_download_cleaning module<a class="headerlink" href="#module-birdsong.utils.xeno_canto_download_cleaning" title="Permalink to this headline">¶</a></h2>
+<p>Created on Mar 28, 2021</p>
+<p>&#64;author: paepcke</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.xeno_canto_download_cleaning.BirdCorrector">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.xeno_canto_download_cleaning.</span></span><span class="sig-name descname"><span class="pre">BirdCorrector</span></span><a class="headerlink" href="#birdsong.utils.xeno_canto_download_cleaning.BirdCorrector" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>A few methods used to rename and otherwise
+cleanup a large Xeno Canto download. Hopefully
+this file won’t be needed in future downloads.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.xeno_canto_download_cleaning.BirdCorrector.make_species_subdirs">
+<span class="sig-name descname"><span class="pre">make_species_subdirs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coll_loc</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">download_dir</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.xeno_canto_download_cleaning.BirdCorrector.make_species_subdirs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create subdirectories below the download_dir, one
+for each species. Move recordings into the proper
+subdirs.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>coll_loc</strong> (<em>str</em>) – path to previously saved XenoCantoCollection</p></li>
+<li><p><strong>download_dir</strong> (<em>str</em>) – path to where the sound files are located</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.xeno_canto_download_cleaning.BirdCorrector.unknown_type_resolution">
+<span class="sig-name descname"><span class="pre">unknown_type_resolution</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coll_loc</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">download_dir</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.xeno_canto_download_cleaning.BirdCorrector.unknown_type_resolution" title="Permalink to this definition">¶</a></dt>
+<dd><p>Downloaded recordings often have non-standard
+type fields, making the distinction between song
+and call difficult. The downloaded sound files then
+end up with <a href="#id29"><span class="problematic" id="id30">UNKNOWN_</span></a> prefixes.</p>
+<p>This method loads the saved collection that contains
+the metadata for the downloaded files. It tries to 
+guess in each XenoCantoRecording instance the proper 
+type from the type fields. It corrects the type field
+if successful. The <a href="#id31"><span class="problematic" id="id32">UNKNOWN_</span></a> prefixed file is then 
+moved to have the proper <a href="#id33"><span class="problematic" id="id34">SONG_</span></a>/<a href="#id35"><span class="problematic" id="id36">CALL_</span></a> prefix.</p>
+<p>Prints remaining unresolved cases.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>coll_loc</strong> (<em>str</em>) – path to previously saved XenoCantoCollection</p></li>
+<li><p><strong>download_dir</strong> (<em>str</em>) – path to where the sound files are located</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-birdsong.utils">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-birdsong.utils" title="Permalink to this headline">¶</a></h2>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &#169; Copyright 2021, Team.
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

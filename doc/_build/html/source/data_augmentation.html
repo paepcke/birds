@@ -1,0 +1,2476 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>data_augmentation package &mdash; Birdsong  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home"> Birdsong
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <!-- Local TOC -->
+              <div class="local-toc"><ul>
+<li><a class="reference internal" href="#">data_augmentation package</a><ul>
+<li><a class="reference internal" href="#submodules">Submodules</a></li>
+<li><a class="reference internal" href="#module-data_augmentation.augment">data_augmentation.augment module</a></li>
+<li><a class="reference internal" href="#module-data_augmentation.augment_audio">data_augmentation.augment_audio module</a></li>
+<li><a class="reference internal" href="#module-data_augmentation.augment_spectrograms">data_augmentation.augment_spectrograms module</a></li>
+<li><a class="reference internal" href="#module-data_augmentation.chop_audiofiles">data_augmentation.chop_audiofiles module</a></li>
+<li><a class="reference internal" href="#module-data_augmentation.chop_spectrograms">data_augmentation.chop_spectrograms module</a></li>
+<li><a class="reference internal" href="#module-data_augmentation.create_spectrograms">data_augmentation.create_spectrograms module</a></li>
+<li><a class="reference internal" href="#module-data_augmentation.list_png_metadata">data_augmentation.list_png_metadata module</a></li>
+<li><a class="reference internal" href="#module-data_augmentation.sound_processor">data_augmentation.sound_processor module</a></li>
+<li><a class="reference internal" href="#module-data_augmentation.utils">data_augmentation.utils module</a></li>
+<li><a class="reference internal" href="#module-data_augmentation">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</div>
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Birdsong</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+      <li>data_augmentation package</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+          
+            <a href="../_sources/source/data_augmentation.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="data-augmentation-package">
+<h1>data_augmentation package<a class="headerlink" href="#data-augmentation-package" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
+</div>
+<div class="section" id="module-data_augmentation.augment">
+<span id="data-augmentation-augment-module"></span><h2>data_augmentation.augment module<a class="headerlink" href="#module-data_augmentation.augment" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="data_augmentation.augment.AugmentationGoals">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">data_augmentation.augment.</span></span><span class="sig-name descname"><span class="pre">AugmentationGoals</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.augment.AugmentationGoals" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">enum.Enum</span></code></p>
+<p>An enumeration.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.augment.AugmentationGoals.MAX">
+<span class="sig-name descname"><span class="pre">MAX</span></span><em class="property"> <span class="pre">=</span> <span class="pre">2</span></em><a class="headerlink" href="#data_augmentation.augment.AugmentationGoals.MAX" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.augment.AugmentationGoals.MEDIAN">
+<span class="sig-name descname"><span class="pre">MEDIAN</span></span><em class="property"> <span class="pre">=</span> <span class="pre">1</span></em><a class="headerlink" href="#data_augmentation.augment.AugmentationGoals.MEDIAN" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.augment.AugmentationGoals.TENTH">
+<span class="sig-name descname"><span class="pre">TENTH</span></span><em class="property"> <span class="pre">=</span> <span class="pre">0</span></em><a class="headerlink" href="#data_augmentation.augment.AugmentationGoals.TENTH" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="data_augmentation.augment.Augmenter">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">data_augmentation.augment.</span></span><span class="sig-name descname"><span class="pre">Augmenter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">input_dir_path</span></em>, <em class="sig-param"><span class="pre">plot=False</span></em>, <em class="sig-param"><span class="pre">overwrite_policy=False</span></em>, <em class="sig-param"><span class="pre">aug_goals=&lt;AugmentationGoals.MEDIAN:</span> <span class="pre">1&gt;</span></em>, <em class="sig-param"><span class="pre">random_augs=False</span></em>, <em class="sig-param"><span class="pre">multiple_augs=False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.augment.Augmenter" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.augment.Augmenter.ADD_NOISE">
+<span class="sig-name descname"><span class="pre">ADD_NOISE</span></span><em class="property"> <span class="pre">=</span> <span class="pre">0.3333333333333333</span></em><a class="headerlink" href="#data_augmentation.augment.Augmenter.ADD_NOISE" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.augment.Augmenter.AUDIO_AUG_NAMES">
+<span class="sig-name descname"><span class="pre">AUDIO_AUG_NAMES</span></span><em class="property"> <span class="pre">=</span> <span class="pre">['add_noise',</span> <span class="pre">'time_shift',</span> <span class="pre">'warp']</span></em><a class="headerlink" href="#data_augmentation.augment.Augmenter.AUDIO_AUG_NAMES" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.augment.Augmenter.AUG_SPECTROGRAMS_DIR">
+<span class="sig-name descname"><span class="pre">AUG_SPECTROGRAMS_DIR</span></span><em class="property"> <span class="pre">=</span> <span class="pre">'spectrograms_augmented/'</span></em><a class="headerlink" href="#data_augmentation.augment.Augmenter.AUG_SPECTROGRAMS_DIR" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.augment.Augmenter.AUG_WAV_DIR">
+<span class="sig-name descname"><span class="pre">AUG_WAV_DIR</span></span><em class="property"> <span class="pre">=</span> <span class="pre">'wav_augmented/'</span></em><a class="headerlink" href="#data_augmentation.augment.Augmenter.AUG_WAV_DIR" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.augment.Augmenter.NOISE_PATH">
+<span class="sig-name descname"><span class="pre">NOISE_PATH</span></span><em class="property"> <span class="pre">=</span> <span class="pre">'data_augmentation/lib/Noise_Recordings/'</span></em><a class="headerlink" href="#data_augmentation.augment.Augmenter.NOISE_PATH" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.augment.Augmenter.P_DIST">
+<span class="sig-name descname"><span class="pre">P_DIST</span></span><em class="property"> <span class="pre">=</span> <span class="pre">[0.3333333333333333,</span> <span class="pre">0.3333333333333333,</span> <span class="pre">0.3333333333333333]</span></em><a class="headerlink" href="#data_augmentation.augment.Augmenter.P_DIST" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.augment.Augmenter.TIME_SHIFT">
+<span class="sig-name descname"><span class="pre">TIME_SHIFT</span></span><em class="property"> <span class="pre">=</span> <span class="pre">0.3333333333333333</span></em><a class="headerlink" href="#data_augmentation.augment.Augmenter.TIME_SHIFT" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.augment.Augmenter.WARP">
+<span class="sig-name descname"><span class="pre">WARP</span></span><em class="property"> <span class="pre">=</span> <span class="pre">0.3333333333333333</span></em><a class="headerlink" href="#data_augmentation.augment.Augmenter.WARP" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.augment.Augmenter.augment_one_species">
+<span class="sig-name descname"><span class="pre">augment_one_species</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">species</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_samples_orig</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.augment.Augmenter.augment_one_species" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.augment.Augmenter.compute_num_augs_per_species">
+<span class="sig-name descname"><span class="pre">compute_num_augs_per_species</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">aug_volumes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_distrib_df</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.augment.Augmenter.compute_num_augs_per_species" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return a dict mapping species name to 
+number of samples that should be available after
+augmentation.</p>
+<p>The aug_volumes arg is either a dict mapping species name
+to an AugmentationGoals (TENTH, MEDIAN, MAX), or just
+an individual AugmentationGoals.</p>
+<p>The sample_distrib_df is a dataframe whose row labels are 
+species names and the single column’s values are numbers
+of available samples for training/validation/test for the
+respective row’s species.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>aug_volumes</strong> (<em>{AugmentationGoals | {str : AugmentationGoals}}</em>) – how many augmentations for each species</p></li>
+<li><p><strong>sample_distrib_df</strong> (<em>pandas.DataFrame</em>) – distribution of initially available
+sample numbers for each species</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>dict mapping each species to the 
+number of samples that need to be created.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>{str : int}</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.augment.Augmenter.create_new_sample">
+<span class="sig-name descname"><span class="pre">create_new_sample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sample_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">paths</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_augs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.augment.Augmenter.create_new_sample" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.augment.Augmenter.create_original_spectrograms">
+<span class="sig-name descname"><span class="pre">create_original_spectrograms</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">samples</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">species_wav_input_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">species_spectrogram_output_dir</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.augment.Augmenter.create_original_spectrograms" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.augment.Augmenter.generate_all_augmentations">
+<span class="sig-name descname"><span class="pre">generate_all_augmentations</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.augment.Augmenter.generate_all_augmentations" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create new samples via augmentation or each species. 
+Augment the audio and/or spectrogram files to reach 
+the number of spectrograms indicated in the self.aug_requirements.</p>
+<p>Spectrograms are created on the way.</p>
+<p>Assumption: self.aug_requirements is a dict mapping 
+species-name : num_required_augmentations</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-data_augmentation.augment_audio">
+<span id="data-augmentation-augment-audio-module"></span><h2>data_augmentation.augment_audio module<a class="headerlink" href="#module-data_augmentation.augment_audio" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="data_augmentation.augment_audio.AudioAugmenter">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">data_augmentation.augment_audio.</span></span><span class="sig-name descname"><span class="pre">AudioAugmenter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">input_dir_path</span></em>, <em class="sig-param"><span class="pre">plot=False</span></em>, <em class="sig-param"><span class="pre">overwrite_policy=False</span></em>, <em class="sig-param"><span class="pre">aug_goals=&lt;AugmentationGoals.MEDIAN:</span> <span class="pre">1&gt;</span></em>, <em class="sig-param"><span class="pre">random_augs=False</span></em>, <em class="sig-param"><span class="pre">multiple_augs=False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.augment_audio.AudioAugmenter" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.augment_audio.AudioAugmenter.ADD_NOISE">
+<span class="sig-name descname"><span class="pre">ADD_NOISE</span></span><em class="property"> <span class="pre">=</span> <span class="pre">0.3333333333333333</span></em><a class="headerlink" href="#data_augmentation.augment_audio.AudioAugmenter.ADD_NOISE" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.augment_audio.AudioAugmenter.NOISE_PATH">
+<span class="sig-name descname"><span class="pre">NOISE_PATH</span></span><em class="property"> <span class="pre">=</span> <span class="pre">'/Users/paepcke/EclipseWorkspacesNew/birds/src/data_augmentation/lib'</span></em><a class="headerlink" href="#data_augmentation.augment_audio.AudioAugmenter.NOISE_PATH" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.augment_audio.AudioAugmenter.TIME_SHIFT">
+<span class="sig-name descname"><span class="pre">TIME_SHIFT</span></span><em class="property"> <span class="pre">=</span> <span class="pre">0.3333333333333333</span></em><a class="headerlink" href="#data_augmentation.augment_audio.AudioAugmenter.TIME_SHIFT" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.augment_audio.AudioAugmenter.VOLUME">
+<span class="sig-name descname"><span class="pre">VOLUME</span></span><em class="property"> <span class="pre">=</span> <span class="pre">0.3333333333333333</span></em><a class="headerlink" href="#data_augmentation.augment_audio.AudioAugmenter.VOLUME" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.augment_audio.AudioAugmenter.augment_one_species">
+<span class="sig-name descname"><span class="pre">augment_one_species</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">in_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_augs_to_do</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.augment_audio.AudioAugmenter.augment_one_species" title="Permalink to this definition">¶</a></dt>
+<dd><p>Takes one species, and a number of audio
+augmentations to do. Generates the files,
+and returns a list of the newly created 
+files (full paths).</p>
+<p>The maximum number of augmentations created
+depends on the number of audio augmentation 
+methods available (currently 3), and the number
+of audio files available for the given species:</p>
+<blockquote>
+<div><p>num-available-audio-augs * num-of-audio-files</p>
+</div></blockquote>
+<p>If num_augs_to_do is higher than the above maximum,
+only that maximum is created. The rest will need to 
+be accomplished by spectrogram augmentation in a 
+different portion of the workflow.</p>
+<p>Augmentations are effectively done round robin across all of
+the species’ audio files such that each file is
+augmented roughly the same number of times until
+num_augs_to_do is accomplished.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>in_dir</strong> (<em>str</em>) – directory holding one species’ audio files</p></li>
+<li><p><strong>out_dir</strong> (<em>src</em>) – destination for new audio files</p></li>
+<li><p><strong>num_augs_to_do</strong> (<em>int</em>) – number of augmentations</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>list of newly created file paths</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>[src]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.augment_audio.AudioAugmenter.create_new_sample">
+<span class="sig-name descname"><span class="pre">create_new_sample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sample_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">noise_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.augment_audio.AudioAugmenter.create_new_sample" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given one audio recording and an audio augmentation
+method name, compute that augmentation, create a file name
+that gives insight into the aug applied, and write that
+new audio file to out_dir.</p>
+<p>Currently available types of audio augmentation technique:</p>
+<blockquote>
+<div><p>o adding background sounds
+o randomly changing volume
+o random time shifts</p>
+</div></blockquote>
+<p>Returns the full path of the newly created audio file:</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sample_path</strong> (<em>str</em>) – absolute path to audio sample</p></li>
+<li><p><strong>out_dir</strong> (<em>src</em>) – destination of resulting new samples</p></li>
+<li><p><strong>method</strong> (<a class="reference internal" href="#data_augmentation.utils.AudAugMethod" title="data_augmentation.utils.AudAugMethod"><em>AudAugMethod</em></a>) – the audio augmentation method to apply</p></li>
+</ul>
+</dd>
+<dt class="field-even">Param</dt>
+<dd class="field-even"><p>noise_path: full path to audio files with background
+noises to overlay onto audio (wind, rain, etc.). Ignored
+unless method is AudAugMethod.ADD_NOISE.</p>
+</dd>
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>Newly created audio file (full path) or an Exception
+object whose e.args attribute is a tuple with the error
+msg plus a manually added one</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>{str | Exception|</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.augment_audio.AudioAugmenter.generate_all_augmentations">
+<span class="sig-name descname"><span class="pre">generate_all_augmentations</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.augment_audio.AudioAugmenter.generate_all_augmentations" title="Permalink to this definition">¶</a></dt>
+<dd><p>Workhorse:
+Create new samples via augmentation for each species. 
+Augment the audio files to reach the number of audio files
+indicated in the self.aug_requirements.</p>
+<p>Assumption: self.aug_requirements is a dict mapping 
+species-name : num_required_augmentations</p>
+<p>Assumption: self.sample_distrib_df is a dataframe like</p>
+<blockquote>
+<div><blockquote>
+<div><p>num_species</p>
+</div></blockquote>
+<p>sp1       10
+sp2       15</p>
+<blockquote>
+<div><p>…</p>
+</div></blockquote>
+</div></blockquote>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-data_augmentation.augment_spectrograms">
+<span id="data-augmentation-augment-spectrograms-module"></span><h2>data_augmentation.augment_spectrograms module<a class="headerlink" href="#module-data_augmentation.augment_spectrograms" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="data_augmentation.augment_spectrograms.SpectrogramAugmenter">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">data_augmentation.augment_spectrograms.</span></span><span class="sig-name descname"><span class="pre">SpectrogramAugmenter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">input_dir_path</span></em>, <em class="sig-param"><span class="pre">output_dir_path</span></em>, <em class="sig-param"><span class="pre">plot=False</span></em>, <em class="sig-param"><span class="pre">overwrite_policy=False</span></em>, <em class="sig-param"><span class="pre">aug_goals=&lt;AugmentationGoals.MEDIAN:</span> <span class="pre">1&gt;</span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.augment_spectrograms.SpectrogramAugmenter" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.augment_spectrograms.SpectrogramAugmenter.augment_one_species">
+<span class="sig-name descname"><span class="pre">augment_one_species</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">in_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_augs_to_do</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.augment_spectrograms.SpectrogramAugmenter.augment_one_species" title="Permalink to this definition">¶</a></dt>
+<dd><p>Takes one species, and a number of spectrogram
+augmentations to do. Generates the files,
+and returns a list of the newly created 
+files (full paths).</p>
+<p>The maximum number of augmentations created
+depends on the number of spectrogram augmentation 
+methods available (currently 3), and the number
+of spectgrogram files available for the given species:</p>
+<blockquote>
+<div><p>num-available-spectro-augs * num-of-spectro-files</p>
+</div></blockquote>
+<p>If num_augs_to_do is higher than the above maximum,
+only that maximum is created. The rest will need to 
+be accomplished by spectrogram augmentation in a 
+different portion of the workflow.</p>
+<p>Augmentations are effectively done round robin across all of
+the species’ spectro files such that each file is
+augmented roughly the same number of times until
+num_augs_to_do is accomplished.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>in_dir</strong> (<em>str</em>) – directory holding one species’ spectro files</p></li>
+<li><p><strong>out_dir</strong> (<em>src</em>) – destination for new spectro files</p></li>
+<li><p><strong>num_augs_to_do</strong> (<em>int</em>) – number of augmentations</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>list of newly created file paths</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>[src]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.augment_spectrograms.SpectrogramAugmenter.create_new_sample">
+<span class="sig-name descname"><span class="pre">create_new_sample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sample_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.augment_spectrograms.SpectrogramAugmenter.create_new_sample" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given one spectrogram file, and an image augmentation
+method name, compute that augmentation, create a file name
+that gives insight into the aug applied, and write that
+new spectrogram file to out_dir.</p>
+<p>Currently available types of image augmentation technique:</p>
+<blockquote>
+<div><p>o adding random or uniform sounds
+o frequency masking
+o time masking</p>
+</div></blockquote>
+<p>Returns the full path of the newly created spectrogram file:</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sample_path</strong> (<em>str</em>) – absolute path to spectrogram</p></li>
+<li><p><strong>out_dir</strong> (<em>src</em>) – destination of resulting new spectros</p></li>
+<li><p><strong>method</strong> (<a class="reference internal" href="#data_augmentation.utils.ImgAugMethod" title="data_augmentation.utils.ImgAugMethod"><em>ImgAugMethod</em></a>) – the (spectrogram) image augmentation method to apply</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Newly created spectro file (full path) or None,
+if a failure occurred.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>{str | None|</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.augment_spectrograms.SpectrogramAugmenter.generate_all_augmentations">
+<span class="sig-name descname"><span class="pre">generate_all_augmentations</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.augment_spectrograms.SpectrogramAugmenter.generate_all_augmentations" title="Permalink to this definition">¶</a></dt>
+<dd><p>Workhorse:
+Create new samples via augmentation for each spectrogram. 
+Augment the spectro files to reach the number of spectro files
+indicated in the self.aug_requirements.</p>
+<p>Assumption: self.aug_requirements is a dict mapping 
+species-name : num_required_augmentations</p>
+<p>Assumption: self.sample_distrib_df is a dataframe like</p>
+<blockquote>
+<div><blockquote>
+<div><p>num_species</p>
+</div></blockquote>
+<p>sp1       10
+sp2       15</p>
+<blockquote>
+<div><p>…</p>
+</div></blockquote>
+</div></blockquote>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-data_augmentation.chop_audiofiles">
+<span id="data-augmentation-chop-audiofiles-module"></span><h2>data_augmentation.chop_audiofiles module<a class="headerlink" href="#module-data_augmentation.chop_audiofiles" title="Permalink to this headline">¶</a></h2>
+<p>NOTE: if on Linux you get:</p>
+<blockquote>
+<div><p>audioread.exceptions.NoBackendError</p>
+</div></blockquote>
+<p>then you need to install ffmpeg:</p>
+<blockquote>
+<div><p>sudo snap install ffmpeg</p>
+</div></blockquote>
+<dl>
+<dt>NOTE: This module loads, and partitions audio files into in-memory.</dt><dd><p>snippets. It then creates spectrograms from the audio snippets.</p>
+<p>If spectrograms of the full recordings are already available,
+it is better to use chop_spectrograms.py to chop them, rather
+than starting with the audio.</p>
+</dd>
+</dl>
+<dl class="py class">
+<dt class="sig sig-object py" id="data_augmentation.chop_audiofiles.ProcessWithoutWarnings">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">data_augmentation.chop_audiofiles.</span></span><span class="sig-name descname"><span class="pre">ProcessWithoutWarnings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">args</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">()</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kwargs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">{}</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">daemon</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.chop_audiofiles.ProcessWithoutWarnings" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">multiprocessing.context.Process</span></code></p>
+<p>Subclass of Process to use when creating
+multiprocessing jobs. Accomplishes two
+items in addition to the parent:</p>
+<blockquote>
+<div><dl class="simple">
+<dt>o Blocks printout of various deprecation warnings connected</dt><dd><p>with matplotlib and librosa</p>
+</dd>
+<dt>o Adds ability for SpectrogramChopper instances to </dt><dd><p>return a result.</p>
+</dd>
+</dl>
+</div></blockquote>
+<dl class="py property">
+<dt class="sig sig-object py" id="data_augmentation.chop_audiofiles.ProcessWithoutWarnings.ret_val">
+<em class="property"><span class="pre">property</span> </em><span class="sig-name descname"><span class="pre">ret_val</span></span><a class="headerlink" href="#data_augmentation.chop_audiofiles.ProcessWithoutWarnings.ret_val" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.chop_audiofiles.ProcessWithoutWarnings.run">
+<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.chop_audiofiles.ProcessWithoutWarnings.run" title="Permalink to this definition">¶</a></dt>
+<dd><p>Method to be run in sub-process; can be overridden in sub-class</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="data_augmentation.chop_audiofiles.SpectrogramChopper">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">data_augmentation.chop_audiofiles.</span></span><span class="sig-name descname"><span class="pre">SpectrogramChopper</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">in_dir_or_spectro_file</span></em>, <em class="sig-param"><span class="pre">output_dir</span></em>, <em class="sig-param"><span class="pre">specific_species=None</span></em>, <em class="sig-param"><span class="pre">overwrite_policy=&lt;WhenAlreadyDone.ASK:</span> <span class="pre">0&gt;</span></em>, <em class="sig-param"><span class="pre">generate_wav_files=False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.chop_audiofiles.SpectrogramChopper" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Processes directories of .wav or .mp3 files,
+chopping them into window_len seconds snippets.
+Each audio snippet is saved, and spectrograms
+are created for each.</p>
+<p>Assumes:</p>
+<blockquote>
+<div><blockquote>
+<div><p>self.in_dir</p>
+</div></blockquote>
+<dl>
+<dt>Species1        Species2   …     Speciesn</dt><dd><p>smpl1_1.mp3      smpl2_1.mp3         smpln_1.mp3
+smpl1_2.mp3      smpl2_2.mp3         smpln_2mp3</p>
+<blockquote>
+<div><p>…</p>
+</div></blockquote>
+</dd>
+</dl>
+</div></blockquote>
+<p>Saves the snippets in a new directory. Creates a spectrogram 
+for each snippet, and saves those in a different, new directory.</p>
+<blockquote>
+<div><p>Resulting directories under self.out_dir will be:</p>
+<blockquote>
+<div><blockquote>
+<div><p>self.out_dir</p>
+</div></blockquote>
+<p>spectrograms               wav-files</p>
+</div></blockquote>
+</div></blockquote>
+<p>Because many spectrograms are created, speed requirements
+call for the use of parallelism. Since each audio file’s processing
+is independent from the others, the multiprocessing library
+is used as follows.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>If command line arg –workers is set to 1, no parallelism
+is used.</p></li>
+<li><p>If multiple cores are available, some percentage of 
+of them will be deployed to chopping. Each core runs 
+a separate copy of this file. The percentage is controlled
+by MAX_PERC_OF_CORES_TO_USE.</p></li>
+</ul>
+</div></blockquote>
+<p>Method chop_all() is used in the single core scenario.
+Method chop_file_list() is used when multiprocessing. This
+method is the ‘target’ in the multiprocessing library’s sense.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.chop_audiofiles.SpectrogramChopper.MAX_PERC_OF_CORES_TO_USE">
+<span class="sig-name descname"><span class="pre">MAX_PERC_OF_CORES_TO_USE</span></span><em class="property"> <span class="pre">=</span> <span class="pre">50</span></em><a class="headerlink" href="#data_augmentation.chop_audiofiles.SpectrogramChopper.MAX_PERC_OF_CORES_TO_USE" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.chop_audiofiles.SpectrogramChopper.chop_all">
+<span class="sig-name descname"><span class="pre">chop_all</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.chop_audiofiles.SpectrogramChopper.chop_all" title="Permalink to this definition">¶</a></dt>
+<dd><p>Workhorse: Assuming self.in_dir is root of all
+species audio samples:</p>
+<blockquote>
+<div><blockquote>
+<div><p>self.in_dir</p>
+</div></blockquote>
+<dl>
+<dt>Species1        Species2   …     Speciesn</dt><dd><p>smpl1_1.mp3      smpl2_1.mp3         smpln_1.mp3
+smpl1_2.mp3      smpl2_2.mp3         smpln_2mp3</p>
+<blockquote>
+<div><p>…</p>
+</div></blockquote>
+</dd>
+</dl>
+</div></blockquote>
+<p>Chops each .mp3 (or .wav) file into window_len snippets.
+Saves those snippets in a new directory. Creates a spectrogram 
+for each snippet, and saves those in a different, new directory.</p>
+<p>Resulting directories under self.out_dir will be:</p>
+<blockquote>
+<div><blockquote>
+<div><p>self.out_dir</p>
+</div></blockquote>
+<p>spectrograms               wav-files</p>
+</div></blockquote>
+<p>If self.specific_species is None, audio files under all
+species are chopped. Else, self.specific_species is 
+expected to be a list of species names that correspond
+to the names of species directories above: Species1, Species2, etc.</p>
+<dl class="simple">
+<dt>Returns a 2-tuple: (number of created .wav audio snippet files,</dt><dd><p>number of created .png spectrogram snippet files,</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.chop_audiofiles.SpectrogramChopper.chop_file_list">
+<span class="sig-name descname"><span class="pre">chop_file_list</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">assignments</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_bool</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">env</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.chop_audiofiles.SpectrogramChopper.chop_file_list" title="Permalink to this definition">¶</a></dt>
+<dd><p>Takes a list like:</p>
+<blockquote>
+<div><p>[(s1,f1),(s1,f2),(s4,f3)]</p>
+</div></blockquote>
+<p>where s_n is a species name, and f_m
+is the basename of an audio file to chop.
+Example: foobar.mp3</p>
+<p>Returns True if all went well, else
+raises exception.</p>
+<p>Wrinkle: this method is called under two 
+very different scenarios (S1/S2). S1 is
+when the process started by the user calls
+this method. That happens when the command
+line arg –workers is set to 1, or on a machine
+where few enough cores are available that only
+one is used. In that case, env is left at None,
+and all is as normal.</p>
+<p>S2 occurs when the initial process (the one started
+from the command line) starts a new Process. That
+process normally contains a new environment, i.e. 
+some default value for all the environment variables.
+In particular, DISPLAY and PYTHONPATH will not be
+what is needed. The result is that all spectrogram
+creating methods fail, because they cannot find a
+graphics backend.</p>
+<p>In that case kwarg env is set to the environment of the 
+initiating process. At the start of this method this
+process’ default environ is then set to match that
+of the initiating process.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>assignments</strong> (<em>[</em><em>(</em><em>str</em><em>,</em><em>str</em><em>)</em><em>]</em>) – list of species/filename pairs</p></li>
+<li><p><strong>env</strong> (<em>{str : Any}</em>) – if provided, the environment of the
+parent process. If None, the current env
+is retained</p></li>
+<li><p><strong>return_bool</strong> – </p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.chop_audiofiles.SpectrogramChopper.chop_one_audio_file">
+<span class="sig-name descname"><span class="pre">chop_one_audio_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">in_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">species</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">spectro_fname</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window_len</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.chop_audiofiles.SpectrogramChopper.chop_one_audio_file" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generates window_len second sound file snippets
+and associated spectrograms from sound files of
+arbitrary length.</p>
+<p>Performs a time shift on all the wav files in the 
+species directories. The shift is ‘rolling’ such that
+no information is lost.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>in_dir</strong> – directory of the audio file to chop</p></li>
+<li><p><strong>species</strong> (<em>{None |</em><em> [</em><em>str</em><em>]</em><em>}</em>) – the directory names of the species to 
+modify the wav files of. If species=None, all 
+subdirectories will be processed.</p></li>
+<li><p><strong>spectro_fname</strong> (<em>str</em>) – basefile name of audio file to chop</p></li>
+<li><p><strong>out_dir</strong> (<em>str</em>) – root directory under which spectrogram
+and audio snippets will be saved (in different subdirs)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.chop_audiofiles.SpectrogramChopper.compute_worker_assignments">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">compute_worker_assignments</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">in_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_workers</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.chop_audiofiles.SpectrogramChopper.compute_worker_assignments" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given the root directory of a set of
+directories whose names are species,
+and which contain recordings by species,
+return a multi processing worker assignment.</p>
+<dl>
+<dt>Expected:</dt><dd><blockquote>
+<div><p>in_dir</p>
+</div></blockquote>
+<dl>
+<dt>Species1        Species2   …     Speciesn</dt><dd><p>smpl1_1.mp3      smpl2_1.mp3         smpln_1.mp3
+smpl1_2.mp3      smpl2_2.mp3         smpln_2mp3</p>
+<blockquote>
+<div><p>…</p>
+</div></blockquote>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>Collects number of recordings available for
+each species. Creates a list of species name
+buckets such that all workers asked to process
+one of the buckets, will have roughly equal
+amounts of work.</p>
+<p>Example return:</p>
+<blockquote>
+<div><p>[[‘Species1’, ‘Species2], [‘Species3’, ‘Species4’, ‘Species5’]]</p>
+</div></blockquote>
+<p>The caller can then assign the first list to
+one worker, and the second list to another worker.</p>
+<p>The number of buckets, and therefore the number
+of eventual workers may be passed in. If None, 
+80% of the cores available on the current machine
+will be assumed. If num_workers is provided and
+the number is larger than the number of available
+cores, the number is reduced to the number of cores.</p>
+<p>Also returned is the number of workers on which the
+computation is based. This number is always the same
+as the number of species name lists in the return.
+But for clarity, the number is returned explicitly.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>in_dir</strong> (<em>str</em>) – root of species recordings</p></li>
+<li><p><strong>num_workers</strong> (<em>{int | None}</em>) – number of buckets into which to partition</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>list of species name lists, and number of workers.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>([[int]], int)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.chop_audiofiles.SpectrogramChopper.create_dest_dirs">
+<span class="sig-name descname"><span class="pre">create_dest_dirs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">species_list</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.chop_audiofiles.SpectrogramChopper.create_dest_dirs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates all directories that will hold new 
+audio snippets and spectrograms for each species.
+For each directory: if dir exists:</p>
+<blockquote>
+<div><p>o if overwrite_policy is True, wipe the dir
+o else ask user.</p>
+<blockquote>
+<div><p>If response is Yes, wipe the dir
+else raise FileExistsError</p>
+</div></blockquote>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>species_list</strong> (<em>[</em><em>str</em><em>]</em>) – names of species to process</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>top level dirs for audio snippets and spectrograms</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>(str)</p>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><p><strong>FileExistsError</strong> – if a dest dir exists and not allowed
+to wipe it.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.chop_audiofiles.SpectrogramChopper.partition_by_recordings">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">partition_by_recordings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">species_file_pairs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_workers</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.chop_audiofiles.SpectrogramChopper.partition_by_recordings" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given a list of species-name/file-path tuples, 
+partition that list into num_workers sublists,
+such that each list contains roughly the same
+number of tuples. If the number of species_file_pairs
+tuples is not divisible by num_workers, the left-over
+tuples are distributed over the first sublists.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>species_file_pairs</strong> – </p></li>
+<li><p><strong>num_workers</strong> – </p></li>
+</ul>
+</dd>
+</dl>
+<p>:return partitioning of the species_file_pairs tuples
+:rtype: [[(str, str)]]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.chop_audiofiles.SpectrogramChopper.run_workers">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">run_workers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">args</span></em>, <em class="sig-param"><span class="pre">overwrite_policy=&lt;WhenAlreadyDone.ASK:</span> <span class="pre">0&gt;</span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.chop_audiofiles.SpectrogramChopper.run_workers" title="Permalink to this definition">¶</a></dt>
+<dd><p>Called by main to run the SpectrogramChopper in
+multiple processes at once. Pajcrtitions the
+audio files to be processed; runs the chopping
+while giving visual progress on terminal.</p>
+<p>Prints success/failure of each worker. Then
+returns</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>args</strong> (<em>{str : Any}</em>) – all arguments provided to argparse</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-data_augmentation.chop_spectrograms">
+<span id="data-augmentation-chop-spectrograms-module"></span><h2>data_augmentation.chop_spectrograms module<a class="headerlink" href="#module-data_augmentation.chop_spectrograms" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="data_augmentation.chop_spectrograms.SpectrogramChopper">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">data_augmentation.chop_spectrograms.</span></span><span class="sig-name descname"><span class="pre">SpectrogramChopper</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">in_dir_or_spectro_file</span></em>, <em class="sig-param"><span class="pre">output_dir</span></em>, <em class="sig-param"><span class="pre">specific_species=None</span></em>, <em class="sig-param"><span class="pre">overwrite_policy=&lt;WhenAlreadyDone.ASK:</span> <span class="pre">0&gt;</span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.chop_spectrograms.SpectrogramChopper" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Processes directories of .png files,
+chopping them into window_len seconds snippets.</p>
+<p>Assumes:</p>
+<blockquote>
+<div><blockquote>
+<div><blockquote>
+<div><p>self.input</p>
+</div></blockquote>
+<p>Species1        Species2   …     Speciesn</p>
+</div></blockquote>
+<p>spectro1_1.png     spectro2_1.png     spectro_n_1.png
+spectro1_2.png     spectro2_2.png     spectro_n_2.png</p>
+<blockquote>
+<div><p>…</p>
+</div></blockquote>
+</div></blockquote>
+<p>Saves the snippets in a new directory.</p>
+<blockquote>
+<div><p>Resulting directories under self.out_dir will be:</p>
+<blockquote>
+<div><blockquote>
+<div><blockquote>
+<div><p>self.out_dir</p>
+</div></blockquote>
+<p>Species1        Species2   …     Speciesn</p>
+</div></blockquote>
+<p>snip_1_1_1         snip_2_1_1        snip_n_1_1
+snip_1_1_2         snip_2_1_2        snip_n_1_2
+snip_1_1_3         snip_2_1_3        snip_n_1_3</p>
+<blockquote>
+<div><blockquote>
+<div><p>snip_2_1_4</p>
+</div></blockquote>
+<p>…</p>
+</div></blockquote>
+<p>snip_1_2_1         snip_2_2_1        snip_n_2_1
+snip_1_2_2         snip_2_2_2        snip_n_2_2
+snip_1_2_3                           snip_n_2_3
+snip_1_2_4</p>
+</div></blockquote>
+</div></blockquote>
+<dl>
+<dt>With snip_b_f_s: </dt><dd><dl class="simple">
+<dt>o b is the bird species (manifesting in the file system</dt><dd><p>as one subdirectory under self.out_dir)</p>
+</dd>
+</dl>
+<p>o f is one spectrogram of a full audio recording
+o s is a snippet number.</p>
+</dd>
+</dl>
+<p>Note the possibility of different numbers of snippets
+in each species, and for each original audio recording 
+(which may be of unequal lengths).</p>
+<p>Because many spectrograms are created, speed requirements
+call for the use of parallelism. Since each audio file’s processing
+is independent from the others, the multiprocessing library
+is used as follows.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>If command line arg –workers is set to 1, no parallelism
+is used.</p></li>
+<li><p>If multiple cores are available, some percentage of 
+of them will be deployed to chopping. Each core runs 
+a separate copy of this file. The percentage is controlled
+by MAX_PERC_OF_CORES_TO_USE.</p></li>
+</ul>
+</div></blockquote>
+<p>Method chop_all() is used in the single core scenario.
+Method chop_file_list() is used when multiprocessing. This
+method is the ‘target’ in the multiprocessing library’s sense.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.chop_spectrograms.SpectrogramChopper.chop_all">
+<span class="sig-name descname"><span class="pre">chop_all</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.chop_spectrograms.SpectrogramChopper.chop_all" title="Permalink to this definition">¶</a></dt>
+<dd><p>Workhorse: Assuming self.input is root of all
+species spectrograms</p>
+<p>Chops each .png file into window_len snippets.
+Saves those snippets in a new directory under 
+self.spectrogram_dir_path</p>
+<p>Resulting directories under self.spectrogram_dir_path 
+will be as per comment in SpectrogramChopper class
+definition.</p>
+<p>If self.specific_species is None, audio files under all
+species are chopped. Else, self.specific_species is 
+expected to be a list of species names that correspond
+to the names of species directories above: Species1, Species2, etc.</p>
+<p>Returns number of created .png spectrogram snippet files.</p>
+<p>:return total number of newly created spectrogram snippets
+:rtype: int</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.chop_spectrograms.SpectrogramChopper.chop_file_list">
+<span class="sig-name descname"><span class="pre">chop_file_list</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">assignments</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_bool</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">env</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.chop_spectrograms.SpectrogramChopper.chop_file_list" title="Permalink to this definition">¶</a></dt>
+<dd><p>Takes a list like:</p>
+<blockquote>
+<div><p>[(s1,f1),(s1,f2),(s4,f3)]</p>
+</div></blockquote>
+<p>where s_n is a species name, and f_m
+is the basename of a spectrogram file to chop.
+Example: foobar.png</p>
+<p>Returns True if all went well, else
+raises exception.</p>
+<p>Wrinkle: this method is called under two 
+very different scenarios (S1/S2). S1 is
+when the process started by the user calls
+this method. That happens when the command
+line arg –workers is set to 1, or on a machine
+where few enough cores are available that only
+one is used. In that case, env is left at None,
+and all is as normal.</p>
+<p>S2 occurs when the initial process (the one started
+from the command line) starts a new Process. That
+process normally contains a new environment, i.e. 
+some default value for all the environment variables.
+<strong>********</strong> NEEDED WITHOUT LIBROSA USAGE?
+In particular, DISPLAY and PYTHONPATH will not be
+what is needed. The result is that all spectrogram
+creating methods fail, because they cannot find a
+graphics backend.</p>
+<p>In that case kwarg env is set to the environment of the 
+initiating process. At the start of this method this
+process’ default environ is then set to match that
+of the initiating process.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>assignments</strong> (<em>[</em><em>(</em><em>str</em><em>,</em><em>str</em><em>)</em><em>]</em>) – list of species/filename pairs</p></li>
+<li><p><strong>env</strong> (<em>{str : Any}</em>) – if provided, the environment of the
+parent process. If None, the current env
+is retained</p></li>
+<li><p><strong>return_bool</strong> – </p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.chop_spectrograms.SpectrogramChopper.chop_one_spectro_file">
+<span class="sig-name descname"><span class="pre">chop_one_spectro_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spectro_fname</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window_len</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">skip_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">original_duration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.chop_spectrograms.SpectrogramChopper.chop_one_spectro_file" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generates window_len second spectrogram snippets
+from spectrograms files of arbitrary length.</p>
+<p>To compute the number of time slices to extract
+for each snippet, the time_slices of the spectrogram time
+slices in fractional seconds must be known. The time_slices
+can be approximated if the play length of the underlying
+audio is known (even if the precise fft settings are unavailable).</p>
+<p>If the given .png file contains metadata with a ‘duration’ 
+key, then the corresponding value is used as the duration of 
+the original audio file in fractional seconds. This metadata
+will be present if the .png file was created with the 
+SoundProcessor.create_spectrogram().</p>
+<p>To enable use of spectrogram images created elsewhere, callers
+can instead supply original_duration in fractional seconds.</p>
+<p>For now, if neither the embedded metadata, nor the original_duration
+is supplied, a ValueError is raised.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>spectro_fname</strong> (<em>str</em>) – full path to spectrogram file to chop</p></li>
+<li><p><strong>window_len</strong> (<em>int</em>) – number of seconds to be covered by each snippet</p></li>
+<li><p><strong>skip_size</strong> (<em>int</em>) – number of seconds to shift right in 
+time for the start of each chop</p></li>
+<li><p><strong>out_dir</strong> (<em>str</em>) – root directory under which spectrogram
+snippets will be saved (in different subdirs)</p></li>
+<li><p><strong>original_duration</strong> – </p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><p><strong>ValueError</strong> – if neither embedded duration metadata is found
+in the given file, nor original_duration is provided</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.chop_spectrograms.SpectrogramChopper.compute_worker_assignments">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">compute_worker_assignments</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">in_dir</span></em>, <em class="sig-param"><span class="pre">dst_dir</span></em>, <em class="sig-param"><span class="pre">overwrite_policy=&lt;WhenAlreadyDone.ASK:</span> <span class="pre">0&gt;</span></em>, <em class="sig-param"><span class="pre">num_workers=None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.chop_spectrograms.SpectrogramChopper.compute_worker_assignments" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given the root directory of a set of
+directories whose names are species,
+and which contain spectrograms by species,
+return a multi processing worker assignment.</p>
+<dl>
+<dt>Expected:</dt><dd><blockquote>
+<div><p>in_dir</p>
+</div></blockquote>
+<dl>
+<dt>Species1        Species2   …     Speciesn</dt><dd><p>smpl1_1.png      smpl2_1.png         smpln_1.png
+smpl1_2.png      smpl2_2.png         smpln_2.png</p>
+<blockquote>
+<div><p>…</p>
+</div></blockquote>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>Collects number of spectrograms available for
+each species. Creates a list of species name
+buckets such that all workers asked to process
+one of the buckets, will have roughly equal
+amounts of work.</p>
+<p>Example return:</p>
+<blockquote>
+<div><p>[[‘Species1’, ‘Species2], [‘Species3’, ‘Species4’, ‘Species5’]]</p>
+</div></blockquote>
+<p>The caller can then assign the first list to
+one worker, and the second list to another worker.</p>
+<p>The number of buckets, and therefore the number
+of eventual workers may be passed in. If None, 
+80% of the cores available on the current machine
+will be assumed. If num_workers is provided and
+the number is larger than the number of available
+cores, the number is reduced to the number of cores.</p>
+<p>Also returned is the number of workers on which the
+computation is based. This number is always the same
+as the number of species name lists in the return.
+But for clarity, the number is returned explicitly.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>in_dir</strong> (<em>str</em>) – root of species recordings</p></li>
+<li><p><strong>num_workers</strong> (<em>{int | None}</em>) – number of buckets into which to partition</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>list of species name lists, and number of workers.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>([[int]], int)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.chop_spectrograms.SpectrogramChopper.create_dest_dirs">
+<span class="sig-name descname"><span class="pre">create_dest_dirs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">species_list</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.chop_spectrograms.SpectrogramChopper.create_dest_dirs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates all directories that will hold new 
+spectrogram snippets for each species.
+For each directory: if dir exists:</p>
+<blockquote>
+<div><p>o if overwrite_policy is True, wipe the dir
+o if overwrite_policy is SKIP, leave the</p>
+<blockquote>
+<div><p>directory in place, contents intact</p>
+</div></blockquote>
+<dl class="simple">
+<dt>o else ask user. </dt><dd><p>If response is Yes, wipe the dir
+else raise FileExistsError</p>
+</dd>
+</dl>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>species_list</strong> (<em>[</em><em>str</em><em>]</em>) – names of species to process</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>top level dir for spectrograms (same as self.out_dir)</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>(str)</p>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><p><strong>FileExistsError</strong> – if a dest dir exists and not allowed
+to wipe it.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.chop_spectrograms.SpectrogramChopper.create_snippet_fpath">
+<span class="sig-name descname"><span class="pre">create_snippet_fpath</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">origin_nm</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wall_start_time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_dir</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.chop_spectrograms.SpectrogramChopper.create_snippet_fpath" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given constituent elements, construct the
+full output path of a new spectrogram snippet.</p>
+<p>Name format if full-length spectrogram file were
+named my_file.png:</p>
+<blockquote>
+<div><p>my_file_sw-start123.png</p>
+</div></blockquote>
+<p>where 123 is the snippet’s start time in seconds
+from the beginning of the full length file</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>origin_nm</strong> (<em>str</em>) – name of full length file; either full path or
+just the file name are fine</p></li>
+<li><p><strong>wall_start_time</strong> (<em>int</em>) – snipet start time from beginning
+of full length spectrogram</p></li>
+<li><p><strong>out_dir</strong> (<em>str</em>) – destination directory</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>full path to the future snippet’s destination</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.chop_spectrograms.SpectrogramChopper.log">
+<span class="sig-name descname"><span class="pre">log</span></span><em class="property"> <span class="pre">=</span> <span class="pre">&lt;LoggingService</span> <span class="pre">0x7f9668b70970&gt;</span></em><a class="headerlink" href="#data_augmentation.chop_spectrograms.SpectrogramChopper.log" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.chop_spectrograms.SpectrogramChopper.partition_by_recordings">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">partition_by_recordings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">species_file_pairs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_workers</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.chop_spectrograms.SpectrogramChopper.partition_by_recordings" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given a list of species-name/file-path tuples, 
+partition that list into num_workers sublists,
+such that each list contains roughly the same
+number of tuples. If the number of species_file_pairs
+tuples is not divisible by num_workers, the left-over
+tuples are distributed over the first sublists.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>species_file_pairs</strong> – </p></li>
+<li><p><strong>num_workers</strong> – </p></li>
+</ul>
+</dd>
+</dl>
+<p>:return partitioning of the species_file_pairs tuples
+:rtype: [[(str, str)]]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.chop_spectrograms.SpectrogramChopper.run_workers">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">run_workers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">args</span></em>, <em class="sig-param"><span class="pre">overwrite_policy=&lt;WhenAlreadyDone.ASK:</span> <span class="pre">0&gt;</span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.chop_spectrograms.SpectrogramChopper.run_workers" title="Permalink to this definition">¶</a></dt>
+<dd><p>Called by main to run the SpectrogramChopper in
+multiple processes at once. Partitions the
+audio files to be processed; runs the chopping
+while giving visual progress on terminal.</p>
+<p>Prints success/failure of each worker. Then
+returns</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>args</strong> (<em>{str : Any}</em>) – all arguments provided to argparse</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-data_augmentation.create_spectrograms">
+<span id="data-augmentation-create-spectrograms-module"></span><h2>data_augmentation.create_spectrograms module<a class="headerlink" href="#module-data_augmentation.create_spectrograms" title="Permalink to this headline">¶</a></h2>
+<p>Created on Apr 26, 2021</p>
+<p>&#64;author: paepcke</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="data_augmentation.create_spectrograms.SpectrogramCreator">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">data_augmentation.create_spectrograms.</span></span><span class="sig-name descname"><span class="pre">SpectrogramCreator</span></span><a class="headerlink" href="#data_augmentation.create_spectrograms.SpectrogramCreator" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Spectrogram creation and manipulation</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.create_spectrograms.SpectrogramCreator.UNITTEST_ACTIONS_COUNTS">
+<span class="sig-name descname"><span class="pre">UNITTEST_ACTIONS_COUNTS</span></span><em class="property"> <span class="pre">=</span> <span class="pre">{}</span></em><a class="headerlink" href="#data_augmentation.create_spectrograms.SpectrogramCreator.UNITTEST_ACTIONS_COUNTS" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.create_spectrograms.SpectrogramCreator.compute_worker_assignments">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">compute_worker_assignments</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">in_dir</span></em>, <em class="sig-param"><span class="pre">dst_dir</span></em>, <em class="sig-param"><span class="pre">overwrite_policy=&lt;WhenAlreadyDone.ASK:</span> <span class="pre">0&gt;</span></em>, <em class="sig-param"><span class="pre">num_workers=None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.create_spectrograms.SpectrogramCreator.compute_worker_assignments" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given the root directory of a set of
+directories whose names are species or field
+recorder IDs, and which contain audio recordings,
+return a multi processing worker assignment.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>cls</strong> – </p>
+</dd>
+</dl>
+<dl>
+<dt>Expected:</dt><dd><blockquote>
+<div><p>in_dir</p>
+</div></blockquote>
+<dl>
+<dt>Species1/Recorder1      Species2/Recorder2   … Speciesn/Recordern</dt><dd><p>smpl1_1.wav              smpl2_1.wav              smpln_1.wav
+smpl1_2.wav              smpl2_2.wav              smpln_2.wav</p>
+<blockquote>
+<div><p>…</p>
+</div></blockquote>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>Collects number of audio files available for each species 
+or audio recorder. Creates a list of species name buckets 
+such that all workers asked to process one of the buckets, 
+will have roughly equal amounts of work.</p>
+<p>Example return:</p>
+<blockquote>
+<div><p>[[‘Species1’, ‘Species2], [‘Species3’, ‘Species4’, ‘Species5’]]</p>
+</div></blockquote>
+<p>Where Species_n are directories.
+The caller can then assign the first list to
+one worker, and the second list to another worker.</p>
+<p>The number of buckets, and therefore the number
+of eventual workers may be passed in. If None, 
+80% of the cores available on the current machine
+will be assumed. If num_workers is provided and
+the number is larger than the number of available
+cores, the number is reduced to the number of cores.</p>
+<p>Also returned is the number of workers on which the
+computation is based. This number is always the same
+as the number of species name lists in the return.
+But for clarity, the number is returned explicitly.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>in_dir</strong> (<em>str</em>) – root of species recordings</p></li>
+<li><p><strong>dst_dir</strong> (<em>str</em>) – root of subdirectories that will contain
+spectrograms</p></li>
+<li><p><strong>num_workers</strong> (<em>{int | None}</em>) – number of buckets into which to partition</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>list of species name lists, and number of workers.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>([[int]], int)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.create_spectrograms.SpectrogramCreator.create_from_file_list">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">create_from_file_list</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">assignments</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">in_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overwrite_policy</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_bool</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">env</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.create_spectrograms.SpectrogramCreator.create_from_file_list" title="Permalink to this definition">¶</a></dt>
+<dd><p>Takes a list like:</p>
+<blockquote>
+<div><p>[(s1,f1),(s1,f2),(s4,f3)]</p>
+</div></blockquote>
+<p>where s_n is a species/audio-recorder name, and f_m
+is the basename of an audio file for which to
+create a spectrogram.</p>
+<p>Example: foobar.png</p>
+<p>Returns True if all went well, else
+raises exception.</p>
+<p>Wrinkle: this method is called under two 
+very different scenarios (S1/S2). S1 is
+when the process started by the user calls
+this method. That happens when the command
+line arg –workers is set to 1, or on a machine
+where few enough cores are available that only
+one is used. In that case, env is left at None,
+and all is as normal.</p>
+<p>S2 occurs when the initial process (the one started
+from the command line) starts a new Process. That
+process normally contains a new environment, i.e. 
+some default value for all the environment variables.
+<strong>********</strong> NEEDED WITHOUT LIBROSA USAGE?
+In particular, DISPLAY and PYTHONPATH will not be
+what is needed. The result is that all spectrogram
+creating methods fail, because they cannot find a
+graphics backend.</p>
+<p>In that case kwarg env is set to the environment of the 
+initiating process. At the start of this method this
+process’ default environ is then set to match that
+of the initiating process.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>assignments</strong> (<em>[</em><em>(</em><em>str</em><em>,</em><em>str</em><em>)</em><em>]</em>) – list of species/filename pairs</p></li>
+<li><p><strong>in_dir</strong> (<em>str</em>) – source of audio files: individual file,
+or root of subdirectories with audio files</p></li>
+<li><p><strong>out_dir</strong> (<em>str</em>) – destination directory of spectrogram(s)</p></li>
+<li><p><strong>overwrite_policy</strong> (<a class="reference internal" href="#data_augmentation.utils.WhenAlreadyDone" title="data_augmentation.utils.WhenAlreadyDone"><em>WhenAlreadyDone</em></a>) – what to do if dest spectrogram
+already exists</p></li>
+<li><p><strong>return_bool</strong> (<em>mp.Value</em>) – place to place return value</p></li>
+<li><p><strong>env</strong> (<em>{str : Any}</em>) – if provided, the environment of the
+parent process. If None, the current env
+is retained</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.create_spectrograms.SpectrogramCreator.create_one_spectrogram">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">create_one_spectrogram</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">aud_file</span></em>, <em class="sig-param"><span class="pre">dst_dir</span></em>, <em class="sig-param"><span class="pre">overwrite_policy=&lt;WhenAlreadyDone.ASK:</span> <span class="pre">0&gt;</span></em>, <em class="sig-param"><span class="pre">identifier='Unknown'</span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.create_spectrograms.SpectrogramCreator.create_one_spectrogram" title="Permalink to this definition">¶</a></dt>
+<dd><p>Convert an audio file into a spectrogram.
+The destination for the .png file is constructed
+from dst_dir, and the audio file name.</p>
+<p>The .png file will contain metadata:</p>
+<blockquote>
+<div><p>o ‘sr’          : &lt;sample rate&gt;
+o ‘duration’    : &lt;number of seconds&gt;
+o ‘identifier’  : &lt;species name as per arg to this method&gt;</p>
+</div></blockquote>
+<p>If the destination file already exists, the 
+overwrite_policy is followed: ASK, OVERWRITE, or
+SKIP.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>aud_file</strong> (<em>str</em>) – file to convert: .wav or .mp3</p></li>
+<li><p><strong>dst_dir</strong> (<em>str</em>) – directory for the resulting .png file</p></li>
+<li><p><strong>overwrite_policy</strong> (<a class="reference internal" href="#data_augmentation.utils.WhenAlreadyDone" title="data_augmentation.utils.WhenAlreadyDone"><em>WhenAlreadyDone</em></a>) – action if destination file exists</p></li>
+<li><p><strong>identifier</strong> (<em>str</em>) – typically ID of audio recorder or species</p></li>
+</ul>
+</dd>
+</dl>
+<p>:raise FileNotFoundError, AudioLoadException</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.create_spectrograms.SpectrogramCreator.cull_rec_paths">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">cull_rec_paths</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">species_or_recorder_name</span></em>, <em class="sig-param"><span class="pre">dst_dir</span></em>, <em class="sig-param"><span class="pre">rec_paths</span></em>, <em class="sig-param"><span class="pre">overwrite_policy=&lt;WhenAlreadyDone.ASK:</span> <span class="pre">0&gt;</span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.create_spectrograms.SpectrogramCreator.cull_rec_paths" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.create_spectrograms.SpectrogramCreator.log">
+<span class="sig-name descname"><span class="pre">log</span></span><em class="property"> <span class="pre">=</span> <span class="pre">&lt;LoggingService</span> <span class="pre">0x7f9668b70970&gt;</span></em><a class="headerlink" href="#data_augmentation.create_spectrograms.SpectrogramCreator.log" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.create_spectrograms.SpectrogramCreator.partition_by_recordings">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">partition_by_recordings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">species_file_pairs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_workers</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.create_spectrograms.SpectrogramCreator.partition_by_recordings" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given a list of species-name/file-path tuples, 
+partition that list into num_workers sublists,
+such that each list contains roughly the same
+number of tuples. If the number of species_file_pairs
+tuples is not divisible by num_workers, the left-over
+tuples are distributed over the first sublists.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>species_file_pairs</strong> (<em>[</em><em>(</em><em>str</em><em>, </em><em>str</em><em>)</em><em>]</em>) – list of species or recorder name
+soundfile name tuples</p></li>
+<li><p><strong>num_workers</strong> (<em>int</em>) – number of computer cores to use</p></li>
+</ul>
+</dd>
+</dl>
+<p>:return partitioning of the species_file_pairs tuples
+:rtype: [[(str, str)]]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.create_spectrograms.SpectrogramCreator.run_workers">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">run_workers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">args</span></em>, <em class="sig-param"><span class="pre">overwrite_policy=&lt;WhenAlreadyDone.ASK:</span> <span class="pre">0&gt;</span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.create_spectrograms.SpectrogramCreator.run_workers" title="Permalink to this definition">¶</a></dt>
+<dd><p>Called by main to run the SpectrogramCreator in
+multiple processes at once. Partitions the
+audio files to be processed; runs the spectrogram 
+creation while giving visual progress on terminal.</p>
+<p>Prints success/failure of each worker.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>args</strong> (<em>{str : Any}</em>) – all arguments provided to argparse</p></li>
+<li><p><strong>overwrite_policy</strong> (<a class="reference internal" href="#data_augmentation.utils.WhenAlreadyDone" title="data_augmentation.utils.WhenAlreadyDone"><em>WhenAlreadyDone</em></a>) – what to do when a spectrogram already exists</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.create_spectrograms.SpectrogramCreator.sign_of_life">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">sign_of_life</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">job</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_already_present_imgs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outdir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">force_rewrite</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.create_spectrograms.SpectrogramCreator.sign_of_life" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-data_augmentation.list_png_metadata">
+<span id="data-augmentation-list-png-metadata-module"></span><h2>data_augmentation.list_png_metadata module<a class="headerlink" href="#module-data_augmentation.list_png_metadata" title="Permalink to this headline">¶</a></h2>
+<p>Created on Apr 29, 2021</p>
+<p>&#64;author: paepcke</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="data_augmentation.list_png_metadata.PNGMetadataManipulator">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">data_augmentation.list_png_metadata.</span></span><span class="sig-name descname"><span class="pre">PNGMetadataManipulator</span></span><a class="headerlink" href="#data_augmentation.list_png_metadata.PNGMetadataManipulator" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>classdocs</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.list_png_metadata.PNGMetadataManipulator.extract_metadata">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">extract_metadata</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">png_fname</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">printout</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.list_png_metadata.PNGMetadataManipulator.extract_metadata" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.list_png_metadata.PNGMetadataManipulator.set_metadata">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">set_metadata</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">png_fpath</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">info</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outfile</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.list_png_metadata.PNGMetadataManipulator.set_metadata" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-data_augmentation.sound_processor">
+<span id="data-augmentation-sound-processor-module"></span><h2>data_augmentation.sound_processor module<a class="headerlink" href="#module-data_augmentation.sound_processor" title="Permalink to this headline">¶</a></h2>
+<dl class="py exception">
+<dt class="sig sig-object py" id="data_augmentation.sound_processor.AudioLoadException">
+<em class="property"><span class="pre">exception</span> </em><span class="sig-prename descclassname"><span class="pre">data_augmentation.sound_processor.</span></span><span class="sig-name descname"><span class="pre">AudioLoadException</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">msg</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">aud_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">other_msg</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.sound_processor.AudioLoadException" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Exception</span></code></p>
+<p>Raised when errors occur while loading 
+audio files. Property ‘audio_file’ is
+available in all instances of this exception.
+The other_msg property, if not None will contain
+the original error message in case the error was
+due to some OS or other problem.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="data_augmentation.sound_processor.SoundProcessor">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">data_augmentation.sound_processor.</span></span><span class="sig-name descname"><span class="pre">SoundProcessor</span></span><a class="headerlink" href="#data_augmentation.sound_processor.SoundProcessor" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Facilities to modify audio files and spectrograms.
+All methods are class methods. So no instances
+are made of this class.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.sound_processor.SoundProcessor.add_background">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">add_background</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">noise_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">len_noise_to_add</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.sound_processor.SoundProcessor.add_background" title="Permalink to this definition">¶</a></dt>
+<dd><p>Takes an absolute file path, and the path to a
+directory that contains noise to overlay onto the 
+given sound file (wind, rain, etc.).</p>
+<p>Returns a numpy structure corresponding to the
+original audio with the noise overlaid, plus the
+sample rate of the new sample. A file name is suggested
+for the sample. It is composed of elements such 
+as the nature and duration of the noise. Client
+may choose to ignore or use.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>file_name</strong> (<em>str</em>) – absolute path to sound file</p></li>
+<li><p><strong>noise_path</strong> (<em>str</em>) – absolute path to directory
+with noise files</p></li>
+<li><p><strong>out_dir</strong> (<em>str</em>) – destination directory of new audio file</p></li>
+<li><p><strong>len_noise_to_add</strong> (<em>float</em>) – how much of a noise snippet
+to overlay (seconds)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>full path of new audio file</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.sound_processor.SoundProcessor.add_noise">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">add_noise</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spectrogram</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">std</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.sound_processor.SoundProcessor.add_noise" title="Permalink to this definition">¶</a></dt>
+<dd><p>Reads a spectrogram from a file, adds uniform noise ‘jitter’ to it,
+and writes the result back to a file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>spectrogram</strong> (<em>np.array</em>) – the spectrogram to modify</p></li>
+<li><p><strong>std</strong> (<em>{int | float}</em>) – standard deviation of the noise; default: 1.0</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>full path of augmented spectrogram</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.sound_processor.SoundProcessor.add_time_freq_masks">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">add_time_freq_masks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">in_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.sound_processor.SoundProcessor.add_time_freq_masks" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs Frequency and Time Masking for Spectrograms. The
+masks add horizontal (freq), and vertical (time) masks.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>file_name</strong> (<em>str</em>) – name of spectrogram file without parents</p></li>
+<li><p><strong>in_dir</strong> (<em>str</em>) – directory in which the spectrogram resides</p></li>
+<li><p><strong>out_dir</strong> (<em>{None | str}</em>) – optionally: destination directory. If None,
+augmented copy is written to in_dir</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>full path of augmented spectrogram</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.sound_processor.SoundProcessor.change_all_volumes">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">change_all_volumes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">in_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">species</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.sound_processor.SoundProcessor.change_all_volumes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Adjusts the volume of all the wav files in the species directory.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>in_dir</strong> (<em>str</em>) – the path to the directory to fetch samples from</p></li>
+<li><p><strong>out_dir</strong> (<em>str</em>) – the path to the directory to save the new files to</p></li>
+<li><p><strong>species</strong> (<em>str</em>) – the directory names of the species to modify the wav 
+files of. If species=None, all subdirectories will be used.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.sound_processor.SoundProcessor.change_sample_volume">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">change_sample_volume</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sample_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_dir</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.sound_processor.SoundProcessor.change_sample_volume" title="Permalink to this definition">¶</a></dt>
+<dd><p>Randomly changes an audio clip’s volume, and writes
+the new audio file to out_dir</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sample_path</strong> (<em>src</em>) – full path to sample</p></li>
+<li><p><strong>out_dir</strong> (<em>src</em>) – destination directory</p></li>
+</ul>
+</dd>
+</dl>
+<p>:return full path to the new audio file
+:rtype str</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.sound_processor.SoundProcessor.create_spectrogram">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">create_spectrogram</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">audio_sample</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sr</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outfile</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_mels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">128</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">info</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.sound_processor.SoundProcessor.create_spectrogram" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create and save a spectrogram from an audio 
+sample. Bandpass filter is applied, Mel scale is used,
+and power is converted to decibels.</p>
+<p>The sampling rate (sr) and time duration in fractional
+seconds is added as metadata under keys “sr” and “duration”.
+Additional info may be included in the .png if info is 
+a dict of key/value pairs.</p>
+<p>The outfile’s parent directories are created, if necessary.</p>
+<p>Retrieving the metadata can be done via SoundProcessor.load_spectrogram(),
+or any other PNG reading software that handles the PNG specification.
+To print the information from the command line, use 
+&lt;proj-root&gt;src/data_augmentation/list_png_metadata.py</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>audio_sample</strong> (<em>np.array</em>) – audio</p></li>
+<li><p><strong>sr</strong> (<em>int</em>) – sample rate</p></li>
+<li><p><strong>outfile</strong> (<em>str</em>) – where to store the result</p></li>
+<li><p><strong>n_mels</strong> (<em>int</em>) – number of mel scale bands</p></li>
+<li><p><strong>info</strong> (<em>{str : str}</em>) – if provided,  a dict of information to
+store as text-only key/value pairs in the png.
+Retrieve info via SoundProcessor.load_spectrogram()
+or other standard PNG reading software that supports
+PNG metadata</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.sound_processor.SoundProcessor.define_bandpass">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">define_bandpass</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lowcut</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">highcut</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sr</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">order</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.sound_processor.SoundProcessor.define_bandpass" title="Permalink to this definition">¶</a></dt>
+<dd><p>The defintion and implementation of the bandpass filter</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>highcut</strong> (<em>int</em>) – the highcut frequency for the bandpass filter</p></li>
+<li><p><strong>lowcut</strong> (<em>int</em>) – the lowcut frequency for the bandpass filter</p></li>
+<li><p><strong>sr</strong> (<em>int</em>) – the sample rate of the audio</p></li>
+<li><p><strong>order</strong> (<em>int</em>) – the order of the filter</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns b, a</dt>
+<dd class="field-even"><p>Numerator (b) and denominator (a) polynomials of the IIR filter. Only returned if output=’ba’.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.sound_processor.SoundProcessor.filter_bird">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">filter_bird</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">audio</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sr</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.sound_processor.SoundProcessor.filter_bird" title="Permalink to this definition">¶</a></dt>
+<dd><p>Filters the given audio using a bandpass filter.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>audio</strong> (<em>np.array</em>) – recording</p></li>
+<li><p><strong>sr</strong> (<em>int</em>) – the sample rate of the audio</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns output</dt>
+<dd class="field-even"><p>the filtered recording audio time series</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.sound_processor.SoundProcessor.freq_mask">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">freq_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spec</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_height</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">40</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_masks</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">replace_with_zero</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.sound_processor.SoundProcessor.freq_mask" title="Permalink to this definition">¶</a></dt>
+<dd><p>Takes a spectrogram array, and returns a new
+spectrogram array with a frequency mask added. 
+Also returns a suggested file name based on
+the randomly chosen mask parameters.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>spec</strong> (<em>np.array</em>) – the spectrogram</p></li>
+<li><p><strong>max_height</strong> (<em>int</em>) – max height of horizontal stripes</p></li>
+<li><p><strong>num_masks</strong> (<em>int</em>) – how many masks to add</p></li>
+<li><p><strong>replace_with_zero</strong> (<em>bool</em>) – if True, replaces the existing
+values with zero. Else replaces them with the mean
+of the entire image</p></li>
+</ul>
+</dd>
+</dl>
+<p>:returns a new array, and a suggested file name
+:rtype (np.array, str)</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.sound_processor.SoundProcessor.load_audio">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">load_audio</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fname</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offset</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">duration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.sound_processor.SoundProcessor.load_audio" title="Permalink to this definition">¶</a></dt>
+<dd><p>Loads a .wav or mp3 audio file,
+and returns a numpy array, and
+the recording’s sample rate.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>fname</strong> (<em>str</em>) – audio file to load</p></li>
+<li><p><strong>offset</strong> (<em>float</em>) – where to start load: seconds into recording</p></li>
+<li><p><strong>duration</strong> (<em>{None | float|</em>) – how many seconds to load</p></li>
+</ul>
+</dd>
+</dl>
+<p>:returns the recording and the associated sample rate
+:rtype: (np.array, float)
+:raises FileNotFoundError, AudioLoadException</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.sound_processor.SoundProcessor.load_spectrogram">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">load_spectrogram</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fname</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.sound_processor.SoundProcessor.load_spectrogram" title="Permalink to this definition">¶</a></dt>
+<dd><p>Loads a .png spectrogram file,
+and returns a numpy array</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>fname</strong> (<em>str</em>) – file to load</p>
+</dd>
+<dt class="field-even">Returns tuple</dt>
+<dd class="field-even"><p>the image and the .png file’s possibly empty metadata dict</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>(np.array, {str : str}</p>
+</dd>
+</dl>
+<p>:raises FileNotFoundError</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.sound_processor.SoundProcessor.log">
+<span class="sig-name descname"><span class="pre">log</span></span><em class="property"> <span class="pre">=</span> <span class="pre">&lt;LoggingService</span> <span class="pre">0x7f9668b70970&gt;</span></em><a class="headerlink" href="#data_augmentation.sound_processor.SoundProcessor.log" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.sound_processor.SoundProcessor.random_noise">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">random_noise</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spectrogram</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">noise_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'uniform'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">std</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.sound_processor.SoundProcessor.random_noise" title="Permalink to this definition">¶</a></dt>
+<dd><p>Adds Gaussian or uniform noise to a numpy array, and returns
+the result. The std arg controls with width of the
+(standard) distribution.</p>
+<blockquote>
+<div><p>Assumes that std is a positive number
+Assumes that spectrogram is normalized: 0 to 255</p>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>spectrogram</strong> (<em>np.array</em>) – the spectrogram to modify</p></li>
+<li><p><strong>noise_type</strong> (<em>str</em>) – whether to add normal (gaussian) or uniform noise;
+must be ‘uniform’ or ‘normal’</p></li>
+<li><p><strong>std</strong> (<em>float</em>) – standard deviation of the noise</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>spectrogram with random noise added</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>np.array</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.sound_processor.SoundProcessor.save_image">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">save_image</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">img</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outfile</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">info</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.sound_processor.SoundProcessor.save_image" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given an image and an optional metadata
+dictionary, write the image as .png, include
+the metadata.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>img</strong> (<em>np_array</em>) – image to save</p></li>
+<li><p><strong>outfile</strong> (<em>str</em>) – destination path</p></li>
+<li><p><strong>info</strong> (<em>{str : str}</em>) – metadata to add</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.sound_processor.SoundProcessor.save_img_array">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">save_img_array</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">img_arr</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dst_path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.sound_processor.SoundProcessor.save_img_array" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.sound_processor.SoundProcessor.scale_minmax">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">scale_minmax</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_val</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_val</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.sound_processor.SoundProcessor.scale_minmax" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.sound_processor.SoundProcessor.set_random_seed">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">set_random_seed</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">seed</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.sound_processor.SoundProcessor.set_random_seed" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.sound_processor.SoundProcessor.time_mask">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">time_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spec</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_width</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_masks</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">replace_with_zero</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.sound_processor.SoundProcessor.time_mask" title="Permalink to this definition">¶</a></dt>
+<dd><p>Takes a spectrogram array, and returns a new
+spectrogram array with a time mask added. 
+Also returns a suggested file name based on
+the randomly chosen time mask parameters.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>spec</strong> (<em>np.array</em>) – the spectrogram</p></li>
+<li><p><strong>max_width</strong> (<em>int</em>) – width of vertical stripes</p></li>
+<li><p><strong>num_masks</strong> (<em>int</em>) – how many masks to add</p></li>
+<li><p><strong>replace_with_zero</strong> (<em>bool</em>) – if True, replaces the existing
+values with zero. Else replaces them with the mean
+of the entire image</p></li>
+</ul>
+</dd>
+</dl>
+<p>:returns a new array, and a suggested file name
+:rtype (np.array, str)</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.sound_processor.SoundProcessor.time_shift">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">time_shift</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_dir</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.sound_processor.SoundProcessor.time_shift" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs a time shift on all the wav files in the 
+species directory. The shift is ‘rolling’ such that
+no information is lost: a random-sized snippet of
+the audio is moved from the start of the clip to
+its end.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>file_name</strong> (<em>str</em>) – full path to audio file</p></li>
+<li><p><strong>out_dir</strong> (<em>str</em>) – the path to the directory to save the new file to</p></li>
+</ul>
+</dd>
+</dl>
+<p>:return full path to the new audio file
+:rtype str
+:raise AssertionError when before &amp; after lengths disagree</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-data_augmentation.utils">
+<span id="data-augmentation-utils-module"></span><h2>data_augmentation.utils module<a class="headerlink" href="#module-data_augmentation.utils" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="data_augmentation.utils.AudAugMethod">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">data_augmentation.utils.</span></span><span class="sig-name descname"><span class="pre">AudAugMethod</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.utils.AudAugMethod" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">enum.Enum</span></code></p>
+<p>An enumeration.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.utils.AudAugMethod.ADD_NOISE">
+<span class="sig-name descname"><span class="pre">ADD_NOISE</span></span><em class="property"> <span class="pre">=</span> <span class="pre">'_bgd'</span></em><a class="headerlink" href="#data_augmentation.utils.AudAugMethod.ADD_NOISE" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.utils.AudAugMethod.TIME_SHIFT">
+<span class="sig-name descname"><span class="pre">TIME_SHIFT</span></span><em class="property"> <span class="pre">=</span> <span class="pre">'-shift'</span></em><a class="headerlink" href="#data_augmentation.utils.AudAugMethod.TIME_SHIFT" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.utils.AudAugMethod.VOLUME">
+<span class="sig-name descname"><span class="pre">VOLUME</span></span><em class="property"> <span class="pre">=</span> <span class="pre">'-volume'</span></em><a class="headerlink" href="#data_augmentation.utils.AudAugMethod.VOLUME" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="data_augmentation.utils.AugmentationGoals">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">data_augmentation.utils.</span></span><span class="sig-name descname"><span class="pre">AugmentationGoals</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.utils.AugmentationGoals" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">enum.Enum</span></code></p>
+<p>An enumeration.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.utils.AugmentationGoals.MAX">
+<span class="sig-name descname"><span class="pre">MAX</span></span><em class="property"> <span class="pre">=</span> <span class="pre">2</span></em><a class="headerlink" href="#data_augmentation.utils.AugmentationGoals.MAX" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.utils.AugmentationGoals.MEDIAN">
+<span class="sig-name descname"><span class="pre">MEDIAN</span></span><em class="property"> <span class="pre">=</span> <span class="pre">1</span></em><a class="headerlink" href="#data_augmentation.utils.AugmentationGoals.MEDIAN" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.utils.AugmentationGoals.NUMBER">
+<span class="sig-name descname"><span class="pre">NUMBER</span></span><em class="property"> <span class="pre">=</span> <span class="pre">3</span></em><a class="headerlink" href="#data_augmentation.utils.AugmentationGoals.NUMBER" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.utils.AugmentationGoals.TENTH">
+<span class="sig-name descname"><span class="pre">TENTH</span></span><em class="property"> <span class="pre">=</span> <span class="pre">0</span></em><a class="headerlink" href="#data_augmentation.utils.AugmentationGoals.TENTH" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="data_augmentation.utils.ImgAugMethod">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">data_augmentation.utils.</span></span><span class="sig-name descname"><span class="pre">ImgAugMethod</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.utils.ImgAugMethod" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">enum.Enum</span></code></p>
+<p>An enumeration.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.utils.ImgAugMethod.FMASK">
+<span class="sig-name descname"><span class="pre">FMASK</span></span><em class="property"> <span class="pre">=</span> <span class="pre">'-fmask'</span></em><a class="headerlink" href="#data_augmentation.utils.ImgAugMethod.FMASK" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.utils.ImgAugMethod.NOISE">
+<span class="sig-name descname"><span class="pre">NOISE</span></span><em class="property"> <span class="pre">=</span> <span class="pre">'-noise'</span></em><a class="headerlink" href="#data_augmentation.utils.ImgAugMethod.NOISE" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.utils.ImgAugMethod.TMASK">
+<span class="sig-name descname"><span class="pre">TMASK</span></span><em class="property"> <span class="pre">=</span> <span class="pre">'-tmask'</span></em><a class="headerlink" href="#data_augmentation.utils.ImgAugMethod.TMASK" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="data_augmentation.utils.Interval">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">data_augmentation.utils.</span></span><span class="sig-name descname"><span class="pre">Interval</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">low_val</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">high_val</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.utils.Interval" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code></p>
+<p>Instances store intervals of ints or
+floats. Supports a dict API for retrieving
+the inclusive low bound, and the exclusive
+high bound.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="data_augmentation.utils.ProcessWithoutWarnings">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">data_augmentation.utils.</span></span><span class="sig-name descname"><span class="pre">ProcessWithoutWarnings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">args</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">()</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kwargs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">{}</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">daemon</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.utils.ProcessWithoutWarnings" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">multiprocessing.context.Process</span></code></p>
+<p>Subclass of Process to use when creating
+multiprocessing jobs. Accomplishes two
+items in addition to the parent:</p>
+<blockquote>
+<div><dl class="simple">
+<dt>o Blocks printout of various deprecation warnings connected</dt><dd><p>with matplotlib and librosa</p>
+</dd>
+<dt>o Adds ability for CreateSpectrogram and SpectrogramChopper </dt><dd><p>instances to return a result.</p>
+</dd>
+</dl>
+</div></blockquote>
+<dl class="py property">
+<dt class="sig sig-object py" id="data_augmentation.utils.ProcessWithoutWarnings.ret_val">
+<em class="property"><span class="pre">property</span> </em><span class="sig-name descname"><span class="pre">ret_val</span></span><a class="headerlink" href="#data_augmentation.utils.ProcessWithoutWarnings.ret_val" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.utils.ProcessWithoutWarnings.run">
+<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.utils.ProcessWithoutWarnings.run" title="Permalink to this definition">¶</a></dt>
+<dd><p>Method to be run in sub-process; can be overridden in sub-class</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="data_augmentation.utils.Utils">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">data_augmentation.utils.</span></span><span class="sig-name descname"><span class="pre">Utils</span></span><a class="headerlink" href="#data_augmentation.utils.Utils" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.utils.Utils.MAX_PERC_OF_CORES_TO_USE">
+<span class="sig-name descname"><span class="pre">MAX_PERC_OF_CORES_TO_USE</span></span><em class="property"> <span class="pre">=</span> <span class="pre">50</span></em><a class="headerlink" href="#data_augmentation.utils.Utils.MAX_PERC_OF_CORES_TO_USE" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.utils.Utils.add_pyplot_manager_to_fig">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">add_pyplot_manager_to_fig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fig</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.utils.Utils.add_pyplot_manager_to_fig" title="Permalink to this definition">¶</a></dt>
+<dd><p>Sometimes, when pyplot figures are passed around,
+the lose their association with their canvas manager.
+This method creates a dummy manager, then adds that
+manager to the passed-in Figure instance in place.</p>
+<dl class="simple">
+<dt>Use when fig.show() throws:</dt><dd><dl class="simple">
+<dt>AttributeError: Figure.show works only for figures managed </dt><dd><p>by pyplot, normally created by pyplot.figure()</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>After calling this method, fig.show() will work. Nothing is
+returned.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>fig</strong> (<em>maptlotlib.pyplot.Figure</em>) – figure to which a canvas manager must be added</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.utils.Utils.binary_in_interval_search">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">binary_in_interval_search</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">intervals</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interval_start</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">low_key</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">high_key</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.utils.Utils.binary_in_interval_search" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given a <em>sorted</em> list L of dict-like instances,
+and a number N, return the index of the instance
+in L that contains N. If none if the intervals
+contains N, return -1.</p>
+<p>The result is obtained through binary search.</p>
+<dl class="simple">
+<dt>Note:</dt><dd><dl class="simple">
+<dt>o The intervals do not need to overlap. I.e.</dt><dd><p>there may be holes</p>
+</dd>
+<dt>o Like Python ranges, intervals are closed on</dt><dd><p>the left, and open at the right. I.e. 
+an interval (4,6) includes 4, but not 6.</p>
+</dd>
+<dt>o Unlike Python ranges, N may be a float, and so</dt><dd><p>do the interval bounds.</p>
+</dd>
+<dt>o One option for an acceptable dict-like for</dt><dd><p>the elements in L are instances of Interval.
+But any dict-API supporting structure is fine.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>intervals</strong> (<em>[</em><a class="reference internal" href="#data_augmentation.utils.Interval" title="data_augmentation.utils.Interval"><em>Interval</em></a><em>]</em>) – list of intervals for which to
+test membership</p></li>
+<li><p><strong>interval_start</strong> (<em>{int | float}</em>) – number for which an enclosing
+interval is to be found</p></li>
+<li><p><strong>low_key</strong> (<em>str</em>) – key with which to retrieve an interval’s
+low bound</p></li>
+<li><p><strong>high_key</strong> (<em>str</em>) – key with which to retrieve an interval’s
+high bound</p></li>
+</ul>
+</dd>
+</dl>
+<p>:return index into intervals, or -1
+:rtype int</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.utils.Utils.compute_num_augs_per_species">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">compute_num_augs_per_species</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">aug_volumes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_distrib_df</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.utils.Utils.compute_num_augs_per_species" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return a dict mapping species name to 
+number of samples that should be available after
+augmentation.</p>
+<p>The aug_volumes arg is either a dict mapping species name
+to an AugmentationGoals (TENTH, MEDIAN, MAX), or just
+an individual AugmentationGoals. The augmentation volume 
+indicates to which degree the least populated species should 
+be filled with augmented samples.</p>
+<p>The sample_distrib_df is a dataframe whose row labels are 
+species names and the single column’s values are numbers
+of available samples for training/validation/test for the
+respective row’s species:</p>
+<blockquote>
+<div><blockquote>
+<div><p>‘num_samples’</p>
+</div></blockquote>
+<p>‘bird1’   2
+‘bird2’   6</p>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>aug_volumes</strong> (<em>{AugmentationGoals | {str : AugmentationGoals}}</em>) – augmentation goal for each species (median of 
+most popolous species, same as maximally populated, or 1/10th).</p></li>
+<li><p><strong>sample_distrib_df</strong> (<em>pandas.DataFrame</em>) – distribution of initially available
+sample numbers for each species</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>dict mapping each species to the 
+number of samples that need to be created.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>{str : int}</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.utils.Utils.count_max_augs">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">count_max_augs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">distribution</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.utils.Utils.count_max_augs" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.utils.Utils.create_folder">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">create_folder</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dir_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overwrite_policy</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.utils.Utils.create_folder" title="Permalink to this definition">¶</a></dt>
+<dd><dl>
+<dt>Given the path to a directory:</dt><dd><p>o If the dir does not exist, create it
+o If dir exists and overwrite_policy is WhenAlreadyDone.SKIP,</p>
+<blockquote>
+<div><p>and return True</p>
+</div></blockquote>
+<dl>
+<dt>o If dir exists and overwrite_policy is WhenAlreadyDone.ASK,</dt><dd><dl class="simple">
+<dt>ask for permission to replace the dir</dt><dd><ul class="simple">
+<li><p>if permission denied, existing dir remains, and return False</p></li>
+<li><p>else tree under dir is cleared, and return True</p></li>
+</ul>
+</dd>
+</dl>
+<p>If dir exists and overwrite_policy is WhenAlreadyDone.OVERWRITE,
+clear the directory and return True</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>Returns True if a new, empty directory was created.
+Return of False means the dir existed, and was left
+untouched.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>dir_path</strong> (<em>str</em>) – path of directory to create</p>
+</dd>
+</dl>
+<p>:return True is empty dir was created, else False
+:rtype: bool</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.utils.Utils.find_in_dir_tree">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">find_in_dir_tree</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">root_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pattern</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'*'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">entry_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'file'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.utils.Utils.find_in_dir_tree" title="Permalink to this definition">¶</a></dt>
+<dd><p>Similates part of the bash shell find command.
+Only bash patters are supported, not Python regex.
+For the find -type values, only file and directory 
+are supported as types. Though abbreviations
+‘f’ and ‘d’ are fine.</p>
+<p>Case of strings are case-normalized using os.path.normcase().
+Change fnmatch to fnmatchcase() in the function to
+perform case-sensitive searches.</p>
+<p>Examples:</p>
+<blockquote>
+<div><dl class="simple">
+<dt># Return  list of absolute file names in /tmp</dt><dd><p>find_in_dir_tree(‘/tmp’, entry_type=’file’)</p>
+</dd>
+<dt># Return list of text files in /tmp</dt><dd><p>find_in_dir_tree(‘/tmp’, pattern=”<a href="#id1"><span class="problematic" id="id2">*</span></a>.txt”)</p>
+</dd>
+</dl>
+<p># Return list of directories in /tmp that start 
+# with ‘Kfold’</p>
+<blockquote>
+<div><p>find_in_dir_tree(‘/tmp’, pattern=”Kfold”, entry_type=’directory’)
+find_in_dir_tree(‘/tmp’, pattern=”Kfold”, entry_type=’d’)</p>
+</div></blockquote>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>root_dir</strong> (<em>str</em>) – directory in which to start recursive descent</p></li>
+<li><p><strong>pattern</strong> (<em>str</em>) – pattern that file or dir must match</p></li>
+<li><p><strong>entry_type</strong> (<em>str</em>) – whether file or directories are included</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>list of file or directory names</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>[str]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.utils.Utils.find_species_names">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">find_species_names</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">species_root</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.utils.Utils.find_species_names" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given the root of a directory in which only
+subdirectories exist that are named after a 
+bird species, return a list of those species
+names.</p>
+<p>Expectation for species_root:</p>
+<blockquote>
+<div><blockquote>
+<div><p>species_root</p>
+</div></blockquote>
+<dl class="simple">
+<dt>brd1_dir   some_file   brd2_dir, brd3_dir …</dt><dd><p>A   N   Y   T    H    I    N    G</p>
+</dd>
+</dl>
+</div></blockquote>
+<p>I.e. there may be files in species_root. But anything
+that is a directory must have a species name.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>species_root</strong> (<em>str</em>) – root of bird species related subdirectories</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>list of species names</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>[str]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.utils.Utils.find_total_recording_length">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">find_total_recording_length</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">species_dir_path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.utils.Utils.find_total_recording_length" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.utils.Utils.is_audio_file">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">is_audio_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fpath</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.utils.Utils.is_audio_file" title="Permalink to this definition">¶</a></dt>
+<dd><p>Very primitive check whether given file is
+and audio file. Just check the extension.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>fpath</strong> (<em>str</em>) – path to check</p>
+</dd>
+</dl>
+<p>:return True if extension is .wav or .mp3, else False
+:rtype bool</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.utils.Utils.listdir_abs">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">listdir_abs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dir_path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.utils.Utils.listdir_abs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given a directory, return its content files. 
+But, in contrast to os.listdir(), the returned
+files are all absolute. Note that this is not
+a recursive walk; only the direct children of
+dir_path are examined.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>dir_path</strong> (<em>src</em>) – absolute path for directory to list</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>list of absolute paths to all contained files</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>(str)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.utils.Utils.method_from_fname">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">method_from_fname</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">aug_name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.utils.Utils.method_from_fname" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.utils.Utils.noise_multiplier">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">noise_multiplier</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">orig_recording</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">noise</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.utils.Utils.noise_multiplier" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.utils.Utils.orig_file_name">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">orig_file_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">augmented_fname</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.utils.Utils.orig_file_name" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given the name of an augmented file, like Amaziliadecora1061880-volume-10.wav,
+return the original file from which the augmentation was created:
+Amaziliadecora1061880.wav</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>augmented_fname</strong> (<em>src</em>) – file name to decipher</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>the original file name</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.utils.Utils.path_elements">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">path_elements</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.utils.Utils.path_elements" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given a path, return a dict of its elements:
+root, fname, and suffix. The method is almost
+like Path.parts or equivalent os.path method.
+But the ‘root’ may be absolute, or relative.
+And fname is provided without extension.</p>
+<blockquote>
+<div><dl class="simple">
+<dt>foo/bar/blue.txt ==&gt; {‘root’<span class="classifier">‘foo/bar’,</span></dt><dd><p>‘fname’: ‘blue’,
+‘suffix: ‘.txt’
+}</p>
+</dd>
+<dt>/foo/bar/blue.txt ==&gt; {‘root’<span class="classifier">‘/foo/bar’,</span></dt><dd><p>‘fname’: ‘blue’,
+‘suffix: ‘.txt’
+}</p>
+</dd>
+<dt>blue.txt ==&gt; {‘root’<span class="classifier">‘’,</span></dt><dd><p>‘fname’: ‘blue’,
+‘suffix: ‘.txt’
+}</p>
+</dd>
+</dl>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>path</strong> (<em>str</em>) – path to dissect</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>dict with file elements</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>{str : str}</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.utils.Utils.read_raven_selection_table">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">read_raven_selection_table</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tbl_path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.utils.Utils.read_raven_selection_table" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given the path to a Raven selection table
+.csv file, return a list of dicts. Each dict
+contains the information in one selection table
+row, plus two additional entries: time_interval,
+and freq_interval; these are added for convenience:</p>
+<p>Selection           row number &lt;int&gt;
+View                not used
+Channel             not used
+Begin Time (s)      begin of vocalization in fractional seconds &lt;float&gt;
+End Time (s)        end of vocalization in fractional seconds &lt;float&gt;
+Low Freq (Hz)       lowest frequency within the lassoed vocalization &lt;float&gt;
+High Freq (Hz)      highest frequency within the lassoed vocalization &lt;float&gt;
+species             four-letter species name &lt;str&gt;
+type                {song, call, call-1, call-trill} &lt;str&gt;
+number              not used
+mix                 comma separated list of other audible species [&lt;str&gt;]</p>
+<p>time_interval       Inteval instance from start and end times
+freq_interval       Inteval instance from start and end frequencies</p>
+<p>Values are converted to appropriate types as above.
+Output is suitable for SnippetSelectionTableMapper.match_snippets()</p>
+<p>The list will be sorted by ascending the ‘Begin Time (s)’
+value.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>tbl_path</strong> (<em>src</em>) – full path to Raven selection table</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>list of dicts, each dict reflecting the content
+of one selection table row</p>
+</dd>
+</dl>
+<p>:rtype [str : Any]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.utils.Utils.recording_lengths_by_species">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">recording_lengths_by_species</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.utils.Utils.recording_lengths_by_species" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.utils.Utils.sample_compositions_by_species">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">sample_compositions_by_species</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">augmented</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.utils.Utils.sample_compositions_by_species" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return a dict with frequencies of sound or spectrogram
+files in path by species. Two cases:</p>
+<blockquote>
+<div><dl>
+<dt>augmented is False:</dt><dd><p>return like</p>
+<blockquote>
+<div><p>num_samples</p>
+</div></blockquote>
+<p>DYSMEN_S            2
+HENLES_S            6</p>
+</dd>
+</dl>
+<p>augmented is True:</p>
+<blockquote>
+<div><blockquote>
+<div><p>add_bg  time_shift  volume  mask  noise original</p>
+</div></blockquote>
+<p>AMADEC                   17          12      19     0      1         0     
+ARRAUR_C                  0           0       0     0      2         0
+Automolusexsertus        17          17      17     0      3         0
+Brotogerisjugularis       0           0       0     0      6         0
+CORALT_C                 11          11      11     0      10        0</p>
+</div></blockquote>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>path</strong> (<em>src</em>) – root of species subdirs</p></li>
+<li><p><strong>augmented</strong> (<em>bool</em>) – whether or not to differentiate between
+augmented and not augmented files</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>dataframe with distribution</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>pandas.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.utils.Utils.set_seed">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">set_seed</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">seed</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.utils.Utils.set_seed" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set the seed across all different necessary platforms
+to allow for comparison of different models and runs</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>seed</strong> (<em>int</em>) – random seed to set for all random num generators</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.utils.Utils.unique_fname">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">unique_fname</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">out_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fname</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.utils.Utils.unique_fname" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a file name unique in the
+given directory. I.e. NOT globally unique.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>out_dir</strong> (<em>str</em>) – directory for which fname is to 
+be uniquified</p></li>
+<li><p><strong>fname</strong> (<em>str</em>) – unique fname without leading path</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>either new, or given file name such that
+the returned name is unique within out_dir</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="data_augmentation.utils.Utils.user_confirm">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">user_confirm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prompt_for_yes_no</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'Y'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.utils.Utils.user_confirm" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="data_augmentation.utils.WhenAlreadyDone">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">data_augmentation.utils.</span></span><span class="sig-name descname"><span class="pre">WhenAlreadyDone</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#data_augmentation.utils.WhenAlreadyDone" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">enum.Enum</span></code></p>
+<p>An enumeration.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.utils.WhenAlreadyDone.ASK">
+<span class="sig-name descname"><span class="pre">ASK</span></span><em class="property"> <span class="pre">=</span> <span class="pre">0</span></em><a class="headerlink" href="#data_augmentation.utils.WhenAlreadyDone.ASK" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.utils.WhenAlreadyDone.OVERWRITE">
+<span class="sig-name descname"><span class="pre">OVERWRITE</span></span><em class="property"> <span class="pre">=</span> <span class="pre">1</span></em><a class="headerlink" href="#data_augmentation.utils.WhenAlreadyDone.OVERWRITE" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="data_augmentation.utils.WhenAlreadyDone.SKIP">
+<span class="sig-name descname"><span class="pre">SKIP</span></span><em class="property"> <span class="pre">=</span> <span class="pre">2</span></em><a class="headerlink" href="#data_augmentation.utils.WhenAlreadyDone.SKIP" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-data_augmentation">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-data_augmentation" title="Permalink to this headline">¶</a></h2>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &#169; Copyright 2021, Team.
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

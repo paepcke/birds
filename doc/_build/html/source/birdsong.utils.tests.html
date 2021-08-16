@@ -1,0 +1,775 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>birdsong.utils.tests package &mdash; Birdsong  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home"> Birdsong
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <!-- Local TOC -->
+              <div class="local-toc"><ul>
+<li><a class="reference internal" href="#">birdsong.utils.tests package</a><ul>
+<li><a class="reference internal" href="#submodules">Submodules</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils.tests.test_dottable_config_parser">birdsong.utils.tests.test_dottable_config_parser module</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils.tests.test_dottable_map">birdsong.utils.tests.test_dottable_map module</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils.tests.test_match_snippets_to_selection_table">birdsong.utils.tests.test_match_snippets_to_selection_table module</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils.tests.test_move_random_perc_of_files">birdsong.utils.tests.test_move_random_perc_of_files module</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils.tests.test_multiclass_pr_curve">birdsong.utils.tests.test_multiclass_pr_curve module</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils.tests.test_neural_net_config">birdsong.utils.tests.test_neural_net_config module</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils.tests.test_tensorboard_manager">birdsong.utils.tests.test_tensorboard_manager module</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils.tests.test_tensorboard_plotter">birdsong.utils.tests.test_tensorboard_plotter module</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils.tests.test_utilities">birdsong.utils.tests.test_utilities module</a></li>
+<li><a class="reference internal" href="#module-birdsong.utils.tests">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</div>
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Birdsong</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+      <li>birdsong.utils.tests package</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+          
+            <a href="../_sources/source/birdsong.utils.tests.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="birdsong-utils-tests-package">
+<h1>birdsong.utils.tests package<a class="headerlink" href="#birdsong-utils-tests-package" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
+</div>
+<div class="section" id="module-birdsong.utils.tests.test_dottable_config_parser">
+<span id="birdsong-utils-tests-test-dottable-config-parser-module"></span><h2>birdsong.utils.tests.test_dottable_config_parser module<a class="headerlink" href="#module-birdsong.utils.tests.test_dottable_config_parser" title="Permalink to this headline">¶</a></h2>
+<p>Created on Dec 19, 2020</p>
+<p>&#64;author: paepcke</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_dottable_config_parser.TestDottableConfigParser">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.tests.test_dottable_config_parser.</span></span><span class="sig-name descname"><span class="pre">TestDottableConfigParser</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">methodName</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'runTest'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_dottable_config_parser.TestDottableConfigParser" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">unittest.case.TestCase</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_dottable_config_parser.TestDottableConfigParser.setUp">
+<span class="sig-name descname"><span class="pre">setUp</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_dottable_config_parser.TestDottableConfigParser.setUp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Hook method for setting up the test fixture before exercising it.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_dottable_config_parser.TestDottableConfigParser.tearDown">
+<span class="sig-name descname"><span class="pre">tearDown</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_dottable_config_parser.TestDottableConfigParser.tearDown" title="Permalink to this definition">¶</a></dt>
+<dd><p>Hook method for deconstructing the test fixture after testing it.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_dottable_config_parser.TestDottableConfigParser.test_basics">
+<span class="sig-name descname"><span class="pre">test_basics</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_dottable_config_parser.TestDottableConfigParser.test_basics" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_dottable_config_parser.TestDottableConfigParser.test_expand_paths">
+<span class="sig-name descname"><span class="pre">test_expand_paths</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_dottable_config_parser.TestDottableConfigParser.test_expand_paths" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-birdsong.utils.tests.test_dottable_map">
+<span id="birdsong-utils-tests-test-dottable-map-module"></span><h2>birdsong.utils.tests.test_dottable_map module<a class="headerlink" href="#module-birdsong.utils.tests.test_dottable_map" title="Permalink to this headline">¶</a></h2>
+<p>Created on Dec 19, 2020</p>
+<p>&#64;author: paepcke</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_dottable_map.TestDottableMap">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.tests.test_dottable_map.</span></span><span class="sig-name descname"><span class="pre">TestDottableMap</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">methodName</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'runTest'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_dottable_map.TestDottableMap" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">unittest.case.TestCase</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_dottable_map.TestDottableMap.setUp">
+<span class="sig-name descname"><span class="pre">setUp</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_dottable_map.TestDottableMap.setUp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Hook method for setting up the test fixture before exercising it.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_dottable_map.TestDottableMap.tearDown">
+<span class="sig-name descname"><span class="pre">tearDown</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_dottable_map.TestDottableMap.tearDown" title="Permalink to this definition">¶</a></dt>
+<dd><p>Hook method for deconstructing the test fixture after testing it.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_dottable_map.TestDottableMap.test_creation">
+<span class="sig-name descname"><span class="pre">test_creation</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_dottable_map.TestDottableMap.test_creation" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_dottable_map.TestDottableMap.test_defaulting">
+<span class="sig-name descname"><span class="pre">test_defaulting</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_dottable_map.TestDottableMap.test_defaulting" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_dottable_map.TestDottableMap.test_get_typed">
+<span class="sig-name descname"><span class="pre">test_get_typed</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_dottable_map.TestDottableMap.test_get_typed" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-birdsong.utils.tests.test_match_snippets_to_selection_table">
+<span id="birdsong-utils-tests-test-match-snippets-to-selection-table-module"></span><h2>birdsong.utils.tests.test_match_snippets_to_selection_table module<a class="headerlink" href="#module-birdsong.utils.tests.test_match_snippets_to_selection_table" title="Permalink to this headline">¶</a></h2>
+<p>Created on May 13, 2021</p>
+<p>&#64;author: paepcke</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_match_snippets_to_selection_table.TestSnippetMatcher">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.tests.test_match_snippets_to_selection_table.</span></span><span class="sig-name descname"><span class="pre">TestSnippetMatcher</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">methodName</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'runTest'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_match_snippets_to_selection_table.TestSnippetMatcher" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">unittest.case.TestCase</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_match_snippets_to_selection_table.TestSnippetMatcher.setUp">
+<span class="sig-name descname"><span class="pre">setUp</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_match_snippets_to_selection_table.TestSnippetMatcher.setUp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Hook method for setting up the test fixture before exercising it.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_match_snippets_to_selection_table.TestSnippetMatcher.setUpClass">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">setUpClass</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_match_snippets_to_selection_table.TestSnippetMatcher.setUpClass" title="Permalink to this definition">¶</a></dt>
+<dd><p>Hook method for setting up class fixture before running tests in the class.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_match_snippets_to_selection_table.TestSnippetMatcher.tearDown">
+<span class="sig-name descname"><span class="pre">tearDown</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_match_snippets_to_selection_table.TestSnippetMatcher.tearDown" title="Permalink to this definition">¶</a></dt>
+<dd><p>Hook method for deconstructing the test fixture after testing it.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_match_snippets_to_selection_table.TestSnippetMatcher.test_match_snippets">
+<span class="sig-name descname"><span class="pre">test_match_snippets</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_match_snippets_to_selection_table.TestSnippetMatcher.test_match_snippets" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-birdsong.utils.tests.test_move_random_perc_of_files">
+<span id="birdsong-utils-tests-test-move-random-perc-of-files-module"></span><h2>birdsong.utils.tests.test_move_random_perc_of_files module<a class="headerlink" href="#module-birdsong.utils.tests.test_move_random_perc_of_files" title="Permalink to this headline">¶</a></h2>
+<p>Created on Jan 15, 2021</p>
+<p>&#64;author: paepcke</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_move_random_perc_of_files.Test">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.tests.test_move_random_perc_of_files.</span></span><span class="sig-name descname"><span class="pre">Test</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">methodName</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'runTest'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_move_random_perc_of_files.Test" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">unittest.case.TestCase</span></code></p>
+<p>Assumes the following file structure
+below this script’s dir (10 files total)</p>
+<blockquote>
+<div><blockquote>
+<div><dl>
+<dt>&lt;curr_dir&gt;</dt><dd><blockquote>
+<div><div class="line-block">
+<div class="line"><br /></div>
+</div>
+</div></blockquote>
+<p>mv_tst_dir</p>
+</dd>
+</dl>
+</div></blockquote>
+<dl>
+<dt>/    |                   dir_file1 … dir_file4   mv_tst_dir1</dt><dd><blockquote>
+<div><div class="line-block">
+<div class="line"><br /></div>
+<div class="line"><br /></div>
+</div>
+</div></blockquote>
+<p>/                                            dir1_file1 … dir1_file6</p>
+</dd>
+</dl>
+</div></blockquote>
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_move_random_perc_of_files.Test.setUp">
+<span class="sig-name descname"><span class="pre">setUp</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_move_random_perc_of_files.Test.setUp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Hook method for setting up the test fixture before exercising it.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_move_random_perc_of_files.Test.setUpClass">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">setUpClass</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_move_random_perc_of_files.Test.setUpClass" title="Permalink to this definition">¶</a></dt>
+<dd><p>Hook method for setting up class fixture before running tests in the class.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_move_random_perc_of_files.Test.tearDown">
+<span class="sig-name descname"><span class="pre">tearDown</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_move_random_perc_of_files.Test.tearDown" title="Permalink to this definition">¶</a></dt>
+<dd><p>Hook method for deconstructing the test fixture after testing it.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_move_random_perc_of_files.Test.test_move">
+<span class="sig-name descname"><span class="pre">test_move</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_move_random_perc_of_files.Test.test_move" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-birdsong.utils.tests.test_multiclass_pr_curve">
+<span id="birdsong-utils-tests-test-multiclass-pr-curve-module"></span><h2>birdsong.utils.tests.test_multiclass_pr_curve module<a class="headerlink" href="#module-birdsong.utils.tests.test_multiclass_pr_curve" title="Permalink to this headline">¶</a></h2>
+<p>Created on Feb 14, 2021</p>
+<p>&#64;author: paepcke</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_multiclass_pr_curve.Test">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.tests.test_multiclass_pr_curve.</span></span><span class="sig-name descname"><span class="pre">Test</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">methodName</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'runTest'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_multiclass_pr_curve.Test" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">unittest.case.TestCase</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_multiclass_pr_curve.Test.setUp">
+<span class="sig-name descname"><span class="pre">setUp</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_multiclass_pr_curve.Test.setUp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Hook method for setting up the test fixture before exercising it.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_multiclass_pr_curve.Test.tearDown">
+<span class="sig-name descname"><span class="pre">tearDown</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_multiclass_pr_curve.Test.tearDown" title="Permalink to this definition">¶</a></dt>
+<dd><p>Hook method for deconstructing the test fixture after testing it.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_multiclass_pr_curve.Test.test_one_call">
+<span class="sig-name descname"><span class="pre">test_one_call</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_multiclass_pr_curve.Test.test_one_call" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-birdsong.utils.tests.test_neural_net_config">
+<span id="birdsong-utils-tests-test-neural-net-config-module"></span><h2>birdsong.utils.tests.test_neural_net_config module<a class="headerlink" href="#module-birdsong.utils.tests.test_neural_net_config" title="Permalink to this headline">¶</a></h2>
+<p>Created on Feb 4, 2021</p>
+<p>&#64;author: paepcke</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_neural_net_config.NeuralNetConfigTest">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.tests.test_neural_net_config.</span></span><span class="sig-name descname"><span class="pre">NeuralNetConfigTest</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">methodName</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'runTest'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_neural_net_config.NeuralNetConfigTest" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">unittest.case.TestCase</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_neural_net_config.NeuralNetConfigTest.setUp">
+<span class="sig-name descname"><span class="pre">setUp</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_neural_net_config.NeuralNetConfigTest.setUp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Hook method for setting up the test fixture before exercising it.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_neural_net_config.NeuralNetConfigTest.setUpClass">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">setUpClass</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_neural_net_config.NeuralNetConfigTest.setUpClass" title="Permalink to this definition">¶</a></dt>
+<dd><p>Hook method for setting up class fixture before running tests in the class.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_neural_net_config.NeuralNetConfigTest.tearDown">
+<span class="sig-name descname"><span class="pre">tearDown</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_neural_net_config.NeuralNetConfigTest.tearDown" title="Permalink to this definition">¶</a></dt>
+<dd><p>Hook method for deconstructing the test fixture after testing it.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_neural_net_config.NeuralNetConfigTest.test_add_section">
+<span class="sig-name descname"><span class="pre">test_add_section</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_neural_net_config.NeuralNetConfigTest.test_add_section" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_neural_net_config.NeuralNetConfigTest.test_eq">
+<span class="sig-name descname"><span class="pre">test_eq</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_neural_net_config.NeuralNetConfigTest.test_eq" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_neural_net_config.NeuralNetConfigTest.test_from_json">
+<span class="sig-name descname"><span class="pre">test_from_json</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_neural_net_config.NeuralNetConfigTest.test_from_json" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_neural_net_config.NeuralNetConfigTest.test_json_human_readable">
+<span class="sig-name descname"><span class="pre">test_json_human_readable</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_neural_net_config.NeuralNetConfigTest.test_json_human_readable" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_neural_net_config.NeuralNetConfigTest.test_setter_evals">
+<span class="sig-name descname"><span class="pre">test_setter_evals</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_neural_net_config.NeuralNetConfigTest.test_setter_evals" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_neural_net_config.NeuralNetConfigTest.test_setter_methods">
+<span class="sig-name descname"><span class="pre">test_setter_methods</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_neural_net_config.NeuralNetConfigTest.test_setter_methods" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_neural_net_config.NeuralNetConfigTest.test_to_json_xc_recording">
+<span class="sig-name descname"><span class="pre">test_to_json_xc_recording</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_neural_net_config.NeuralNetConfigTest.test_to_json_xc_recording" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-birdsong.utils.tests.test_tensorboard_manager">
+<span id="birdsong-utils-tests-test-tensorboard-manager-module"></span><h2>birdsong.utils.tests.test_tensorboard_manager module<a class="headerlink" href="#module-birdsong.utils.tests.test_tensorboard_manager" title="Permalink to this headline">¶</a></h2>
+<p>Created on Feb 12, 2021</p>
+<p>&#64;author: paepcke</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_tensorboard_manager.ShowInBrowserTester">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.tests.test_tensorboard_manager.</span></span><span class="sig-name descname"><span class="pre">ShowInBrowserTester</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">methodName</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'runTest'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_tensorboard_manager.ShowInBrowserTester" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">unittest.case.TestCase</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_tensorboard_manager.ShowInBrowserTester.setUp">
+<span class="sig-name descname"><span class="pre">setUp</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_tensorboard_manager.ShowInBrowserTester.setUp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Hook method for setting up the test fixture before exercising it.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_tensorboard_manager.ShowInBrowserTester.tearDown">
+<span class="sig-name descname"><span class="pre">tearDown</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_tensorboard_manager.ShowInBrowserTester.tearDown" title="Permalink to this definition">¶</a></dt>
+<dd><p>Hook method for deconstructing the test fixture after testing it.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_tensorboard_manager.ShowInBrowserTester.test_show_in_browser">
+<span class="sig-name descname"><span class="pre">test_show_in_browser</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_tensorboard_manager.ShowInBrowserTester.test_show_in_browser" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-birdsong.utils.tests.test_tensorboard_plotter">
+<span id="birdsong-utils-tests-test-tensorboard-plotter-module"></span><h2>birdsong.utils.tests.test_tensorboard_plotter module<a class="headerlink" href="#module-birdsong.utils.tests.test_tensorboard_plotter" title="Permalink to this headline">¶</a></h2>
+<p>Created on Jan 25, 2021</p>
+<p>&#64;author: paepcke</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.tests.test_tensorboard_plotter.</span></span><span class="sig-name descname"><span class="pre">TestTensorBoardPlotter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">methodName</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'runTest'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">unittest.case.TestCase</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.await_user_ack">
+<span class="sig-name descname"><span class="pre">await_user_ack</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">msg</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.await_user_ack" title="Permalink to this definition">¶</a></dt>
+<dd><p>Print given msg or the default msg,
+then block till user hits any key.</p>
+<p>Used when images are sent to tensorboard,
+and user needs to check them. The end
+of the test suite will remove the tensorflow
+event files; so then it would be too late.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>msg</strong> (<em>{str | None}</em>) – prompt to print</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.clone_tally">
+<span class="sig-name descname"><span class="pre">clone_tally</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tally</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">f1_macro</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">f1_micro</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">f1_weighted</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">phase</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.clone_tally" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.create_conf_matrix">
+<span class="sig-name descname"><span class="pre">create_conf_matrix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_classes</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">perc_correct</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.25</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.create_conf_matrix" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates and returns random confusion
+matrix, and corresponding fake class
+names.</p>
+<dl class="simple">
+<dt>:returns tuple of class name list, and the</dt><dd><p>confusion matrix</p>
+</dd>
+</dl>
+<p>:rtype ([str], np.ndarray)</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.gen_pred_truth">
+<span class="sig-name descname"><span class="pre">gen_pred_truth</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_classes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">perc_correct</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.gen_pred_truth" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given a number of classes, and a percentage 
+of hypothetically correct predictions, generate
+two sequences[int] of length num_classes: First,
+a sequence that represents true target class labels. 
+Second, a sequence that matches the truth labels
+perc_correct number of times.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>num_classes</strong> (<em>int</em>) – number of hypothetical 
+classes</p></li>
+<li><p><strong>perc_correct</strong> (<em>float</em>) – percentage of hypothetial
+class predictions that are to match the truth</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>a dict: {‘truth’: [int], ‘pred’ : [int]}</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.make_tallies">
+<span class="sig-name descname"><span class="pre">make_tallies</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">testing</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.make_tallies" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return two tallies, one 
+train, one val. Client can 
+use clone_tally() to replicate
+and then modify the f1 values</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.setUp">
+<span class="sig-name descname"><span class="pre">setUp</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.setUp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Hook method for setting up the test fixture before exercising it.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.setUpClass">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">setUpClass</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.setUpClass" title="Permalink to this definition">¶</a></dt>
+<dd><p>Hook method for setting up class fixture before running tests in the class.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.tearDown">
+<span class="sig-name descname"><span class="pre">tearDown</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.tearDown" title="Permalink to this definition">¶</a></dt>
+<dd><p>Hook method for deconstructing the test fixture after testing it.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.tearDownClass">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">tearDownClass</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.tearDownClass" title="Permalink to this definition">¶</a></dt>
+<dd><p>Hook method for deconstructing the class fixture after running all tests in the class.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.test_class_support_to_tensorboard">
+<span class="sig-name descname"><span class="pre">test_class_support_to_tensorboard</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.test_class_support_to_tensorboard" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.test_compute_binary_pr_curve">
+<span class="sig-name descname"><span class="pre">test_compute_binary_pr_curve</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.test_compute_binary_pr_curve" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.test_compute_multiclass_pr_curve">
+<span class="sig-name descname"><span class="pre">test_compute_multiclass_pr_curve</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.test_compute_multiclass_pr_curve" title="Permalink to this definition">¶</a></dt>
+<dd><p>Extend the [0,1] classes used in
+test_compute_binary_pr_curve() to   
+classes [0,1,2]. Goal is to get the
+same result for class 2 as for class 1
+since class 1 outcomes are tested in 
+test_compute_binary_pr_curve() and were
+manually verified there.</p>
+<p>So we copy the labels and append them
+to the labels used in test_compute_binary_pr_curve().
+We then change all the 1-class in the copy
+to 2.</p>
+<p>For predictions we also copy and append the
+preds from test_compute_binary_pr_curve(). But
+we make no changes. So when the multiclass pr
+curve method treats each class as one-against-all,
+we should get the identical results we can then 
+use for testing.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.test_conf_mat_to_tensorboard">
+<span class="sig-name descname"><span class="pre">test_conf_mat_to_tensorboard</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.test_conf_mat_to_tensorboard" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.test_degenerate_multiclass_pr_curve">
+<span class="sig-name descname"><span class="pre">test_degenerate_multiclass_pr_curve</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.test_degenerate_multiclass_pr_curve" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.test_large_pr_curve">
+<span class="sig-name descname"><span class="pre">test_large_pr_curve</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.test_large_pr_curve" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.test_make_all_classes_f1_table">
+<span class="sig-name descname"><span class="pre">test_make_all_classes_f1_table</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.test_make_all_classes_f1_table" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.test_make_f1_train_val_table">
+<span class="sig-name descname"><span class="pre">test_make_f1_train_val_table</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.test_make_f1_train_val_table" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="simple">
+<dt>Return a github flavored table:</dt><dd><p><a href="#id1"><span class="problematic" id="id2">|phase|ep0  |ep1 |ep2 |
+|-----|</span></a>—–<a href="#id3"><span class="problematic" id="id4">|----|</span></a>—-|
+<a href="#id5"><span class="problematic" id="id6">|train|</span></a> f1_0|f1_1|f1_2|
+|  val| f1_0|f1_1|f1_2|</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.test_more_img_requests_than_available">
+<span class="sig-name descname"><span class="pre">test_more_img_requests_than_available</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.test_more_img_requests_than_available" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.test_print_onto_image">
+<span class="sig-name descname"><span class="pre">test_print_onto_image</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.test_print_onto_image" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.test_tensorboard_port">
+<span class="sig-name descname"><span class="pre">test_tensorboard_port</span></span><em class="property"> <span class="pre">=</span> <span class="pre">6009</span></em><a class="headerlink" href="#birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.test_tensorboard_port" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.test_visualize_epoch_testing_phase_only">
+<span class="sig-name descname"><span class="pre">test_visualize_epoch_testing_phase_only</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.test_visualize_epoch_testing_phase_only" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.test_visualize_epoch_train_plus_val">
+<span class="sig-name descname"><span class="pre">test_visualize_epoch_train_plus_val</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.test_visualize_epoch_train_plus_val" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.test_write_img_grid">
+<span class="sig-name descname"><span class="pre">test_write_img_grid</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_tensorboard_plotter.TestTensorBoardPlotter.test_write_img_grid" title="Permalink to this definition">¶</a></dt>
+<dd><p>Test creating a grid of train images
+for tensorboard. Method signature is:</p>
+<blockquote>
+<div><p>writer, 
+num_imgs=4, 
+img_dirs=None, 
+img_paths=None,
+img_height=43,    # px
+img_width=171,    # px
+unittesting=False):</p>
+</div></blockquote>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-birdsong.utils.tests.test_utilities">
+<span id="birdsong-utils-tests-test-utilities-module"></span><h2>birdsong.utils.tests.test_utilities module<a class="headerlink" href="#module-birdsong.utils.tests.test_utilities" title="Permalink to this headline">¶</a></h2>
+<p>Created on Mar 11, 2021</p>
+<p>&#64;author: paepcke</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_utilities.TestUtilities">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">birdsong.utils.tests.test_utilities.</span></span><span class="sig-name descname"><span class="pre">TestUtilities</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">methodName</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'runTest'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_utilities.TestUtilities" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">unittest.case.TestCase</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_utilities.TestUtilities.setUp">
+<span class="sig-name descname"><span class="pre">setUp</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_utilities.TestUtilities.setUp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Hook method for setting up the test fixture before exercising it.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_utilities.TestUtilities.setUpClass">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">setUpClass</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_utilities.TestUtilities.setUpClass" title="Permalink to this definition">¶</a></dt>
+<dd><p>Hook method for setting up class fixture before running tests in the class.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_utilities.TestUtilities.tearDown">
+<span class="sig-name descname"><span class="pre">tearDown</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_utilities.TestUtilities.tearDown" title="Permalink to this definition">¶</a></dt>
+<dd><p>Hook method for deconstructing the test fixture after testing it.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_utilities.TestUtilities.testName">
+<span class="sig-name descname"><span class="pre">testName</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_utilities.TestUtilities.testName" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_utilities.TestUtilities.test_construct_filename">
+<span class="sig-name descname"><span class="pre">test_construct_filename</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_utilities.TestUtilities.test_construct_filename" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_utilities.TestUtilities.test_ellipsed_file_path">
+<span class="sig-name descname"><span class="pre">test_ellipsed_file_path</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_utilities.TestUtilities.test_ellipsed_file_path" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_utilities.TestUtilities.test_load_preds_and_labels">
+<span class="sig-name descname"><span class="pre">test_load_preds_and_labels</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_utilities.TestUtilities.test_load_preds_and_labels" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_utilities.TestUtilities.test_make_run_props_dict">
+<span class="sig-name descname"><span class="pre">test_make_run_props_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_utilities.TestUtilities.test_make_run_props_dict" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="birdsong.utils.tests.test_utilities.TestUtilities.test_parse_filename">
+<span class="sig-name descname"><span class="pre">test_parse_filename</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#birdsong.utils.tests.test_utilities.TestUtilities.test_parse_filename" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-birdsong.utils.tests">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-birdsong.utils.tests" title="Permalink to this headline">¶</a></h2>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &#169; Copyright 2021, Team.
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
