@@ -254,22 +254,39 @@ class Test(unittest.TestCase):
         # Misspelled column headers:
         
         dict_list = Utils.read_raven_selection_table(self.raven_sel_tbl_bad_col_header_spellings_path)
-        desired = \
-                {'Selection': '2',
-                'View': 'Spectrogram 1',
-                'Channel': '1',
-                'Begin Time (s)': 2.390074726,
-                'End Time (s)': 3.231216904,
-                'Low Freq (Hz)': 1564.1,
-                'High Freq (Hz)': 3519.1,
-                'species': 'OBNTC',
-                'type': 'CALL',
-                'number': '2',
-                'mix': ['GAGAG'],
-                'time_interval': {'low_val': 2.390074726,'high_val': 3.231216904},
-                'freq_interval': {'low_val': 1564.1,'high_val': 3519.1}
-                }
-        self.assertDictEqual(dict_list[0], desired)
+        desired = [
+            {'Selection': '3',
+            'View': 'Spectrogram 1',
+            'Channel': '1',
+            'Begin Time (s)': 1.234,
+            'End Time (s)': 5.64,
+            'Low Freq (Hz)': 1564.1,
+            'High Freq (Hz)': 3519.1,
+            'species': 'OBNTC',
+            'type': 'CALL',
+            'number': '2',
+            'mix': ['SHWCG'],
+            'time_interval': {'low_val': 1.234,'high_val': 5.64},
+            'freq_interval': {'low_val': 1564.1,'high_val': 3519.1}
+            },
+            {'Selection': '2',
+            'View': 'Spectrogram 1',
+            'Channel': '1',
+            'Begin Time (s)': 2.390074726,
+            'End Time (s)': 3.231216904,
+            'Low Freq (Hz)': 1564.1,
+            'High Freq (Hz)': 3519.1,
+            'species': 'OBNTC',
+            'type': 'CALL',
+            'number': '2',
+            'mix': ['GAGAG'],
+            'time_interval': {'low_val': 2.390074726,'high_val': 3.231216904},
+            'freq_interval': {'low_val': 1564.1,'high_val': 3519.1}
+            }
+            ]
+                
+        self.assertDictEqual(dict_list[0], desired[0])
+        self.assertDictEqual(dict_list[1], desired[1])
 
     #------------------------------------
     # test_pad_series 
