@@ -1022,14 +1022,23 @@ class Utils:
             # Convert all mix 4-letter codes into 5-letter codes:
             new_mix = []
             for mix_species in sel_dict['mix']:
-                new_mix.append(cls._four_to_five_from_sel_row_dict(mix_species, sel_dict, tbl_path))
+                # If mix_species is not a 4-letter 
+                # code, we assume the labeller labeled
+                # some kind of noise, like "barking dog":
+                if len(mix_species) != 4:
+                    new_mix.append('NOISG')
+                else:
+                    new_mix.append(cls._four_to_five_from_sel_row_dict(mix_species, sel_dict, tbl_path))
             sel_dict['mix'] = new_mix
             
             # Same for the single (4-letter) species:
             try:
-                sel_dict['species'] = cls._four_to_five_from_sel_row_dict(sel_dict['species'], 
-                                                                          sel_dict, 
-                                                                          tbl_path)
+                if len(sel_dict['species']) != 4:
+                    sel_dict['species'] = 'NOISG'
+                else:
+                    sel_dict['species'] = cls._four_to_five_from_sel_row_dict(sel_dict['species'], 
+                                                                              sel_dict, 
+                                                                              tbl_path)
             except ValueError:
                 # Likely the species was entered as something 
                 # like 'Motorcycle' or 'thunder' or 'NO BIRD':
