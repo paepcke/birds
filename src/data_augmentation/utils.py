@@ -915,6 +915,9 @@ class Utils:
         # Coerce types and unify keys:
         
         species_spellings = ['species', 'Especie', 'Specie', 'SPECIE', 'specie']
+        type_spellings    = ['Type', 'tipo', 'Tipo', 'TYPE', 'TIPPO']
+        mix_spellings     = ['Mix', 'MIX', 'mezcla', 'Mezcla', 'MEZCLA']
+        number_spellings  = ['Number', 'NUMBER', 'numero', 'Numero', 'NUMERO']
         
         for sel_dict in sel_dict_list:
             sel_dict['Selection'] = str(sel_dict['Selection'])
@@ -923,11 +926,61 @@ class Utils:
             sel_dict['Low Freq (Hz)'] = float(sel_dict['Low Freq (Hz)'])
             sel_dict['High Freq (Hz)'] = float(sel_dict['High Freq (Hz)'])
             
-            # Make sure there is a 'type' column,
-            # the one that says 'call', 'song,' etc.:
-            if 'type' not in list(sel_dict.keys()):
-                sel_dict['type'] = ''
             
+            # Go through the column names that human labelers
+            # add manually, rather than being built-into Raven.
+            # Eradicate any spelling differences:
+
+            col_keys = list(sel_dict.keys())
+
+            # Make sure there is a 'type' column,
+            # the one that says 'call', 'song,' etc.
+            # The col name could have different spellings:
+            
+            if 'type' not in col_keys:
+                # Maybe there is no col called 'type'...
+                sel_dict['type'] = ''
+                # ... but we'll check for different spellings:
+                for type_col_name in type_spellings:
+                    try:
+                        type_val = sel_dict[type_col_name]
+                        sel_dict['type'] = type_val
+                        del sel_dict[type_col_name]
+                        break
+                    except KeyError:
+                        # That wasn't the spelling used
+                        continue
+
+            # Same for 'mix' column:
+            if 'mix' not in col_keys:
+                # Maybe there is no col called 'mix'...
+                sel_dict['mix'] = ''
+                # ...but we'll check for different spellings:
+                for mix_col_name in mix_spellings:
+                    try:
+                        mix_val = sel_dict[mix_col_name]
+                        sel_dict['mix'] = mix_val
+                        del sel_dict[mix_col_name]
+                        break
+                    except KeyError:
+                        # That wasn't the spelling used
+                        continue
+
+            # Same for 'mix' column:
+            if 'number' not in col_keys:
+                # Maybe there is no col called 'number'...
+                sel_dict['number'] = '1'
+                # ...but we'll check for different spellings:
+                for number_col_name in number_spellings:
+                    try:
+                        number_val = sel_dict[number_col_name]
+                        sel_dict['number'] = number_val
+                        del sel_dict[number_col_name]
+                        break
+                    except KeyError:
+                        # That wasn't the spelling used
+                        continue
+
             # Make the four-letter species names upper case:
             try:
                 sel_dict['species'] = sel_dict['species'].upper()
@@ -1000,7 +1053,9 @@ class Utils:
         the code conversion by adding 'S' or 'C'. Else raise a ConversionError.
         
         The sel_row_dict is a dict containing all info from one row
-        in one selection table. The tbl_path is used to provide good error
+        in one selection table. 
+        
+        The tbl_path is used to provide good error
         messages.
 
         :param four_code: 4-letter species code to convert to 5-letter code
@@ -1022,7 +1077,7 @@ class Utils:
             # Species is split by song/call, so get the type:
             species_type = sel_row_dict['type'].upper()
             if species_type not in ['SONG', 'CALL']:
-                raise ConversionError(f"Selection table {tbl_path}, selection# {sel_row_dict['Selection']} mix species {four_code} needs song/call info")
+                raise ConversionError(f"Selection table {tbl_path}, selection# {sel_row_dict['Selection']} species {four_code} needs song/call info")
             # We have the required info:
             five_code = four_code + ('S' if species_type == 'SONG' else 'C')
 
