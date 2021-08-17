@@ -348,7 +348,7 @@ class SpeciesNameConverter:
                               DIRECTION.FOUR_SIX,
                               DIRECTION.FOUR_FIVE
                               ]:
-            raise ValueError(f"For 4-letter codes, direction must be 5-letter, 6-letter, or scienfic name")
+            raise ValueError(f"For 4-letter codes, direction must be 5-letter, 6-letter, or scienfic name (nm_given: {nm_given})")
         elif len(nm_given) == 5 and \
             direction not in [DIRECTION.FIVE_FOUR,
                               ]:
@@ -357,12 +357,12 @@ class SpeciesNameConverter:
             direction not in [DIRECTION.SIX_FOUR,
                               DIRECTION.SIX_SCI
                               ]:
-            raise ValueError(f"For 6-letter codes, direction must be 4-letter or scienfic name")
+            raise ValueError(f"For 6-letter codes, direction must be 4-letter or scienfic name (nm_given: {nm_given})")
         elif len(nm_given) > 6 and \
             direction not in [DIRECTION.SCI_FOUR,
                               DIRECTION.SCI_SIX
                               ]:
-            raise ValueError(f"For scientific names, direction must be 4-letter or 6-letter code")
+            raise ValueError(f"For scientific names, direction must be 4-letter or 6-letter code (nm_given: {nm_given})")
 
         # Ensure proper format, such as
         # upper case, and no underscores
