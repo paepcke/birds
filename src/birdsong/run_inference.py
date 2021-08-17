@@ -123,6 +123,7 @@ class Inferencer:
         self.samples_path = samples_path
         self.gpu_ids      = gpu_ids if type(gpu_ids) == list else [gpu_ids]
         self.sampling     = sampling
+        self.csv_dir      = self.exp.csv_files_path
         if batch_size is not None:
             self.batch_size = batch_size
         else:
@@ -310,7 +311,7 @@ class Inferencer:
             # Convert the list of truth labels from the
             # dataloaders class IDs to the corresponding
             # model class IDs:
-            y_model = [torch.tensor(self.sample_cid_to_model_cid[t.item])
+            y_model = [torch.tensor(self.sample_cid_to_model_cid[t.item()])
                        for t in y
                        ]
             outputs = sko_net.predict(X)

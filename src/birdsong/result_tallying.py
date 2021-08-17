@@ -10,7 +10,6 @@ import os, sys
 
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import balanced_accuracy_score
-from sklearn.metrics import confusion_matrix
 from sklearn.metrics import f1_score
 from sklearn.metrics import precision_score
 from sklearn.metrics import recall_score
@@ -21,7 +20,6 @@ import torch
 
 from birdsong.utils.learning_phase import LearningPhase
 from result_analysis.charting import Charter
-from birdsong.utils import learning_phase
 
 
 packet_root = os.path.abspath(__file__.split('/')[0])
@@ -523,7 +521,10 @@ class ResultTally:
         self.class_names    = class_names
         self.batch_size     = batch_size
         self.preds          = None
-        self.labels         = labels.tolist()
+        if type(labels) == list:
+            self.labels = labels
+        else:
+            self.labels         = labels.tolist()
         
         # Remember the attrs that don't need
         # to be computed, and access to which 
