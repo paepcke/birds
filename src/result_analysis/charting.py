@@ -901,9 +901,8 @@ class Charter:
         # Get one row with step, train-preds, train_labels,
         # val_preds, and val_labels at a time:
         with open(fname, 'r') as data_fd:
-            # Skip the header row:
-            data_fd.readline()
-            for line in data_fd:
+            reader = csv.DictReader(data_fd)
+            for outcome_dict in reader:
                 # Safely turn string formatted
                 # lists into lists of ints:
                 train_labels = eval(outcome_dict['train_labels'],
