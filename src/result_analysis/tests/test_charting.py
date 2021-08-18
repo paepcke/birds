@@ -187,11 +187,13 @@ class ChartingTester(unittest.TestCase):
         # column for each target class
         pred_probs   = pd.read_csv(os.path.join(self.viz_data_dir, 'pred_probs_300_samples.csv'))
         
-        mAP, pr_curve_specs = Charter.visualize_testing_result(truth_labels, pred_probs)
+        (mAP, num_classes_used_for_mAP_calc), pr_curve_specs = Charter.visualize_testing_result(truth_labels, 
+                                                                                                pred_probs)
         
         self.assertEqual(round(mAP, 3), 0.091)
         
         num_samples, num_classes = pred_probs.shape
+        self.assertEqual(num_classes, num_classes_used_for_mAP_calc)
         self.assertEqual(len(pr_curve_specs), num_classes)
         self.assertEqual(len(truth_labels), num_samples)
         
@@ -199,11 +201,15 @@ class ChartingTester(unittest.TestCase):
         self.assertEqual(round(avg_prec_class_0, 6), 0.104266)
         
         best_op_pt_10 = pr_curve_specs[10]['best_op_pt']
-        self.assertEqual(round(best_op_pt_10['f1'], 4), 0.1931)
+        #self.assertEqual(round(best_op_pt_10['f1'], 4), 0.1931)
+        self.assertEqual(round(best_op_pt_10['f1'], 4), 0.1481)
         
-        self.assertEqual(round(best_op_pt_10['threshold'], 7), 0.0037106)
-        self.assertEqual(round(best_op_pt_10['precision'], 7), 0.1157025)
-        self.assertEqual(round(best_op_pt_10['recall'], 7), 0.5833333)
+        #self.assertEqual(round(best_op_pt_10['threshold'], 7), 0.0037106)
+        self.assertEqual(round(best_op_pt_10['threshold'], 4), 0.0255)
+        #self.assertEqual(round(best_op_pt_10['precision'], 7), 0.1157025)
+        self.assertEqual(round(best_op_pt_10['precision'], 4), 0.1333)
+        #self.assertEqual(round(best_op_pt_10['recall'], 7), 0.5833333)
+        self.assertEqual(round(best_op_pt_10['recall'], 4), 0.1667)
 
 
 # ------------------- Utilities ---------------
