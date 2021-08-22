@@ -65,6 +65,7 @@ class Inferencer:
 
     def __init__(self, 
                  training_exp_path,
+                 testing_exp_path,
                  samples_path,
                  model_names, 
                  batch_size=1,
@@ -88,19 +89,21 @@ class Inferencer:
         samples is OK
         
         :param training_exp_path: path to ExperimentManager experiment root
-        :type training_exp_path: src
-        :param samples_path:
-        :type samples_path:
+            directory; this is the EM that holds data from training
+        :type training_exp_path: str
+        :param testing_exp_path: directory to put dir root of new ExperimentManager
+            that stores all testing results
+        :type testing_exp_path: str 
+        :param samples_path: path to samples to test against trained model
+        :type samples_path: str
         :param model_names: list of models to try, or individual model key
         :type model_names: {[str] | str}
-        :param batch_size:
-        :type batch_size:
+        :param batch_size: how many samples to run inference over at once
+        :type batch_size: int
         :param save_logits: set True to have the logits of
             each prediction saved to ExpermentManager's results
             under key 'logits'.
         :type save_logits: bool
-        :param labels_path:
-        :type labels_path:
         :param gpu_ids: Device number of GPU, in case 
             one is available
         :type gpu_ids: {int | [int]}
@@ -116,9 +119,13 @@ class Inferencer:
         
         self.save_logits = save_logits
 
-        # Create an experiment instance from the
-        # existing training experiment:
-        self.exp = ExperimentManager(training_exp_path)
+        # Create an experiment instance filled with 
+        # data created during training:
+        self.training_exp = ExperimentManager(training_exp_path)
+        
+        # An ExperimentManager instance to hold data 
+        # from this test run:
+        self.testing_exp = ExperimentManager(testing_exp_path)
 
         if type(model_names) != list:
             model_names = [model_names]
@@ -128,14 +135,14 @@ class Inferencer:
             # Remove any extension, such as .pth that
             # the caller may have included
             model_key = Path(model_name).stem
-            if not os.path.exists(self.exp.abspath(model_key, Datatype.model)):
+            if not os.path.exists(self.training_exp.abspath(model_key, Datatype.model)):
                 raise FileNotFoundError(f"Model {model_key} does not exist")
 
         self.model_names  = model_names
         self.samples_path = samples_path
         self.gpu_ids      = gpu_ids if type(gpu_ids) == list else [gpu_ids]
         self.sampling     = sampling
-        self.csv_dir      = self.exp.csv_files_path
+        self.csv_dir      = self.testing_exp.csv_files_path
         if batch_size is not None:
             self.batch_size = batch_size
         else:
@@ -151,7 +158,7 @@ class Inferencer:
 
     def prep_model_inference(self, model_name):
         '''
-        - Loads experiment configuration from self.exp
+        - Loads experiment configuration from self.training_exp
         - Creates self.writer(), a tensorboard writer with destination dir:
                 <script_dir>/runs_inferences/inf_results_<datetime>
         - Creates an ImageFolder classed dataset to self.samples_path
@@ -166,13 +173,13 @@ class Inferencer:
 
         # Get the experiment configuration used
         # for training:
-        self.config = self.exp.read('hparams', Datatype.hparams)
+        self.config = self.training_exp.read('hparams', Datatype.hparams)
         
         # Add a separate tensorboard directory 
         # for testing this model:
         tb_name = f"tensorboardTesting_{model_name}"
-        self.exp.save(tb_name)
-        tb_dir = self.exp.abspath(tb_name, Datatype.tensorboard)
+        self.testing_exp.save(tb_name)
+        tb_dir = self.testing_exp.abspath(tb_name, Datatype.tensorboard)
         self.writer = SummaryWriterPlus(log_dir=tb_dir)
         
         dataset = SingleRootImageDataset(
@@ -194,7 +201,7 @@ class Inferencer:
         # dict as key 'class_label_names' and as a header-only
         # csv file under the key 'class_names':
 
-        self.class_names = self.exp['class_label_names']
+        self.class_names = self.training_exp['class_label_names']
         self.num_classes = len(self.class_names)
         
         # Build translation dict between the numeric
@@ -215,7 +222,7 @@ class Inferencer:
             
         csv_data_header_predictions = self.class_names + ['label']
         try:
-            self.exp.save('predictionsTesting', header=csv_data_header_predictions)
+            self.testing_exp.save('predictionsTesting', header=csv_data_header_predictions)
         except ValueError:
             # File may already exist, which is fine:
             pass
@@ -225,7 +232,7 @@ class Inferencer:
             # file for that too:
             csv_data_header_logits = self.class_names
             try:
-                self.exp.save('logits', header=csv_data_header_logits)
+                self.testing_exp.save('logits', header=csv_data_header_logits)
             except ValueError:
                 # File may already exist, which is fine:
                 pass
@@ -244,7 +251,7 @@ class Inferencer:
             )
 
         self.log.info(f"Tensorboard info will be written to {tb_dir}")
-        predictions_path = self.exp.abspath('predictionsTesting', Datatype.tabular)
+        predictions_path = self.testing_exp.abspath('predictionsTesting', Datatype.tabular)
         self.log.info(f"Result measurement CSV file(s) will be written to {predictions_path}")
         
     #------------------------------------
@@ -319,7 +326,7 @@ class Inferencer:
         # Init the model from the requested model's
         # state dict. The path to that data is available
         # from the experiment instance:
-        sko_net.load_params(self.exp.abspath(self.model_key, Datatype.model))
+        sko_net.load_params(self.training_exp.abspath(self.model_key, Datatype.model))
 
         res_coll = ResultCollection()
         display_counter = 0
@@ -346,7 +353,7 @@ class Inferencer:
             # If we are to save all the logits,
             # save the ones of this batch:
             if self.save_logits:
-                self.exp.save('logits', outputs)
+                self.testing_exp.save('logits', outputs)
 
             if batch_num > 0 and batch_num % self.REPORT_EVERY == 0:
                 tmp_coll = ResultCollection(res_coll[start_idx:])
@@ -524,8 +531,8 @@ class Inferencer:
         conf_matrix_fig = self._report_conf_matrix(truths, 
                                                    predicted_classes, 
                                                    show_in_tensorboard=True)
-        self.exp.save('conf_matrix', conf_matrix_fig)
-        self.log.info(f"Saved confusion matrix fig in {self.exp.abspath('conf_matrix', Datatype.figure)}")
+        self.testing_exp.save('conf_matrix', conf_matrix_fig)
+        self.log.info(f"Saved confusion matrix fig in {self.testing_exp.abspath('conf_matrix', Datatype.figure)}")
 
         pred_probs_df = result_coll.flattened_probabilities(phase=LearningPhase.TESTING)
         # Get mean average precision and the number
@@ -538,11 +545,11 @@ class Inferencer:
         
         # Save the probabilities after converting to nice species names:
         pred_probs_df.columns = self.class_names
-        self.exp.save('probabilities', pred_probs_df)
-        self.log.info(f"Saved probabilities in {self.exp.abspath('probabilities', Datatype.tabular)}")
+        self.testing_exp.save('probabilities', pred_probs_df)
+        self.log.info(f"Saved probabilities in {self.testing_exp.abspath('probabilities', Datatype.tabular)}")
         
         # Save pr_curve figure:
-        self.exp.save('pr_curve', pr_curve_fig)
+        self.testing_exp.save('pr_curve', pr_curve_fig)
 
 
         # Text tables results to tensorboard:
@@ -742,8 +749,8 @@ class Inferencer:
         res_df['num_classes_total'] = len(self.class_names)
         
         # Write to csv file:
-        self.exp.save('ir_results', res_df)
-        self.log.info(f"Saved IR results in {self.exp.abspath('ir_results', Datatype.tabular)}")
+        self.testing_exp.save('ir_results', res_df)
+        self.log.info(f"Saved IR results in {self.testing_exp.abspath('ir_results', Datatype.tabular)}")
 
         # Get the per-class prec/rec/f1/support:
         classification_report_dict = classification_report(all_labels, 
@@ -778,8 +785,8 @@ class Inferencer:
         ir_per_cl_df = ir_per_cl_df.T
         
         # Write perfomance per class to file:
-        self.exp.save('performance_per_class', ir_per_cl_df, index_col='species')
-        self.log.info(f"Saved performance per class in {self.exp.abspath('performance_per_class', Datatype.tabular)}")
+        self.testing_exp.save('performance_per_class', ir_per_cl_df, index_col='species')
+        self.log.info(f"Saved performance per class in {self.testing_exp.abspath('performance_per_class', Datatype.tabular)}")
         
         # Write results to tensorboard as well:
         
@@ -814,7 +821,7 @@ class Inferencer:
             'num_classes'    : len(self.class_names)
             }]) 
 
-        self.exp.save('accuracy_mAP', acc_mAP_df)
+        self.testing_exp.save('accuracy_mAP', acc_mAP_df)
 
         # Write the same info to tensorboard:
         accuracy_skel = {'col_header' : ['accuracy', 
@@ -909,9 +916,14 @@ class Inferencer:
         except Exception as e:
             self.log.err(f"Could not close tensorboard writer: {repr(e)}")
         try:
-            self.exp.close()
+            self.training_exp.close()
         except Exception as e:
-            self.log.err(f"Could not close tabular data writing during close(): {repr(e)}")
+            self.log.err(f"Could not close tabular training data reading during close(): {repr(e)}")
+        try:
+            self.testing_exp.close()
+        except Exception as e:
+            self.log.err(f"Could not close tabular testing data writing during close(): {repr(e)}")
+            
 
 
 # --------------------- Utilities -------------------

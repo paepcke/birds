@@ -5,6 +5,7 @@ Created on Mar 16, 2021
 '''
 import os
 import shutil
+from tempfile import TemporaryDirectory
 import unittest
 
 from experiment_manager.experiment_manager import ExperimentManager, Datatype
@@ -31,8 +32,12 @@ class InferenceTester(unittest.TestCase):
         cls.samples_path = os.path.join(cls.cur_dir, 'data/birds')
         
         # Create an ExperimentManager:
-        exp_root = os.path.join(cls.cur_dir, 'experiment_run_inf_test')
+        exp_root = os.path.join(cls.cur_dir, 'training_exp_inf_test')
         cls.exp = ExperimentManager(exp_root)
+        
+        # And a place there inference results are kept
+        # in an ExperimentManager:
+        cls.testing_exp_path = os.path.join(cls.cur_dir, 'testing_exp_inf_test')
 
         # Populate the experiment with a test model, as if
         # that model had been saved in a training:
@@ -55,11 +60,12 @@ class InferenceTester(unittest.TestCase):
         cls.exp.save()
 
     def setUp(self):
-        pass
+        self.tmp_dir = TemporaryDirectory(dir='/tmp', prefix='inference_testing_')
+        self.tmp_dir_nm = self.tmp_dir.name
 
     def tearDown(self):
-        pass
-    
+        self.tmp_dir.cleanup()
+
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.exp.root)
@@ -78,6 +84,7 @@ class InferenceTester(unittest.TestCase):
         
         inferencer = Inferencer(
             self.exp.root,
+            self.tmp_dir_nm,
             self.samples_path,
             'model_0',
             batch_size=batch_size,
@@ -112,6 +119,7 @@ class InferenceTester(unittest.TestCase):
     def test_report_results(self):
         inferencer = Inferencer(
             self.exp.root,
+            self.tmp_dir_nm,
             self.samples_path,
             'model_0',
             save_logits=True,
@@ -127,7 +135,7 @@ class InferenceTester(unittest.TestCase):
             print('Done running inference.')
     
             # Performance per class
-            df = inferencer.exp.read('performance_per_class', Datatype.tabular)
+            df = inferencer.testing_exp.read('performance_per_class', Datatype.tabular)
             expected = pd.DataFrame([['PLANS', 0.5, 1.0, 0.666667, 6.0],
                                      ['WBWWS', 0.0, 0.0, 0.000000, 6.0]
                                     ],
@@ -136,7 +144,7 @@ class InferenceTester(unittest.TestCase):
             self.assertDataframesEqual(df, expected, rounding=2)
 
             # IR results:
-            df = inferencer.exp.read('ir_results', Datatype.tabular)
+            df = inferencer.testing_exp.read('ir_results', Datatype.tabular)
             expected = pd.DataFrame([[0.250000, 0.500000, 0.250000, 
                                      0.500000, 0.500000, 0.500000, 
                                      0.333333, 0.500000, 0.333333, 
@@ -154,18 +162,18 @@ class InferenceTester(unittest.TestCase):
 
 
             # Get the (initially empty) inference predictions table:
-            df = self.exp.read('predictionsTesting', Datatype.tabular)
+            df = inferencer.testing_exp.read('predictionsTesting', Datatype.tabular)
             expected = pd.DataFrame([], columns=['PLANS', 'WBWWS', 'label'])
             self.assertDataframesEqual(df, expected)
             
             try:
                 # Figure is saved as pdf file, so cannot read back:
-                self.exp.read('pr_curve', Datatype.figure)
+                inferencer.testing_exp.read('pr_curve', Datatype.figure)
             except TypeError:
                 # Good: could not read PDF file
                 pass
 
-            df = self.exp.read('logits', Datatype.tabular)
+            df = inferencer.testing_exp.read('logits', Datatype.tabular)
             expected = pd.DataFrame(
                                 [
                                    [552470.50,-577170.75],
@@ -184,7 +192,7 @@ class InferenceTester(unittest.TestCase):
                                 )
             self.assertDataframesEqual(df, expected)
             
-            df = self.exp.read('probabilities', Datatype.tabular)
+            df = inferencer.testing_exp.read('probabilities', Datatype.tabular)
             expected = pd.DataFrame([
                 [1.0,  0.0],
                 [1.0,  0.0],
@@ -215,6 +223,7 @@ class InferenceTester(unittest.TestCase):
         
         inferencer = Inferencer(
             self.exp.root,
+            self.tmp_dir_nm,
             self.samples_path,
             'model_0',
             batch_size=2,
@@ -246,6 +255,7 @@ class InferenceTester(unittest.TestCase):
         # due to unittesting == True:
         inferencer = Inferencer(
             self.exp.root,
+            self.tmp_dir_nm,
             self.samples_path,
             'model_0',
             batch_size=16,
@@ -293,6 +303,7 @@ class InferenceTester(unittest.TestCase):
         # due to unittesting == True:
         inferencer = Inferencer(
             None, # experiment root path
+            self.tmp_dir_nm,
             self.samples_path,
             None, # model names
             batch_size=16,
