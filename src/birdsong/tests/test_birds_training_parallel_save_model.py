@@ -206,7 +206,7 @@ class TestBirdsTrainingParallel(unittest.TestCase):
             self.assertEqual(trainer.tally_collection[(10,'Training')].epoch,10)
             self.assertEqual(trainer.tally_collection[(9,'Validating')].epoch,9)
             
-            save_file = os.path.join(self.curr_dir, 'saved_model.pth')
+            save_file = os.path.join(self.curr_dir, 'models/saved_model.pth')
             trainer.save_model_checkpoint(save_file, 
                                           trainer.model, 
                                           trainer.optimizer)

@@ -178,8 +178,16 @@ class Charter:
         # thresholds.
         
         for class_id in range(num_classes):
-            
-            bin_labels_series = bin_labels_df.iloc[:,class_id]
+
+            # Consider special case of binary classification
+            # with 2 classes; bin_labels_df will only have
+            # the decision for class 0. So take the labels
+            # for class 1 to be the inverse of class 0's label:
+            if num_classes == 2 and class_id > 0:
+                bin_labels_series = 1 - bin_labels_df.iloc[:,0]
+            else:
+                bin_labels_series = bin_labels_df.iloc[:,class_id]
+
             preds_series  = pred_probs.iloc[:,class_id]
             
             # Get precision and recall at each
@@ -1180,7 +1188,7 @@ class CurveSpecification(dict):
                  pr_curve_df,
                  avg_precision,
                  class_id,
-                 cull_threshold_value=False,
+                 cull_threshold_value=None,
                  **kwargs
                  ):
         '''

@@ -64,10 +64,11 @@ class Inferencer:
     #-------------------
 
     def __init__(self, 
-                 exp_path,
+                 training_exp_path,
                  samples_path,
                  model_names, 
-                 batch_size=1, 
+                 batch_size=1,
+                 save_logits=False, 
                  gpu_ids=0,
                  sampling=None,
                  unittesting=False
@@ -86,14 +87,18 @@ class Inferencer:
         not inferencing on up to batch_size - 1 
         samples is OK
         
-        :param exp_path: path to ExperimentManager experiment root
-        :type exp_path: src
+        :param training_exp_path: path to ExperimentManager experiment root
+        :type training_exp_path: src
         :param samples_path:
         :type samples_path:
-        :param model_names: list of models to try
-        :type model_names: [str]
+        :param model_names: list of models to try, or individual model key
+        :type model_names: {[str] | str}
         :param batch_size:
         :type batch_size:
+        :param save_logits: set True to have the logits of
+            each prediction saved to ExpermentManager's results
+            under key 'logits'.
+        :type save_logits: bool
         :param labels_path:
         :type labels_path:
         :param gpu_ids: Device number of GPU, in case 
@@ -108,8 +113,15 @@ class Inferencer:
 
         if unittesting:
             return
+        
+        self.save_logits = save_logits
 
-        self.exp = ExperimentManager(exp_path)
+        # Create an experiment instance from the
+        # existing training experiment:
+        self.exp = ExperimentManager(training_exp_path)
+
+        if type(model_names) != list:
+            model_names = [model_names]
 
         # Check that all requested models exist:
         for model_name in model_names:
@@ -139,17 +151,13 @@ class Inferencer:
 
     def prep_model_inference(self, model_name):
         '''
-        1. Loads experiment configuration from self.exp
-        2. Creates self.csv_writer to write results measures
-            into csv files. The destination file is determined
-            as follows:
-                <script_dir>/runs_raw_inferences/inf_csv_results_<datetime>/<model-props-derived-fname>.csv
-        3. Creates self.writer(), a tensorboard writer with destination dir:
+        - Loads experiment configuration from self.exp
+        - Creates self.writer(), a tensorboard writer with destination dir:
                 <script_dir>/runs_inferences/inf_results_<datetime>
-        4. Creates an ImageFolder classed dataset to self.samples_path
-        5. Creates a shuffling DataLoader
-        6. Initializes self.num_classes and self.class_names
-        7. Creates self.model from the passed-in model_path name
+        - Creates an ImageFolder classed dataset to self.samples_path
+        - Creates a shuffling DataLoader
+        - Initializes self.num_classes and self.class_names
+        - Creates self.model from the passed-in model_path name
         
         :param model_path: path to model that will be used for
             inference by this instance of Inferencer
@@ -204,13 +212,23 @@ class Inferencer:
                                          self.class_names,
                                          unknown_species_class=None
                                          )
-
-        csv_data_header = self.class_names + ['label']
+            
+        csv_data_header_predictions = self.class_names + ['label']
         try:
-            self.exp.save('predictionsTesting', header=csv_data_header)
+            self.exp.save('predictionsTesting', header=csv_data_header_predictions)
         except ValueError:
             # File may already exist, which is fine:
             pass
+
+        if self.save_logits:
+            # If we are to save logits, prepare a CSV
+            # file for that too:
+            csv_data_header_logits = self.class_names
+            try:
+                self.exp.save('logits', header=csv_data_header_logits)
+            except ValueError:
+                # File may already exist, which is fine:
+                pass
 
         # Get the right type of model,
         # Don't bother getting it pretrained,
@@ -234,9 +252,9 @@ class Inferencer:
     #-------------------
     
     def __call__(self, gpu_id_model_path_pair):
-        gpu_id, self.model_path = gpu_id_model_path_pair
-        self.prep_model_inference(self.model_path)
-        self.log.info(f"Beginning inference with model {FileUtils.ellipsed_file_path(self.model_path)} on gpu_id {gpu_id}")
+        gpu_id, self.model_key = gpu_id_model_path_pair
+        self.prep_model_inference(self.model_key)
+        self.log.info(f"Beginning inference with model {FileUtils.ellipsed_file_path(self.model_key)} on gpu_id {gpu_id}")
         #****************
         return self.run_inference(gpu_to_use=gpu_id)
         # Parallelism:
@@ -301,7 +319,7 @@ class Inferencer:
         # Init the model from the requested model's
         # state dict. The path to that data is available
         # from the experiment instance:
-        sko_net.load_params(self.exp.abspath(self.model_path, Datatype.model))
+        sko_net.load_params(self.exp.abspath(self.model_key, Datatype.model))
 
         res_coll = ResultCollection()
         display_counter = 0
@@ -324,6 +342,11 @@ class Inferencer:
                                 self.batch_size
                                 )
             res_coll.add(tally, batch_num)
+            
+            # If we are to save all the logits,
+            # save the ones of this batch:
+            if self.save_logits:
+                self.exp.save('logits', outputs)
 
             if batch_num > 0 and batch_num % self.REPORT_EVERY == 0:
                 tmp_coll = ResultCollection(res_coll[start_idx:])
@@ -340,6 +363,7 @@ class Inferencer:
             self.report_results(res_coll)
         finally:
             self.writer.close()
+            return res_coll
 
     #------------------------------------
     # report_intermittent_results 
@@ -358,7 +382,7 @@ class Inferencer:
         
         The start_idx/end_idx define a slice of tallies whose
         (partial) content is added to the csv file managed by
-        self.csv_writer. 
+        the experiment manager
         
         :param res_coll: collection of result tallies
         :type res_coll: ResultCollection
@@ -425,7 +449,7 @@ class Inferencer:
         res3               ...
         res_(batch_size - 1)
         
-        Assumption: self.csv_writer contains an open csv.Writer instance
+        Assumption: e contains an open csv.Writer instance
                     with header already written:
                     
                         Class0,Class1,...Classn,Label
@@ -474,6 +498,7 @@ class Inferencer:
                 # Have a pd.Series  with the probabilities of 
                 # one sample for each class. Values are tensors
                 # of individual floats.
+#******!!!!!                
                 self.csv_writer.writerow(one_sample_probs)
 
     #------------------------------------
@@ -481,6 +506,17 @@ class Inferencer:
     #-------------------
     
     def report_results(self, result_coll):
+        '''
+        Report confusion matrix, mAP, pr-curves, and
+        typical IR curves by computing them, and saving
+        as csv or images (in case of charts) to the
+        ExperimentManager instance, and to tensorboard.
+        
+        :param result_coll: collection of TallyResult instances
+            from the inference loop
+        :type result_coll: ResultCollection
+        '''
+
         predicted_classes = result_coll.flattened_predictions(phase=LearningPhase.TESTING)
         truths = result_coll.flattened_labels(phase=LearningPhase.TESTING)
         
@@ -488,11 +524,8 @@ class Inferencer:
         conf_matrix_fig = self._report_conf_matrix(truths, 
                                                    predicted_classes, 
                                                    show_in_tensorboard=True)
-        self.log.info(f"Saving confusion matrix fig 'inference_conf_matrix.pdf' in {self.csv_dir}")
-        conf_matrix_fig.savefig(os.path.join(self.csv_dir, 'inference_conf_matrix.pdf'),
-                                format='pdf',
-                                dpi=150
-                                )
+        self.exp.save('conf_matrix', conf_matrix_fig)
+        self.log.info(f"Saved confusion matrix fig in {self.exp.abspath('conf_matrix', Datatype.figure)}")
 
         pred_probs_df = result_coll.flattened_probabilities(phase=LearningPhase.TESTING)
         # Get mean average precision and the number
@@ -503,18 +536,20 @@ class Inferencer:
                                                                         show_in_tensorboard=True
                                                                         )
         
+        # Save the probabilities after converting to nice species names:
+        pred_probs_df.columns = self.class_names
+        self.exp.save('probabilities', pred_probs_df)
+        self.log.info(f"Saved probabilities in {self.exp.abspath('probabilities', Datatype.tabular)}")
+        
         # Save pr_curve figure:
-        self.log.info(f"Saving PR curve pr_curve.pdf in {self.csv_dir}")
-        pr_curve_fig.savefig(os.path.join(self.csv_dir, 'pr_curve.pdf'),
-                             format='pdf',
-                             dpi=150
-                             )
+        self.exp.save('pr_curve', pr_curve_fig)
+
 
         # Text tables results to tensorboard:
         self._report_textual_results(predicted_classes, 
                                      truths, 
-                                     (mAP,num_classes), 
-                                     self.csv_dir)
+                                     (mAP,num_classes) 
+                                     )
         
 
 
@@ -646,8 +681,7 @@ class Inferencer:
     def _report_textual_results(self, 
                                 all_preds, 
                                 all_labels, 
-                                mAP_info, 
-                                res_dir):
+                                mAP_info):
         '''
         Given sequences of predicted class IDs and 
         corresponding truth labels, computes information 
@@ -666,11 +700,11 @@ class Inferencer:
         which average precision (AP) was not NaN, i.e. the 
         number of classes included in the mAP
         
-        Writes these results into three .csv files:
+        Writes these results into three .csv files in the
+        ExperimentManager under the following keys:
 
-           <res_dir>/accuracy_mAP.csv
-           <res_dir>/performance_per_class.csv
-           <res_dir>/ir_results.csv
+           performance_per_class  # prec/rec/f1/support for each class
+           ir_results             # over information retrieval type results
         
         Finally, constructs Github flavored tables from the
         above results, and posts them to the 'text' tab of 
@@ -684,9 +718,6 @@ class Inferencer:
             precision, and the number of classes from which the
             quantity was calculated
         :type mAP: (float, int)
-        :param res_dir: directory where all .csv and other 
-            result files are to be written
-        :type res_dir: str
         '''
         
         res = self._compute_ir_values(all_preds, all_labels)
@@ -711,40 +742,47 @@ class Inferencer:
         res_df['num_classes_total'] = len(self.class_names)
         
         # Write to csv file:
-        self._ir_tbl_to_csv(res_dir, 'ir_results.csv', res_df)
+        self.exp.save('ir_results', res_df)
+        self.log.info(f"Saved IR results in {self.exp.abspath('ir_results', Datatype.tabular)}")
 
         # Get the per-class prec/rec/f1/support:
-        per_class_report = classification_report(all_labels, 
+        classification_report_dict = classification_report(all_labels, 
                                                  all_preds, 
                                                  output_dict=True,
-                                                 zero_division=0)
-        # Turn into a df:
+                                                 zero_division=0,
+                                                 target_names=self.class_names
+                                                 )
+        # We now have like:
+        #    {'PLANS': {'precision': 0.5, 'recall': 1.0, 'f1-score': 0.6666666666666666, 'support': 6},
+        #     'WBWWS': {'precision': 0.0, 'recall': 0.0, 'f1-score': 0.0, 'support': 6},
+        #     'accuracy': 0.5,
+        #     'macro avg':    {'precision': 0.25, 'recall': 0.5, 'f1-score': 0.3333333333333333, 'support': 12},
+        #     'weighted avg': {'precision': 0.25, 'recall': 0.5, 'f1-score': 0.3333333333333333, 'support': 12}
+        #     }
+        # Separate the species-specific info from the rest,
+        # which we already computed and stored in ir_results:
+
+        # Get rid of the entries we already covered:
+        del classification_report_dict['accuracy']
+        del classification_report_dict['macro avg']
+        del classification_report_dict['weighted avg']
+
+        # Turn species/prec/rec/f1/support into a df:
         #
         #             precision  recall  f1-score  support
         #    label 1        0.5     1.0      0.67      1.0
         #    label 2        0.6     0.2      0.88      1.0
         #          ...                    ...
-        ir_per_cl_df = pd.DataFrame.from_dict(per_class_report)
+        ir_per_cl_df = pd.DataFrame.from_dict(classification_report_dict)
         # Have prec/rec/f1/support as rows/ want those as cols:
         ir_per_cl_df = ir_per_cl_df.T
-        # Drop the accuracy and averages we already covered above:
-        ir_per_cl_df = ir_per_cl_df.drop(['accuracy', 'macro avg', 'weighted avg'])
-        # Replace the numeric species class IDs with
-        # their species. Note that the df may not contain
-        # data for all species, so we cannot count on using
-        # range():
-        new_row_labels = []
-        for index_entry in ir_per_cl_df.index:
-            new_row_labels.append(self.class_names[int(index_entry)])
-        ir_per_cl_df.index = new_row_labels
-
+        
         # Write perfomance per class to file:
-        self._ir_tbl_to_csv(res_dir, 
-                            'performance_per_class.csv', 
-                            ir_per_cl_df,
-                            index_label='species')
-
-
+        self.exp.save('performance_per_class', ir_per_cl_df, index_col='species')
+        self.log.info(f"Saved performance per class in {self.exp.abspath('performance_per_class', Datatype.tabular)}")
+        
+        # Write results to tensorboard as well:
+        
         res_rnd = {}
         for meas_nm, meas_val in res.items():
             
@@ -776,8 +814,9 @@ class Inferencer:
             'num_classes'    : len(self.class_names)
             }]) 
 
-        self._ir_tbl_to_csv(res_dir, 'accuracy_mAP.csv', acc_mAP_df)
-        
+        self.exp.save('accuracy_mAP', acc_mAP_df)
+
+        # Write the same info to tensorboard:
         accuracy_skel = {'col_header' : ['accuracy', 
                                          'balanced_accuracy', 
                                          'mean avg precision (mAP)',
@@ -801,63 +840,6 @@ class Inferencer:
         self.writer.add_text('Accuracy', accuracy_tbl, global_step=0)
         
         return res_series
-
-    #------------------------------------
-    # _ir_tbl_to_csv 
-    #-------------------
-    
-    def _ir_tbl_to_csv(self, res_dir, fname, df, index_label=None):
-        '''
-        Check whether fname exists in res_dir. If
-        so, append the dataframe df's values to the
-        file. Else, create the file, and write the df,
-        using columns as header.
-        
-        :param res_dir: destination directory
-        :type res_dir: str
-        :param fname: destination file name
-        :type fname: str
-        :param df: dataframe with column names set
-        :type df: pd.DataFrame
-        :param index_label: if the df's row labels are
-            to be included, set index_label to the column
-            name to use for those labels. If None, no
-            row labels are included
-        :type index_label: {None | str}
-        '''
-
-        res_csv_path = os.path.join(res_dir, fname)
-        
-        # Should we append or create a new file?
-        try:
-            if os.path.getsize(res_csv_path) > 0:
-                append_to_csv = True
-        except FileNotFoundError:
-                append_to_csv = False
-        else:
-            append_to_csv = False
-            
-        if index_label is None:
-            include_index = False
-        else:
-            include_index = True
-        
-        self.log.info(f"Writing {fname} to {res_dir}")
-
-        if append_to_csv:
-            df.to_csv(res_csv_path, 
-                      index=include_index,
-                      index_label=index_label, 
-                      mode='a', 
-                      header=False,
-                      )
-        else:
-            df.to_csv(res_csv_path, 
-                      index=include_index,
-                      index_label=index_label, 
-                      mode='w', 
-                      header=True)
-
 
     #------------------------------------
     # _compute_ir_values
@@ -927,9 +909,9 @@ class Inferencer:
         except Exception as e:
             self.log.err(f"Could not close tensorboard writer: {repr(e)}")
         try:
-            self.csv_writer.close()
+            self.exp.close()
         except Exception as e:
-            self.log.err(f"Could not close CSV writer: {repr(e)}")
+            self.log.err(f"Could not close tabular data writing during close(): {repr(e)}")
 
 
 # --------------------- Utilities -------------------

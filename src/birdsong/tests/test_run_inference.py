@@ -4,8 +4,10 @@ Created on Mar 16, 2021
 @author: paepcke
 '''
 import os
+import shutil
 import unittest
 
+from experiment_manager.experiment_manager import ExperimentManager, Datatype
 import torch
 
 from birdsong.run_inference import Inferencer
@@ -22,42 +24,26 @@ class InferenceTester(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.curr_dir = os.path.dirname(__file__)
+        cls.cur_dir = os.path.dirname(__file__)
         
         # Training data: root of species subdirectories:
         #*****cls.samples_path = os.path.join(cls.curr_dir, 'data_other/TestSnippets')
-        cls.samples_path = os.path.join(cls.curr_dir, 'data/birds')
+        cls.samples_path = os.path.join(cls.cur_dir, 'data/birds')
         
-        # Where to put the raw prediction/label results
-        # as .csv:
-        cls.runs_raw_results = os.path.join(
-            cls.curr_dir,
-            'runs_raw_results'
-            )
+        # Create an ExperimentManager:
+        exp_root = os.path.join(cls.cur_dir, 'experiment_run_inf_test')
+        cls.exp = ExperimentManager(exp_root)
 
-        # Dir of models to test:
-        cls.saved_model_dir = os.path.join(
-            cls.curr_dir,'models')
-
-        # Assume there is only one model in
-        # saved_model_path; a bit of an unsafe
-        # assumption...but can get pickier if
-        # more than one model will be involved
-        # in inference testing:
+        # Populate the experiment with a test model, as if
+        # that model had been saved in a training:
+        test_model_path = os.path.join(cls.cur_dir, 'models/model_0.pth')
+        shutil.copy(test_model_path, cls.exp.models_path)
         
-        cls.saved_model_path = os.path.join(
-            cls.saved_model_dir,
-            'mod_2021-07-08T13_20_58_net_resnet18_pre_True_frz_0_lr_0.01_opt_Adam_bs_2_ks_7_folds_2_gray_True_classes_2_ep1.pth'
-            )
-
-        cls.preds_path = os.path.join(
-            cls.runs_raw_results,
-            'preds_inference.csv'
-            )
-        cls.labels_path = os.path.join(
-            cls.runs_raw_results,
-            'labels_inference.csv'
-            )
+        test_hparams_path = os.path.join(cls.cur_dir, 'hparams/hparams.json')
+        shutil.copy(test_hparams_path, cls.exp.hparams_path)
+        
+        class_names = os.listdir(cls.samples_path)
+        cls.exp['class_label_names'] = class_names 
 
         cls.num_samples = 0
         cls.num_species = 0
@@ -65,13 +51,18 @@ class InferenceTester(unittest.TestCase):
             if len(fileList) > 0:
                 cls.num_species += 1
             cls.num_samples += len(fileList)
+            
+        cls.exp.save()
 
     def setUp(self):
         pass
 
     def tearDown(self):
         pass
-
+    
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.exp.root)
     #------------------------------------
     # test_inference
     #-------------------
@@ -86,13 +77,14 @@ class InferenceTester(unittest.TestCase):
         batch_size = 2
         
         inferencer = Inferencer(
-            self.saved_model_path,
+            self.exp.root,
             self.samples_path,
+            'model_0',
             batch_size=batch_size,
-            labels_path=self.labels_path
             )
         try:
-            inferencer.prep_model_inference(self.saved_model_path)
+            inferencer.model_key = 'model_0'
+            inferencer.prep_model_inference('model_0')
             print('Running inference...')
             tally_coll = inferencer.run_inference()
             print('Done running inference.')
@@ -113,25 +105,104 @@ class InferenceTester(unittest.TestCase):
             inferencer.close()
 
     #------------------------------------
-    # test__report_charted_results
+    # test_report_results
     #-------------------
     
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    def test__report_charted_results(self):
+    def test_report_results(self):
         inferencer = Inferencer(
-            self.saved_model_path,
+            self.exp.root,
             self.samples_path,
-            batch_size=2,
-            labels_path=self.labels_path
+            'model_0',
+            save_logits=True,
+            batch_size=2
             )
+        # Under normal circumstances, inferencer.model_path
+        # will pt to one model to inference with:
+        inferencer.model_key = 'model_0'
         try:
-            inferencer.prep_model_inference(self.saved_model_path)
+            inferencer.prep_model_inference('model_0')
             print('Running inference...')
-            tally_coll = inferencer.run_inference()
+            _tally_coll = inferencer.run_inference()
             print('Done running inference.')
     
-            inferencer._report_charted_results(
-                thresholds=[0.2, 0.4, 0.6, 0.8, 1.0])
+            # Performance per class
+            df = inferencer.exp.read('performance_per_class', Datatype.tabular)
+            expected = pd.DataFrame([['PLANS', 0.5, 1.0, 0.666667, 6.0],
+                                     ['WBWWS', 0.0, 0.0, 0.000000, 6.0]
+                                    ],
+                                     columns=['species', 'precision', 'recall', 'f1-score', 'support']
+                                    )
+            self.assertDataframesEqual(df, expected, rounding=2)
+
+            # IR results:
+            df = inferencer.exp.read('ir_results', Datatype.tabular)
+            expected = pd.DataFrame([[0.250000, 0.500000, 0.250000, 
+                                     0.500000, 0.500000, 0.500000, 
+                                     0.333333, 0.500000, 0.333333, 
+                                     0.500000, 0.500000, 0.500000, 
+                                     2.000000, 2.000000]],
+                                     columns=['prec_macro', 'prec_micro', 'prec_weighted', 
+                                              'recall_macro','recall_micro', 'recall_weighted', 
+                                              'f1_macro', 'f1_micro', 'f1_weighted',
+                                              'accuracy', 'balanced_accuracy', 'mAP',
+                                              'well_defined_APs', 'num_classes_total'
+                                              ]
+                                    )
+            self.assertDataframesEqual(df, expected, rounding=2)
+            
+
+
+            # Get the (initially empty) inference predictions table:
+            df = self.exp.read('predictionsTesting', Datatype.tabular)
+            expected = pd.DataFrame([], columns=['PLANS', 'WBWWS', 'label'])
+            self.assertDataframesEqual(df, expected)
+            
+            try:
+                # Figure is saved as pdf file, so cannot read back:
+                self.exp.read('pr_curve', Datatype.figure)
+            except TypeError:
+                # Good: could not read PDF file
+                pass
+
+            df = self.exp.read('logits', Datatype.tabular)
+            expected = pd.DataFrame(
+                                [
+                                   [552470.50,-577170.75],
+                                   [429042.06,-455358.06],
+                                   [519468.53,-546999.25],
+                                   [339625.40,-358724.50],
+                                   [374372.03,-398033.22],
+                                   [829133.40,-842167.25],
+                                   [509088.16,-534293.40],
+                                   [904704.80,-916578.06],
+                                   [753957.50,-762811.75],
+                                   [632876.10,-651891.40],
+                                   [286517.78,-306404.30],
+                                   [134765.64,-168751.28]
+                                ], columns=['PLANS', 'WBWWS']
+                                )
+            self.assertDataframesEqual(df, expected)
+            
+            df = self.exp.read('probabilities', Datatype.tabular)
+            expected = pd.DataFrame([
+                [1.0,  0.0],
+                [1.0,  0.0],
+                [1.0,  0.0],
+                [1.0,  0.0],
+                [1.0,  0.0],
+                [1.0,  0.0],
+                [1.0,  0.0],
+                [1.0,  0.0],
+                [1.0,  0.0],
+                [1.0,  0.0],
+                [1.0,  0.0],
+                [1.0,  0.0],
+                ], columns = ['PLANS', 'WBWWS']
+                )
+            self.assertDataframesEqual(df, expected)
+            
+            
         finally:
             inferencer.close()
 
@@ -143,21 +214,21 @@ class InferenceTester(unittest.TestCase):
     def test_res_measures_to_df(self):
         
         inferencer = Inferencer(
-            self.saved_model_path,
+            self.exp.root,
             self.samples_path,
+            'model_0',
             batch_size=2,
-            labels_path=self.labels_path
             )
         try:
-            inferencer.prep_model_inference(self.saved_model_path)
+            inferencer.prep_model_inference('model_0')
             series = pd.Series([10,20,np.array([100,200]),30,np.array([1000,2000])],
                                index=['meas1', 'meas2', 'prec_by_class', 'meas3', 'recall_by_class']
                                )
             df = inferencer.res_measures_to_df(series)
             truth = pd.DataFrame([[10, 20, 100, 200, 30, 1000, 2000]],
-                                 columns=['meas1', 'meas2', 'prec_DYSMEN_S', 
-                                         'prec_HENLES_S', 'meas3', 'rec_DYSMEN_S', 
-                                         'rec_HENLES_S']
+                                 columns=['meas1', 'meas2', 'prec_PLANS', 
+                                         'prec_WBWWS', 'meas3', 'rec_PLANS', 
+                                         'rec_WBWWS']
                                  )
             self.assertTrue(all(df == truth))
         finally:
@@ -174,10 +245,10 @@ class InferenceTester(unittest.TestCase):
         # This instance won't do anything,
         # due to unittesting == True:
         inferencer = Inferencer(
-            self.saved_model_path,
+            self.exp.root,
             self.samples_path,
+            'model_0',
             batch_size=16,
-            labels_path=self.labels_path,
             unittesting=True
             )
        
@@ -188,8 +259,10 @@ class InferenceTester(unittest.TestCase):
 
         # Four curves with bop['f1'] from 0.0 to 0.3
         crv_specs = self.make_crv_specs(4)
-        crvs = inferencer.pick_pr_curve_classes(crv_specs)
-        self.assertListEqual(crvs, [crv_specs[0], crv_specs[2], crv_specs[3]])
+        min_best_f1_crv, med_best_f1_crv, max_best_f1_crv = inferencer.pick_pr_curve_classes(crv_specs)
+        self.assertTrue(min_best_f1_crv == crv_specs[0])
+        self.assertTrue(med_best_f1_crv == crv_specs[1])
+        self.assertTrue(max_best_f1_crv == crv_specs[3])
         
         # Four curves with bop['f1'] of 0.0, 0.0, 0.2, 0.2
         # i.e. median == max:
@@ -207,7 +280,7 @@ class InferenceTester(unittest.TestCase):
         crv_specs[2]['best_op_pt']['f1'] = 0.0
         crv_specs[3]['best_op_pt']['f1'] = 0.2
         crvs = inferencer.pick_pr_curve_classes(crv_specs)
-        for i, true_crv in enumerate([crv_specs[0], crv_specs[3], crv_specs[3]]):
+        for i, true_crv in enumerate([crv_specs[0], crv_specs[2], crv_specs[3]]):
             self.assertEqual(crvs[i], true_crv)
 
     #------------------------------------
@@ -289,6 +362,18 @@ class InferenceTester(unittest.TestCase):
 # -------------------- Utilities --------------
 
     #------------------------------------
+    # assert_dataframes_equal
+    #-------------------
+    
+    def assertDataframesEqual(self, df1, df2, rounding=None):
+        self.assertTrue((df1.columns == df2.columns).all())
+        self.assertTrue((df1.index   == df2.index).all())
+        if rounding is None:
+            self.assertTrue((df1 == df2).all().all())
+        else:
+            self.assertTrue((df1.round(rounding) == df2.round(rounding)).all().all())
+
+    #------------------------------------
     # make_crv_specs 
     #-------------------
     
@@ -304,8 +389,8 @@ class InferenceTester(unittest.TestCase):
         :rtype [CurveSpecification]
         '''
         
-        df = pd.DataFrame([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]],
-                          columns=['Precision', 'Recall', 'f1']
+        df = pd.DataFrame([[0.1, 0.2, 0.3, 0.1], [0.4, 0.5, 0.6, np.nan]],
+                          columns=['Precision', 'Recall', 'f1', 'Threshold']
                           )
                           
         crv_specs = []
@@ -324,8 +409,6 @@ class InferenceTester(unittest.TestCase):
             bop['f1'] = i/10
             
             crv_spec = CurveSpecification(df,
-                                         [0.0, 0.1, 0.2], # Thresholds
-                                         bop,
                                          0.1, # AP
                                          i # class_id
                                          )

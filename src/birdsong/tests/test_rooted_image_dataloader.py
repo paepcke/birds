@@ -6,7 +6,6 @@ Created on Dec 13, 2020
 from _collections import OrderedDict
 import os
 from pathlib import Path
-import socket, sys
 import unittest
 
 import natsort
@@ -180,15 +179,15 @@ class TestNRootsImageDataset(unittest.TestCase):
         self.assertDictEqual(mrds.class_to_id,
                              {'audi'     : 0,
                               'bmw'      : 1,
-                              'DYSMEN_S' : 2,
-                              'HENLES_S' : 3
+                              'PLANS' : 2,
+                              'WBWWS' : 3
                               })
 
         # Total number of samples:
         #   6 Audis
         #   6 BMWs
-        #   6 DYSMEN_S
-        #   6 HENLES_S
+        #   6 PLANS
+        #   6 WBWWS
         
         # Lenghts of dataset bookkeeping structs should
         # be num of samples:
@@ -234,8 +233,8 @@ class TestNRootsImageDataset(unittest.TestCase):
         
         mrds = MultiRootImageDataset(self.TEST_FILE_PATH_GLOB)
         self.assertDictEqual(mrds.class_to_id,
-                             OrderedDict([('DYSMEN_S', 0), 
-                                          ('HENLES_S', 1), 
+                             OrderedDict([('PLANS', 0), 
+                                          ('WBWWS', 1), 
                                           ('audi', 2), 
                                           ('bmw', 3), 
                                           ('diving_gear', 4), 
@@ -243,7 +242,7 @@ class TestNRootsImageDataset(unittest.TestCase):
                              )
 
         self.assertEqual(mrds.class_names(),
-                         ['DYSMEN_S', 'HENLES_S', 'audi', 'bmw', 'diving_gear', 'office_supplies']
+                         ['PLANS', 'WBWWS', 'audi', 'bmw', 'diving_gear', 'office_supplies']
                          )
 
         # Spot check the 'snorkel.jpg' image file 
