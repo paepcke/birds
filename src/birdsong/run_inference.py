@@ -357,8 +357,9 @@ class Inferencer:
 
             if batch_num > 0 and batch_num % self.REPORT_EVERY == 0:
                 tmp_coll = ResultCollection(res_coll[start_idx:])
+                # Overlay the charts in tensorboard
                 self.report_intermittent_results(tmp_coll,
-                                                 display_counter=display_counter) # Overlay the charts in tensorboard
+                                                 display_counter=display_counter) 
                 start_idx += len(res_coll) - start_idx
                 display_counter += 1
 
@@ -386,10 +387,6 @@ class Inferencer:
         Each call results in an updated bar chart that reflects
         the entire collection. Tenforboard will overlay them, and
         provide a slider.
-        
-        The start_idx/end_idx define a slice of tallies whose
-        (partial) content is added to the csv file managed by
-        the experiment manager
         
         :param res_coll: collection of result tallies
         :type res_coll: ResultCollection
@@ -498,15 +495,8 @@ class Inferencer:
             batch_results['label'] = pd.Series(truths)
 
             # Write rows to CSV as floats:
-        
-            for i in range(len(batch_results)):
-                one_sample_probs = batch_results.iloc[i,:].values
-                
-                # Have a pd.Series  with the probabilities of 
-                # one sample for each class. Values are tensors
-                # of individual floats.
-#******!!!!!                
-                self.csv_writer.writerow(one_sample_probs)
+            # NOTE: Now done as a whole in report_results():
+            #self.testing_exp.save('probabilities', batch_results)
 
     #------------------------------------
     # report_results 
@@ -515,7 +505,7 @@ class Inferencer:
     def report_results(self, result_coll):
         '''
         Report confusion matrix, mAP, pr-curves, and
-        typical IR curves by computing them, and saving
+        typical IR values by computing them, and saving
         as csv or images (in case of charts) to the
         ExperimentManager instance, and to tensorboard.
         
