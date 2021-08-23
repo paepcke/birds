@@ -363,8 +363,8 @@ class Inferencer:
                 display_counter += 1
 
             #************
-            if batch_num >= 7:
-                break
+            #if batch_num >= 7:
+            #    break
             #************
         try:
             self.report_results(res_coll)
@@ -1195,10 +1195,14 @@ if __name__ == '__main__':
                         help='file name(s) from among the saved Pytorch model(s); repeatable, if more than one, composites of results from all models. ',
                         default=None)
     
-    parser.add_argument('experiment_path',
-                        help="path to an ExperimentManager's experiment root",
+    parser.add_argument('train_exp_path',
+                        help="path to ExperimentManager's experiment root with results from training",
                         default=None)
         
+    parser.add_argument('test_exp_path',
+                        help="path to new ExperimentManager's experiment as dest for inference results",
+                        default=None)
+
     parser.add_argument('samples_path',
                         help='path to samples to run through model',
                         default=None)
@@ -1212,7 +1216,7 @@ if __name__ == '__main__':
     # Expand Unix wildcards, tilde, and env 
     # vars in the experiment_path
     
-    exp_path = os.path.expanduser(os.path.expandvars(args.experiment_path))
+    exp_path = os.path.expanduser(os.path.expandvars(args.train_exp_path))
     
     if type(args.model_name) != list:
         model_names = [args.model_name]
@@ -1260,6 +1264,7 @@ if __name__ == '__main__':
         break
 
     inferencer = Inferencer(exp_path,
+                            args.test_exp_path,
                             samples_path,
                             model_names,
                             gpu_ids=args.device if type(args.device) == list else [args.device],
