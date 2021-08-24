@@ -167,7 +167,7 @@ class BirdsBasicTrainerCV:
         
         self.class_names = self.train_loader.dataset.class_names()
         
-        exp_dir  = os.path.join(self.curr_dir, f"experiment_{FileUtils.file_timestamp()}")
+        exp_dir  = os.path.join(self.curr_dir, f"experiment_{FileUtils.file_timestamp()}_train")
         
         self.exp = ExperimentManager(exp_dir)
         self.log.info(f"Results will be under {self.exp.root}")
