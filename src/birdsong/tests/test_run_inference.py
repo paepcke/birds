@@ -88,6 +88,7 @@ class InferenceTester(unittest.TestCase):
             self.samples_path,
             'model_0',
             batch_size=batch_size,
+            save_logits=True
             )
         try:
             inferencer.model_key = 'model_0'
@@ -162,8 +163,22 @@ class InferenceTester(unittest.TestCase):
 
 
             # Get the (initially empty) inference predictions table:
-            df = inferencer.testing_exp.read('predictionsTesting', Datatype.tabular)
-            expected = pd.DataFrame([], columns=['PLANS', 'WBWWS', 'label'])
+            df = inferencer.testing_exp.read('predictions', Datatype.tabular)
+            expected = pd.DataFrame([
+                                    [0,0],
+                                    [0,1],
+                                    [0,0],
+                                    [0,0],
+                                    [0,0],
+                                    [0,1],
+                                    [0,0],
+                                    [0,1],
+                                    [0,1],
+                                    [0,0],
+                                    [0,1],
+                                    [0,1]
+                                    ], columns=['prediction', 'truth'])
+            
             self.assertDataframesEqual(df, expected)
             
             try:

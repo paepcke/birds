@@ -25,6 +25,7 @@ from multiprocessing import Pool
 import os
 from pathlib import Path
 import sys
+import warnings
 
 from experiment_manager.experiment_manager import ExperimentManager, Datatype
 from logging_service.logging_service import LoggingService
@@ -219,14 +220,6 @@ class Inferencer:
                                          self.class_names,
                                          unknown_species_class=None
                                          )
-            
-        csv_data_header_predictions = self.class_names + ['label']
-        try:
-            self.testing_exp.save('predictionsTesting', header=csv_data_header_predictions)
-        except ValueError:
-            # File may already exist, which is fine:
-            pass
-
         if self.save_logits:
             # If we are to save logits, prepare a CSV
             # file for that too:
@@ -251,7 +244,7 @@ class Inferencer:
             )
 
         self.log.info(f"Tensorboard info will be written to {tb_dir}")
-        predictions_path = self.testing_exp.abspath('predictionsTesting', Datatype.tabular)
+        predictions_path = self.testing_exp.abspath('predictions', Datatype.tabular)
         self.log.info(f"Result measurement CSV file(s) will be written to {predictions_path}")
         
     #------------------------------------
@@ -358,7 +351,18 @@ class Inferencer:
             if batch_num > 0 and batch_num % self.REPORT_EVERY == 0:
                 tmp_coll = ResultCollection(res_coll[start_idx:])
                 # Overlay the charts in tensorboard
-                self.report_intermittent_results(tmp_coll,
+
+                with warnings.catch_warnings():
+                    
+                    # Action to take: Ignore the
+                    # "predicting something that's not 
+                    # anywhere in truth labels" warnings:
+                    warnings.filterwarnings("ignore",
+                                            category=UserWarning,
+                                            message='y_pred contains classes not in y_true'
+                                            )
+
+                    self.report_intermittent_results(tmp_coll,
                                                  display_counter=display_counter) 
                 start_idx += len(res_coll) - start_idx
                 display_counter += 1
@@ -519,7 +523,8 @@ class Inferencer:
         
         # Confusion matrix to tensorboard and local figure, if possible:
         conf_matrix_fig = self._report_conf_matrix(truths, 
-                                                   predicted_classes, 
+                                                   predicted_classes,
+                                                   show=False, # Don't try to show pyplot fig on server
                                                    show_in_tensorboard=True)
         self.testing_exp.save('conf_matrix', conf_matrix_fig)
         self.log.info(f"Saved confusion matrix fig in {self.testing_exp.abspath('conf_matrix', Datatype.figure)}")
@@ -540,14 +545,13 @@ class Inferencer:
         
         # Save pr_curve figure:
         self.testing_exp.save('pr_curve', pr_curve_fig)
-
+        self.log.info(f"Saved pr-curve at {self.testing_exp.abspath('pr_curve', Datatype.figure)}")
 
         # Text tables results to tensorboard:
         self._report_textual_results(predicted_classes, 
                                      truths, 
                                      (mAP,num_classes) 
                                      )
-        
 
 
     #------------------------------------
@@ -586,15 +590,15 @@ class Inferencer:
         :rtype: matplotlib.pyplot.Figure
         '''
 
+        # Get dataframe of confusion matrix
         conf_matrix = Charter.compute_confusion_matrix(truth_series,
                                                        predicted_classes,
                                                        self.class_names,
                                                        normalize=True
                                                        )
 
-        self.log.info(f"Writing conf_matrix.csv to {self.csv_dir}")
-        dst_path = os.path.join(self.csv_dir, 'conf_matrix.csv')
-        conf_matrix.to_csv(dst_path, index_label='True Class')
+        self.testing_exp.save('conf_matrix', conf_matrix, index_col='True Class')
+        self.log.info(f"Wrote conf_matrix.csv to {self.testing_exp.abspath('conf_matrix', Datatype.tabular)}")
 
         fig = Charter.fig_black_white_from_conf_matrix(conf_matrix)
         if show_in_tensorboard:
@@ -710,14 +714,20 @@ class Inferencer:
         :param all_preds: list of all predictions made
         :type all_preds: [int]
         :param all_labels: list of all truth labels
-        :type all_labels: [int]
+        :type all_labels: [tensor(int)]
         :param mAP_info: the previously calculated mean average
             precision, and the number of classes from which the
             quantity was calculated
         :type mAP: (float, int)
         '''
-        
+
         res = self._compute_ir_values(all_preds, all_labels)
+        # 
+        pred_df = pd.DataFrame(zip(all_preds, [label.item() for label in all_labels]),
+                               columns=['prediction', 'truth']
+                               )
+        self.testing_exp.save('predictions', pred_df)
+        self.log.info(f"Saved predictions in {self.testing_exp.abspath('predictions', Datatype.tabular)}")
         
         # Get a Series looks like:
         #    prec_macro,0.04713735383721669
@@ -1039,7 +1049,7 @@ class Inferencer:
             recall_micro,0.0703125
         
         create a dataframe with the series' index as column
-        names. However, for list-valued entries, expand,
+        names. However, for list-valued entries, expand the values,
         giving each list element its own column. Col names
         for those expansions will be <SPECIES_ABBREV>_prec
         or <SPECIES_ABBREV>_rec, as appropriate.
