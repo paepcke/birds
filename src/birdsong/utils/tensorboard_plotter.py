@@ -392,6 +392,7 @@ class TensorBoardPlotter:
                        img_height=200,    # px
                        img_width=400,     # px
                        to_grayscale=True,
+                       tensorboard_tag='Input Examples',
                        unittesting=False):
         '''
         Create and log a Tensorboard 'grid' of
@@ -418,6 +419,9 @@ class TensorBoardPlotter:
         :param to_grayscale: whether or not to convert 
             images to grayscale upon import
         :type to_grayscale: bool
+        :param tensorboard_tag: header under which the panel will
+            appear in tensorboard
+        :type tensorboard_tag: str
         :param unittesting: controls whether grid is
             actually created, or the img tensor that
             would be contained in the grid is returned
@@ -478,7 +482,7 @@ class TensorBoardPlotter:
         
         if unittesting:
             return grid
-        writer.add_image('Train Input Examples', grid)
+        writer.add_image(tensorboard_tag, grid)
         return grid
 
 

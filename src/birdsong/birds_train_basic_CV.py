@@ -189,6 +189,7 @@ class BirdsBasicTrainerCV:
         TensorBoardPlotter.write_img_grid(self.writer,
                                           self.root_train_test_data,
                                           len(self.class_names), # Num of train examples
+                                          tensorboard_tag='Training Input Examples'
                                           )
 
         # All ResultTally instances are

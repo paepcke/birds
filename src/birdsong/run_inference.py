@@ -41,7 +41,8 @@ from birdsong.result_tallying import ResultTally, ResultCollection
 from birdsong.rooted_image_dataset import SingleRootImageDataset
 from birdsong.utils.github_table_maker import GithubTableMaker
 from birdsong.utils.learning_phase import LearningPhase
-from birdsong.utils.tensorboard_plotter import SummaryWriterPlus
+from birdsong.utils.tensorboard_plotter import SummaryWriterPlus, \
+    TensorBoardPlotter
 from birdsong.utils.utilities import FileUtils
 from data_augmentation.utils import Utils
 import numpy as np
@@ -242,6 +243,15 @@ class Inferencer:
             freeze=0,
             to_grayscale=self.config.Training.getboolean('to_grayscale', True)
             )
+        
+        # Log a few example spectrograms to tensorboard;
+        # one per class:
+        TensorBoardPlotter.write_img_grid(self.writer,
+                                          self.samples_path,
+                                          len(self.class_names), # Num of train examples
+                                          tensorboard_tag='Inference Input Examples'
+                                          )
+        
 
         self.log.info(f"Tensorboard info will be written to {tb_dir}")
         predictions_path = self.testing_exp.abspath('predictions', Datatype.tabular)
