@@ -40,7 +40,8 @@ class SelectionTableConsolidator:
         '''
         Goes through each table, cleans it, and
         writes one tab separated value table to 
-        self.out_tbl_name.
+        out_tbl_name if it is not None. If out_tbl_name
+        is None, writes to stdout. 
         '''
         self.sel_tbl_flds = ['RecordingID',
                              'Begin Time (s)',
@@ -54,11 +55,20 @@ class SelectionTableConsolidator:
                              'Mix'
                              ]
 
-        with open(out_tbl_name, 'w') as fd:
+        try:
+            if out_tbl_name is not None:
+                fd = open(out_tbl_name, 'w')
+            else:
+                fd = sys.stdout
             writer = csv.DictWriter(fd, fieldnames=self.sel_tbl_flds)
             writer.writeheader()
             for tbl_path in tbl_paths:
                 self._add_entries(tbl_path, writer)
+        finally:
+            if out_tbl_name is not None:
+                fd.close()
+            else:
+                fd.flush()
 
     #------------------------------------
     # species_histogram
@@ -255,7 +265,7 @@ if __name__ == '__main__':
                         )
     
     parser.add_argument('-d', '--out_name',
-                        help='name of outfile absolute, or relative to sel_tbl_all; default: sel_tbl_all_xxx.csv'
+                        help='name of outfile absolute, or relative to sel_tbl_all; default: stdout'
                         )
     
     parser.add_argument('-t', '--table',
@@ -314,14 +324,7 @@ if __name__ == '__main__':
             tables_full_paths.append(os.path.join(in_dir, tbl_nm))
 
     out_name = args.out_name
-    if out_name is None:
-        out_path_root = os.path.join(in_dir, 'sel_tbl_all.txt')
-        out_path = out_path_root
-        distinguisher = 0
-        while os.path.exists(out_path):
-            distinguisher += 1
-            out_path += f"_{distinguisher}"
-    else:
+    if out_name is not None:
         if not os.path.isabs(out_name):
             out_name = os.path.join(in_dir, out_name)
         # If given name exists: warn:
@@ -333,5 +336,6 @@ if __name__ == '__main__':
                 
     consolidator = SelectionTableConsolidator()
     consolidator.consolidate_tables(tables_full_paths, out_name)
-    
-    print(f"Consolidated table in {out_name}")
+  
+    if out_name is not None:
+        print(f"Consolidated table in {out_name}")
