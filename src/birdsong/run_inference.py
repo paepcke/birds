@@ -213,13 +213,13 @@ class Inferencer:
         # trained. Setting unknown_species_class forces a
         # ValueError if any species is in the samples, but not
         # in the classes over which the model was trained. 
-        # To tolerate this situation, set unknown_species_class to 'NOIS'
-        # so that such classes will be mapped to the NOIS model 
-        # class ID species:
+        # To tolerate this situation, set unknown_species_class to 
+        # 'NOISG' or 'OTHRG', so that such classes will be mapped to 
+        # the NOISG/OTHRG model class ID species:
         self.sample_cid_to_model_cid,  _unmatched_sample_classes = \
             self._build_class_id_xlation(dataset.class_names(), 
                                          self.class_names,
-                                         unknown_species_class=None
+                                         unknown_species_class='OTHRG'
                                          )
         if self.save_logits:
             # If we are to save logits, prepare a CSV
