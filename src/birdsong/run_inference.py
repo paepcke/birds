@@ -1105,7 +1105,7 @@ class Inferencer:
     def _build_class_id_xlation(self, 
                                 sample_class_names, 
                                 model_class_names,
-                                unknown_species_class=None
+                                unknown_species_class='OTHRG'
                                 ):
         '''
         
@@ -1114,14 +1114,14 @@ class Inferencer:
         Models are training on a set C_m of target classes.
         Those classes each have names, whose position in a list,
         when sorted alphabetically, are their model class IDs. Call
-        those the "model space class IDs".
+        those the "model-space class IDs".
         
         However, a given set to samples from a different source
         than the training set (e.g. field recordings) will not necessarily
         contain all samples of all C_m. They may have their own sample 
         subset of classes C_s. When a pytorch dataset/dataloader yield
         truth values, they will be numeric IDs derived from the list C_s.
-        Those are the "sample space class IDs". 
+        Those are the "sample-space class IDs". 
         
         This method creates a dict that maps C_s class IDs to C_m class
         IDs. The translation is created by matching the class names in 
@@ -1139,7 +1139,7 @@ class Inferencer:
         :param unknown_species_class: name of model space class to which
             to assign species found in sample space, but not in model space
             If None, raise ValueError if such a mismatch occurs. By convention,
-            NOIS is the species used for unknown (stands for 'NOISE')
+            OTHRG is the species used for unknown (stands for 'OTHER-General')
         :type unknown_species_class: {None | str}
         :return a tuple whose first element is a dictionary mapping numeric sample 
             space class IDs to numeric model space class IDs. The second
