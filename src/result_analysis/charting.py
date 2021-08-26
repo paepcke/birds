@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 '''
 Created on May 6, 2021
 
@@ -72,15 +73,42 @@ class Charter:
             try:
                 if type(action) == VizConfMatrixReq:
                     if action.from_raw_results:
-                        cm = Charter.confusion_matrices_from_raw_results(action.path, normalize=True)
+                        # Get list of CM instances. Each
+                        # instance has a training, and a
+                        # validation matrix:
+                        self.log.info("Start reading raw train/validation results...")
+                        cm_list = Charter.confusion_matrices_from_raw_results(action.path, normalize=True)
+                        self.log.info("Done reading raw train/validation results.")
                     else:
-                        cm = Charter.read_conf_matrix_from_file(action.path)
-                    fig = self.fig_from_conf_matrix(cm,
-                                                    supertitle=action.supertitle,
-                                                    title=action.title,
-                                                    write_in_fields=action.write_in_fields
-                                                    )
-                    fig.show()
+                        # Get singleton list of CM:
+                        self.log.info("Start reading pre-computed train/validation results...")
+                        cm_list = [Charter.read_conf_matrix_from_file(action.path)]
+                        self.log.info("Done reading pre-computed train/validation results...")
+                                                
+                    self.figs = []
+                    if action.supertitle is None or action.supertitle == '':
+                        supertitle = 'Confusion Matrix'
+                    else:
+                        supertitle = action.supertitle
+                    
+                    # Just compute the first and last pairs
+                    # of train/validation confusion matrix figures:
+                    for cm_obj in [cm_list[0], cm_list[-1]]:
+                        final_supertitle = f"{supertitle}: end of training step {cm_obj.step}"
+                        self.log.info(f"Computing figure {final_supertitle}...")
+                        self.figs.append(self.fig_from_conf_matrix(cm_obj.training,
+                                                                   supertitle=final_supertitle,
+                                                                   write_in_fields=action.write_in_fields
+                                                                   )
+                                    )
+
+                        final_supertitle = f"{supertitle}: end of validation step {cm_obj.step}"
+                        self.log.info(f"Computing figure {final_supertitle}...")
+                        self.figs.append(self.fig_from_conf_matrix(cm_obj.validation,
+                                                                   supertitle=final_supertitle,
+                                                                   write_in_fields=action.write_in_fields
+                                                                   )
+                        )
                     
                 elif action == 'pr_curves':
                     pass #data = 0 #********************
@@ -92,10 +120,10 @@ class Charter:
                     for err_dict in errors:
                         action, err = list(err_dict.items())[0]
                         print(f"Error during action {action.name}({action.path}): {repr(err)}") 
-                # Re-raise the first of the errors:
-                first_err = list(errors[0].values())[0]
-                #****raise RuntimeError(f"Action error (1 of {len(errors)})") from first_err
-                raise first_err
+                        # Re-raise the first of the errors:
+                    first_err = list(errors[0].values())[0]
+                    #****raise RuntimeError(f"Action error (1 of {len(errors)})") from first_err
+                    raise first_err
 
     #------------------------------------
     # visualize_testing_result
@@ -287,16 +315,16 @@ class Charter:
         # cases when both recall and precision are zero:
         # Suppress warnings:
         with warnings.catch_warnings():
-            try:
-                warnings.filterwarnings("error",
-                                        #category=UndefinedMetricWarning
-                                        category=UserWarning
-                                        )
-                warnings.filterwarnings("ignore",
-                                        #category=UndefinedMetricWarning
-                                        category=RuntimeWarning
-                                        )
+            warnings.filterwarnings("error",
+                                    #category=UndefinedMetricWarning
+                                    category=UserWarning
+                                    )
+            warnings.filterwarnings("ignore",
+                                    #category=UndefinedMetricWarning
+                                    category=RuntimeWarning
+                                    )
                 
+            try:
                 # Fix precision and recall NaN values 
                 # by interpolating from their neighbors:
                 
@@ -327,7 +355,7 @@ class Charter:
             except Exception as e:
                 raise type(e)(f"Error during f1 computation: {e}") from e
 
-        avg_prec = average_precision_score(truth_series, pred_probs_series)
+            avg_prec = average_precision_score(truth_series, pred_probs_series)
 
         # Create a crv spec instance, but in the 
         # process, remove all rows with threshold
@@ -520,9 +548,10 @@ class Charter:
         
         # Adjust the figure size by the number
         # of species to show: result in inches.
-        # The 2.5 is empirical:
+        # The 2.5 is empirical, as is the minimum
+        # height:
         
-        fig_height = len(class_names) / 2.5
+        fig_height = max(12, len(class_names) / 2.5)
         fig_width  = fig_height * 0.67
         
         fig.set_size_inches(fig_height, fig_width)
@@ -907,7 +936,11 @@ class Charter:
 
         results = []
         # Get one row with step, train-preds, train_labels,
-        # val_preds, and val_labels at a time:
+        # val_preds, and val_labels at a time.
+        # The embedded lists can have length beyond
+        # the default csv field size of 131072. Change
+        # that default:
+        csv.field_size_limit(sys.maxsize)
         with open(fname, 'r') as data_fd:
             reader = csv.DictReader(data_fd)
             for outcome_dict in reader:
@@ -1544,4 +1577,14 @@ if __name__ == '__main__':
     if args.pr_curves is not None:
         actions.append(VizPRCurvesReq(path=args.pr_curves))
         
-    Charter(actions)
+    charter = Charter(actions)
+    for fig_num, fig in enumerate(charter.figs):
+        if fig_num < len(charter.figs)-1:
+            msg = f"Hit enter to see fig {fig_num+1}/{len(charter.figs)}"
+        else:
+            msg = "Hit enter to exit"
+        fig.show()
+        input(msg)
+    for fig in charter.figs:
+        fig.close()
+    

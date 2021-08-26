@@ -5,18 +5,6 @@ Created on Mar 12, 2021
 @author: paepcke
 
 TODO:
-    o Catch cnt-C and complete without a stack trace
-       after finishing the 'finally' clause
-    o Why always: 
-      run_inference.py(3254979): 2021-07-06 14:01:54,082;WARNING: For all thresholds, one or more of precision,
-              recall or f1 are undefined. No p/r curves to show
-    o ir_results.csv: 
-        ,0       
-        prec_macro,0.0622439088620259
-        prec_micro,0.07980347329707624
-              ...
-      Why the leading zero?
-      
 
 '''
 from _collections import OrderedDict
@@ -24,6 +12,7 @@ import argparse
 from multiprocessing import Pool
 import os
 from pathlib import Path
+import shutil
 import sys
 import warnings
 
@@ -140,6 +129,23 @@ class Inferencer:
             if not os.path.exists(self.training_exp.abspath(model_key, Datatype.model)):
                 raise FileNotFoundError(f"Model {model_key} does not exist")
 
+        # Copy all hparams from the training exp manager
+        # to the inference manager for easy reference:
+        for hparm_fname in os.listdir(self.training_exp.hparams_path):
+            key = Path(hparm_fname).stem
+            net_conf = self.training_exp.read(key, Datatype.hparams)
+            self.testing_exp.save(key, net_conf)
+
+        # Same with models, except that we just copy
+        # them in the file system, rather than loading
+        # them:
+        
+        train_models_path = self.training_exp.models_path
+        test_models_path  = self.testing_exp.models_path
+        for model_key in model_names:
+            src = os.path.join(train_models_path, f"{model_key}.pth")
+            shutil.copy(src, test_models_path)
+
         self.model_names  = model_names
         self.samples_path = samples_path
         self.gpu_ids      = gpu_ids if type(gpu_ids) == list else [gpu_ids]
@@ -177,6 +183,9 @@ class Inferencer:
         # for training:
         self.config = self.training_exp.read('hparams', Datatype.hparams)
         
+        # Are we to save the raw logits so that
+        # we can later do saliency analysis?
+        self.save_logits  = self.config.Training.getboolean('save_logits', False)
         # Add a separate tensorboard directory 
         # for testing this model:
         tb_name = f"tensorboardTesting_{model_name}"
@@ -206,6 +215,11 @@ class Inferencer:
         self.class_names = self.training_exp['class_label_names']
         self.num_classes = len(self.class_names)
         
+        if self.save_logits:
+            header = self.class_names.copy()
+            header.extend(['label'])
+        self.testing_exp.save('logits', header=header)
+
         # Build translation dict between the numeric
         # class IDs built by the SingleRootImageDataset from
         # the samples directory hierarchy, and the (possibly)
@@ -356,7 +370,11 @@ class Inferencer:
             # If we are to save all the logits,
             # save the ones of this batch:
             if self.save_logits:
-                self.testing_exp.save('logits', outputs)
+                # Turn logits output into a df:
+                logits_df = pd.DataFrame(outputs, columns=self.class_names)
+                # Add the truth labels as a column on the right:
+                logits_df['label'] = y
+                self.testing_exp.save('logits', logits_df)
 
             if batch_num > 0 and batch_num % self.REPORT_EVERY == 0:
                 tmp_coll = ResultCollection(res_coll[start_idx:])
@@ -383,6 +401,8 @@ class Inferencer:
             #************
         try:
             self.report_results(res_coll)
+        except Exception as e:
+            self.log.err(f"Error while trying to report results: {repr(e)}")
         finally:
             self.writer.close()
             return res_coll
@@ -445,8 +465,8 @@ class Inferencer:
 
 
         # Now add just the new preds/labels to the CSV file:
-        self._write_probability_rows(res_coll)
-        
+        # Now done in report_results()
+        #**** self._write_probability_rows(res_coll)
  
     #------------------------------------
     # _write_probability_rows 
@@ -550,6 +570,8 @@ class Inferencer:
         
         # Save the probabilities after converting to nice species names:
         pred_probs_df.columns = self.class_names
+        # Add the truth label col on the right:
+        pred_probs_df['label'] = [int(tns) for tns in truths]
         self.testing_exp.save('probabilities', pred_probs_df)
         self.log.info(f"Saved probabilities in {self.testing_exp.abspath('probabilities', Datatype.tabular)}")
         
@@ -763,12 +785,30 @@ class Inferencer:
         self.log.info(f"Saved IR results in {self.testing_exp.abspath('ir_results', Datatype.tabular)}")
 
         # Get the per-class prec/rec/f1/support:
-        classification_report_dict = classification_report(all_labels, 
-                                                 all_preds, 
-                                                 output_dict=True,
-                                                 zero_division=0,
-                                                 target_names=self.class_names
-                                                 )
+
+        # Convert labels from tensors to ints:        
+        all_int_labels    = [int(lbl) for lbl in all_labels]
+        
+        # Get set of labels that were in truth set:
+        all_int_lbl_set   = set(all_int_labels)
+        
+        # Get corresponding lists of labels and class
+        # names:
+        occurring_labels       = []
+        occurring_target_names = []
+        for occurring_lbl in all_int_lbl_set:
+            occurring_labels.append(occurring_lbl)
+            occurring_target_names.append(self.class_names[occurring_lbl])
+
+        classification_report_dict = classification_report(
+            all_int_labels, 
+            all_preds, 
+            output_dict=True,
+            labels=occurring_labels,
+            target_names=occurring_target_names,
+            zero_division=0
+            )
+
         # We now have like:
         #    {'PLANS': {'precision': 0.5, 'recall': 1.0, 'f1-score': 0.6666666666666666, 'support': 6},
         #     'WBWWS': {'precision': 0.0, 'recall': 0.0, 'f1-score': 0.0, 'support': 6},
