@@ -21,8 +21,10 @@ from torch import nn
 from torch import optim
 import torch
 
+import matplotlib.pyplot as plt
+
 #from ml_experiment_manager.experiment_manager import ExperimentManager
-from experiment_manager.experiment_manager import ExperimentManager
+from experiment_manager.experiment_manager import ExperimentManager, Datatype
 
 from birdsong.cross_validation_dataloader import CrossValidatingDataLoader, \
     EndOfSplit
@@ -36,6 +38,7 @@ from birdsong.utils.neural_net_config import NeuralNetConfig, ConfigError
 from birdsong.utils.tensorboard_plotter import SummaryWriterPlus, TensorBoardPlotter
 from birdsong.utils.utilities import FileUtils, CSVWriterCloseable  # , Differentiator
 from data_augmentation.utils import Utils
+from result_analysis.charting import Charter, VizConfMatrixReq, CELL_LABELING
 
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
@@ -201,6 +204,9 @@ class BirdsBasicTrainerCV:
         self.log.debug(f"Just before train: \n{'none--on CPU' if self.fastest_device.type == 'cpu' else torch.cuda.memory_summary()}")
         try:
             final_step = self.train()
+            # Create and save confusion matrices for
+            # the first and final step:
+            self._create_conf_matrix_figs()
             self.visualize_final_epoch_results(final_step)
         finally:
             self.close_tensorboard()
@@ -727,6 +733,31 @@ class BirdsBasicTrainerCV:
         return train_loader
     
     #------------------------------------
+    # _create_conf_matrix_figs 
+    #-------------------
+    
+    def _create_conf_matrix_figs(self):
+        
+        preds_path = self.exp.abspath('predictions', Datatype.tabular)
+        actions    = []
+        actions.append(VizConfMatrixReq(path=preds_path,
+                                        from_raw_results=True,
+                                        supertitle='Confusion matrix',
+                                        write_in_fields=CELL_LABELING.DIAGONAL
+                                        ))
+
+        charter = Charter(actions)
+        fig_keys = ['conf_matrix_train_step0',
+                    'conf_matrix_val_step0',
+                    'conf_matrix_train_final_step',
+                    'conf_matrix_val_final_step'
+                    ] 
+        for fig_num, fig in enumerate(charter.figs):
+            self.exp.save(fig_keys[fig_num], fig)
+        for fig in charter.figs:
+            plt.close(fig)
+
+    #------------------------------------
     # initialize_model 
     #-------------------
     
@@ -819,158 +850,6 @@ class BirdsBasicTrainerCV:
         self.results = ResultCollection()
 
         self.log.info(f"To view tensorboard charts: in shell: tensorboard --logdir {tb_path}; then browser: localhost:6006")
-
-    #------------------------------------
-    # create_csv_writer 
-    #-------------------
-    
-    #*******************
-    def create_csv_writerDISABLED(self, raw_data_dir):
-    #*******************        
-        '''
-        Create a csv_writer that will fill a csv
-        file during training/validation as follows:
-        
-            step  train_preds   train_labels  val_preds  val_labels
-            
-        Cols after the integer 'step' col will each be
-        an array of ints:
-        
-                  train_preds    train_lbls   val_preds  val_lbls
-                2,"[2,5,1,2,3]","[2,6,1,2,1]","[1,2]",    "[1,3]" 
-        
-        If raw_data_dir is provided as a str, it is
-        taken as the directory where csv file with predictions
-        and labels are to be written. The dir is created if necessary.
-         
-        If the arg is instead set to True, a dir 'runs_raw_results' is
-        created under this script's directory if it does not
-        exist. Then a subdirectory is created for this run,
-        using the hparam settings to build a file name. The dir
-        is created if needed. Result ex.:
-        
-              <script_dir>
-                   runs_raw_results
-                       Run_lr_0.001_br_32
-                           run_2021_05_ ... _lr_0.001_br_32.csv
-        
-        
-        Then file name is created, again from the run
-        hparam settings. If this file exists, user is asked whether
-        to remove or append. The first of the two return values 
-        will be:
-        
-           o None if csv file exists, but is not to 
-             be overwritten nor appended-to
-           o A CSV writer for a file open for either
-             'write' or 'append.
-             
-        The second return value is: 
-        
-           o None if self.save_logits is False, or a logits file already
-             exists and user decided to save it.
-           o A file descriptor in append mode 
-        
-        :param raw_data_dir: If simply True, create dir and file names
-            from hparams, and create as needed. If a string, it is 
-            assumed to be the directory where a .csv file is to be
-            created. If None, self.csv_writer is set to None.
-        :type raw_data_dir: {None | True | str|
-        :return: a 2-tuple; first element: CSV writer ready for action. Set either to
-            write a fresh file, or append to an existing file.
-            Unless file exists, and user decided not to overwrite.
-            Second element: None if self.save_logits is False, or an fd 
-            in append mode, with the logits header written to the
-            file.
-            
-        :rtype: ({None | csv.writer}, {None | fd})
-        '''
-
-        # Ensure the csv file root dir exists if
-        # we'll do a csv dir and run-file below it:
-        
-        if type(raw_data_dir) == str:
-            raw_data_root = raw_data_dir
-        else:
-            raw_data_root = os.path.join(self.curr_dir, 'runs_raw_results')
-
-        if not os.path.exists(raw_data_root):
-            os.mkdir(raw_data_root)
-
-        # Can rely on raw_data_root being defined and existing:
-        
-        if raw_data_dir is None:
-            return None, None
-
-        # Create both a raw dir sub-directory and a .csv file
-        # for this run:
-        csv_subdir_name = FileUtils.construct_filename(self.config.Training, 
-                                                       prefix='Run', 
-                                                       incl_date=True)
-        os.makedirs(csv_subdir_name)
-        
-        # Create a csv file name:
-        csv_file_nm = FileUtils.construct_filename(self.config.Training, 
-                                                   prefix='run',
-                                                   suffix='.csv',
-                                                   incl_date=True)
-        
-        csv_path = os.path.join(raw_data_root, csv_file_nm)
-        
-        # Get csv_raw_fd appropriately:
-        
-        if os.path.exists(csv_path):
-            do_overwrite = FileUtils.user_confirm(f"File {csv_path} exists; overwrite?", default='N')
-            if not do_overwrite:
-                do_append = FileUtils.user_confirm(f"Append instead?", default='N')
-                if not do_append:
-                    return None, None
-                else:
-                    mode = 'a'
-        else:
-            mode = 'w'
-            
-        csv_writer = CSVWriterCloseable(csv_path, 
-                                        mode=mode, 
-                                        delimiter=',')
-
-        header = ['step', 'train_preds', 'train_labels', 'val_preds', 'val_labels']
-        csv_writer.writerow(header)
-
-        # If we want to save all the logits to a csv file,
-        # create an open fd with append mode:
-        if self.save_logits:
-            csv_raw_file_nm = FileUtils.construct_filename(self.config.Training, 
-                                                           prefix='run_logits',
-                                                           suffix='.csv',
-                                                           incl_date=True)
-
-            csv_raw_path = os.path.join(raw_data_root, csv_raw_file_nm)
-
-            if os.path.exists(csv_raw_path):
-                do_overwrite = FileUtils.user_confirm(f"File {csv_raw_path} exists; overwrite?", default='N')
-                if not do_overwrite:
-                    do_append = FileUtils.user_confirm(f"Append instead?", default='N')
-                    if not do_append:
-                        return csv_writer, None
-                    else:
-                        mode = 'a'
-            else:
-                mode = 'w'
-
-            
-            logit_fd = open(csv_raw_path, mode)
-            # Header will be the list of class IDs,
-            # followed by columns for each row's label
-            # and step:
-            header = self.class_names.copy()
-            header.extend(['label', 'step'])
-            logit_fd.write(f"{','.join(header)}" + '\n')
-            logit_fd.flush()
-        else:
-            logit_fd = None
-        
-        return csv_writer, logit_fd
 
     #------------------------------------
     # create_model_archive 
