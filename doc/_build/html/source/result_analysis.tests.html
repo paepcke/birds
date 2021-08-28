@@ -89,8 +89,8 @@
               <div class="local-toc"><ul>
 <li><a class="reference internal" href="#">result_analysis.tests package</a><ul>
 <li><a class="reference internal" href="#submodules">Submodules</a></li>
-<li><a class="reference internal" href="#module-result_analysis.tests.test_charting">result_analysis.tests.test_charting module</a></li>
-<li><a class="reference internal" href="#module-result_analysis.tests">Module contents</a></li>
+<li><a class="reference internal" href="#result-analysis-tests-test-charting-module">result_analysis.tests.test_charting module</a></li>
+<li><a class="reference internal" href="#module-contents">Module contents</a></li>
 </ul>
 </li>
 </ul>
@@ -165,112 +165,11 @@
 <div class="section" id="submodules">
 <h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
 </div>
-<div class="section" id="module-result_analysis.tests.test_charting">
-<span id="result-analysis-tests-test-charting-module"></span><h2>result_analysis.tests.test_charting module<a class="headerlink" href="#module-result_analysis.tests.test_charting" title="Permalink to this headline">¶</a></h2>
-<p>Created on May 7, 2021</p>
-<p>&#64;author: paepcke</p>
-<dl class="py class">
-<dt class="sig sig-object py" id="result_analysis.tests.test_charting.Test">
-<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">result_analysis.tests.test_charting.</span></span><span class="sig-name descname"><span class="pre">Test</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">methodName</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'runTest'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#result_analysis.tests.test_charting.Test" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">unittest.case.TestCase</span></code></p>
-<dl class="py method">
-<dt class="sig sig-object py" id="result_analysis.tests.test_charting.Test.assert_dataframes_equal">
-<span class="sig-name descname"><span class="pre">assert_dataframes_equal</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">df2</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#result_analysis.tests.test_charting.Test.assert_dataframes_equal" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="result_analysis.tests.test_charting.Test.assert_heatmaps_equal">
-<span class="sig-name descname"><span class="pre">assert_heatmaps_equal</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fig</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">truth_arr</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">col_names</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#result_analysis.tests.test_charting.Test.assert_heatmaps_equal" title="Permalink to this definition">¶</a></dt>
-<dd><p>Assert whether the data in a given matplotlib figure 
-is the same as the data in a different matplotlib figure
-that was previously saved.</p>
-<p>For additional thoroughness, pass in the array of column
-names of the previously saved figure.</p>
-<p>Uses self.assertEqual().</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>fig</strong> (<em>matplotlib.pyplot.Figure</em>) – figure whose data is to be tested for equality 
-against the data of a previously saved figure</p></li>
-<li><p><strong>truth_arr</strong> (<em>np.array</em>) – the data extracted from the reference
-figure</p></li>
-<li><p><strong>col_names</strong> (<em>[</em><em>str</em><em>]</em>) – optionally, the column names of the 
-figures’ columns</p></li>
-</ul>
-</dd>
-</dl>
-<p>:raise AssertionError</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="result_analysis.tests.test_charting.Test.np_diff">
-<span class="sig-name descname"><span class="pre">np_diff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">first</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">second</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">as_df</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#result_analysis.tests.test_charting.Test.np_diff" title="Permalink to this definition">¶</a></dt>
-<dd><p>Given two numpy arrays, return a ‘diff’ array
-of shape (n, 2) in which each row is one of
-n differences. Col 0 is value in the first
-array, and col 1 is value in the second array.</p>
-<p>if as_df is True, returns a dataframe with column
-header [‘first’, ‘second’]</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>first</strong> (<em>np.array</em>) – one np array to compare</p></li>
-<li><p><strong>second</strong> (<em>np.array</em>) – other np array to compare</p></li>
-</ul>
-</dd>
-</dl>
-<p>:returns an np array with result, or a dataframe
-:rtype {np.array | pd.DataFrame}</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="result_analysis.tests.test_charting.Test.setUp">
-<span class="sig-name descname"><span class="pre">setUp</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#result_analysis.tests.test_charting.Test.setUp" title="Permalink to this definition">¶</a></dt>
-<dd><p>Hook method for setting up the test fixture before exercising it.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="result_analysis.tests.test_charting.Test.setUpClass">
-<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">setUpClass</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#result_analysis.tests.test_charting.Test.setUpClass" title="Permalink to this definition">¶</a></dt>
-<dd><p>Hook method for setting up class fixture before running tests in the class.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="result_analysis.tests.test_charting.Test.tearDown">
-<span class="sig-name descname"><span class="pre">tearDown</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#result_analysis.tests.test_charting.Test.tearDown" title="Permalink to this definition">¶</a></dt>
-<dd><p>Hook method for deconstructing the test fixture after testing it.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="result_analysis.tests.test_charting.Test.test_calc_conf_matrix_norm">
-<span class="sig-name descname"><span class="pre">test_calc_conf_matrix_norm</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#result_analysis.tests.test_charting.Test.test_calc_conf_matrix_norm" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="result_analysis.tests.test_charting.Test.test_fig_from_conf_matrix_no_infinities">
-<span class="sig-name descname"><span class="pre">test_fig_from_conf_matrix_no_infinities</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#result_analysis.tests.test_charting.Test.test_fig_from_conf_matrix_no_infinities" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="result_analysis.tests.test_charting.Test.test_fig_from_conf_matrix_no_infinities_diag_labeled">
-<span class="sig-name descname"><span class="pre">test_fig_from_conf_matrix_no_infinities_diag_labeled</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#result_analysis.tests.test_charting.Test.test_fig_from_conf_matrix_no_infinities_diag_labeled" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="result_analysis.tests.test_charting.Test.test_fig_from_conf_matrix_with_infinities">
-<span class="sig-name descname"><span class="pre">test_fig_from_conf_matrix_with_infinities</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#result_analysis.tests.test_charting.Test.test_fig_from_conf_matrix_with_infinities" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="result_analysis.tests.test_charting.Test.test_read_conf_matrix_from_file">
-<span class="sig-name descname"><span class="pre">test_read_conf_matrix_from_file</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#result_analysis.tests.test_charting.Test.test_read_conf_matrix_from_file" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-</dd></dl>
-
+<div class="section" id="result-analysis-tests-test-charting-module">
+<h2>result_analysis.tests.test_charting module<a class="headerlink" href="#result-analysis-tests-test-charting-module" title="Permalink to this headline">¶</a></h2>
 </div>
-<div class="section" id="module-result_analysis.tests">
-<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-result_analysis.tests" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="module-contents">
+<h2>Module contents<a class="headerlink" href="#module-contents" title="Permalink to this headline">¶</a></h2>
 </div>
 </div>
 
