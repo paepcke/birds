@@ -909,7 +909,18 @@ class Utils:
         '''
         with open(tbl_path, 'r') as sel_tbl_fd:
             reader = DictReader(sel_tbl_fd, delimiter='\t')
-            sel_dict_list = [row_dict for row_dict in reader]
+            # The if clause checks each dict
+            # for whether all it's values are either 
+            # None or empty space. If they are, the
+            # line is ignored:
+            sel_dict_list = [row_dict 
+                             for 
+                             row_dict 
+                             in reader
+                             if not all(fld is None or fld.isspace()
+                                        for fld 
+                                        in row_dict.values())
+                             ]
         
         
         # Coerce types and unify keys:
