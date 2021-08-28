@@ -7,8 +7,8 @@ import csv
 import os
 import tempfile
 
+from data_augmentation.utils import Utils
 import numpy as np
-
 from result_analysis.utils.consolidate_selection_tables import SelectionTableConsolidator
 
 
@@ -41,22 +41,16 @@ class FrequencyBandExtractor(dict):
         :type sel_tbl_info: src
         '''
         
-        if not os.exists(sel_tbl_info):
+        if not os.path.exists(sel_tbl_info):
             raise FileNotFoundError(f"No selection table at {sel_tbl_info}")
         
-        tbls = []
         if os.path.isdir(sel_tbl_info):
-            sel_dict_list = self._consolidate_tbls(sel_tbl_info)
+            self.sel_dict_list = self._consolidate_tbls(sel_tbl_info)
         else:
             # Just a single select table:
-            with open(sel_tbl_info, 'r') as fd:
-                reader = csv.DictReader(fd)
-                sel_dict_list = [sel_dict
-                                 for sel_dict
-                                 in reader 
-                                 ]
+            self.sel_dict_list = Utils.read_raven_selection_table(sel_tbl_info)
 
-        self.freq_infos = self._create_freq_infos(sel_dict_list)
+        self.freq_info = self._create_freq_infos(self.sel_dict_list)
 
     #------------------------------------
     # _consolidate_tbls
@@ -76,27 +70,17 @@ class FrequencyBandExtractor(dict):
         :rtype [{str : str}]
         '''
         
-        tbls = []
+        tbl_paths = []
         for root, _dirs, files in os.walk(tbl_dir):
             for fname in files:
-                tbls.append(os.path.join(root, fname))
+                tbl_paths.append(os.path.join(root, fname))
     
         # Consolidate into a single table:
-        consolidated_rows_dict_list = []
-        consolidator = SelectionTableConsolidator() 
-        with tempfile.NamedTemporaryFile(suffix='.txt', 
-                                         prefix='sel_tbl_tmp_', 
-                                         dir='/tmp', 
-                                         delete=True) as fd:
-            out_path = fd.name
-            consolidator.consolidate_tables(tbls, out_path)
-            
-            fd.flush()
-            reader = csv.DictReader(fd)
-            for selection_dict in reader:
-                consolidated_rows_dict_list.append(selection_dict)
+        all_rows_dict_list = []
+        for tbl_path in tbl_paths:
+            all_rows_dict_list.extend(Utils.read_raven_selection_table(tbl_path))
                 
-        return consolidated_rows_dict_list
+        return all_rows_dict_list
     
     #------------------------------------
     # _create_freq_infos
@@ -105,7 +89,7 @@ class FrequencyBandExtractor(dict):
     def _create_freq_infos(self, selection_dicts):
         '''
         Given a list of dicts, each containing selection
-        table information about a single select (species,
+        table information about a single selection (species,
         start time, frequency range, etc.), return a 
         new dict that maps species names to a FrequencyInfo
         instance. Those instances contain information about
@@ -122,13 +106,13 @@ class FrequencyBandExtractor(dict):
         for sel_dict in selection_dicts:
             low_freq  = float(sel_dict['Low Freq (Hz)'])
             high_freq = float(sel_dict['High Freq (Hz)'])
-            species   = sel_dict['Species']
+            species   = sel_dict['species']
             
             try:
                 freq_info = self[species]
             except KeyError:
                 # First observation of this species:
-                freq_info = FrequencyInfo()
+                freq_info = FrequencyInfo(species)
                 self[species] = freq_info
                 
             # Add the new observation:
@@ -142,10 +126,60 @@ class FrequencyInfo:
     # Constructor 
     #-------------------
     
-    def __init__(self):
+    def __init__(self, species):
         
+        self.species = species
         self.all_low_freqs  = np.array([])
         self.all_high_freqs = np.array([])
+        self._curr_lowest_freq  = float('inf')
+        self._curr_highest_freq = 0.0
+
+    #------------------------------------
+    # min_frequency
+    #-------------------
+
+    def min_frequency(self):
+        return self._curr_lowest_freq
+
+    #------------------------------------
+    # max_frequency
+    #-------------------
+
+    def max_frequency(self):
+        return self._curr_highest_freq
+    
+    #------------------------------------
+    # center_frequency
+    #-------------------
+    
+    def center_frequency(self):
+        '''
+        Return the mean of all observations' 
+        center frequencies.
+        '''
+
+        return np.mean((self.all_high_freqs - self.all_low_freqs) / 2.)
+
+    #------------------------------------
+    # stdev_freq_bands
+    #-------------------
+    
+    def stdev_freq_bands(self):
+        '''
+        Return the standard deviation of the
+        frequencies around the mean of the species'
+        center frequency.
+        
+        :return standard deviation spread around
+            mean of center frequencies in Hz
+        :rtype float
+        '''
+        # The delta degrees of freedom
+        # for this call is 0, meaning we are
+        # using degrees of freedom equal to 
+        # all the frequency centers. The method
+        # computes the population stdev:
+        return np.std((self.all_high_freqs - self.all_low_freqs) / 2.)
 
     #------------------------------------
     # add_selection
@@ -178,34 +212,10 @@ class FrequencyInfo:
 
         # Update the species' lowest and
         # highest observed frequency:
-        if real_low_freq < self.curr_lowest_freq:
-            self.curr_lowest_freq = real_low_freq
-        if real_high_freq > self.curr_high_freq:
-            self.curr_highest_freq = real_high_freq
+        if real_low_freq < self._curr_lowest_freq:
+            self._curr_lowest_freq = real_low_freq
+        if real_high_freq > self._curr_highest_freq:
+            self._curr_highest_freq = real_high_freq
 
         self.all_low_freqs  = np.append(self.all_low_freqs, real_low_freq)
         self.all_high_freqs = np.append(self.all_high_freqs, real_high_freq)
-
-    #------------------------------------
-    # center_frequency
-    #-------------------
-    
-    def center_frequency(self):
-        '''
-        Return the mean of all observations' 
-        center frequencies.
-        '''
-
-        return np.mean(self.all_high_freqs - self.all_low_freqs) 
-
-    #------------------------------------
-    # stdev
-    #-------------------
-    
-    def stdev(self):
-        '''
-        Return the standard deviation of the
-        frequencies
-        '''
-        
-        
