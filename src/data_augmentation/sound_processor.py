@@ -71,12 +71,12 @@ class SoundProcessor:
     
     # Pick out the 00:03:34.60 from
     #   '  Duration: 00:03:34.60, start: 0.025056, bitrate: 223 kb/s'
-    DURATION_PATTERN = re.compile(r"[\s]*Duration: ([0-9:.]*).*")
+    DURATION_PATTERN = re.compile(b"[\s]*Duration: ([0-9:.]*).*")
     # Pick out the 44100 from:
     #    'Stream #0:0: Audio: mp3, 44100 Hz, stereo, fltp, 211 kb/s'
     
     # The '?' after the ".*" makes the search non-greedy
-    STREAM_PATTERN   = re.compile(r"[\s]*Stream.*?([0-9]+) Hz.*")
+    STREAM_PATTERN   = re.compile(b"[\s]*Stream.*?([0-9]+) Hz.*")
 
     #------------------------------------
     # Constructor Stub 
@@ -867,26 +867,30 @@ class SoundProcessor:
         
         # Even if no error, ffprobe writes to stderr,
         # and subprocess returns byte str:
-        try:
-            output = proc.stderr.decode('utf-8').split('\n')
-        except UnicodeDecodeError as e:
-            raise ValueError(f"Bad ffprobe unicode value in {fname}: {proc.stderr}: {repr(e)}")
+        
+        # Output is a byte string, and we need to leave
+        # it that way, because some mp3 metadata has bad
+        # unicode. We'll deal with those lines in the
+        # line-by-line loop below:
+        output = proc.stderr.split(b'\n')
         
         # Find duration and sample rates
         duration    = None
         sample_rate = None
         
-        for line in output:
+        for byte_line in output:
             if duration is not None and sample_rate is not None:
+                # All done:
                 break
-        
+
             if duration is None:
-                match = cls.DURATION_PATTERN.search(line)
+                match = cls.DURATION_PATTERN.search(byte_line)
                 if match is not None:
-                    duration = match.group(1)
+                    # Get duration as regular string, not byte str:
+                    duration = match.group(1).decode('utf8')
                     continue
             if sample_rate is None:
-                match = cls.STREAM_PATTERN.search(line)
+                match = cls.STREAM_PATTERN.search(byte_line)
                 if match is not None:
                     sample_rate = int(match.group(1))
 
