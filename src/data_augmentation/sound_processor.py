@@ -8,6 +8,9 @@ import shutil
 import subprocess
 import warnings
 
+import numpy as np
+import pandas as pd
+
 from PIL import Image
 from PIL.PngImagePlugin import PngImageFile, PngInfo
 import librosa
@@ -17,12 +20,7 @@ from scipy.signal import lfilter
 import skimage.io
 import soundfile
 
-from data_augmentation.utils import Utils, Interval
-import numpy as np
-
-
-sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from data_augmentation.utils import Interval, Utils
 
 # ------------------------ Exception Classes -----------------
 
@@ -167,7 +165,7 @@ class SoundProcessor:
     
         assert len(during_noise) == len(noise)
     
-        segment_with_noise = during_noise + Utils.noise_multiplier(orig_recording, noise) * noise
+        segment_with_noise = during_noise + cls.noise_multiplier(orig_recording, noise) * noise
         first_half   = np.concatenate((before_noise, segment_with_noise))
         new_sample   = np.concatenate((first_half, after_noise)) # what i think it should be
         new_duration = librosa.get_duration(new_sample, float(new_sr))
@@ -289,6 +287,35 @@ class SoundProcessor:
         out_path = os.path.join(out_dir, aug_sample_name)
         soundfile.write(out_path, y2, sample_rate0)
         return out_path
+
+
+    #------------------------------------
+    # find_total_recording_length
+    #-------------------
+
+    @classmethod
+    def find_total_recording_length(cls, species_dir_path):
+        total_duration = 0
+        for recording in os.listdir(species_dir_path):
+            dur_sr_dict = SoundProcessor.soundfile_metadata(os.path.join(species_dir_path, 
+                                                                         recording))
+            duration = dur_sr_dict['duration'].seconds
+            total_duration += duration
+        return total_duration
+
+    #------------------------------------
+    # recording_lengths_by_species
+    #-------------------
+
+    @classmethod
+    def recording_lengths_by_species(cls, path):
+        num_samples_in = {} # initialize dict - usage num_samples_in['CORALT_S'] = 64
+        for species in os.listdir(path):
+            rec_len = cls.find_total_recording_length(os.path.join(path, species))
+            num_samples_in[species] = {"total_recording_length": rec_len} 
+        return pd.DataFrame.from_dict(num_samples_in, orient='index').sort_index()
+
+
 
     # --------------- Operations on Spectrograms Files --------------
 
@@ -589,6 +616,18 @@ class SoundProcessor:
 
     # ----------------- Utilities --------------
 
+    #------------------------------------
+    # noise_multiplier
+    #-------------------
+
+    @classmethod
+    def noise_multiplier(cls, orig_recording, noise):
+        MIN_SNR, MAX_SNR = 3, 30  # min and max sound to noise ratio (in dB)
+        snr = random.uniform(MIN_SNR, MAX_SNR)
+        noise_rms = np.sqrt(np.mean(noise**2))
+        orig_rms  = np.sqrt(np.mean(orig_recording**2))
+        desired_rms = orig_rms / (10 ** (float(snr) / 20))
+        return desired_rms / noise_rms
 
     #------------------------------------
     # energy_highlights
