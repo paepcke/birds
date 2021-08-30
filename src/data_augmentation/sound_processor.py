@@ -870,7 +870,7 @@ class SoundProcessor:
         try:
             output = proc.stderr.decode('utf-8').split('\n')
         except UnicodeDecodeError as e:
-            raise UnicodeDecodeError(f"Bad ffprobe unicode value in {fname}: {proc.stderr}: {repr(e)}")
+            raise ValueError(f"Bad ffprobe unicode value in {fname}: {proc.stderr}: {repr(e)}")
         
         # Find duration and sample rates
         duration    = None
