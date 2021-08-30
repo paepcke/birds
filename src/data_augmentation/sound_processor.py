@@ -1,7 +1,11 @@
+import datetime
 import math
 import os, sys
 from pathlib import Path
 import random
+import re
+import shutil
+import subprocess
 import warnings
 
 from PIL import Image
@@ -64,6 +68,15 @@ class SoundProcessor:
 
     SPECTRO_WIN_HEIGHT=256
     '''Number of frequency bands in spectrogram'''
+    
+    # Pick out the 00:03:34.60 from
+    #   '  Duration: 00:03:34.60, start: 0.025056, bitrate: 223 kb/s'
+    DURATION_PATTERN = re.compile(r"[\s]*Duration: ([0-9:.]*).*")
+    # Pick out the 44100 from:
+    #    'Stream #0:0: Audio: mp3, 44100 Hz, stereo, fltp, 211 kb/s'
+    
+    # The '?' after the ".*" makes the search non-greedy
+    STREAM_PATTERN   = re.compile(r"[\s]*Stream.*?([0-9]+) Hz.*")
 
     #------------------------------------
     # Constructor Stub 
@@ -808,6 +821,94 @@ class SoundProcessor:
         else:
             res = img_obj 
         return (res, info)
+
+    #------------------------------------
+    #  soundfile_metadata
+    #-------------------
+
+    @classmethod
+    def soundfile_metadata(cls, fname):
+        '''
+        Given the path to an mp3 file, return a dict
+           duration     : <datetime.timedelta>
+           sample_rate  : <integer in Hz>
+        
+        :param fname: full path to mp3 file
+        :type fname: str
+        :return excerpt from mp3 metadata
+        :rtype {str : float | int}
+        '''
+
+        if not os.path.exists(fname):
+            raise FileNotFoundError(f"File {fname} does not exist.")
+        
+        # If ffmpeg is unavailable, we cannot 
+        # find the play lengths of the mp3 recordings.
+        # Give up:
+        
+        if os.environ['PATH'].find(':/usr/local/bin:') == -1:
+            os.environ['PATH'] = os.environ['PATH'] + ':/usr/local/bin:'
+        if shutil.which('ffprobe') is None:
+            raise NotImplementedError("Must install ffmpeg: sudo apt-get ffmpeg")
+        
+        # Get metadata as a string, like:
+        #     Input #0, mp3, from '/tmp/bird.mp3':
+        #       Metadata:
+        #         title           : Silver-throated Tanager (Tangara icterocephala)
+        #         genre           : Thraupidae
+        #         artist          : Thore Noernberg
+        #         album           : xeno-canto
+        #         TIT1            : wbaakn
+        #         copyright       : 2012 Thore Noernberg
+        #       Duration: 00:00:18.88, start: 0.000000, bitrate: 193 kb/s
+        #         Stream #0:0: Audio: mp3, 44100 Hz, stereo, s16p, 192 kb/s
+
+        proc = subprocess.run(['ffprobe', fname], capture_output=True)
+        
+        # Even if no error, ffprobe writes to stderr,
+        # and subprocess returns byte str:
+        output = proc.stderr.decode('utf-8').split('\n')
+        
+        # Find duration and sample rates
+        duration    = None
+        sample_rate = None
+        
+        for line in output:
+            if duration is not None and sample_rate is not None:
+                break
+        
+            if duration is None:
+                match = cls.DURATION_PATTERN.search(line)
+                if match is not None:
+                    duration = match.group(1)
+                    continue
+            if sample_rate is None:
+                match = cls.STREAM_PATTERN.search(line)
+                if match is not None:
+                    sample_rate = int(match.group(1))
+
+        if duration is None or sample_rate is None:
+            msg = "Problem finding: "
+            if duration is None:
+                msg += 'duration.'
+            if sample_rate is None:
+                msg += "Problem finding sample rate."
+            raise ValueError(f"{msg} ffprobe output: \n {output}")
+            
+        # Now have like:
+        #    duration: '00:00:18.88'
+        #    sample_rate: 44100
+
+        # Get a reasonable representation of the duration
+        # from something like: '00:00:54.19':
+        hrs, mins, secs = duration.split(':')
+        duration_obj = datetime.timedelta(hours=int(hrs), 
+                                          minutes=int(mins), 
+                                          seconds=float(secs))
+        return {'duration': duration_obj,
+                'sample_rate' : sample_rate
+                }
+        
 
     #------------------------------------
     # save_image 
