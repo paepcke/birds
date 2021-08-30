@@ -867,7 +867,10 @@ class SoundProcessor:
         
         # Even if no error, ffprobe writes to stderr,
         # and subprocess returns byte str:
-        output = proc.stderr.decode('utf-8').split('\n')
+        try:
+            output = proc.stderr.decode('utf-8').split('\n')
+        except UnicodeDecodeError as e:
+            raise UnicodeDecodeError(f"Bad ffprobe unicode value in {fname}: {proc.stderr}: {repr(e)}")
         
         # Find duration and sample rates
         duration    = None
