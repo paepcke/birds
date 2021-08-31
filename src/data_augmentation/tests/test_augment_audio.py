@@ -18,8 +18,8 @@ from data_augmentation.utils import AugmentationGoals, WhenAlreadyDone, Utils
 import pandas as pd
 
 
-#***********TEST_ALL = True
-TEST_ALL = False
+TEST_ALL = True
+#TEST_ALL = False
 
 
 class AudioAugmentationTester(unittest.TestCase):
@@ -254,7 +254,7 @@ class AudioAugmentationTester(unittest.TestCase):
     # test_required_species_minutes
     #-------------------
 
-    #*********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_required_species_minutes(self):
         
         augmenter = AudioAugmenter(self.aug_tst_data, unittesting=True)
@@ -333,6 +333,45 @@ class AudioAugmentationTester(unittest.TestCase):
             true_total   = totals[species]
             true_needed  = round(100 - true_total, 2)
             self.assertEqual(round(needed_seconds, 2), true_needed)
+
+
+    #------------------------------------
+    # test_specify_augmentation_tasks
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_specify_augmentation_tasks(self):
+        
+        augmenter = AudioAugmenter(self.aug_tst_data, unittesting=True)
+        
+        # Test goal MAX:
+        
+        # Get asset --> secs_needed dict:
+        species_assets = augmenter._required_species_seconds(self.aug_tst_data,
+                                                             AugmentationGoals.MAX
+                                                             )
+        task_list = augmenter.specify_augmentation_tasks(self.aug_tst_data,
+                                                         AugmentationGoals.MAX
+                                                         )
+        # Add up the seconds that would be augmented
+        # by each task, and check that they are roughly
+        # equal to the required additional seconds for each
+        # species:
+        species_gained_secs_tally = {}
+        for task in task_list:
+            species = task.species
+            try:
+                species_gained_secs_tally[species] += task.duration_added
+            except KeyError:
+                # First encounter with this species:
+                species_gained_secs_tally[species] = task.duration_added
+
+        # Check gained against needed:
+        for asset, secs_needed in species_assets.items():
+            species = asset.species
+            self.assertGreaterEqual(species_gained_secs_tally[species],
+                                    secs_needed
+                                    )
 
 # ------------------------- Utilities -----------------------
 

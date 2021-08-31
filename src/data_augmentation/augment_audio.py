@@ -441,24 +441,98 @@ class AudioAugmenter:
     
 
     #------------------------------------
-    # create_sample_aug_tasks
+    # specify_augmentation_tasks
     #-------------------
     
-    def create_sample_aug_tasks(self, species_dir, aug_goals=AugmentationGoals.MEDIAN,):
+    def specify_augmentation_tasks(self, 
+                                   species_root, 
+                                   aug_goal=AugmentationGoals.MEDIAN,
+                                   absolute_seconds=None
+                                   ):
         '''
-        Return dict mapping full paths of recordings
-        to the number of required augmentations to create
-        from that respective recording.
+        Returns a list of AugmentationTask instances that
+        each specify all that is needed to start a parallel
+        task for audio augmentation.
         
-        :param species_dir: path the root of a species
-            recording directory tree
-        :type species_dir: src
-        :return map from recording file path to number of
-            required augmentations
+        The augmentations are spread across the available recordings
+        of this asset's species until the additional number of seconds 
+        needed is reached.
+        
+        Strategy:
+            o Assume that the process of augmenting based on an audio file
+              generates an additional audio file of the same length
+            o Augment recordings round robin, proceeding shortest 
+              to longest recording to generate variety
+        
+        :param species_root: directory holding one subdirectory
+            for each species' recordings
+        :type species_root: str
+        :param aug_goal: how much to augment all species
+        :type aug_goal: AugmentationGoals
+        :param absolute_seconds: number of audio seconds required for
+            each species. Ignored unless aug_goal is AugmentationGoals.NUMBER
+        :type absolute_seconds: {int | float}
+        :return list of AugmentationTask instances that can be
+            executed in parallel
+        :rtype [AugmentationTask]
+        '''
+        
+        # Get dict mapping each species
+        # to the number of seconds needed to reach
+        # augmentation goal. Keys are SpeciesRecordingAsset
+        # that contain information about the recordings
+        # available for one species:
+        asset_secs_needed_dict = self._required_species_seconds(species_root, 
+                                                                aug_goal, 
+                                                                absolute_seconds)
+
+        aug_tasks = []
+        for asset, secs_needed in asset_secs_needed_dict.items():
+            aug_tasks.extend(self._create_aug_tasks_one_species(asset, secs_needed))
+        
+        return aug_tasks
+
+    #------------------------------------
+    # _create_aug_tasks_one_species
+    #-------------------
+    
+    def _create_aug_tasks_one_species(self, asset, seconds_needed):
+        '''
+        Given one SpeciesRecordingAsset instance,
+        return a list of augmentation tasks that will
+        bring that species up to the aug_goal.
+        
+        :param asset: information about the recordings
+            of a single species
+        :type asset: SpeciesRecordingAsset
+        :param seconds_needed: total number of additional 
+            recording seconds wanted
+        :type seconds_needed: {int | float}
+        :return list of AugmentationTask instances to
+            run in order to reach the target
+        :rtype [AugmentationTask]
         '''
 
-        # Get dict with the total number of recording seconds
-        # available for each species:
+        aug_tasks = []
+        secs_left_to_create = seconds_needed
+        
+        # The asset instance is a dict mapping recording paths 
+        # to recording durations in rising order of duration:
+        
+        done = False
+        # Keep going round robin, creating an aug task
+        # for each recording in turn, then starting over
+        # with the first recording until the needed seconds
+        # are covered:
+        while not done:
+            for record_path, duration in asset.items():
+                aug_tasks.append(AugmentationTask(record_path, duration))
+                secs_left_to_create -= duration
+                
+                if secs_left_to_create <= 0:
+                    done = True
+                    break 
+        return aug_tasks
 
     #------------------------------------
     # _required_species_seconds 
@@ -663,52 +737,6 @@ class SpeciesRecordingAsset(dict):
         return median_dur
 
     #------------------------------------
-    # specify_augmentation_tasks
-    #-------------------
-    
-    def specify_augmentation_tasks(self, seconds_needed):
-        '''
-        Returns a list of AugmentationTask instances that
-        each specify all that is needed to start a parallel
-        task for audio augmentation.
-        
-        The augmentations are spread across the available recordings
-        of this asset's species until the additional number of seconds 
-        needed is reached.
-        
-        Strategy:
-            o Assume that augmenting based on an audio file
-              generates an additional audio file of the same length
-            o Augment recordings round robin, proceeding shortest 
-              to longest recording to generate variety
-        
-        :param seconds_needed: number of recording seconds to augment
-        :type seconds_needed: int
-        :return list of AugmentationTask instances that can be
-            executed in parallel
-        :rtype [AugmentationTask]
-        '''
-        
-        aug_tasks = []
-        secs_left_to_create = seconds_needed
-        
-        # This instance is a dict of recording paths 
-        # mapping to recording durations in rising order 
-        # of duration:
-        
-        done = False
-        # Keep going round robin:
-        while not done:
-            for record_path, duration in self.items():
-                aug_tasks.append(AugmentationTask(record_path))
-                secs_left_to_create -= duration
-                
-                if secs_left_to_create <= 0:
-                    done = True
-                    break 
-        return aug_tasks
-    
-    #------------------------------------
     # __repr__
     #-------------------
     
@@ -760,9 +788,13 @@ class AugmentationTask:
     # Constructor
     #-------------------
     
-    def __init__(self, recording_path):
+    def __init__(self, recording_path, duration_added):
         
         self.recording_path = recording_path
+        self.duration_added = duration_added
+        # Species is the name of the given audio file's
+        # directory (without leading dirs):
+        self.species        = Path(recording_path).parent.stem
 
 
 # ------------------------ Main ------------
