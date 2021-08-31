@@ -8,15 +8,13 @@ import random
 import sys, os
 import warnings
 
+import pandas as pd
+
 from logging_service import LoggingService
 
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import AugmentationGoals, WhenAlreadyDone
 from data_augmentation.utils import Utils, AudAugMethod
-from pandas.core.sorting import nargminmax
-
-sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 #---------------- Class AudioAugmenter ---------------
 
@@ -73,8 +71,10 @@ class AudioAugmenter:
                  overwrite_policy=False,
                  species_filter=None,
                  aug_goals=AugmentationGoals.MEDIAN,
-                 random_augs = False,
-                 multiple_augs = False,):
+                 random_augs=False,
+                 multiple_augs=False,
+                 unittesting=False
+                 ):
 
         '''
         If species_filter is provided, it is expected
@@ -109,16 +109,21 @@ class AudioAugmenter:
         :param multiple_augs: if we want to allow multiple augmentations per sample 
             (e.g. time shift and volume)):
         :type multiple_augs: bool
+        :param unittesting: do no initialization
+        :type unittesting: bool
         '''
 
         self.log = LoggingService()
-
+        
+        if unittesting:
+            return
+        
         if not isinstance(overwrite_policy, WhenAlreadyDone):
             raise TypeError(f"Overwrite policy must be a member of WhenAlreadyDone, not {type(overwrite_policy)}") 
 
         if not os.path.isabs(input_dir_path):
             raise ValueError(f"Input path must be a full, absolute path; not {input_dir_path}")
-
+        
         self.input_dir_path   = input_dir_path
         self.multiple_augs    = multiple_augs
         self.plot             = plot
@@ -434,7 +439,332 @@ class AudioAugmenter:
 
         return out_path if failures is None else failures
     
+
+    #------------------------------------
+    # create_sample_aug_tasks
+    #-------------------
     
+    def create_sample_aug_tasks(self, species_dir, aug_goals=AugmentationGoals.MEDIAN,):
+        '''
+        Return dict mapping full paths of recordings
+        to the number of required augmentations to create
+        from that respective recording.
+        
+        :param species_dir: path the root of a species
+            recording directory tree
+        :type species_dir: src
+        :return map from recording file path to number of
+            required augmentations
+        '''
+
+        # Get dict with the total number of recording seconds
+        # available for each species:
+
+    #------------------------------------
+    # _required_species_seconds 
+    #-------------------
+    
+    def _required_species_seconds(self, 
+                                  root_all_species, 
+                                  aug_goal,
+                                  absolute_seconds=None
+                                  ):
+        '''
+        Given the root directory with recordings from
+        one species, return a dict mapping full paths 
+        of recordings to the number of augmentations that
+        need to be created from them.
+        
+        The aug_goal must be an AugmentationGoals enum element that
+        specifies a target for the total number of recording seconds
+        to have at the end: MAX means create enough augmentations from
+        the different recordings such that species have as many 
+        recording seconds as the species with the most seconds. Analogously
+        for MIN, MEDIAN, TENTH, and (absolute) NUMBER. If given
+        AugmentationGoals.NUMBER, then absolute_seconds must be a 
+        target number of seconds.
+        
+        Returned dict will only include entries for which augmentations
+        are required. The dict will map asset instances to required additional
+        seconds:
+        
+                  species_asset --> num_secs
+                  
+        Asset instances know how to apportion their additional 
+        seconds to parallelly executable tasks.
+
+        :param root_all_species: path to recordings of one species
+        :type root_all_species: src
+        :param aug_goal:
+        :type aug_goal:
+        :param absolute_seconds: number of audio seconds required for
+            each species. Ignored unless aug_goal is AugmentationGoals.NUMBER
+        :type absolute_seconds: {int | float}
+        :return dict mapping asset instances to their additionally
+            required number of recording seconds
+        :rtype {SpeciesRecordingAsset : int}
+        '''
+
+        if type(aug_goal) != AugmentationGoals:
+            raise TypeError(f"aug_goal must be an AugmentationGoals enum member, not {aug_goal}")
+
+        # Make a dict that maps each species to a
+        # SpeciesRecordingAsset instance that contains
+        # the duration of each recording of one species.
+        
+        species_assets = {Path(species_dir).stem : SpeciesRecordingAsset(species_dir)
+                          for species_dir 
+                          in Utils.listdir_abs(root_all_species)
+                          }
+        
+        # Sort species_assets by rising number of 
+        # recording seconds:
+        
+        sorted_species_assets = {species : rec_secs 
+                                 for species, rec_secs 
+                                 in sorted(species_assets.items(), 
+                                           key=lambda pair: pair[1].available_seconds)}
+
+        assets = list(sorted_species_assets.values())
+        
+        
+        if aug_goal == AugmentationGoals.MAX:
+            # Maximum avail. seconds among all species:
+            target = assets[-1].available_seconds
+        elif aug_goal == AugmentationGoals.MEDIAN:
+            # Use classmethod to find median across all durations:
+            target = SpeciesRecordingAsset.median(assets)
+        elif aug_goal == AugmentationGoals.TENTH:
+            # One tenth of max:
+            target = assets[-1].available_seconds / 10.
+        elif aug_goal == AugmentationGoals.NUMBER:
+            # A particular goal in number of seconds:
+            target = absolute_seconds
+
+        # Compute number of seconds still needed
+        # for each species (asset --> secsNeeded):
+        additional_secs_needed = {}
+
+        for species, asset in sorted_species_assets.items():
+
+            # If available recording time suffices, done:
+            if asset.available_seconds >= target:
+                # No augmentation needed for this species.
+                # Simply make no entry for it in augmentation_tasks:
+                continue
+
+            # How many seconds are missing?
+            additional_secs_needed[asset] = target - asset.available_seconds 
+
+        return additional_secs_needed
+    
+    
+# --------------------- SpeciesRecordingAsset Class ------------
+
+class SpeciesRecordingAsset(dict):
+    '''
+    Instances act like dicts that map a full 
+    path to a recording to that recording's duration.
+    The dict is ordered by raising duration length.
+    '''
+    
+    #------------------------------------
+    # Constructor
+    #-------------------
+    
+    def __init__(self, species_path):
+        '''
+        Given the root directory with recordings from
+        one species, act as a dict that maps each full recording
+        path to the number of seconds that is the duration of
+        that recording.
+        
+        Instances are sortable via the sort/sorted functions.
+        Instances are hashable, and can therefore serve as
+        keys in a dict. The class implements __eq__.
+        
+        In addition, retain the total number of recorded seconds
+        for the species.
+        
+        Instances provide the following:
+            
+            <inst>.species  : name of species for which recording
+                              information is enclosed in <inst>.
+            <inst>.species_dir : directory holding the samples 
+            <inst>.available_seconds : total number of recorded seconds
+            <inst>[<recording_path>] --> number of seconds in that recording
+
+        :param species_path: path to recordings of one species
+        :type species_path: src
+        '''
+        
+        self.species     = Path(species_path).stem
+        self.species_dir = species_path
+        self.available_seconds = 0
+        # For each recording: its duration:
+        rec_len_dict = {}
+        for recording in Utils.listdir_abs(species_path):
+            # The total_seconds() includes the microseconds,
+            # so the value will be a float: 
+            duration = SoundProcessor.soundfile_metadata(recording)['duration'].total_seconds()
+            self.available_seconds += duration
+            rec_len_dict[recording] = duration
+            
+        # Sort the recording length dict by 
+        # length, smallest to largest and make
+        # this instance's content be that dict:
+        self.update({k : v 
+                     for k, v 
+                     in sorted(rec_len_dict.items(), key=lambda pair: pair[1])
+                     })
+
+    #------------------------------------
+    # max
+    #-------------------
+
+    @classmethod
+    def max(cls, inst_list):
+        '''
+        From a list of SpeciesRecordingAsset instances,
+        return the highest of the available seconds values
+
+        :param inst_list: list of SpeciesRecordingAsset
+        :type inst_list: [SpeciesRecordingAsset]
+        :return the duration of the species with the
+            highest number of recording seconds
+        :rtype float
+        '''
+        longest_dur = max([inst.available_seconds
+                           for inst in inst_list
+                           ])
+        return longest_dur
+
+    #------------------------------------
+    # median
+    #-------------------
+
+    @classmethod
+    def median(cls, inst_list):
+        '''
+        From a list of SpeciesRecordingAsset instances,
+        return the median of the available recording
+        seconds from among the  species.
+
+        :param inst_list: list of SpeciesRecordingAsset
+        :type inst_list: [SpeciesRecordingAsset]
+        :return the median duration of the species
+        :rtype float
+        '''
+    
+        durations = [inst.available_seconds
+                           for inst in inst_list
+                           ]
+        median_dur = pd.Series(durations).median()
+        return median_dur
+
+    #------------------------------------
+    # specify_augmentation_tasks
+    #-------------------
+    
+    def specify_augmentation_tasks(self, seconds_needed):
+        '''
+        Returns a list of AugmentationTask instances that
+        each specify all that is needed to start a parallel
+        task for audio augmentation.
+        
+        The augmentations are spread across the available recordings
+        of this asset's species until the additional number of seconds 
+        needed is reached.
+        
+        Strategy:
+            o Assume that augmenting based on an audio file
+              generates an additional audio file of the same length
+            o Augment recordings round robin, proceeding shortest 
+              to longest recording to generate variety
+        
+        :param seconds_needed: number of recording seconds to augment
+        :type seconds_needed: int
+        :return list of AugmentationTask instances that can be
+            executed in parallel
+        :rtype [AugmentationTask]
+        '''
+        
+        aug_tasks = []
+        secs_left_to_create = seconds_needed
+        
+        # This instance is a dict of recording paths 
+        # mapping to recording durations in rising order 
+        # of duration:
+        
+        done = False
+        # Keep going round robin:
+        while not done:
+            for record_path, duration in self.items():
+                aug_tasks.append(AugmentationTask(record_path))
+                secs_left_to_create -= duration
+                
+                if secs_left_to_create <= 0:
+                    done = True
+                    break 
+        return aug_tasks
+    
+    #------------------------------------
+    # __repr__
+    #-------------------
+    
+    def __repr__(self):
+        duration = round(self.available_seconds, 2)
+        return f"<SpeciesRecordingAsset {self.species}:{duration}secs {hex(id(self))}>"
+
+    #------------------------------------
+    # __str__
+    #-------------------
+    
+    def __str__(self):
+        return(self.__repr__())
+    
+    
+    #------------------------------------
+    # __hash__
+    #-------------------
+    
+    def __hash__(self):
+        return id(self)
+    
+    #------------------------------------
+    # __eq__ 
+    #-------------------
+    
+    def __eq__(self, other):
+        return (self.available_seconds == other.available_seconds and
+               self.species_dir == other.species_dir
+               )
+
+    #------------------------------------
+    # __lt__
+    #-------------------
+    
+    def __lt__(self, other):
+        return self.available_seconds < other.available_seconds
+
+
+# -------------------- Class AugmentationTask ---------------
+
+class AugmentationTask:
+    '''
+    All information needed to run one augmentation
+    on one audio recording.
+    '''
+    
+    #------------------------------------
+    # Constructor
+    #-------------------
+    
+    def __init__(self, recording_path):
+        
+        self.recording_path = recording_path
+
+
 # ------------------------ Main ------------
 
 # NOTE: because the --species argument allows for repetition,

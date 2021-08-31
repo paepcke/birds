@@ -5,19 +5,21 @@ Created on Apr 21, 2021
 '''
 import os
 from pathlib import Path
+import statistics
 import tempfile
 import unittest
 import warnings
 
 import librosa
-import pandas as pd
 
 from data_augmentation.augment_audio import AudAugMethod, AudioAugmenter
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import AugmentationGoals, WhenAlreadyDone, Utils
+import pandas as pd
 
-TEST_ALL = True
-#TEST_ALL = False
+
+#***********TEST_ALL = True
+TEST_ALL = False
 
 
 class AudioAugmentationTester(unittest.TestCase):
@@ -30,6 +32,8 @@ class AudioAugmentationTester(unittest.TestCase):
         one_fname        = os.listdir(cls.species1_dir)[0]
         cls.one_aud_file = os.path.join(cls.species1_dir, one_fname)
         cls.noise_path   = os.path.join(cls.curr_dir, '../lib')
+        
+        cls.aug_tst_data = os.path.join(cls.curr_dir, 'data/augmentation_tst_data/')
         
         # Hide the UserWarning: PySoundFile failed. Trying audioread instead.
         warnings.filterwarnings(action="ignore",
@@ -245,6 +249,90 @@ class AudioAugmentationTester(unittest.TestCase):
         truth = {'foo' : 15, 'bar' : 0, 'fum' : 0}
         res   = Utils.compute_num_augs_per_species(aug_goals, population)
         self.assertDictEqual(truth, res)
+        
+    #------------------------------------
+    # test_required_species_minutes
+    #-------------------
+
+    #*********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_required_species_minutes(self):
+        
+        augmenter = AudioAugmenter(self.aug_tst_data, unittesting=True)
+        
+        # Get dict mapping SpeciesRecordingAsset
+        # instances to number of seconds of augmentation
+        # needed. Each SpeciesRecordingAsset provides:
+        #    o available_seconds
+        #    o species
+        #
+        # The test set has the following play durations:
+        #    wtros_bird1.mp3 : 29.88
+        #    wtros_bird2.mp3 : 14.55
+        #    wtros_bird3.mp3 : 45.53
+        #   
+        #    yceug_bird1.mp3 : 22.81
+        #    yceug_bird2.mp3 : 22.54
+        #
+        #    legrg_bird1.mp3 :  7.46
+        #    legrg_bird2.mp3 :  5.40
+
+        wtros_total = 29.88 + 14.55 + 45.53
+        yceug_total = 22.81 + 22.54
+        legrg_total =  7.46 + 5.40
+        
+        totals = {'WTROS' : wtros_total,
+                  'YCEUG' : yceug_total,
+                  'LEGRG' : legrg_total
+                  }
+        
+        max_durations    = max(wtros_total, yceug_total, legrg_total)
+        median_durations = statistics.median([wtros_total, yceug_total, legrg_total])
+        tenth_durations  = max_durations / 10.
+
+        # Test goal MAX:
+        species_assets = augmenter._required_species_seconds(self.aug_tst_data,
+                                                             AugmentationGoals.MAX
+                                                             )
+        
+        for asset, needed_seconds in species_assets.items():
+            species      = asset.species
+            true_total   = totals[species]
+            true_needed  = round(max_durations - true_total, 2)
+            self.assertEqual(round(needed_seconds, 2), true_needed)
+
+        # Test goal MEDIAN:
+        species_assets = augmenter._required_species_seconds(self.aug_tst_data,
+                                                             AugmentationGoals.MEDIAN
+                                                             )
+        
+        for asset, needed_seconds in species_assets.items():
+            species      = asset.species
+            true_total   = totals[species]
+            true_needed  = round(median_durations - true_total, 2)
+            self.assertEqual(round(needed_seconds, 2), true_needed)
+
+        # Test goal TENTH:
+        species_assets = augmenter._required_species_seconds(self.aug_tst_data,
+                                                             AugmentationGoals.TENTH
+                                                             )
+        
+        for asset, needed_seconds in species_assets.items():
+            species      = asset.species
+            true_total   = totals[species]
+            true_needed  = round(tenth_durations - true_total, 2)
+            self.assertEqual(round(needed_seconds, 2), true_needed)
+
+        # Test goal fixed number of seconds: 100:
+        species_assets = augmenter._required_species_seconds(self.aug_tst_data,
+                                                             AugmentationGoals.NUMBER,
+                                                             absolute_seconds=100
+                                                             )
+        
+        for asset, needed_seconds in species_assets.items():
+            species      = asset.species
+            true_total   = totals[species]
+            true_needed  = round(100 - true_total, 2)
+            self.assertEqual(round(needed_seconds, 2), true_needed)
 
 # ------------------------- Utilities -----------------------
 
@@ -276,7 +364,7 @@ class AudioAugmentationTester(unittest.TestCase):
         self.assertEqual(dur1, dur2)
 
 
-
+# ---------------- Main ---------------------
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']
     unittest.main()
