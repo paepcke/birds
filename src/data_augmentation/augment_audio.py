@@ -2,11 +2,12 @@
 # coding: utf-8
 
 import argparse
-import math
 from pathlib import Path
 import random
 import sys, os
 import warnings
+
+import multiprocessing as mp
 
 import pandas as pd
 
@@ -61,18 +62,20 @@ class AudioAugmenter:
     
     NOISE_PATH = os.path.join(os.path.dirname(__file__),'lib')
     
+    TASK_QUEUE_SIZE = 50
+    ''' Size of queue feeding the augmentation workers'''
+    
     #------------------------------------
-    # Constructor 
+    # Constructor
     #-------------------
 
     def __init__(self, 
-                 input_dir_path,
-                 plot=False,
-                 overwrite_policy=False,
+                 species_root,
+                 overwrite_policy=WhenAlreadyDone.ASK,
+                 num_workers=None,
                  species_filter=None,
-                 aug_goals=AugmentationGoals.MEDIAN,
-                 random_augs=False,
-                 multiple_augs=False,
+                 aug_goal=AugmentationGoals.MEDIAN,
+                 absolute_seconds=None,
                  unittesting=False
                  ):
 
@@ -87,9 +90,9 @@ class AudioAugmenter:
              before the filtering occurs. Could be optimized,
              but time performance is not an issue. 
         
-        :param input_dir_path: directory holding .wav files
-        :type input_dir_path: str
-        :param plot: whether or not to plot informative chars 
+        :param species_root: directory holding .wav or .mp3 files
+        :type species_root: str
+        :param plot: whether or not to plot informative charts 
             along the way
         :type plot: bool
         :param overwrite_policy: if true, don't ask each time
@@ -98,17 +101,12 @@ class AudioAugmenter:
         :param species_filter, if provided is a dict mapping
             species names to number of desired augmentations.
         :type species_filter: {None | {str : int} 
-        :param aug_goals: either an AugmentationGoals member,
-               or a dict with a separate AugmentationGoals
-               for each species: {species : AugmentationGoals}
-               (See definition of AugmentationGoals; TENTH/MAX/MEDIAN)
-        :type aug_goals: {AugmentationGoals | {str : AugmentationGoals}}
-        :param random_augs: if this is true, will randomly choose augmentation 
-            to use for each new sample
-        :type random_augs: bool
-        :param multiple_augs: if we want to allow multiple augmentations per sample 
-            (e.g. time shift and volume)):
-        :type multiple_augs: bool
+        :param aug_goal: an AugmentationGoals member,
+               (See definition of AugmentationGoals; TENTH/MAX/MEDIAN/NUMBER)
+        :type aug_goal: AugmentationGoals
+        :param absolute_seconds: number of audio seconds required for
+            each species. Ignored unless aug_goal is AugmentationGoals.NUMBER
+        :type absolute_seconds: {int | float}
         :param unittesting: do no initialization
         :type unittesting: bool
         '''
@@ -121,255 +119,131 @@ class AudioAugmenter:
         if not isinstance(overwrite_policy, WhenAlreadyDone):
             raise TypeError(f"Overwrite policy must be a member of WhenAlreadyDone, not {type(overwrite_policy)}") 
 
-        if not os.path.isabs(input_dir_path):
-            raise ValueError(f"Input path must be a full, absolute path; not {input_dir_path}")
+        if not os.path.isabs(species_root):
+            raise ValueError(f"Input path must be a full, absolute path; not {species_root}")
         
-        self.input_dir_path   = input_dir_path
-        self.multiple_augs    = multiple_augs
-        self.plot             = plot
+        self.species_root     = species_root
         self.overwrite_policy = overwrite_policy
         self.species_filter   = species_filter
+        self.out_dir_root     = os.path.join(Path(species_root).parent, 'audio_augmentations')
+
+        # Determine number of workers:
+        num_cores = mp.cpu_count()
+        # Use only a percentage of the cores:
+        if num_workers is None:
+            num_workers = round(num_cores * Utils.MAX_PERC_OF_CORES_TO_USE  / 100)
+        elif num_workers > num_cores:
+            # Limit pool size to number of cores:
+            num_workers = num_cores
+
+        # Get a list of AugmentationTask specifications:
+        aug_task_list = self.specify_augmentation_tasks(species_root, 
+                                                        aug_goal, 
+                                                        absolute_seconds)
         
-        self.species_names = Utils.find_species_names(self.input_dir_path)
-
-        # If aug_goals is not a dict mapping
-        # each species to an aug_goals, but just
-        # a single AugmentationGoals, create
-        # a dict from all bird species, mapping
-        # each to that same value:
+        # Make sure an outdir exists under self.out_dir_root
+        # for each species, and remember the outdirs:
+        self.species_out_dirs = {}
+        for species in [task.species for task in aug_task_list]:
+            this_out_dir = os.path.join(self.out_dir_root, f"{species}")
+            self.species_out_dirs[species] = this_out_dir
+            os.makedirs(this_out_dir, exist_ok=True)
         
-        if type(aug_goals) != dict:
-            aug_goals = {species : aug_goals
-                          for species in self.species_names
-                          }
-
-        # Get dataframe with row lables being the
-        # species, and one col with number of samples
-        # in the respective species:
-        #       num_samples
-        # sp1       10
-        # sp2       15
-        #      ..
-
-        self.sample_distrib_df = Utils.sample_compositions_by_species(input_dir_path, 
-                                                                      augmented=False)
-        
-        if plot:
-            # Plot a distribution:
-            self.sample_distrib_df.plot.bar()
-
-        # Build a dict with number of augmentations to do
-        # for each species:
-        self.augs_to_do = Utils.compute_num_augs_per_species(aug_goals, 
-                                                             self.sample_distrib_df)
-        
-        # Get input dir path without trailing slash:
-#****        canonical_in_path = str(Path(input_dir_path))
-        # Create the descriptive name of an output directory 
-        # for the augmented samples: 
-        if random_augs:
-            os.path.join(Path(input_dir_path).parent, 'augmented_samples_random')
-            self.output_dir_path = os.path.join(Path(input_dir_path).parent, 
-                                                'augmented_samples_random')
-        else:
-            assert(self.ADD_NOISE + self.TIME_SHIFT + self.VOLUME == 1)
-            dir_nm = f"Augmented_samples_-{self.ADD_NOISE:.2f}n-{self.TIME_SHIFT:.2f}ts-{self.VOLUME:.2f}w"
-            self.output_dir_path = os.path.join(Path(input_dir_path).parent, dir_nm)
-
-        if self.multiple_augs:
-            self.output_dir_path += "/"
-        else:
-            # Indicate that augmentations are mutually exclusive
-            self.output_dir_path += "-exc/"  
-
-        self.log.info(f"Results will be in {self.output_dir_path}")
-
-        Utils.create_folder(self.output_dir_path, self.overwrite_policy)
-
-        # Hide the UserWarning: PySoundFile failed. Trying audioread instead.
-        warnings.filterwarnings(action="ignore",
-                                message="PySoundFile failed. Trying audioread instead.",
-                                category=UserWarning, 
-                                module='', 
-                                lineno=0)
-
+        self.run_jobs(aug_task_list, num_workers)
 
     #------------------------------------
-    # generate_all_augmentations
+    # run_jobs
     #-------------------
 
-    def generate_all_augmentations(self):
-        '''
-        Workhorse:
-        Create new samples via augmentation for each species. 
-        Augment the audio files to reach the number of audio files
-        indicated in the self.aug_requirements.
+    def run_jobs(self, task_specs, num_workers):
         
-        Assumption: self.aug_requirements is a dict mapping 
-        species-name : num_required_augmentations
+        task_queue = mp.Manager().Queue(maxsize=self.TASK_QUEUE_SIZE)
+        # For nice progress reports, create a shared
+        # dict quantities that each process will report
+        # on to the console as progress indications:
+        #    o Which job-completions have already been reported
+        #      to the console (a list)
+        # All Python processes on the various cores
+        # will have read/write access:
+        manager = mp.Manager()
+        global_info = manager.dict()
+        global_info['jobs_status'] = manager.list()
+
+        num_tasks  = len(task_specs)
         
-        Assumption: self.sample_distrib_df is a dataframe like
+        aug_jobs = []
+
+        # Start all the workers:
+        for i in range(min(num_tasks, num_workers)):
+            ret_value_slot = mp.Value("b", False)
+            job = mp.Process(target=self.create_new_sample,
+                             args=(task_queue,),
+                             name=f"aud_augmenter-{i}"
+                             )
+            job.ret_val = ret_value_slot
+            aug_jobs.append(job)
+            print(f"Starting augmenter {job.name}")
+            # This job is not yet done:
+            global_info['jobs_status'].append(False)
+            job.start()
+
+        # Start feeding tasks:
         
-        	        num_species
-        	  sp1       10
-        	  sp2       15
-        	       ...
-        	  
-        '''
-        num_augmentations = 0
-        failures = 0
+        for task in task_specs:
+            species = task.species
+            task.out_dir = self.species_out_dirs[species]
+            task_queue.put(task)
+
+        # Indicate end of tasks in to the queue, one
+        # 'STOP' str for each worker to see:
         
-        for species, _rows in self.sample_distrib_df.iterrows():
-            # For each species, create as many augmentations
-            # as was computed earlier, or was provided from
-            # the command line in the species filter option:
-            
-            if self.species_filter is not None:
-                if species not in list(self.species_filter.keys()):
+        for _i in range(num_workers):
+            task_queue.put('STOP')
+
+        # Keep checking on each job, until
+        # all are done as indicated by all jobs_done
+        # values being True, a.k.a valued 1:
+        
+        while sum(global_info['jobs_status']) < num_workers:
+            for job_idx, job in enumerate(aug_jobs):
+                # Timeout 4 sec
+                job.join(4)
+                if job.exitcode is not None:
+                    if global_info['jobs_status'][job_idx]:
+                        # One of the processes has already
+                        # reported this job as done. Don't
+                        # report it again:
+                        continue
+                        
+                    # Let other processes know that this job
+                    # is done, and they don't need to report 
+                    # that fact: we'll do it here below:
+                    global_info['jobs_status'][job_idx] = True
+                    
+                    # This job finished, and that fact has not
+                    # been logged yet to the console:
+                    
+                    res = "OK" if job.ret_val else "Error"
+                    # New line after the single-line progress msgs:
+                    print("")
+                    print(f"Worker {job.name}/{num_workers} finished with: {res}")
+                    #global_info['snips_done'] = self.sign_of_life(job, 
+                    #                                              global_info['snips_done'],
+                    #                                              outdir,
+                    #                                              start_time,
+                    #                                              force_rewrite=True)
+                    # Check on next job:
                     continue
-                num_needed_augs = self.species_filter[species]
-            else:
-                num_needed_augs = self.augs_to_do[species]
-
-            if num_needed_augs == 0:
-                continue
-            in_dir = os.path.join(self.input_dir_path, species)
-            out_dir = os.path.join(self.output_dir_path, species)
-            aug_paths, failures = self.augment_one_species(in_dir,
-                                                           out_dir,
-                                                           num_needed_augs 
-                                                           )
-            num_augmentations += len(aug_paths)
-
-        # Clean up directory clutter:
-        search_root_dir = os.path.join(self.output_dir_path)
-        os.system(f"find {search_root_dir} -name \".DS_Store\" -delete")
         
-        self.log.info(f"Total of {num_augmentations} new audio files")
-        if failures > 0:
-            self.log.info(f"Grant total of audio augmentation failures: {failures}")
-        
-        self.log.info("Done")
-        
-    #------------------------------------
-    # augment_one_species
-    #-------------------
-
-    def augment_one_species(self, in_dir, out_dir, num_augs_to_do):
-        '''
-        Takes one species, and a number of audio
-        augmentations to do. Generates the files,
-        and returns a list of the newly created 
-        files (full paths).
-        
-        The maximum number of augmentations created
-        depends on the number of audio augmentation 
-        methods available (currently 3), and the number
-        of audio files available for the given species:
-        
-           num-available-audio-augs * num-of-audio-files
-        
-        If num_augs_to_do is higher than the above maximum,
-        only that maximum is created. The rest will need to 
-        be accomplished by spectrogram augmentation in a 
-        different portion of the workflow.
-
-        Augmentations are effectively done round robin across all of
-        the species' audio files such that each file is
-        augmented roughly the same number of times until
-        num_augs_to_do is accomplished.
-
-        :param in_dir: directory holding one species' audio files
-        :type in_dir: str
-        :param out_dir: destination for new audio files
-        :type out_dir: src
-        :param num_augs_to_do: number of augmentations
-        :type num_augs_to_do: int
-        :returns: list of newly created file paths
-        :rtype: [src]
-        '''
-        
-        # By convention, species name is the last part of the directory:
-        species_name = Path(in_dir).stem
-        
-        # Create subfolder for the given species:
-        if not Utils.create_folder(out_dir, self.overwrite_policy):
-            self.log.info(f"Skipping augmentations for {species_name}")
-            return []
-
-        # Get dict: {full-path-to-an-audio_file : 0}
-        # The zeroes will be counts of augmentations
-        # needed for that file:    
-        in_wav_files     = {full_in_path : 0
-                            for full_in_path
-                            in Utils.listdir_abs(in_dir)
-                            } 
-        # Cannot do augmentations for species with 0 samples
-        if len(in_wav_files) == 0:
-            self.log.info(f"Skipping for {species_name} since there are no original samples.")
-            return []
-
-        # Distribute augmenations across the original
-        # input files:
-        aug_assigned = 0
-        while aug_assigned < num_augs_to_do:
-            for fname in in_wav_files.keys():
-                in_wav_files[fname] += 1
-                aug_assigned += 1
-                if aug_assigned >= num_augs_to_do:
-                    break
-        new_sample_paths = []
-        failures = 0
-
-        for in_fname, num_augs_this_file in in_wav_files.items():
-
-            # Create augs with different methods:
-
-            # Pick audio aug methods to apply (without replacement)
-            # Note that if more augs are to be applied to each file
-            # than methods are available, some methods will need
-            # to be applied multiple times; no problem, as each
-            # method includes randomness:
-            max_methods_sample_size = min(len(list(AudAugMethod)), num_augs_this_file)
-            methods = random.sample(list(AudAugMethod), max_methods_sample_size)
-            
-            # Now have something like:
-            #     [volume, time-shift], or all methods: [volume, time-shift, noise]
-            
-            if num_augs_this_file > len(methods):
-                # Repeat the methods as often as
-                # needed:
-                num_method_set_repeats = int(math.ceil(num_augs_this_file/len(methods)))
-                # The slice to num_augs_this_file chops off
-                # the possible excess from the array replication: 
-                method_seq = (methods * num_method_set_repeats)[:num_augs_this_file]
-                
-                # Assuming num_augs_per_file is 7, we not have method_seq:
-                #    [m1,m2,m3,m1,m2,m3,m1]
-            else:
-                method_seq = methods
-                
-            for method in method_seq:
-                out_path_or_err = self.create_new_sample(in_fname, out_dir, method)
-                if isinstance(out_path_or_err, Exception):
-                    failures += 1
-                else:
-                    new_sample_paths.append(out_path_or_err)
-
-        self.log.info(f"Audio aug report: {len(new_sample_paths)} new files; {failures} failures")
-                
-        return new_sample_paths, failures
-
     #------------------------------------
     # create_new_sample 
     #-------------------
 
-    def create_new_sample(self,
-                          sample_path,
-                          out_dir,
-                          method,
-                          noise_path=None):
+    def create_new_sample(self, task_queue):
         '''
+        NOTE: This method is run in parallel. It is the
+              'target' method for each of the workers
+        
         Given one audio recording and an audio augmentation
         method name, compute that augmentation, create a file name
         that gives insight into the aug applied, and write that
@@ -383,62 +257,87 @@ class AudioAugmenter:
 
         Returns the full path of the newly created audio file:
         
-        :param sample_path: absolute path to audio sample
-        :type sample_path: str
-        :param out_dir: destination of resulting new samples
-        :type out_dir: src
-        :param method: the audio augmentation method to apply
-        :type method: AudAugMethod
-        :param noise_path: full path to audio files with background
-            noises to overlay onto audio (wind, rain, etc.). Ignored
-            unless method is AudAugMethod.ADD_NOISE.
-        :type noise_path: str
-        :return: Newly created audio file (full path) or an Exception
-            object whose e.args attribute is a tuple with the error
-            msg plus a manually added one 
-        :rtype: {str | Exception}
+        :param task_queue: inter process communication queue
+            from which AugmentationTask objects are read 
+        :type multiprocessing.Manager queue
+        :return: returns when STOP is read from task_queue. Return
+            value is None, or an Exception object if an exception occurred.
+        :rtype: {None | Exception}
         '''
-        
+
+        done = False
         failures = None
-        out_path = None
-        if method == AudAugMethod.ADD_NOISE:
-            if noise_path is None:
-                noise_path = AudioAugmenter.NOISE_PATH
-            # Add rain, wind, or such at random:
-            try:
-                out_path = SoundProcessor.add_background(
-                        sample_path,
-                        self.NOISE_PATH,
-                        out_dir, 
-                        len_noise_to_add=5.0)
-            except Exception as e:
-                sample_fname = Path(sample_path).stem
-                msg = f"Failed to add background sounds to {sample_fname} ({repr(e)})"
-                self.log.err(msg)
-                e.args = tuple([e.args[0], msg])
-                failures = e
+        
+        # Ensure that each subprocess has
+        # a different random seed, rather than
+        # everyone inheriting from the parent:
+        
+        random.seed(os.getpid())
 
-        elif method == AudAugMethod.TIME_SHIFT:
+        #*****************
+        legr_tasks = 0
+        #***************** 
+        
+        while not done:
+            
+            task_obj = task_queue.get()
             try:
-                out_path = SoundProcessor.time_shift(sample_path, out_dir)
-            except Exception as e:
-                sample_fname = Path(sample_path).stem
-                msg = f"Failed to time shift on {sample_fname} ({repr(e)})"
-                self.log.err(msg)
-                e.args = tuple([e.args[0], msg])
-                failures = e
-        elif method == AudAugMethod.VOLUME:
-            try:
-                out_path = SoundProcessor.change_sample_volume(sample_path, out_dir)
-            except Exception as e:
-                sample_fname = Path(sample_path).stem
-                msg = f"Failed to modify volume on {sample_fname} ({repr(e)})"
-                self.log.err(msg)
-                e.args = tuple([e.args[0], msg])
-                failures = e
+                if task_obj == 'STOP':
+                    done = True
+                    continue
+                #**********************
+                if task_obj.species == "LEGRG":
+                    legr_tasks += 1
+                #**********************
+                species = task_obj.species 
+                sample_path = task_obj.recording_path
+                out_dir = self.species_out_dirs[species]
+                # Pick a random augmentation method:
+                method = random.choice([AudAugMethod.ADD_NOISE,
+                                        AudAugMethod.TIME_SHIFT,
+                                        AudAugMethod.VOLUME]
+                                        )
+                
+                if method == AudAugMethod.ADD_NOISE:
+                    try:
+                        _out_path = SoundProcessor.add_background(
+                                sample_path,
+                                self.NOISE_PATH,
+                                out_dir, 
+                                len_noise_to_add=5.0)
+                    except Exception as e:
+                        sample_fname = Path(sample_path).stem
+                        msg = f"Failed to add background sounds to {sample_fname} ({repr(e)})"
+                        self.log.err(msg)
+                        e.args = tuple([e.args[0], msg])
+                        failures = e
+        
+                elif method == AudAugMethod.TIME_SHIFT:
+                    try:
+                        _out_path = SoundProcessor.time_shift(sample_path, out_dir)
+                    except Exception as e:
+                        sample_fname = Path(sample_path).stem
+                        msg = f"Failed to time shift on {sample_fname} ({repr(e)})"
+                        self.log.err(msg)
+                        e.args = tuple([e.args[0], msg])
+                        failures = e
+                elif method == AudAugMethod.VOLUME:
+                    try:
+                        _out_path = SoundProcessor.change_sample_volume(sample_path, out_dir)
+                    except Exception as e:
+                        sample_fname = Path(sample_path).stem
+                        msg = f"Failed to modify volume on {sample_fname} ({repr(e)})"
+                        self.log.err(msg)
+                        e.args = tuple([e.args[0], msg])
+                        failures = e
 
-        return out_path if failures is None else failures
-    
+            finally:
+                # Notify system that this task is done
+                task_queue.task_done()
+
+        print(f"************* Worker processed {legr_tasks}")
+        return failures
+
 
     #------------------------------------
     # specify_augmentation_tasks
@@ -796,6 +695,19 @@ class AugmentationTask:
         # directory (without leading dirs):
         self.species        = Path(recording_path).parent.stem
 
+    #------------------------------------
+    # __repr__
+    #-------------------
+    
+    def __repr__(self):
+        return f"<AudAugTask {self.species} +{self.duration_added} {hex(id(self))}>"
+
+    #------------------------------------
+    # __str__
+    #-------------------
+    
+    def __str__(self):
+        return self.__repr__()
 
 # ------------------------ Main ------------
 
@@ -810,12 +722,6 @@ if __name__ == '__main__':
                                      description="Augment existing set of audio recordings."
                                      )
    
-    parser.add_argument('-p', '--plot',
-                        help='whether or not to plot species distributions; default: False',
-                        action='store_true',
-                        default=False
-                        )
-                        
     parser.add_argument('-y', '--overwrite_policy',
                         help='if set, overwrite existing out directories without asking; default: False',
                         action='store_true',
@@ -875,7 +781,6 @@ if __name__ == '__main__':
         overwrite_policy = WhenAlreadyDone.SKIP
 
     augmenter = AudioAugmenter(args.input_dir_path,
-                          plot=args.plot,
                           overwrite_policy=overwrite_policy,
                           species_filter=species_filter if len(species_filter) > 0 else None
                           )

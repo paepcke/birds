@@ -12,10 +12,11 @@ import warnings
 
 import librosa
 
-from data_augmentation.augment_audio import AudAugMethod, AudioAugmenter
+from data_augmentation.augment_audio import AudioAugmenter
 from data_augmentation.sound_processor import SoundProcessor
-from data_augmentation.utils import AugmentationGoals, WhenAlreadyDone, Utils
+from data_augmentation.utils import AugmentationGoals, Utils
 import pandas as pd
+import shutil
 
 
 TEST_ALL = True
@@ -34,7 +35,19 @@ class AudioAugmentationTester(unittest.TestCase):
         cls.noise_path   = os.path.join(cls.curr_dir, '../lib')
         
         cls.aug_tst_data = os.path.join(cls.curr_dir, 'data/augmentation_tst_data/')
+        cls.aug_tst_out_dir = os.path.join(cls.curr_dir, 'data/audio_augmentations/')
         
+        cls.wtros_total = 29.88 + 14.55 + 45.53
+        cls.yceug_total = 22.81 + 22.54
+        cls.legrg_total =  7.46 + 5.40
+        
+        cls.totals = {'WTROS' : cls.wtros_total,
+                      'YCEUG' : cls.yceug_total,
+                      'LEGRG' : cls.legrg_total
+                      }
+        cls.median_duration = statistics.median(list(cls.totals.values()))
+
+
         # Hide the UserWarning: PySoundFile failed. Trying audioread instead.
         warnings.filterwarnings(action="ignore",
                                 message="PySoundFile failed. Trying audioread instead.",
@@ -43,34 +56,14 @@ class AudioAugmentationTester(unittest.TestCase):
                                 lineno=0)
 
     def setUp(self):
+        # Remove previously created augmentations:
+        shutil.rmtree(self.aug_tst_out_dir, ignore_errors=True)
+        
         species_root = Path(self.species2_dir).parent.stem
         self.full_species_root = os.path.abspath(species_root)
-        self.aud_augmenter_median = AudioAugmenter (
-                self.full_species_root,
-                plot=False,
-                overwrite_policy=WhenAlreadyDone.OVERWRITE,
-                aug_goals=AugmentationGoals.MEDIAN,
-                random_augs = False,
-                multiple_augs = False)
-
-        self.aud_augmenter_max = AudioAugmenter (
-                self.full_species_root,
-                plot=False,
-                overwrite_policy=WhenAlreadyDone.OVERWRITE,
-                aug_goals=AugmentationGoals.MAX,
-                random_augs = False,
-                multiple_augs = False)
-
-        self.aud_augmenter_tenth = AudioAugmenter (
-                self.full_species_root,
-                plot=False,
-                overwrite_policy=WhenAlreadyDone.OVERWRITE,
-                aug_goals=AugmentationGoals.TENTH,
-                random_augs = False,
-                multiple_augs = False)
 
     def tearDown(self):
-        pass
+        shutil.rmtree(self.aug_tst_out_dir, ignore_errors=True)
 
     #------------------------------------
     # test_add_noise 
@@ -116,107 +109,6 @@ class AudioAugmentationTester(unittest.TestCase):
             # examined truth:
             self.assertEqualDurSR(out_file, self.one_aud_file)
 
-    #------------------------------------
-    # test_create_new_sample
-    #-------------------
-    
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    def test_create_new_sample(self):
-
-        with tempfile.TemporaryDirectory(prefix='aud_tests', dir='/tmp') as tmpdir_nm:
-
-            for method in AudAugMethod:
-                out_file = self.aud_augmenter_median.create_new_sample(self.one_aud_file, 
-                                                                tmpdir_nm,
-                                                                method)
-                # Can't do more than try to load the new
-                # file and check its length against manually
-                # examined truth:
-                self.assertEqualDurSR(out_file, self.one_aud_file)
-
-
-    #------------------------------------
-    # test_generate_all_augmentations_median 
-    #-------------------
-    
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    def test_generate_all_augmentations_median(self):
-        self.aud_augmenter_median.generate_all_augmentations()
-        dirs_with_augs = os.path.join(self.curr_dir,
-                                      'Augmented_samples_-0.33n-0.33ts-0.33w-exc/DYSMEN_S'
-                                      )
-        # Should have two new audio files:
-        #   o DYSMEN_S had 2 to start with
-        #   o HENLES_S had 6 to start with
-        #   o We asked for median goal, which is 4
-        #   o So DYSMEN_S should have received 2 new augs
-        new_files = os.listdir(dirs_with_augs)
-        self.assertEqual(len(new_files), 2)
-
-    #------------------------------------
-    # test_generate_all_augmentations_median_species_filter 
-    #-------------------
-    
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    def test_generate_all_augmentations_median_species_ilter (self):
-        
-        augmenter_median = AudioAugmenter (
-                self.full_species_root,
-                plot=False,
-                overwrite_policy=WhenAlreadyDone.OVERWRITE,
-                aug_goals=AugmentationGoals.MEDIAN,
-                random_augs = False,
-                multiple_augs = False,
-                species_filter = {'DYSMEN_S' : 4}
-                )
-        
-        augmenter_median.generate_all_augmentations()
-
-        # Only augs for DYSMEN_S should have been created,
-        # not for HENLES_S:
-        
-        dir_with_augs = os.path.join(self.curr_dir,
-                                      'Augmented_samples_-0.33n-0.33ts-0.33w-exc/'
-                                      )
-        self.assertEqual(len(os.listdir(dir_with_augs)), 1)
-                         
-        dysmen_aug_dir = os.path.join(dir_with_augs, 'DYSMEN_S')
-        new_files = os.listdir(dysmen_aug_dir)
-        self.assertEqual(len(new_files), 4)
-
-    #------------------------------------
-    # test_generate_all_augmentations_max 
-    #-------------------
-    
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    def test_generate_all_augmentations_max(self):
-        self.aud_augmenter_max.generate_all_augmentations()
-        dirs_with_augs = os.path.join(self.curr_dir,
-                                      'Augmented_samples_-0.33n-0.33ts-0.33w-exc/DYSMEN_S'
-                                      )
-        # Should have two new audio files:
-        #   o DYSMEN_S had 2 to start with
-        #   o HENLES_S had 6 to start with
-        #   o We asked for median goal, which is 4
-        #   o So DYSMEN_S should have received 2 new augs
-        new_files = os.listdir(dirs_with_augs)
-        self.assertEqual(len(new_files), 4)
-
-    #------------------------------------
-    # test_generate_all_augmentations_tenth
-    #-------------------
-    
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    def test_generate_all_augmentations_tenth(self):
-        # Even the minimally recorded DYSMEN_S has 
-        # 2 recordings. 1/10 of the six HENLES_S species
-        # is 1. So we expect the following to do nothing:
-        self.aud_augmenter_tenth.generate_all_augmentations()
-        dirs_with_augs = os.path.join(self.curr_dir,
-                                      'Augmented_samples_-0.33n-0.33ts-0.33w-exc'
-                                      )
-        new_files = os.listdir(dirs_with_augs)
-        self.assertEqual(len(new_files), 0)
 
     #------------------------------------
     # test_compute_num_augs_per_species 
@@ -251,11 +143,11 @@ class AudioAugmentationTester(unittest.TestCase):
         self.assertDictEqual(truth, res)
         
     #------------------------------------
-    # test_required_species_minutes
+    # test_required_species_seconds
     #-------------------
 
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    def test_required_species_minutes(self):
+    def test_required_species_seconds(self):
         
         augmenter = AudioAugmenter(self.aug_tst_data, unittesting=True)
         
@@ -276,17 +168,8 @@ class AudioAugmentationTester(unittest.TestCase):
         #    legrg_bird1.mp3 :  7.46
         #    legrg_bird2.mp3 :  5.40
 
-        wtros_total = 29.88 + 14.55 + 45.53
-        yceug_total = 22.81 + 22.54
-        legrg_total =  7.46 + 5.40
-        
-        totals = {'WTROS' : wtros_total,
-                  'YCEUG' : yceug_total,
-                  'LEGRG' : legrg_total
-                  }
-        
-        max_durations    = max(wtros_total, yceug_total, legrg_total)
-        median_durations = statistics.median([wtros_total, yceug_total, legrg_total])
+        max_durations    = max(self.wtros_total, self.yceug_total, self.legrg_total)
+        median_durations = statistics.median([self.wtros_total, self.yceug_total, self.legrg_total])
         tenth_durations  = max_durations / 10.
 
         # Test goal MAX:
@@ -296,7 +179,7 @@ class AudioAugmentationTester(unittest.TestCase):
         
         for asset, needed_seconds in species_assets.items():
             species      = asset.species
-            true_total   = totals[species]
+            true_total   = self.totals[species]
             true_needed  = round(max_durations - true_total, 2)
             self.assertEqual(round(needed_seconds, 2), true_needed)
 
@@ -307,7 +190,7 @@ class AudioAugmentationTester(unittest.TestCase):
         
         for asset, needed_seconds in species_assets.items():
             species      = asset.species
-            true_total   = totals[species]
+            true_total   = self.totals[species]
             true_needed  = round(median_durations - true_total, 2)
             self.assertEqual(round(needed_seconds, 2), true_needed)
 
@@ -318,7 +201,7 @@ class AudioAugmentationTester(unittest.TestCase):
         
         for asset, needed_seconds in species_assets.items():
             species      = asset.species
-            true_total   = totals[species]
+            true_total   = self.totals[species]
             true_needed  = round(tenth_durations - true_total, 2)
             self.assertEqual(round(needed_seconds, 2), true_needed)
 
@@ -330,7 +213,7 @@ class AudioAugmentationTester(unittest.TestCase):
         
         for asset, needed_seconds in species_assets.items():
             species      = asset.species
-            true_total   = totals[species]
+            true_total   = self.totals[species]
             true_needed  = round(100 - true_total, 2)
             self.assertEqual(round(needed_seconds, 2), true_needed)
 
@@ -372,6 +255,50 @@ class AudioAugmentationTester(unittest.TestCase):
             self.assertGreaterEqual(species_gained_secs_tally[species],
                                     secs_needed
                                     )
+
+    #------------------------------------
+    # test_augmentation
+    #-------------------
+    
+    #*********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_augmentation(self):
+        
+        _augmenter = AudioAugmenter(self.aug_tst_data,
+                                   num_workers=1,
+                                   aug_goal=AugmentationGoals.MEDIAN
+                                   )
+        
+        
+        # Only LEGRG was less than the 
+        # median of available recordings across
+        # species (~45 sec). So only LEGRG should 
+        # have been augmented:
+        
+        self.assertEqual(len(os.listdir(self.aug_tst_out_dir)), 1)
+
+        # Get sum of new LEGRG recording durations:
+        new_legrg_durations = SoundProcessor.find_total_recording_length(os.path.join(self.aug_tst_out_dir, 'LEGRG'))
+        # New plus already existing durations should be 
+        # about at the median:
+        self.assertGreaterEqual(new_legrg_durations + self.totals['LEGRG'], self.median_duration)
+        
+        # Clear out the augmentations for the
+        # next test:
+        shutil.rmtree(self.aug_tst_out_dir, ignore_errors=True)
+        
+        # Next: Try MAX as a goal: i.e. lift LEGRG and YECUG to
+        # about 88:  
+        
+        _augmenter = AudioAugmenter(self.aug_tst_data,
+                                   num_workers=1,
+                                   aug_goal=AugmentationGoals.MAX
+                                   )
+        new_legrg_durations = SoundProcessor.find_total_recording_length(os.path.join(self.aug_tst_out_dir, 'LEGRG'))
+        new_yceug_durations = SoundProcessor.find_total_recording_length(os.path.join(self.aug_tst_out_dir, 'YCEUG'))
+
+        self.assertGreaterEqual(new_yceug_durations + self.totals['YCEUG'], 88)
+        print('foo')
+
 
 # ------------------------- Utilities -----------------------
 

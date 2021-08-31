@@ -1,15 +1,13 @@
 import datetime
 import math
-import os, sys
+import os
 from pathlib import Path
 import random
 import re
 import shutil
 import subprocess
+import uuid
 import warnings
-
-import numpy as np
-import pandas as pd
 
 from PIL import Image
 from PIL.PngImagePlugin import PngImageFile, PngInfo
@@ -21,9 +19,11 @@ import skimage.io
 import soundfile
 
 from data_augmentation.utils import Interval, Utils
+import numpy as np
+import pandas as pd
+
 
 # ------------------------ Exception Classes -----------------
-
 class AudioLoadException(Exception):
     '''
     Raised when errors occur while loading 
@@ -103,6 +103,8 @@ class SoundProcessor:
         as the nature and duration of the noise. Client
         may choose to ignore or use.
 
+        :param cls:
+        :type cls:
         :param file_name: absolute path to sound file
         :type file_name: str
         :param noise_path: absolute path to directory
@@ -110,6 +112,9 @@ class SoundProcessor:
         :type noise_path: str
         :param out_dir: destination directory of new audio file
         :type out_dir: str
+        :param uid: a unique identifier that will be
+            included in the output filename.
+        :type uid: str
         :param len_noise_to_add: how much of a noise snippet
             to overlay (seconds)
         :type len_noise_to_add: float
@@ -175,7 +180,7 @@ class SoundProcessor:
         sample_file_stem = Path(file_name).stem
         noise_file_stem  = Path(background_name).stem
         noise_dur = str(int(noise_start_loc/new_sr * 1000))
-        file_name= f"{sample_file_stem}-{noise_file_stem}_bgd{noise_dur}ms.wav"
+        file_name= f"{sample_file_stem}-{noise_file_stem}_bgd{noise_dur}ms_{uuid.uuid1().hex}.wav"
         
         # Ensure that the fname doesn't exist:
         uniq_fname = Utils.unique_fname(out_dir, file_name)
@@ -237,7 +242,7 @@ class SoundProcessor:
         # Output the new wav data to a file
         # Just the foofile part of /home/me/foofile.mp3:
         sample_root = Path(sample_path).stem
-        new_sample_fname = f"{sample_root}-volume{factor}.wav"
+        new_sample_fname = f"{sample_root}-volume{factor}_{uuid.uuid1().hex}.wav"
         out_file = os.path.join(out_dir, new_sample_fname)
         soundfile.write(out_file, y1, sample_rate0)
         return out_file
@@ -283,7 +288,7 @@ class SoundProcessor:
         # Output the new wav data to a file
         # Get just the 'foo' part of '/blue/red/foo.mp3':
         file_stem = Path(file_name).stem
-        aug_sample_name = f"{file_stem}-shift{str(int(amount * 1000))}ms.wav"
+        aug_sample_name = f"{file_stem}-shift{str(int(amount * 1000))}ms_{uuid.uuid1().hex}.wav"
         out_path = os.path.join(out_dir, aug_sample_name)
         soundfile.write(out_path, y2, sample_rate0)
         return out_path

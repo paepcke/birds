@@ -30,17 +30,17 @@ class SpectrogramAugmenter:
     #-------------------
 
     def __init__(self, 
-                 input_dir_path,
+                 species_root,
                  output_dir_path,
                  plot=False,
                  overwrite_policy=False,
-                 aug_goals=AugmentationGoals.MEDIAN
+                 aug_goal=AugmentationGoals.MEDIAN
                 ):
 
         '''
         
-        :param input_dir_path: directory holding .png files
-        :type input_dir_path: str
+        :param species_root: directory holding .png files
+        :type species_root: str
         :param output_dir_path: root of destination dir under
             which each species' subdirectories will be placed.
             Augmentations will be placed in those subdirs.
@@ -51,11 +51,11 @@ class SpectrogramAugmenter:
         :param overwrite_policy: if true, don't ask each time
             previously created work will be replaced
         :type overwrite_policy: bool 
-        :param aug_goals: either an AugmentationGoals member,
+        :param aug_goal: either an AugmentationGoals member,
                or a dict with a separate AugmentationGoals
                for each species: {species : AugmentationGoals}
                (See definition of AugmentationGoals; TENTH/MAX/MEDIAN)
-        :type aug_goals: {AugmentationGoals | {str : AugmentationGoals}}
+        :type aug_goal: {AugmentationGoals | {str : AugmentationGoals}}
         '''
 
         self.log = LoggingService()
@@ -63,10 +63,10 @@ class SpectrogramAugmenter:
         if not isinstance(overwrite_policy, WhenAlreadyDone):
             raise TypeError(f"Overwrite policy must be a member of WhenAlreadyDone, not {type(overwrite_policy)}") 
 
-        if not os.path.isabs(input_dir_path):
-            raise ValueError(f"Input path must be a full, absolute path; not {input_dir_path}")
+        if not os.path.isabs(species_root):
+            raise ValueError(f"Input path must be a full, absolute path; not {species_root}")
 
-        self.input_dir_path   = input_dir_path
+        self.input_dir_path   = species_root
         self.output_dir_path  = output_dir_path
         self.plot             = plot
         self.overwrite_policy = overwrite_policy
@@ -81,7 +81,7 @@ class SpectrogramAugmenter:
         # sp2       15
         #      ..
 
-        self.sample_distrib_df = Utils.sample_compositions_by_species(input_dir_path, 
+        self.sample_distrib_df = Utils.sample_compositions_by_species(species_root, 
                                                                       augmented=False)
         
         if plot:
@@ -90,7 +90,7 @@ class SpectrogramAugmenter:
 
         # Build a dict with number of augmentations to do
         # for each species:
-        self.augs_to_do = Utils.compute_num_augs_per_species(aug_goals, 
+        self.augs_to_do = Utils.compute_num_augs_per_species(aug_goal, 
                                                              self.sample_distrib_df)
         
         self.log.info(f"Results will be in {self.output_dir_path}")
