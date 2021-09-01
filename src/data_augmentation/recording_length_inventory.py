@@ -81,10 +81,12 @@ class RecordingsInventory:
         if not manifest_dir_path.exists():
             manifest_dir_path.mkdir()
             
+        # Generate README.txt if requested:
         if message is not None:
             with open(manifest_dir_path.joinpath('README.txt'), 'w') as fd:
                 fd.write(message)
         
+        # Write df as manifest.json:
         manifest_fname = manifest_dir_path.joinpath('manifest.json')
         with open(manifest_fname, 'w') as fd:
             df.to_json(fd)
@@ -119,6 +121,11 @@ class RecordingsInventory:
         
         new_ylabels = [str(datetime.timedelta(seconds=secs)) for secs in ytick_locs]
         ax.set_yticklabels(new_ylabels)
+        
+        # Make x-axis species labels small, b/c there may
+        # be many of them:
+        
+        ax.set_xticklabels(ax.get_xticklabels(), fontdict={'fontsize' : 9})
 
         # Y Axis label:
         ax.set_ylabel('Time (hrs:mins:secs)')

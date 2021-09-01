@@ -8,12 +8,14 @@ import os
 import tempfile
 import unittest
 
+import pandas as pd
+
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import Interval
 
 
-TEST_ALL = True
-#TEST_ALL = False
+#***********TEST_ALL = True
+TEST_ALL = False
 
 # NOTE: SoundProcessor is also exercised in 
 #       other unittests, such as create_spectrogram()
@@ -24,6 +26,9 @@ class TestSoundProcessor(unittest.TestCase):
     def setUpClass(cls):
         cls.cur_dir = os.path.dirname(__file__)
         cls.snd_file_data = os.path.join(cls.cur_dir, "data/mp3_and_wav_data/")
+        
+        # Recordings for testing recording_lengths_by_species():
+        cls.more_recordings_dir = os.path.join(cls.cur_dir, "sound_data")
         
     def setUp(self):
         pass
@@ -112,6 +117,51 @@ class TestSoundProcessor(unittest.TestCase):
                     }
         self.assertDictEqual(sound_md, expected)
         
+    #------------------------------------
+    # test_find_recording_lengths
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_find_recording_lengths(self):
+        
+        duration_distrib_df = SoundProcessor.find_recording_lengths(self.snd_file_data)
+
+        expected = pd.DataFrame([[ 54,'0:00:54'],
+                                 [  18,'0:00:18'],
+                                 [ 214,'0:03:34'],
+                                 [  54,'0:00:54']
+                                 ],
+                                index=['church_bells.wav',
+                                       'mp3_file_xeno_canto.mp3',
+                                       'music.mp3',
+                                       'church_bells.mp3'
+                                       ],
+                                columns=['recording_length_secs',
+                                         'recording_length_hhs_mins_secs'
+                                         ]
+                                )
+        self.assertTrue(all((expected == duration_distrib_df)))
+
+        total_dur = SoundProcessor.find_total_recording_length(self.snd_file_data)
+        self.assertEqual(total_dur, sum([54,18,214,54]))
+
+    #------------------------------------
+    # test_recording_lengths_by_species
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_recording_lengths_by_species(self):
+        
+        dur_distrib_by_species = SoundProcessor.recording_lengths_by_species(self.more_recordings_dir)
+
+        expected = pd.DataFrame([[210, '0:03:30'],
+                                 [144, '0:02:24']
+                                 ],
+                                 index=['DYSMEN_S', 'HENLES_S'],
+                                 columns=['total_recording_length (secs)', 'duration (hrs:mins:secs)']
+                                 )
+        self.assertTrue(all(dur_distrib_by_species == expected))
+
 
 # ------------- Main ------------
 

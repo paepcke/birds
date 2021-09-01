@@ -295,6 +295,48 @@ class SoundProcessor:
 
 
     #------------------------------------
+    # find_recording_lengths
+    #-------------------
+    
+    @classmethod
+    def find_recording_lengths(cls, species_dir_path):
+        '''
+        Given a directory with .wav or .mp3 recordings,
+        return a dataframe row labels (index) being 
+        a recording file name, and two columns:
+        
+            o 'recording_length_secs' the duration in seconds
+            o 'recording_length_hhs_mins_secs' in 'hrs:mins:secs'
+            
+        Like:
+                     recording_length_secs recording_length_hhs_mins_secs
+            fname1           12                  0:00:12
+            fname2           62                  0:01:02 
+            
+
+        :param species_dir_path: directory containing recordings
+        :type species_dir_path: str
+        :return dataframe with duration information for each
+            file
+        :rtype pd.DataFrame
+        '''
+        res_dict = {}
+        for recording in os.listdir(species_dir_path):
+            dur_sr_dict = SoundProcessor.soundfile_metadata(os.path.join(species_dir_path, 
+                                                                         recording))
+            duration = dur_sr_dict['duration'].seconds
+            res_dict[recording] = duration
+        res_df = pd.DataFrame.from_dict(res_dict, 
+                                        orient='index', 
+                                        columns=['recording_length_secs']
+                                        )
+        res_df['recording_length_hhs_mins_secs'] = \
+            res_df['recording_length_secs'].map(lambda el: 
+                                                str(datetime.timedelta(seconds=el))
+                                                )
+        return res_df
+
+    #------------------------------------
     # find_total_recording_length
     #-------------------
 
@@ -309,12 +351,8 @@ class SoundProcessor:
         :return sum of recording lengths
         :rtype float
         '''
-        total_duration = 0
-        for recording in os.listdir(species_dir_path):
-            dur_sr_dict = SoundProcessor.soundfile_metadata(os.path.join(species_dir_path, 
-                                                                         recording))
-            duration = dur_sr_dict['duration'].seconds
-            total_duration += duration
+        df_fname_secs = cls.find_recording_lengths(species_dir_path)
+        total_duration = df_fname_secs['recording_length_secs'].sum()
         return total_duration
 
     #------------------------------------
@@ -344,8 +382,14 @@ class SoundProcessor:
         num_samples_in = {} # initialize dict - usage num_samples_in['CORALT_S'] = 64
         for species in os.listdir(path):
             rec_len = cls.find_total_recording_length(os.path.join(path, species))
-            num_samples_in[species] = {"total_recording_length (secs)": rec_len} 
-        return pd.DataFrame.from_dict(num_samples_in, orient='index').sort_index()
+            num_samples_in[species] = {"total_recording_length (secs)": rec_len}
+            
+        # A an hrs:mins:secs column:
+        df = pd.DataFrame.from_dict(num_samples_in, orient='index').sort_index()
+        df['duration (hrs:mins:secs)'] = \
+            df['total_recording_length (secs)'].map(lambda el: 
+                                             str(datetime.timedelta(seconds=el)))
+        return df
 
     # --------------- Operations on Spectrograms Files --------------
 
