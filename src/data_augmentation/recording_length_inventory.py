@@ -97,7 +97,9 @@ class RecordingsInventory:
             fig_title = f"Recording Durations in {species_root_path.stem}"
             self.chart_results(df, manifest_dir_path, fig_title)
             
-            
+        
+        print(f"Outputs were saved in {str(manifest_dir_path)}")
+        
     #------------------------------------
     # chart_results
     #-------------------
