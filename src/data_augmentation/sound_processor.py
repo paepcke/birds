@@ -300,6 +300,15 @@ class SoundProcessor:
 
     @classmethod
     def find_total_recording_length(cls, species_dir_path):
+        '''
+        Given a directory with .wav or .mp3 recordings,
+        return the sum of recording lengths.
+
+        :param species_dir_path: directory containing recordings
+        :type species_dir_path: str
+        :return sum of recording lengths
+        :rtype float
+        '''
         total_duration = 0
         for recording in os.listdir(species_dir_path):
             dur_sr_dict = SoundProcessor.soundfile_metadata(os.path.join(species_dir_path, 
@@ -314,13 +323,29 @@ class SoundProcessor:
 
     @classmethod
     def recording_lengths_by_species(cls, path):
+        '''
+        Given directory that contains subidrectories with
+        .wav or .mp3 recordings, return a dataframe with 
+        recording length information:
+        
+                         total_recording_length
+            species1            10.5
+            species2             2.0
+               ...              ...
+               
+        Rows will be alpha-sorted by species.
+             
+        :param path: root of the recording subdirectories
+        :type path: str
+        :return sum of recording length of all recodings
+            of each species
+        :rtype pd.DataFrame
+        '''
         num_samples_in = {} # initialize dict - usage num_samples_in['CORALT_S'] = 64
         for species in os.listdir(path):
             rec_len = cls.find_total_recording_length(os.path.join(path, species))
-            num_samples_in[species] = {"total_recording_length": rec_len} 
+            num_samples_in[species] = {"total_recording_length (secs)": rec_len} 
         return pd.DataFrame.from_dict(num_samples_in, orient='index').sort_index()
-
-
 
     # --------------- Operations on Spectrograms Files --------------
 

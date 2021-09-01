@@ -1010,7 +1010,7 @@ class Charter:
         
            fig = plt.figure()
            data = pd.Series([1,2,3], index=['foo','bar','fum'])
-           Charter.barchartdata) 
+           Charter.barchart(data) 
            
         The color_groups allows coloring related bars
         the same. Example: if bars include micro-precision,

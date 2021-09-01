@@ -1174,14 +1174,15 @@ class Utils:
     @classmethod
     def time_delta_str(cls, time_delta, granularity=2):
         '''
-        Takes the difference between two datetime times:
+        Takes the difference between two datetime times.
+        Returns a human readable string.
         
                start_time = datetime.datetime.now()
                <some time elapses>
                end_time = datetime.datetime.now()
                
                delta = end_time - start_time
-               time_delta_str(delta
+               time_delta_str(delta)
         
         Depending on granularity, returns a string like:
         

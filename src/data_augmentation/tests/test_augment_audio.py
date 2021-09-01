@@ -22,7 +22,6 @@ import shutil
 TEST_ALL = True
 #TEST_ALL = False
 
-
 class AudioAugmentationTester(unittest.TestCase):
 
     @classmethod
@@ -260,7 +259,7 @@ class AudioAugmentationTester(unittest.TestCase):
     # test_augmentation
     #-------------------
     
-    #*********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_augmentation(self):
         
         _augmenter = AudioAugmenter(self.aug_tst_data,
@@ -299,6 +298,40 @@ class AudioAugmentationTester(unittest.TestCase):
         self.assertGreaterEqual(new_yceug_durations + self.totals['YCEUG'], 88)
         print('foo')
 
+    #------------------------------------
+    # test_species_filter
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_species_filter(self):
+        
+        # Test whether we can limit augs to 
+        # a given list of species, and ignore
+        # others that are present under the species
+        # root dir:
+        
+        # Make it a single species, the one with the
+        # most recordings:
+        _augmenter = AudioAugmenter(self.aug_tst_data,
+                                   num_workers=1,
+                                   aug_goal=AugmentationGoals.MAX,
+                                   species_filter=['WTROS']
+                                   )
+        # Should have done nothing:
+        with self.assertRaises(FileNotFoundError):
+            os.listdir(self.aug_tst_out_dir)
+            
+        # Now filter for two species out of the three:
+        _augmenter = AudioAugmenter(self.aug_tst_data,
+                                   num_workers=1,
+                                   aug_goal=AugmentationGoals.MAX,
+                                   species_filter=['WTROS', 'LEGRG']
+                                   )
+        new_legrg_durations = SoundProcessor.find_total_recording_length(os.path.join(self.aug_tst_out_dir, 
+                                                                                      'LEGRG'))
+        
+        self.assertEqual(new_legrg_durations, 72)
+        self.assertListEqual(os.listdir(self.aug_tst_out_dir), ['LEGRG'])
 
 # ------------------------- Utilities -----------------------
 

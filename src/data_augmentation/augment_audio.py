@@ -5,20 +5,18 @@ import argparse
 from pathlib import Path
 import random
 import sys, os
-import warnings
-
-import multiprocessing as mp
-
-import pandas as pd
+import datetime
 
 from logging_service import LoggingService
 
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import AugmentationGoals, WhenAlreadyDone
 from data_augmentation.utils import Utils, AudAugMethod
+import multiprocessing as mp
+import pandas as pd
+
 
 #---------------- Class AudioAugmenter ---------------
-
 class AudioAugmenter:
     '''
     Process a directory subtree of species recordings
@@ -98,9 +96,9 @@ class AudioAugmenter:
         :param overwrite_policy: if true, don't ask each time
             previously created work will be replaced
         :type overwrite_policy: bool
-        :param species_filter, if provided is a dict mapping
-            species names to number of desired augmentations.
-        :type species_filter: {None | {str : int} 
+        :param species_filter, if provided is a list of species
+            to involve in the augmentation
+        :type species_filter: {None | [str]}
         :param aug_goal: an AugmentationGoals member,
                (See definition of AugmentationGoals; TENTH/MAX/MEDIAN/NUMBER)
         :type aug_goal: AugmentationGoals
@@ -139,7 +137,8 @@ class AudioAugmenter:
         # Get a list of AugmentationTask specifications:
         aug_task_list = self.specify_augmentation_tasks(species_root, 
                                                         aug_goal, 
-                                                        absolute_seconds)
+                                                        absolute_seconds,
+                                                        species_filter=species_filter)
         
         # Make sure an outdir exists under self.out_dir_root
         # for each species, and remember the outdirs:
@@ -156,6 +155,20 @@ class AudioAugmenter:
     #-------------------
 
     def run_jobs(self, task_specs, num_workers):
+        '''
+        Create processes on multiple CPUs, and feed
+        them augmentation tasks. Wait for them to finish.
+        
+        :param task_specs: list of AugmentationTask instances
+        :type task_specs: [AugmentationTask]
+        :param num_workers: number of CPUs to use simultaneously.
+            Default is 
+        :type num_workers: {None | int}
+        '''
+        
+        if len(task_specs) == 0:
+            self.log.warn("Audio augmentation task list was empty; nothing done.")
+            return
         
         task_queue = mp.Manager().Queue(maxsize=self.TASK_QUEUE_SIZE)
         # For nice progress reports, create a shared
@@ -274,10 +287,6 @@ class AudioAugmenter:
         
         random.seed(os.getpid())
 
-        #*****************
-        legr_tasks = 0
-        #***************** 
-        
         while not done:
             
             task_obj = task_queue.get()
@@ -285,10 +294,6 @@ class AudioAugmenter:
                 if task_obj == 'STOP':
                     done = True
                     continue
-                #**********************
-                if task_obj.species == "LEGRG":
-                    legr_tasks += 1
-                #**********************
                 species = task_obj.species 
                 sample_path = task_obj.recording_path
                 out_dir = self.species_out_dirs[species]
@@ -335,7 +340,6 @@ class AudioAugmenter:
                 # Notify system that this task is done
                 task_queue.task_done()
 
-        print(f"************* Worker processed {legr_tasks}")
         return failures
 
 
@@ -346,7 +350,8 @@ class AudioAugmenter:
     def specify_augmentation_tasks(self, 
                                    species_root, 
                                    aug_goal=AugmentationGoals.MEDIAN,
-                                   absolute_seconds=None
+                                   absolute_seconds=None,
+                                   species_filter=None
                                    ):
         '''
         Returns a list of AugmentationTask instances that
@@ -371,6 +376,9 @@ class AudioAugmenter:
         :param absolute_seconds: number of audio seconds required for
             each species. Ignored unless aug_goal is AugmentationGoals.NUMBER
         :type absolute_seconds: {int | float}
+        :param species_filter: list of species to involve; all
+            others under species_root are ignored
+        :type species_filter: {None | [str]}
         :return list of AugmentationTask instances that can be
             executed in parallel
         :rtype [AugmentationTask]
@@ -383,12 +391,13 @@ class AudioAugmenter:
         # available for one species:
         asset_secs_needed_dict = self._required_species_seconds(species_root, 
                                                                 aug_goal, 
-                                                                absolute_seconds)
+                                                                absolute_seconds,
+                                                                species_filter=species_filter)
 
         aug_tasks = []
         for asset, secs_needed in asset_secs_needed_dict.items():
             aug_tasks.extend(self._create_aug_tasks_one_species(asset, secs_needed))
-        
+
         return aug_tasks
 
     #------------------------------------
@@ -440,7 +449,8 @@ class AudioAugmenter:
     def _required_species_seconds(self, 
                                   root_all_species, 
                                   aug_goal,
-                                  absolute_seconds=None
+                                  absolute_seconds=None,
+                                  species_filter=None
                                   ):
         '''
         Given the root directory with recordings from
@@ -473,6 +483,9 @@ class AudioAugmenter:
         :param absolute_seconds: number of audio seconds required for
             each species. Ignored unless aug_goal is AugmentationGoals.NUMBER
         :type absolute_seconds: {int | float}
+        :param species_filter: optional list of species to include;
+            if none, all species under root_all_species are included
+        :type species_filter: {None | [str]}
         :return dict mapping asset instances to their additionally
             required number of recording seconds
         :rtype {SpeciesRecordingAsset : int}
@@ -481,28 +494,50 @@ class AudioAugmenter:
         if type(aug_goal) != AugmentationGoals:
             raise TypeError(f"aug_goal must be an AugmentationGoals enum member, not {aug_goal}")
 
+        # All species (i.e. subdirectory names under root_all_species):
+        species_subdir_list = Utils.listdir_abs(root_all_species)
+        if species_filter is not None:
+            species_subdirs_to_augment = \
+                filter(lambda subdir_name: 
+                       Path(subdir_name).stem in species_filter,
+                       species_subdir_list 
+                       )
+        else:
+            species_subdirs_to_augment = species_subdir_list
+
         # Make a dict that maps each species to a
         # SpeciesRecordingAsset instance that contains
         # the duration of each recording of one species.
         
+        self.log.info(f"Start recording-time inventory (long operation)")
+        start_time = datetime.datetime.now()
         species_assets = {Path(species_dir).stem : SpeciesRecordingAsset(species_dir)
                           for species_dir 
-                          in Utils.listdir_abs(root_all_species)
+                          in species_subdirs_to_augment
                           }
+        end_time = datetime.datetime.now()
+        duration_str = Utils.time_delta_str(end_time - start_time)
+        self.log.info(f"Finished recording-time inventory ({duration_str})")
+        
+        if len(species_assets) == 0:
+            # If filter choked all species
+            # out of the running:
+            self.log.warn("No audio augmentation, because no species subdir qualifies")
+            return {}
         
         # Sort species_assets by rising number of 
         # recording seconds:
-        
+
         sorted_species_assets = {species : rec_secs 
                                  for species, rec_secs 
                                  in sorted(species_assets.items(), 
-                                           key=lambda pair: pair[1].available_seconds)}
+                                           key=lambda pair: pair[1].available_seconds)
+                                 }
 
         assets = list(sorted_species_assets.values())
-        
-        
+
         if aug_goal == AugmentationGoals.MAX:
-            # Maximum avail. seconds among all species:
+            # Maximum available seconds among all species:
             target = assets[-1].available_seconds
         elif aug_goal == AugmentationGoals.MEDIAN:
             # Use classmethod to find median across all durations:
@@ -731,7 +766,8 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--species',
                         type=str,
                         nargs='+',
-                        help='Repeatable; must be pairs: <species> <num_of_augs>')
+                        help='repeatable: only augment given species'
+                        )
 
     parser.add_argument('input_dir_path',
                         help='path to .wav files',
@@ -744,34 +780,6 @@ if __name__ == '__main__':
         print(f"Wav file directory {args.input_dir_path} does not exist")
         sys.exit(1)
 
-    # Ensure that the species are pairs like
-    #   --species VASE 10 PATY 15
-    
-    # Build a dict of species name and requested
-        # number of augs:
-    species_filter = {}
-    if args.species is not None:
-        species_specs = args.species
-        # List length must be even:
-        if len(species_specs) % 2 != 0:
-            print(f"Species arg must be a series of species/num_augs pairs; given info misses some")
-            sys.exit(1)
-            
-        for i in range(0,len(species_specs),2):
-            species  = species_specs[i]
-            # Ensure a species of that name is a
-            # subdirectory of the root dir:
-            if not os.path.exists(os.path.join(args.input_dir_path, species)):
-                print(f"Species {species} is not among subdirs of {args.input_dir_path}")
-                sys.exit(1)
-            try:
-                num_augs = int(species_specs[i+1])
-            except ValueError:
-                print(f"Number of augmentations for {species} given as {species_specs[i+1]}, which is not an int.")
-                sys.exit(1)
-            
-            species_filter[species] = num_augs 
-
     # Turn the overwrite_policy arg into the
     # proper enum mem
     if args.overwrite_policy:
@@ -782,11 +790,7 @@ if __name__ == '__main__':
 
     augmenter = AudioAugmenter(args.input_dir_path,
                           overwrite_policy=overwrite_policy,
-                          species_filter=species_filter if len(species_filter) > 0 else None
+                          species_filter=args.species if len(args.species) > 0 else None
                           )
-
-    augmenter.generate_all_augmentations()
-
-
 
 
