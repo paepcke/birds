@@ -19,6 +19,7 @@ import skimage.io
 import soundfile
 
 from data_augmentation.utils import Interval, Utils
+from birdsong.utils.utilities import FileUtils
 import numpy as np
 import pandas as pd
 
@@ -96,25 +97,19 @@ class SoundProcessor:
         directory that contains noise to overlay onto the 
         given sound file (wind, rain, etc.).
         
-        Returns a numpy structure corresponding to the
-        original audio with the noise overlaid, plus the
-        sample rate of the new sample. A file name is suggested
+        Creates a new sounfile with the original audio and
+        the noise overlaid, plus the. A file name is created
         for the sample. It is composed of elements such 
-        as the nature and duration of the noise. Client
-        may choose to ignore or use.
+        as the nature and duration of the noise. The new
+        audio is saved to that file. 
 
-        :param cls:
-        :type cls:
         :param file_name: absolute path to sound file
         :type file_name: str
-        :param noise_path: absolute path to directory
-            with noise files
+        :param noise_path: either absolute path to directory of
+            noise files, or path to individual noise file to use
         :type noise_path: str
         :param out_dir: destination directory of new audio file
         :type out_dir: str
-        :param uid: a unique identifier that will be
-            included in the output filename.
-        :type uid: str
         :param len_noise_to_add: how much of a noise snippet
             to overlay (seconds)
         :type len_noise_to_add: float
@@ -123,12 +118,17 @@ class SoundProcessor:
         '''
         
         len_noise_to_add = float(len_noise_to_add)
-        backgrounds = os.listdir(noise_path)
+        if os.path.isdir(noise_path):
+            backgrounds = os.listdir(noise_path)
+        else:
+            backgrounds = [noise_path]
     
         # Pick a random noise file:
         background_name = backgrounds[random.randint(0, len(backgrounds)-1)]
-    
-        cls.log.info(f"Adding {background_name} to {file_name}.")
+        # Make a shortened paths of file and background_name just for log msgs
+        short_file_nm     = FileUtils.ellipsed_file_path(file_name)
+        short_backgrnd_nm = FileUtils.ellipsed_file_path(background_name)
+        cls.log.info(f"Adding {short_backgrnd_nm} to {short_file_nm}.")
         
         # We will be working with 1 second as the smallest unit of time
         # load all of both wav files and determine the length of each
@@ -170,6 +170,8 @@ class SoundProcessor:
     
         assert len(during_noise) == len(noise)
     
+        # Compute the overlay: to the chosen portion of the
+        # original file, add a fraction of the noise:
         segment_with_noise = during_noise + cls.noise_multiplier(orig_recording, noise) * noise
         first_half   = np.concatenate((before_noise, segment_with_noise))
         new_sample   = np.concatenate((first_half, after_noise)) # what i think it should be
@@ -299,7 +301,7 @@ class SoundProcessor:
     #-------------------
     
     @classmethod
-    def find_recording_lengths(cls, species_dir_path):
+    def find_recording_lengths(cls, recordings_src):
         '''
         Given a directory with .wav or .mp3 recordings,
         return a dataframe row labels (index) being 
@@ -314,18 +316,27 @@ class SoundProcessor:
             fname2           62                  0:01:02 
             
 
-        :param species_dir_path: directory containing recordings
-        :type species_dir_path: str
+        :param recordings_src: directory containing recordings
+        :type recordings_src: str
         :return dataframe with duration information for each
             file
         :rtype pd.DataFrame
         '''
         res_dict = {}
-        for recording in os.listdir(species_dir_path):
-            dur_sr_dict = SoundProcessor.soundfile_metadata(os.path.join(species_dir_path, 
-                                                                         recording))
+
+        # Distinguish between recordings_src being an
+        # individual file vs. a directory of recordings:
+        
+        if os.path.isdir(recordings_src):
+            recordings_src = Utils.listdir_abs(recordings_src)
+        else:
+            # Just get duration of an individual sound file:
+            recordings_src = [recordings_src]  
+            
+        for recording in recordings_src:
+            dur_sr_dict = SoundProcessor.soundfile_metadata(recording)
             duration = dur_sr_dict['duration'].seconds
-            res_dict[recording] = duration
+            res_dict[Path(recording).name] = duration
         res_df = pd.DataFrame.from_dict(res_dict, 
                                         orient='index', 
                                         columns=['recording_length_secs']
@@ -696,6 +707,19 @@ class SoundProcessor:
 
     @classmethod
     def noise_multiplier(cls, orig_recording, noise):
+        '''
+        Return a random noise multiplier between
+        3 and 30 dB
+
+        :param orig_recording: audio recording
+        :type orig_recording: np.ndarray 
+        :param noise: noise recording
+        :type noise: np.ndarray
+        :return multiplier to apply to noise so that
+            adding the result to orig_recording 
+            results in the mix
+        :rtype float
+        '''
         MIN_SNR, MAX_SNR = 3, 30  # min and max sound to noise ratio (in dB)
         snr = random.uniform(MIN_SNR, MAX_SNR)
         noise_rms = np.sqrt(np.mean(noise**2))
