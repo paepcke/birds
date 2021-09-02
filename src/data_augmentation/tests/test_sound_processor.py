@@ -14,8 +14,8 @@ from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import Interval
 
 
-#***********TEST_ALL = True
-TEST_ALL = False
+TEST_ALL = True
+#TEST_ALL = False
 
 # NOTE: SoundProcessor is also exercised in 
 #       other unittests, such as create_spectrogram()
@@ -144,7 +144,20 @@ class TestSoundProcessor(unittest.TestCase):
 
         total_dur = SoundProcessor.find_total_recording_length(self.snd_file_data)
         self.assertEqual(total_dur, sum([54,18,214,54]))
-
+        
+        # Test getting duration of just a single file:
+        one_snd_file = os.path.join(self.snd_file_data, 'church_bells.mp3')
+        duration_distrib_df = SoundProcessor.find_recording_lengths(one_snd_file)
+        
+        expected = pd.DataFrame([[  54,'0:00:54']],
+                                index=['church_bells.mp3'],
+                                columns=['recording_length_secs',
+                                         'recording_length_hhs_mins_secs'
+                                         ]
+                                )
+        
+        self.assertTrue(all((expected == duration_distrib_df)))
+        
     #------------------------------------
     # test_recording_lengths_by_species
     #-------------------
@@ -161,6 +174,40 @@ class TestSoundProcessor(unittest.TestCase):
                                  columns=['total_recording_length (secs)', 'duration (hrs:mins:secs)']
                                  )
         self.assertTrue(all(dur_distrib_by_species == expected))
+
+
+    #------------------------------------
+    # test_add_background
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_add_background(self):
+        
+        main_species_path    = os.path.join(self.more_recordings_dir,
+                                            'DYSMEN_S/SONG_Dysithamnusmentalis_xc50519.mp3')
+        overlay_species_path = os.path.join(self.more_recordings_dir,
+                                            'HENLES_S/SONG_Henicorhinaleucosticta_xc259378.mp3')
+        
+        main_dur    = SoundProcessor.find_total_recording_length(main_species_path)
+        overlay_dur = SoundProcessor.find_total_recording_length(overlay_species_path)
+        
+        with tempfile.TemporaryDirectory(dir='/tmp', prefix='sound_overlay_test') as out_dir:
+            new_fname = SoundProcessor.add_background(main_species_path,
+                                                      overlay_species_path, 
+                                                      out_dir
+                                                      )
+            
+            after_main_dur    = SoundProcessor.find_total_recording_length(main_species_path)
+            after_overlay_dur = SoundProcessor.find_total_recording_length(overlay_species_path)
+            
+            # Original main and overlay files should
+            # be unaffected:
+            self.assertEqual(after_main_dur, main_dur)
+            self.assertEqual(after_overlay_dur, overlay_dur)
+            
+            mix_dur = SoundProcessor.find_total_recording_length(new_fname)
+            self.assertEqual(mix_dur, main_dur)
+            
 
 
 # ------------- Main ------------
