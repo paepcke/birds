@@ -3,15 +3,15 @@ Created on Apr 25, 2021
 
 @author: paepcke
 '''
+import datetime
 import os
 import unittest
 
-import pandas as pd
-
+from birdsong.utils.species_name_converter import ConversionError
 from data_augmentation.utils import AugmentationGoals
 from data_augmentation.utils import Utils, Interval
+import pandas as pd
 
-from birdsong.utils.species_name_converter import ConversionError
 
 TEST_ALL = True
 #TEST_ALL = False
@@ -312,6 +312,24 @@ class Test(unittest.TestCase):
         new_s = Utils.pad_series(s, 'right', 4)
         self.assertTrue((new_s == pd.Series([1,2,3,3])).all())
         
+    #------------------------------------
+    # test_time_delta_str
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_time_delta_str(self):
+        
+        res = Utils.time_delta_str(10)
+        self.assertEqual(res, '10.0 seconds')
+
+        res = Utils.time_delta_str(100)
+        self.assertEqual(res, '1.0 minute, 40.0 seconds')
+
+        res = Utils.time_delta_str(datetime.timedelta(seconds=100))
+        self.assertEqual(res, '1.0 minute, 40.0 seconds')
+        
+        res = Utils.time_delta_str(datetime.timedelta(seconds=3610))
+        self.assertEqual(res, '1.0 hour, 10.0 seconds')
 
 
 # ---------------- Main --------------

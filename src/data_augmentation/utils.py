@@ -1,4 +1,5 @@
 from csv import DictReader
+import datetime
 from enum import Enum
 from fnmatch import fnmatch
 import os
@@ -13,12 +14,12 @@ from natsort import natsorted
 from torch import cuda
 import torch
 
+from birdsong.utils.species_name_converter import SpeciesNameConverter, DIRECTION, ConversionError
 import matplotlib.pyplot as plt
 import multiprocessing as mp
 import numpy as np
 import pandas as pd
 
-from birdsong.utils.species_name_converter import SpeciesNameConverter, DIRECTION, ConversionError
 
 #-------------------------- Enum for Policy When Output Files Exist -----------
 class WhenAlreadyDone(Enum):
@@ -1175,7 +1176,7 @@ class Utils:
     def time_delta_str(cls, time_delta, granularity=2):
         '''
         Takes the difference between two datetime times.
-        Returns a human readable string.
+        Returns a human readable string. Usage:
         
                start_time = datetime.datetime.now()
                <some time elapses>
@@ -1200,15 +1201,21 @@ class Utils:
                           '10.0 seconds'
 
             If duration is less than second, returns '< 1sec>'
-            
+        
+        The time_delta may either be a datetime.timedelta instance,
+        or a number of seconds.
+        
         :param time_delta: time difference to turn into a string
-        :type time_delta: datetime.timedelta
+        :type time_delta: {int | float | datetime.timedelta}
         :param granularity: time granularity down to which to compute
         :type granularity: int
         :return: printable string of the time duration in readable form
         :rtype: str
         
         '''
+        if type(time_delta) in [float, int]:
+            time_delta = datetime.timedelta(seconds=time_delta)
+        
         intervals = (
             ('weeks', 604800),  # 60 * 60 * 24 * 7
             ('days', 86400),    # 60 * 60 * 24
