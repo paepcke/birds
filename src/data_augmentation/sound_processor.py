@@ -455,7 +455,7 @@ class SoundProcessor:
             cls.log.info(f"Analyzing {num_aud_files} audio files of species {Path(species_dir).stem}")
             
             rec_len = cls.find_total_recording_length(species_dir)
-            num_samples_in[species_dir] = {"total_recording_length (secs)": rec_len}
+            num_samples_in[Path(species_dir).stem] = {"total_recording_length (secs)": rec_len}
 
         if len(num_samples_in) == 0:
             return None 

@@ -116,6 +116,7 @@ class RecordingsInventory:
 
         print(f"Preparing bar chart...")
         fig = plt.figure()
+        # Make sure the species names
         ax = Charter.barchart(df['total_recording_length (secs)'])
         ax.set_xticklabels(ax.get_xticklabels(), rotation=45)
         
