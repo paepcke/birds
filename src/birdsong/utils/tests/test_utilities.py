@@ -4,14 +4,16 @@ Created on Mar 11, 2021
 @author: paepcke
 '''
 import os
+from pathlib import Path
+import tempfile
 import unittest
 
-from birdsong.utils.utilities import FileUtils
 from birdsong.utils.neural_net_config import NeuralNetConfig
+from birdsong.utils.utilities import FileUtils
 
 
-TEST_ALL = True
-#TEST_ALL = False
+#*********TEST_ALL = True
+TEST_ALL = False
 
 class TestUtilities(unittest.TestCase):
 
@@ -94,6 +96,64 @@ class TestUtilities(unittest.TestCase):
         prop_dict = FileUtils.make_run_props_dict(training_section)
         self.assertDictEqual(prop_dict, expected_dict)
 
+    #------------------------------------
+    # test_find_files_by_type
+    #-------------------
+
+    #*******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_find_files_by_type(self):
+        
+        expected_dict = {}
+        with tempfile.TemporaryDirectory(dir='/tmp', prefix='find_files_test_') as tmp_dir_nm:
+            # Create test files and dirs:
+            
+            tmp_root_path = Path(tmp_dir_nm)
+            
+            # Top level singleton file:
+            src = tmp_root_path.joinpath('tmp_top1.wav')
+            # Create the file
+            src.touch()
+            
+            found_files = FileUtils.find_files_by_type(src, FileUtils.AUDIO_EXTENSIONS)
+            expected_dict[None] = [str(src)]
+            self.assertDictEqual(found_files, expected_dict)
+
+            # Add second top level file:
+            src1 = tmp_root_path.joinpath('tmp_top2.wav')
+            # Create the file
+            src1.touch()
+            
+            found_files = FileUtils.find_files_by_type([src, src1],
+                                                        FileUtils.AUDIO_EXTENSIONS)
+            expected_dict[None] = [str(src), str(src1)]
+            self.assertDictEqual(found_files, expected_dict)
+            
+            # Add a subdir with a file:
+            level1_dir = tmp_root_path.joinpath('Level1')
+            level1_dir.mkdir()
+            src2 = level1_dir.joinpath('level1_tmp1.MP3')
+            src2.touch()
+            
+            found_files = FileUtils.find_files_by_type([src, level1_dir, src1],
+                                                        FileUtils.AUDIO_EXTENSIONS)
+
+            expected_dict[str(level1_dir)] = ['level1_tmp1.MP3']
+            self.assertDictEqual(found_files, expected_dict)
+
+            # Add sibling to level1 subdir with 2 files:
+            level2_dir = tmp_root_path.joinpath('Level2')
+            level2_dir.mkdir()
+            src3 = level2_dir.joinpath('level2_tmp1.MP3')
+            src4 = level2_dir.joinpath('level2_tmp2.WAV')
+            src3.touch()
+            src4.touch()
+            
+            found_files = FileUtils.find_files_by_type([src, level1_dir, src1, level2_dir],
+                                                        FileUtils.AUDIO_EXTENSIONS)
+
+            expected_dict[str(level2_dir)] = ['level2_tmp1.MP3', 'level2_tmp2.WAV']
+            self.assertDictEqual(found_files, expected_dict)
+    
     #------------------------------------
     # test_parse_filename
     #-------------------

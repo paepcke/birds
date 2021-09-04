@@ -9,7 +9,7 @@ import csv
 import datetime
 import glob
 import os
-from pathlib import Path
+from pathlib import Path, PosixPath
 import re
 import shutil
 
@@ -66,6 +66,7 @@ class FileUtils:
                           in fname_short_2_long.items()}
 
     IMG_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif', '.tiff', '.webp')
+    AUDIO_EXTENSIONS = ('.wav', '.mp3')
 
     # Pattern to identify an iso
     # date near the start of a string.
@@ -121,6 +122,86 @@ class FileUtils:
             the_dir = the_path
             
         os.makedirs(the_dir, exist_ok=True) 
+
+    #------------------------------------
+    # find_sound_files
+    #-------------------
+    
+    @classmethod
+    def find_files_by_type(self, file_sources, extensions):
+        '''
+        Returns a dict mapping each found directory name to
+        a list of audio files in that directory. Audio files
+        may be one with extension extensions, after lower-casing.
+        Readily available list of extensions are FileUtils.AUDIO_EXTENSIONS,
+        and FileUtils.IMG_EXTENSIONS.
+        
+        File sources may be:
+            o an individual file path
+            o a directory
+            o a list of file/directory mixtures
+            
+        Every file is examined by its extension to see whether
+        it is an audio file. If so, the return-dict[<full-dir-path> : file-name-list]
+        is updated. Any top level individual audio files are
+        collected under res-dict[None]. Ex return:
+        
+             {'/foo/bar' : ['blue.wav', 'green.mp3'],
+              None       : ['yellow.MP3'],
+              '/tmp/'    : ['tmp1.Wav', 'tmp2.Mp3']
+              }   
+
+        If no audio files are found, returns empty dict 
+        
+        :param file_sources: file or directory paths, or a list thereof
+        :type file_sources: {str | [str]}
+        :return a dict mapping directory paths to lists of enclosed
+            audio file names
+        :rtype: {{str|None} : [str]}
+        '''
+        
+        # Corner case: a single source *file* (not dir):
+        if type(file_sources) == str and os.path.isfile(file_sources):
+            if Path(file_sources).suffix.lower() in extensions:
+                return {None : [file_sources]}
+            else:
+                return None
+
+        if type(file_sources) != list:
+            file_sources = [file_sources]
+        
+        res_dict = {}
+        # Run through the given list of source files/dirs:
+        for src in file_sources:
+            # Allow Path instances for convenience:
+            if type(src) not in [PosixPath, str]:
+                continue
+
+            if type(src) != PosixPath:
+                src = Path(src)
+
+            # Is src just a file, as opposed to a dir?
+            if src.is_file() and src.suffix.lower() in extensions:
+                try:
+                    # File under key None:
+                    res_dict[None].append(str(src))
+                except KeyError:
+                    # First file under 'None' key:
+                    res_dict[None] = [str(src)]
+                # Next source file or dir:
+                continue
+            
+            # src is a directory; walk it recursively:
+            for root, _dirs, files in os.walk(src):
+                for file in files:
+                    if Path(file).suffix.lower() in extensions:
+                        try:
+                            res_dict[root].append(file)
+                        except KeyError:
+                            # First encounter of a qualifying
+                            # file in directory:
+                            res_dict[root] = [file]
+        return res_dict
 
     #------------------------------------
     # find_class_paths
