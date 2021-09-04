@@ -91,54 +91,85 @@ class SoundProcessor:
     #-------------------
 
     @classmethod
-    def add_background(cls, file_name, noise_path, out_dir, len_noise_to_add=5.0):
+    def add_background(cls, 
+                       file_name, 
+                       noise_sources, 
+                       out_dir, 
+                       len_noise_to_add=5.0):
         '''
-        Takes an absolute file path, and the path to a
-        directory that contains noise to overlay onto the 
-        given sound file (wind, rain, etc.).
+        Takes an absolute file path, and noise source
+        files. Randomly selects a noise file to overlay onto 
+        the given sound file (wind, rain, another bird, etc.).
         
         Creates a new sounfile with the original audio and
-        the noise overlaid, plus the. A file name is created
+        the noise overlaid. A file name is created
         for the sample. It is composed of elements such 
         as the nature and duration of the noise. The new
-        audio is saved to that file. 
+        audio is saved to that file.
+
+        In addition to randomly selecting the noise file,
+        the position in the file to be modified where the
+        noise is overlaid is chosen randomly.
 
         :param file_name: absolute path to sound file
         :type file_name: str
-        :param noise_path: either absolute path to directory of
-            noise files, or path to individual noise file to use
-        :type noise_path: str
+        :param noise_sources: either absolute path to directory of
+            noise files, or path to individual noise file to use,
+            or a list of directories/files
+        :type noise_sources: str
         :param out_dir: destination directory of new audio file
         :type out_dir: str
         :param len_noise_to_add: how much of a noise snippet
             to overlay (seconds)
         :type len_noise_to_add: float
-        :return: full path of new audio file
-        :rtype: str
+        :return: full path of new audio file, and full path
+            of the noise file used
+        :rtype: (str, str)
         '''
         
         len_noise_to_add = float(len_noise_to_add)
-        if os.path.isdir(noise_path):
-            backgrounds = os.listdir(noise_path)
-        else:
-            backgrounds = [noise_path]
-    
-        # Pick a random noise file:
-        background_name = backgrounds[random.randint(0, len(backgrounds)-1)]
-        # Make a shortened paths of file and background_name just for log msgs
+
+        # Make a dict:
+        #    noise-src-dir : [noise-fname1, noise-fname2,...]
+        #    None          : [full-noise-file_path1, full-noise-file_path2, ...]
+        
+        # (possibly) with a key of None for collection of 
+        # individually specified files in noise_sources:
+        
+        noise_src_dict = FileUtils.find_files_by_type(noise_sources, 
+                                                      FileUtils.AUDIO_EXTENSIONS)
+
+        # To pick a random noise file, first
+        # pick a random directory (i.e. key) from
+        # the noise_src_dict:
+        key_dir_idx = random.randint(0, len(noise_src_dict) - 1)
+        key = list(noise_src_dict)[key_dir_idx]
+        # Next, a random file within the list of files
+        file_list = noise_src_dict[key]
+        file_idx    = random.randint(0, len(file_list) - 1)
+        
+        # Top level noise files (i.e. ones in argument
+        # noise_sources that are paths to files, not directories),
+        # are under the None key in noise_src_dir.
+        
+        full_background_path = file_list[file_idx] \
+            if key is None \
+            else os.path.join(key, file_list[file_idx])
+
+        # Make shortened paths of file and background_name just for log msgs
         short_file_nm     = FileUtils.ellipsed_file_path(file_name)
-        short_backgrnd_nm = FileUtils.ellipsed_file_path(background_name)
+        short_backgrnd_nm = FileUtils.ellipsed_file_path(full_background_path)
         cls.log.info(f"Adding {short_backgrnd_nm} to {short_file_nm}.")
         
         # We will be working with 1 second as the smallest unit of time
         # load all of both wav files and determine the length of each
-        noise, noise_sr = SoundProcessor.load_audio(os.path.join(noise_path, background_name))  # type(noise) = np.ndarray
+        noise, noise_sr = SoundProcessor.load_audio(os.path.join(noise_sources, full_background_path))  # type(noise) = np.ndarray
         orig_recording, orig_sr = SoundProcessor.load_audio(file_name)
     
         new_sr = math.gcd(noise_sr, orig_sr)
         if noise_sr != orig_sr:
             # Resample both noise and orig records so that they have same sample rate
-            cls.log.info(f"Resampling: {background_name} and {file_name}")
+            cls.log.info(f"Resampling: {short_backgrnd_nm} and {short_file_nm}")
             noise = librosa.resample(noise, noise_sr, new_sr)
             orig_recording = librosa.resample(orig_recording, orig_sr, new_sr)
             # input("ready?")
@@ -180,7 +211,7 @@ class SoundProcessor:
         assert new_duration == orig_duration
         # File name w/o extension:
         sample_file_stem = Path(file_name).stem
-        noise_file_stem  = Path(background_name).stem
+        noise_file_stem  = Path(full_background_path).stem
         noise_dur = str(int(noise_start_loc/new_sr * 1000))
         file_name= f"{sample_file_stem}-{noise_file_stem}_bgd{noise_dur}ms_{uuid.uuid1().hex}.wav"
         
@@ -189,7 +220,7 @@ class SoundProcessor:
         out_path = os.path.join(out_dir, uniq_fname)
         
         soundfile.write(out_path, new_sample, new_sr)
-        return out_path
+        return out_path, full_background_path
 
     #------------------------------------
     # change_all_volumes 
@@ -916,6 +947,12 @@ class SoundProcessor:
                                 lineno=0)
 
         try:
+            # The following may raise a warning like:
+            #   ...audioread/__init__.py:86: ResourceWarning: unclosed file <_io.BufferedReader name=16>
+            # this is discussed on the Web, and is due
+            # to some subprocess call in audioread; nothing
+            # I'll do on this one:
+
             recording, sample_rate = librosa.load(fname, offset=offset, duration=duration)
         except Exception as e:
             raise AudioLoadException(f"Could not load {fname}", fname, other_msg=repr(e)) from e
@@ -1032,7 +1069,7 @@ class SoundProcessor:
                     sample_rate = int(match.group(1))
 
         if duration is None or sample_rate is None:
-            msg = "Problem finding: "
+            msg = f"File {fname}: Problem finding: "
             if duration is None:
                 msg += 'duration.'
             if sample_rate is None:
