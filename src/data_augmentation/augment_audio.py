@@ -869,10 +869,11 @@ if __name__ == '__main__':
     noise_sources = args.noisesources
 
     augmenter = AudioAugmenter(args.input_dir_path,
-                          overwrite_policy=overwrite_policy,
-                          aug_goal=goal,
-                          absolute_seconds=absolute_seconds,
-                          aug_methods=args.augmethods,
-                          species_filter=args.species,
-                          noise_sources=noise_sources
-                          )
+                               args.output_dir_path,
+                               overwrite_policy=overwrite_policy,
+                               aug_goal=goal,
+                               absolute_seconds=absolute_seconds,
+                               aug_methods=args.augmethods,
+                               species_filter=args.species,
+                               noise_sources=noise_sources
+                               )
