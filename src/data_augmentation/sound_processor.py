@@ -405,7 +405,7 @@ class SoundProcessor:
     #-------------------
 
     @classmethod
-    def recording_lengths_by_species(cls, path):
+    def recording_lengths_by_species(cls, species_root):
         '''
         Given directory that contains subidrectories with
         .wav or .mp3 recordings, return a dataframe with 
@@ -416,21 +416,46 @@ class SoundProcessor:
             species2             2.0
                ...              ...
                
-        Rows will be alpha-sorted by species.
+        Rows will be alpha-sorted by species_dir.
              
-        :param path: root of the recording subdirectories
-        :type path: str
+        :param species_root: root of the recording subdirectories
+        :type species_root: str
         :return sum of recording length of all recodings
-            of each species. If no recordings found, returns
+            of each species_dir. If no recordings found, returns
             None
         :rtype {pd.DataFrame | None}
         '''
         num_samples_in = {} # initialize dict - usage num_samples_in['CORALT_S'] = 64
-        for species in os.listdir(path):
-            if not os.path.isdir(species):
+        
+        # Just for progress reports: get number
+        # of species dirs to examine:
+        num_species = sum([1 
+                           for dir_entry
+                           in os.scandir(species_root)
+                           if dir_entry.is_dir()
+                           ])
+        
+        cls.log.info({f"Analyzing metadata for audio files of {num_species} species..."})
+
+        for species_dir in Utils.listdir_abs(species_root):
+            # Skip file names that are at top level;
+            # i.e. only consider files under the species
+            # subdirs:
+            if not os.path.isdir(species_dir):
                 continue
-            rec_len = cls.find_total_recording_length(os.path.join(path, species))
-            num_samples_in[species] = {"total_recording_length (secs)": rec_len}
+            
+            # For progress reports, get number of
+            # audio files in this subdir:
+            num_aud_files = sum([1
+                                 for dir_entry
+                                 in os.scandir(species_dir)
+                                 if dir_entry.is_file() and \
+                                    Path(dir_entry).suffix in FileUtils.AUDIO_EXTENSIONS
+                                 ])
+            cls.log.info(f"Analyzing {num_aud_files} audio files of species {Path(species_dir).stem}")
+            
+            rec_len = cls.find_total_recording_length(species_dir)
+            num_samples_in[species_dir] = {"total_recording_length (secs)": rec_len}
 
         if len(num_samples_in) == 0:
             return None 
