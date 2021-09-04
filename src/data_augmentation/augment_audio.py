@@ -50,7 +50,18 @@ class AudioAugmenter:
     
     Command line users can specify the repeatable --species
     command line option to specify particular species
-    and number of augmentations.  
+    and number of augmentations.
+    
+    For the superimposed background noise method of
+    audio augmentation, clients control the source of
+    sounds to overlay.
+    
+    Randomness is inserted at every step: choice of 
+    augmentation method, and again within those methods.
+    For instance, background noise overlays random select
+    noise files (unless contrained by client), and also 
+    randomize the place in the augmented audio where the
+    overlay occurs, as well as the blend multiplier. 
     
     '''
 
@@ -74,6 +85,8 @@ class AudioAugmenter:
                  species_filter=None,
                  aug_goal=AugmentationGoals.MEDIAN,
                  absolute_seconds=None,
+                 aug_methods=None,
+                 noise_sources=None,
                  unittesting=False
                  ):
 
@@ -119,6 +132,11 @@ class AudioAugmenter:
 
         if not os.path.isabs(species_root):
             raise ValueError(f"Input path must be a full, absolute path; not {species_root}")
+
+        if noise_sources is None:
+            noise_sources = AudioAugmenter.NOISE_PATH
+        if aug_methods is None:
+            aug_methods = ['ADD_NOISE', 'TIME_SHIFT', 'VOLUME']
         
         self.species_root     = species_root
         self.overwrite_policy = overwrite_policy
@@ -356,7 +374,10 @@ class AudioAugmenter:
         '''
         Returns a list of AugmentationTask instances that
         each specify all that is needed to start a parallel
-        task for audio augmentation.
+        task for augmentating one audio file.
+        
+        The run_jobs() method consumes
+        the list of AugmentationTask produced here.
         
         The augmentations are spread across the available recordings
         of this asset's species until the additional number of seconds 
@@ -763,14 +784,34 @@ if __name__ == '__main__':
                         default=False
                         )
     
+    parser.add_argument('-g', '--goal',
+                        help="augmentation goal: 'median', 'max', or seconds as an integer; default is median",
+                        default=None
+                        )
+    
     parser.add_argument('-s', '--species',
                         type=str,
                         nargs='+',
-                        help='repeatable: only augment given species'
+                        help='repeatable: only augment species listed here'
+                        )
+
+    parser.add_argument('-n', '--noisesources',
+                        type=str,
+                        nargs='+',
+                        help='repeatable: noise sources to use for blending audio; audio files and directories',
+                        default=None
+                        )
+    
+    parser.add_argument('-a', '--augmethods',
+                        type=str,
+                        choices=['ADD_NOISE', 'TIME_SHIFT', 'VOLUME'],
+                        nargs='+',
+                        help='repeatable: augmentation methods to use',
+                        default=None
                         )
 
     parser.add_argument('input_dir_path',
-                        help='path to .wav files',
+                        help='path to .wav files root',
                         default=None)
 
     args = parser.parse_args()
@@ -788,9 +829,39 @@ if __name__ == '__main__':
         #overwrite_policy = WhenAlreadyDone.ASK
         overwrite_policy = WhenAlreadyDone.SKIP
 
+    absolute_seconds = None
+    if args.goal is not None:
+        # Must be 'median', 'max', or a number of seconds
+        goal = args.goal
+        if goal == 'median':
+            goal = AugmentationGoals.MEDIAN
+        elif goal == 'max':
+            goal = AugmentationGoals.MAX
+        else:
+            if type(goal) != int:
+                print(f"The augmentation goal must be 'median', 'max', or a number of seconds, not {goal}")
+                sys.exit(1)
+            # Got a proper goal of min number of seconds:
+            absolute_seconds = goal
+            goal = AugmentationGoals.NUMBER
+    else:
+        # Default:
+        goal = AugmentationGoals.MEDIAN
+        
+    # Noise files for overlays:
+    if args.noisesources is not None:
+        # Check existence:
+        for noise_source in args.noisesources:
+            if not os.path.exists(noise_source):
+                print(f"Cannot find noise source {noise_source}; doing nothing")
+                sys.exit(1)
+    noise_sources = args.noise
+
     augmenter = AudioAugmenter(args.input_dir_path,
                           overwrite_policy=overwrite_policy,
-                          species_filter=args.species if len(args.species) > 0 else None
+                          aug_goal=goal,
+                          absolute_seconds=absolute_seconds,
+                          aug_methods=args.augmethods,
+                          species_filter=args.species if len(args.species) > 0 else None,
+                          noise_sources=noise_sources
                           )
-
-

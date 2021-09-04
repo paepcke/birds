@@ -421,8 +421,9 @@ class SoundProcessor:
         :param path: root of the recording subdirectories
         :type path: str
         :return sum of recording length of all recodings
-            of each species
-        :rtype pd.DataFrame
+            of each species. If no recordings found, returns
+            None
+        :rtype {pd.DataFrame | None}
         '''
         num_samples_in = {} # initialize dict - usage num_samples_in['CORALT_S'] = 64
         for species in os.listdir(path):
@@ -430,7 +431,10 @@ class SoundProcessor:
                 continue
             rec_len = cls.find_total_recording_length(os.path.join(path, species))
             num_samples_in[species] = {"total_recording_length (secs)": rec_len}
-            
+
+        if len(num_samples_in) == 0:
+            return None 
+
         # A an hrs:mins:secs column:
         df = pd.DataFrame.from_dict(num_samples_in, orient='index').sort_index()
         df['duration (hrs:mins:secs)'] = \

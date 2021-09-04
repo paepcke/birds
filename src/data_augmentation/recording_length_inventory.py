@@ -49,7 +49,9 @@ class RecordingsInventory:
 
     def __init__(self, species_root, message=None, chart_result=False):
         '''
-        Constructor
+        Does all the metadata reading, and manifest
+        file creations. Raises FileNotFoundError if
+        no audio is found under the species_root directory.
         
         :param species_root: root of species subdirectories
         :type species_root: str
@@ -58,6 +60,7 @@ class RecordingsInventory:
         :param chart_result: whether or not to include a 
             barchart of the result
         :type chart_result: bool
+        :raise FileNotFoundError if no audio files found.
         '''
         
         if not os.path.exists(species_root) or not os.path.isdir(species_root):
@@ -71,6 +74,11 @@ class RecordingsInventory:
         #    species2            ...
         
         df = SoundProcessor.recording_lengths_by_species(species_root)
+        
+        # Could be None
+        if df is None:
+            raise FileNotFoundError()
+        
         end_time = datetime.datetime.now()
         duration_str = Utils.time_delta_str(end_time - start_time)
         print(f"Done with recording inventory ({duration_str}).")
@@ -164,9 +172,12 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    RecordingsInventory(args.species_root,
-                        message=args.message,
-                        chart_result=args.chart)
+    try:
+        RecordingsInventory(args.species_root,
+                            message=args.message,
+                            chart_result=args.chart)
+    except FileNotFoundError:
+        print(f"No audio files found under {args.species_root}")
     
     if args.chart:
         input("Hit any key to close figure and exit...")

@@ -5,17 +5,19 @@ Created on Apr 29, 2021
 '''
 import datetime
 import os
+import random
 import tempfile
 import unittest
 
-import pandas as pd
+from pathlib import Path
 
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import Interval
+import pandas as pd
 
 
-TEST_ALL = True
-#TEST_ALL = False
+#*********TEST_ALL = True
+TEST_ALL = False
 
 # NOTE: SoundProcessor is also exercised in 
 #       other unittests, such as create_spectrogram()
@@ -180,7 +182,7 @@ class TestSoundProcessor(unittest.TestCase):
     # test_add_background
     #-------------------
     
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #*******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_add_background(self):
         
         main_species_path    = os.path.join(self.more_recordings_dir,
@@ -190,12 +192,16 @@ class TestSoundProcessor(unittest.TestCase):
         
         main_dur    = SoundProcessor.find_total_recording_length(main_species_path)
         overlay_dur = SoundProcessor.find_total_recording_length(overlay_species_path)
-        
+
+        # Make randomness reproducible for testing:
+        random.seed(42)
         with tempfile.TemporaryDirectory(dir='/tmp', prefix='sound_overlay_test') as out_dir:
-            new_fname = SoundProcessor.add_background(main_species_path,
-                                                      overlay_species_path, 
-                                                      out_dir
-                                                      )
+            (new_fname, noise_used) = SoundProcessor.add_background(main_species_path,
+                                                                    overlay_species_path, 
+                                                                    out_dir
+                                                                    )
+            
+            self.assertEqual(noise_used, overlay_species_path)
             
             after_main_dur    = SoundProcessor.find_total_recording_length(main_species_path)
             after_overlay_dur = SoundProcessor.find_total_recording_length(overlay_species_path)
@@ -208,7 +214,16 @@ class TestSoundProcessor(unittest.TestCase):
             mix_dur = SoundProcessor.find_total_recording_length(new_fname)
             self.assertEqual(mix_dur, main_dur)
             
-
+            (new_fname, noise_used) = SoundProcessor.add_background(main_species_path,
+                                                                    os.path.join(self.more_recordings_dir,
+                                                                                 'HENLES_S'),
+                                                                    out_dir
+                                                                    )
+            # Since we set the random seed, the
+            # noise file picked is predictable, b/c
+            # a fixed number of calls to random.randint()
+            # are involved in add_background():
+            self.assertEqual(Path(noise_used).name, 'SONG_Henicorhinaleucosticta_xc259384.mp3') 
 
 # ------------- Main ------------
 

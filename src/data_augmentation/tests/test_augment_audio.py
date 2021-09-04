@@ -19,8 +19,8 @@ import pandas as pd
 import shutil
 
 
-TEST_ALL = True
-#TEST_ALL = False
+#************TEST_ALL = True
+TEST_ALL = False
 
 class AudioAugmentationTester(unittest.TestCase):
 
@@ -68,16 +68,29 @@ class AudioAugmentationTester(unittest.TestCase):
     # test_add_noise 
     #-------------------
 
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_add_noise(self):
         with tempfile.TemporaryDirectory(prefix='aud_tests', dir='/tmp') as tmpdir_nm:
 
-            out_file = SoundProcessor.add_background(self.one_aud_file, self.noise_path, tmpdir_nm)
+            out_file, _noise_file = SoundProcessor.add_background(self.one_aud_file, 
+                                                                  self.noise_path, 
+                                                                  tmpdir_nm)
+            
             # Can't do more than try to load the new
             # file and check its length against manually
             # examined truth:
             self.assertEqualDurSR(out_file, self.one_aud_file)
-        
+            
+            # Specify a particular bird file to overlay:
+            overlay_bird_file = os.path.join(self.species2_dir,
+                                             'hen1.mp3'
+                                             ) 
+            out_file, _noise_file = SoundProcessor.add_background(self.one_aud_file, 
+                                                                  overlay_bird_file,
+                                                                  tmpdir_nm)
+            
+            self.assertEqualDurSR(out_file, self.one_aud_file)
+
     #------------------------------------
     # test_change_sample_volume 
     #-------------------
