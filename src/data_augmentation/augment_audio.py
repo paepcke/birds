@@ -80,6 +80,7 @@ class AudioAugmenter:
 
     def __init__(self, 
                  species_root,
+                 out_dir,
                  overwrite_policy=WhenAlreadyDone.ASK,
                  num_workers=None,
                  species_filter=None,
@@ -103,6 +104,9 @@ class AudioAugmenter:
         
         :param species_root: directory holding .wav or .mp3 files
         :type species_root: str
+        :param out_dir: augmentation directory destination; is
+            created if not exists
+        :type out_dir: str
         :param plot: whether or not to plot informative charts 
             along the way
         :type plot: bool
@@ -141,7 +145,7 @@ class AudioAugmenter:
         self.species_root     = species_root
         self.overwrite_policy = overwrite_policy
         self.species_filter   = species_filter
-        self.out_dir_root     = os.path.join(Path(species_root).parent, 'audio_augmentations')
+        self.out_dir_root     = out_dir
 
         # Determine number of workers:
         num_cores = mp.cpu_count()
@@ -813,6 +817,10 @@ if __name__ == '__main__':
     parser.add_argument('input_dir_path',
                         help='path to .wav files root',
                         default=None)
+
+    parser.add_argument('output_dir_path',
+                        help='directory where results are to be placed; created if not exists'
+                        )
 
     args = parser.parse_args()
 
