@@ -873,6 +873,6 @@ if __name__ == '__main__':
                           aug_goal=goal,
                           absolute_seconds=absolute_seconds,
                           aug_methods=args.augmethods,
-                          species_filter=args.species if len(args.species) > 0 else None,
+                          species_filter=args.species,
                           noise_sources=noise_sources
                           )
