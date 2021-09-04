@@ -866,7 +866,7 @@ if __name__ == '__main__':
             if not os.path.exists(noise_source):
                 print(f"Cannot find noise source {noise_source}; doing nothing")
                 sys.exit(1)
-    noise_sources = args.noise
+    noise_sources = args.noisesources
 
     augmenter = AudioAugmenter(args.input_dir_path,
                           overwrite_policy=overwrite_policy,
