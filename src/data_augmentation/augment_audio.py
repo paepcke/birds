@@ -846,7 +846,10 @@ if __name__ == '__main__':
         elif goal == 'max':
             goal = AugmentationGoals.MAX
         else:
-            if type(goal) != int:
+            # Should be an int:
+            try:
+                goal = int(goal)
+            except ValueError:
                 print(f"The augmentation goal must be 'median', 'max', or a number of seconds, not {goal}")
                 sys.exit(1)
             # Got a proper goal of min number of seconds:
