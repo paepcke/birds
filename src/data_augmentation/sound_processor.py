@@ -365,6 +365,9 @@ class SoundProcessor:
             recordings_src = [recordings_src]  
             
         for recording in recordings_src:
+            # Skip non-audio files:
+            if not Path(recording).suffix in FileUtils.AUDIO_EXTENSIONS:
+                continue
             dur_sr_dict = SoundProcessor.soundfile_metadata(recording)
             duration = dur_sr_dict['duration'].seconds
             res_dict[Path(recording).name] = duration
@@ -423,6 +426,8 @@ class SoundProcessor:
         '''
         num_samples_in = {} # initialize dict - usage num_samples_in['CORALT_S'] = 64
         for species in os.listdir(path):
+            if not os.path.isdir(species):
+                continue
             rec_len = cls.find_total_recording_length(os.path.join(path, species))
             num_samples_in[species] = {"total_recording_length (secs)": rec_len}
             
