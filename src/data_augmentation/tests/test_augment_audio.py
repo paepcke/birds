@@ -19,8 +19,8 @@ import pandas as pd
 import shutil
 
 
-#************TEST_ALL = True
-TEST_ALL = False
+TEST_ALL = True
+#TEST_ALL = False
 
 class AudioAugmentationTester(unittest.TestCase):
 
@@ -68,10 +68,11 @@ class AudioAugmentationTester(unittest.TestCase):
     # test_add_noise 
     #-------------------
 
-    #********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_add_noise(self):
         with tempfile.TemporaryDirectory(prefix='aud_tests', dir='/tmp') as tmpdir_nm:
 
+            # Add any noise from the noise library 
             out_file, _noise_file = SoundProcessor.add_background(self.one_aud_file, 
                                                                   self.noise_path, 
                                                                   tmpdir_nm)
@@ -84,7 +85,8 @@ class AudioAugmentationTester(unittest.TestCase):
             # Specify a particular bird file to overlay:
             overlay_bird_file = os.path.join(self.species2_dir,
                                              'hen1.mp3'
-                                             ) 
+                                             )
+            # Add another bird song on top of the base recording: 
             out_file, _noise_file = SoundProcessor.add_background(self.one_aud_file, 
                                                                   overlay_bird_file,
                                                                   tmpdir_nm)
@@ -161,7 +163,9 @@ class AudioAugmentationTester(unittest.TestCase):
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_required_species_seconds(self):
         
-        augmenter = AudioAugmenter(self.aug_tst_data, unittesting=True)
+        augmenter = AudioAugmenter(self.aug_tst_data,
+                                   self.aug_tst_out_dir, 
+                                   unittesting=True)
         
         # Get dict mapping SpeciesRecordingAsset
         # instances to number of seconds of augmentation
@@ -237,7 +241,9 @@ class AudioAugmentationTester(unittest.TestCase):
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_specify_augmentation_tasks(self):
         
-        augmenter = AudioAugmenter(self.aug_tst_data, unittesting=True)
+        augmenter = AudioAugmenter(self.aug_tst_data,
+                                   self.aug_tst_out_dir, 
+                                   unittesting=True)
         
         # Test goal MAX:
         
@@ -276,9 +282,10 @@ class AudioAugmentationTester(unittest.TestCase):
     def test_augmentation(self):
         
         _augmenter = AudioAugmenter(self.aug_tst_data,
-                                   num_workers=1,
-                                   aug_goal=AugmentationGoals.MEDIAN
-                                   )
+                                    self.aug_tst_out_dir,
+                                    num_workers=1,
+                                    aug_goal=AugmentationGoals.MEDIAN
+                                    )
         
         
         # Only LEGRG was less than the 
@@ -302,9 +309,10 @@ class AudioAugmentationTester(unittest.TestCase):
         # about 88:  
         
         _augmenter = AudioAugmenter(self.aug_tst_data,
-                                   num_workers=1,
-                                   aug_goal=AugmentationGoals.MAX
-                                   )
+                                    self.aug_tst_out_dir,
+                                    num_workers=1,
+                                    aug_goal=AugmentationGoals.MAX
+                                    )
         new_legrg_durations = SoundProcessor.find_total_recording_length(os.path.join(self.aug_tst_out_dir, 'LEGRG'))
         new_yceug_durations = SoundProcessor.find_total_recording_length(os.path.join(self.aug_tst_out_dir, 'YCEUG'))
 
@@ -326,20 +334,22 @@ class AudioAugmentationTester(unittest.TestCase):
         # Make it a single species, the one with the
         # most recordings:
         _augmenter = AudioAugmenter(self.aug_tst_data,
-                                   num_workers=1,
-                                   aug_goal=AugmentationGoals.MAX,
-                                   species_filter=['WTROS']
-                                   )
+                                    self.aug_tst_out_dir,
+                                    num_workers=1,
+                                    aug_goal=AugmentationGoals.MAX,
+                                    species_filter=['WTROS']
+                                    )
         # Should have done nothing:
         with self.assertRaises(FileNotFoundError):
             os.listdir(self.aug_tst_out_dir)
             
         # Now filter for two species out of the three:
         _augmenter = AudioAugmenter(self.aug_tst_data,
-                                   num_workers=1,
-                                   aug_goal=AugmentationGoals.MAX,
-                                   species_filter=['WTROS', 'LEGRG']
-                                   )
+                                    self.aug_tst_out_dir,
+                                    num_workers=1,
+                                    aug_goal=AugmentationGoals.MAX,
+                                    species_filter=['WTROS', 'LEGRG']
+                                    )
         new_legrg_durations = SoundProcessor.find_total_recording_length(os.path.join(self.aug_tst_out_dir, 
                                                                                       'LEGRG'))
         

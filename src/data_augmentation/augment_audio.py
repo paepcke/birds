@@ -138,10 +138,23 @@ class AudioAugmenter:
             raise ValueError(f"Input path must be a full, absolute path; not {species_root}")
 
         if noise_sources is None:
-            noise_sources = AudioAugmenter.NOISE_PATH
+            self.noise_sources = AudioAugmenter.NOISE_PATH
+        else:
+            self.noise_sources = noise_sources
+
+        # Process requested augmentation 
+        # mehods; any specified?
         if aug_methods is None:
-            aug_methods = ['ADD_NOISE', 'TIME_SHIFT', 'VOLUME']
-        
+            # No, use all three:
+            self.augmethods = [AudAugMethod.ADD_NOISE,
+                               AudAugMethod.TIME_SHIFT,
+                               AudAugMethod.VOLUME
+                               ]
+        else:
+            # Yes, a list of methods was
+            # specified. 
+            self.augmethods = aug_methods
+
         self.species_root     = species_root
         self.overwrite_policy = overwrite_policy
         self.species_filter   = species_filter
@@ -320,16 +333,13 @@ class AudioAugmenter:
                 sample_path = task_obj.recording_path
                 out_dir = self.species_out_dirs[species]
                 # Pick a random augmentation method:
-                method = random.choice([AudAugMethod.ADD_NOISE,
-                                        AudAugMethod.TIME_SHIFT,
-                                        AudAugMethod.VOLUME]
-                                        )
+                method = random.choice(self.augmethods)
                 
                 if method == AudAugMethod.ADD_NOISE:
                     try:
                         _out_path = SoundProcessor.add_background(
                                 sample_path,
-                                self.NOISE_PATH,
+                                self.noise_sources,
                                 out_dir, 
                                 len_noise_to_add=5.0)
                     except Exception as e:
@@ -520,7 +530,11 @@ class AudioAugmenter:
             raise TypeError(f"aug_goal must be an AugmentationGoals enum member, not {aug_goal}")
 
         # All species (i.e. subdirectory names under root_all_species):
-        species_subdir_list = Utils.listdir_abs(root_all_species)
+        species_subdir_list = [one_dir
+                               for one_dir
+                               in Utils.listdir_abs(root_all_species)
+                               if os.path.isdir(one_dir)]
+        
         if species_filter is not None:
             species_subdirs_to_augment = \
                 filter(lambda subdir_name: 
@@ -867,13 +881,29 @@ if __name__ == '__main__':
                 print(f"Cannot find noise source {noise_source}; doing nothing")
                 sys.exit(1)
     noise_sources = args.noisesources
+    
+    if args.augmethods is not None:
+        # Convert the CLI 
+        # words NOISE, TIME_SHIFT, and VOLUME
+        # into AudAugMethod enum members, if
+        # needed:
+        augmethods = []
+        if 'NOISE' in args.augmethods:
+            augmethods.append(AudAugMethod.ADD_NOISE)
+        if 'TIME_SHIFT' in args.augmethods:
+            augmethods.append(AudAugMethod.TIME_SHIFT)
+        if 'VOLUME' in args.augmethods:
+            augmethods.append(AudAugMethod.VOLUME)
+            
+    else:
+        augmethods = None
 
     augmenter = AudioAugmenter(args.input_dir_path,
                                args.output_dir_path,
                                overwrite_policy=overwrite_policy,
                                aug_goal=goal,
                                absolute_seconds=absolute_seconds,
-                               aug_methods=args.augmethods,
+                               aug_methods=augmethods,
                                species_filter=args.species,
                                noise_sources=noise_sources
                                )
