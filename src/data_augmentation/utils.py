@@ -1167,6 +1167,13 @@ class Utils:
     
         return config
 
+    #------------------------------------
+    # datetime_str
+    #-------------------
+    
+    @classmethod
+    def datetime_str(cls):
+        return datetime.datetime.now().isoformat()
 
     #------------------------------------
     # time_delta_str 

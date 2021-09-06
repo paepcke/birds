@@ -369,7 +369,8 @@ class SoundProcessor:
             if not Path(recording).suffix in FileUtils.AUDIO_EXTENSIONS:
                 continue
             dur_sr_dict = SoundProcessor.soundfile_metadata(recording)
-            duration = dur_sr_dict['duration'].seconds
+            dur_delta   = dur_sr_dict['duration']
+            duration = dur_delta.seconds + 10**-6 * dur_delta.microseconds
             res_dict[Path(recording).name] = duration
         res_df = pd.DataFrame.from_dict(res_dict, 
                                         orient='index', 

@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 
 from result_analysis.charting import Charter
+from logging_service import LoggingService
 
 
 class RecordingsInventory:
@@ -41,13 +42,19 @@ class RecordingsInventory:
           in the manifest subdir
         o If requested, generate a barchart of the results, and
           save it in <manifest subdir>/audio_recording_distribution.pdf
+          
+    The dataframe is available as <inst>.inventory.
     '''
 
     #------------------------------------
     # Constructor 
     #-------------------
 
-    def __init__(self, species_root, message=None, chart_result=False):
+    def __init__(self, 
+                 species_root, 
+                 message=None, 
+                 chart_result=False, 
+                 print_results=True):
         '''
         Does all the metadata reading, and manifest
         file creations. Raises FileNotFoundError if
@@ -60,28 +67,33 @@ class RecordingsInventory:
         :param chart_result: whether or not to include a 
             barchart of the result
         :type chart_result: bool
+        :param print_results: whether or not to print the
+            recording durations of each species to the console
+        :type print_results: bool
         :raise FileNotFoundError if no audio files found.
         '''
+
+        self.log = LoggingService()
         
         if not os.path.exists(species_root) or not os.path.isdir(species_root):
-            print(f"Directory must exist, but given {species_root}")
+            self.log.err(f"Directory must exist, but given {species_root}")
             sys.exit(1)
-        print("Begin recording inventory...")
+        self.log.info("Begin recording inventory...")
         start_time = datetime.datetime.now()
         # Get df:
         #                   total_recording_length
         #    species1              10.4
         #    species2            ...
         
-        df = SoundProcessor.recording_lengths_by_species(species_root)
+        self.inventory = SoundProcessor.recording_lengths_by_species(species_root)
         
         # Could be None
-        if df is None:
+        if self.inventory is None:
             raise FileNotFoundError()
         
         end_time = datetime.datetime.now()
         duration_str = Utils.time_delta_str(end_time - start_time)
-        print(f"Done with recording inventory ({duration_str}).")
+        self.log.info(f"Done with recording inventory ({duration_str}).")
 
         species_root_path = Path(species_root)
         # Ensure existence of destination for manifest directory:
@@ -94,19 +106,21 @@ class RecordingsInventory:
             with open(manifest_dir_path.joinpath('README.txt'), 'w') as fd:
                 fd.write(message)
         
-        # Write df as manifest.json:
+        # Write self.inventory as manifest.json:
         manifest_fname = manifest_dir_path.joinpath('manifest.json')
         with open(manifest_fname, 'w') as fd:
-            df.to_json(fd)
+            self.inventory.to_json(fd)
 
-        print(df.to_string())
+        if print_results:
+            print(self.inventory.to_string())
 
         if chart_result:
             fig_title = f"Recording Durations in {species_root_path.stem}"
-            self.chart_results(df, manifest_dir_path, fig_title)
+            self.chart_results(self.inventory, manifest_dir_path, fig_title)
             
         
-        print(f"Outputs were saved in {str(manifest_dir_path)}")
+        if print_results:
+            print(f"Outputs were saved in {str(manifest_dir_path)}")
         
     #------------------------------------
     # chart_results
@@ -114,7 +128,7 @@ class RecordingsInventory:
     
     def chart_results(self, df, manifest_dir_path, fig_title):
 
-        print(f"Preparing bar chart...")
+        self.log.info(f"Preparing bar chart...")
         fig = plt.figure()
         # Make sure the species names
         ax = Charter.barchart(df['total_recording_length (secs)'])

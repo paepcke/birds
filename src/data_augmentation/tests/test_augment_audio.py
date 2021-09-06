@@ -12,12 +12,11 @@ import warnings
 
 import librosa
 
-from data_augmentation.augment_audio import AudioAugmenter
+from data_augmentation.augment_audio import AudioAugmenter, SpeciesRecordingAsset
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import AugmentationGoals, Utils
 import pandas as pd
 import shutil
-
 
 TEST_ALL = True
 #TEST_ALL = False
@@ -35,6 +34,8 @@ class AudioAugmentationTester(unittest.TestCase):
         
         cls.aug_tst_data = os.path.join(cls.curr_dir, 'data/augmentation_tst_data/')
         cls.aug_tst_out_dir = os.path.join(cls.curr_dir, 'data/audio_augmentations/')
+
+        #*****cls.dysmen_total = 11.0 + 47.00 = 58.00
         
         cls.wtros_total = 29.88 + 14.55 + 45.53
         cls.yceug_total = 22.81 + 22.54
@@ -235,9 +236,90 @@ class AudioAugmentationTester(unittest.TestCase):
 
 
     #------------------------------------
+    # test_SpeciesRecordingAsset_items
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_SpeciesRecordingAsset_items(self):
+        
+        asset = SpeciesRecordingAsset(os.path.join(self.aug_tst_data, 'WTROS'))
+        for (path, duration) in asset.items():
+            if path.endswith('wtros_bird1.mp3'):
+                self.assertEqual(duration, 29.88)
+
+            elif path.endswith('wtros_bird2.mp3'):
+                self.assertEqual(duration, 14.55)
+                
+            elif path.endswith('wtros_bird3.mp3'):
+                self.assertEqual(duration, 45.53)
+                
+            else:
+                self.fail(f"Bad path: {path}")
+
+        # Test sorting when when calling items():
+        
+        new_content_dict = {os.path.join(self.aug_tst_data, 'WTROS/wtros_bird5.mp3') : 40,
+                            os.path.join(self.aug_tst_data, 'WTROS/wtros_bird4.mp3') : 10,
+                            os.path.join(self.aug_tst_data, 'WTROS/wtros_bird7.mp3') : 0
+                            }
+        asset.content = new_content_dict
+        asset.must_sort = True
+        
+        item_tuples = list(asset.items())
+
+        paths       = [Path(item_tuple[0]).stem for item_tuple in item_tuples]
+        durations   = [item_tuple[1] for item_tuple in item_tuples]
+        
+        self.assertListEqual(paths, ['wtros_bird7',
+                                     'wtros_bird4',
+                                     'wtros_bird2',
+                                     'wtros_bird1',
+                                     'wtros_bird5',
+                                     'wtros_bird3'])
+        self.assertListEqual(durations, [0, 10, 14.55, 29.88, 40, 45.53])
+                             
+
+        # Test sorting when when calling values():
+
+        new_content_dict = {os.path.join(self.aug_tst_data, 'WTROS/wtros_bird5.mp3') : 40,
+                            os.path.join(self.aug_tst_data, 'WTROS/wtros_bird4.mp3') : 10,
+                            os.path.join(self.aug_tst_data, 'WTROS/wtros_bird7.mp3') : 0
+                            }
+        
+        asset.content = new_content_dict
+        asset.must_sort = True
+        
+        item_tuples = list(asset.items())
+        durations   = [item_tuple[1] for item_tuple in item_tuples]
+        self.assertListEqual(durations, [0, 10, 14.55, 29.88, 40, 45.53])
+
+        # Test sorting when when calling keys():
+        
+        new_content_dict = {os.path.join(self.aug_tst_data, 'WTROS/wtros_bird5.mp3') : 40,
+                            os.path.join(self.aug_tst_data, 'WTROS/wtros_bird4.mp3') : 10,
+                            os.path.join(self.aug_tst_data, 'WTROS/wtros_bird7.mp3') : 0
+                            }
+        asset.content = new_content_dict
+        asset.must_sort = True
+        
+        item_tuples = list(asset.items())
+        paths       = [Path(item_tuple[0]).stem for item_tuple in item_tuples]
+        self.assertListEqual(paths, ['wtros_bird7',
+                                     'wtros_bird4',
+                                     'wtros_bird2',
+                                     'wtros_bird1',
+                                     'wtros_bird5',
+                                     'wtros_bird3'])
+        
+        
+
+
+
+    #------------------------------------
     # test_specify_augmentation_tasks
     #-------------------
     
+    #****** TEST NEXT
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_specify_augmentation_tasks(self):
         
@@ -339,11 +421,15 @@ class AudioAugmentationTester(unittest.TestCase):
                                     aug_goal=AugmentationGoals.MAX,
                                     species_filter=['WTROS']
                                     )
-        # Should have done nothing:
+        # Should have done nothing, because WTROS
+        # has the max recording durations, and we
+        # only considered that species:
         with self.assertRaises(FileNotFoundError):
             os.listdir(self.aug_tst_out_dir)
             
-        # Now filter for two species out of the three:
+        # Now filter for two species out of the three,
+        # ignoring YCEUG; this should bring LEGRG up
+        # to the duration sum of the WTROS:
         _augmenter = AudioAugmenter(self.aug_tst_data,
                                     self.aug_tst_out_dir,
                                     num_workers=1,
@@ -353,8 +439,22 @@ class AudioAugmentationTester(unittest.TestCase):
         new_legrg_durations = SoundProcessor.find_total_recording_length(os.path.join(self.aug_tst_out_dir, 
                                                                                       'LEGRG'))
         
-        self.assertEqual(new_legrg_durations, 72)
+        self.assertEqual(round(new_legrg_durations, 2), 76.62)
         self.assertListEqual(os.listdir(self.aug_tst_out_dir), ['LEGRG'])
+        
+    #------------------------------------
+    # test_SpeciesRecordingAsset
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_SpeciesRecordingAsset(self):
+        
+        species_dir = os.path.join(self.species1_dir)
+        asset = SpeciesRecordingAsset(species_dir)
+        
+        self.assertEqual(asset.species, 'DYSMEN_S')
+                
+        self.assertIsNone(asset.available_seconds)
 
 # ------------------------- Utilities -----------------------
 

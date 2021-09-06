@@ -2,13 +2,14 @@
 # coding: utf-8
 
 import argparse
+import datetime
 from pathlib import Path
 import random
 import sys, os
-import datetime
 
 from logging_service import LoggingService
 
+from data_augmentation.recording_length_inventory import RecordingsInventory
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import AugmentationGoals, WhenAlreadyDone
 from data_augmentation.utils import Utils, AudAugMethod
@@ -88,19 +89,44 @@ class AudioAugmenter:
                  absolute_seconds=None,
                  aug_methods=None,
                  noise_sources=None,
+                 recording_inventory=None,
                  unittesting=False
                  ):
 
         '''
+        
+        The num_workers controls how many cores will be employed
+        for the augmentation. If the given number is higher than the
+        available cores, only as many processes as there are cores
+        are created at a time. If None, then Utils.MAX_PERC_OF_CORES_TO_USE
+        percentage of available cores is used.
+
         If species_filter is provided, it is expected
         to be a dict mapping species names to a number
         of augmentations to perform. Only those species
         will be augmented.
         
-        Note: the species_filter feature was added. So
-             a number of unnecessary computations are performed
-             before the filtering occurs. Could be optimized,
-             but time performance is not an issue. 
+        The aug_goal specifies how many augmentations to create
+        within each species. See documentation of AugmentationGoals in
+        utils.py. If aug_goal is AugmentationGoals.NUMBER, then
+        absolute_seconds must provide the minimal total number of seconds worth
+        of recordings that every species must contain after augmentation. 
+        
+        The aug_methods argument may be any combination of AudAugMethod.ADD_NOISE,
+        AudAugMethod.TIME_SHIFT, and AudAugMethod.VOLUME.
+        
+        The noise_sources argument points to audio recordings to use for
+        the ADD_NOISE method. Random selections of the recordings will be used to 
+        blend onto a given sample that is to be augmented. The argument
+        may be an individual sound file, a directory of such sound files,
+        or a list with combinations of the two. Default is AudioAugmenter.NOISE_PATH.
+        
+        The recording_inventory is an optional path to a previously saved
+        json inventory of recorded seconds available for each species. The file is 
+        assumed to be a json-formated saved dataframe with two columns:
+        'total_recoring_length (secs)', and 'duration (hrs:mins_secs)'.
+        Rows are one per species. Such a file is usually produced
+        by recording_length_inventory(), and saved as manifest.json.
         
         :param species_root: directory holding .wav or .mp3 files
         :type species_root: str
@@ -122,12 +148,17 @@ class AudioAugmenter:
         :param absolute_seconds: number of audio seconds required for
             each species. Ignored unless aug_goal is AugmentationGoals.NUMBER
         :type absolute_seconds: {int | float}
+        :param recording_inventory: optional path to a previously saved
+            inventory of recording seconds for each species. Usually produced
+            by recording_length_inventory(), and saved as manifest.json
+        :type recording_inventory: str
         :param unittesting: do no initialization
         :type unittesting: bool
         '''
 
         self.log = LoggingService()
         
+        self.recording_inventory = recording_inventory
         if unittesting:
             return
         
@@ -159,6 +190,7 @@ class AudioAugmenter:
         self.overwrite_policy = overwrite_policy
         self.species_filter   = species_filter
         self.out_dir_root     = out_dir
+        self.recording_inventory = recording_inventory
 
         # Determine number of workers:
         num_cores = mp.cpu_count()
@@ -547,31 +579,67 @@ class AudioAugmenter:
         # Make a dict that maps each species to a
         # SpeciesRecordingAsset instance that contains
         # the duration of each recording of one species.
-        
-        self.log.info(f"Start recording-time inventory (long operation)")
-        start_time = datetime.datetime.now()
-        species_assets = {Path(species_dir).stem : SpeciesRecordingAsset(species_dir)
-                          for species_dir 
-                          in species_subdirs_to_augment
-                          }
-        end_time = datetime.datetime.now()
-        duration_str = Utils.time_delta_str(end_time - start_time)
-        self.log.info(f"Finished recording-time inventory ({duration_str})")
-        
-        if len(species_assets) == 0:
-            # If filter choked all species
-            # out of the running:
-            self.log.warn("No audio augmentation, because no species subdir qualifies")
-            return {}
-        
-        # Sort species_assets by rising number of 
-        # recording seconds:
 
-        sorted_species_assets = {species : rec_secs 
-                                 for species, rec_secs 
-                                 in sorted(species_assets.items(), 
-                                           key=lambda pair: pair[1].available_seconds)
-                                 }
+        if self.recording_inventory is not None:
+            # Great: save ourselves time loading metadata of
+            # every recording, and adding the time durations:
+                # Get like:
+                #        total_recording_length (secs) duration (hrs:mins:secs)
+                # BAFFG                          16216                  4:30:16
+                # BANAG                           7309                  2:01:49
+                # BBFLG                            974                  0:16:14
+                #             ...     
+            self.inventory_df = pd.io.json.read_json(self.recording_inventory)
+            # Make an uninitialized list of asset instances:
+            species_assets = [SpeciesRecordingAsset(species_path)
+                              for species_path
+                              in species_subdirs_to_augment
+                              ]
+            # Set the sum of recording seconds for each species,
+            # which we know from the inventorty_df:
+            for species_asset in species_assets:
+                species_asset.available_seconds = self.inventory_df.loc[species_asset.species,
+                                                                        'total_recording_length (secs)' 
+                                                                        ]
+                
+        else:
+            # Create inventory of already available recording seconds:
+            
+            self.log.info(f"Start recording-time inventory (long operation)")
+            start_time = datetime.datetime.now()
+            inventory_readme_msg = f"Inventory for species under {root_all_species} ({Utils.datetime_str})"
+            self.inventory_df = RecordingsInventory(root_all_species, 
+                                                    message=inventory_readme_msg, 
+                                                    chart_result=True,
+                                                    print_results=False).inventory
+            end_time = datetime.datetime.now()
+            duration_str = Utils.time_delta_str(end_time - start_time)
+            self.log.info(f"Finished recording-time inventory ({duration_str})")
+            
+            # Using that inventory, create a dict of 
+            # recording assets, keyed from the species names:
+            species_assets = {}
+            for species_dir in species_subdirs_to_augment:
+                species  = Path(species_dir).stem
+                recordings_duration = self.inventory_df.loc[species, 'total_recording_length (secs)']
+                asset   = SpeciesRecordingAsset(species_dir, 
+                                                recordings_duration=recordings_duration)
+                species_assets[species] = asset
+
+            if len(species_assets) == 0:
+                # If filter choked all species
+                # out of the running:
+                self.log.warn("No audio augmentation, because no species subdir qualifies")
+                return {}
+        
+            # Sort species_assets by rising number of 
+            # recording seconds:
+    
+            sorted_species_assets = {species : rec_secs 
+                                     for species, rec_secs 
+                                     in sorted(species_assets.items(), 
+                                               key=lambda pair: pair[1].available_seconds)
+                                     }
 
         assets = list(sorted_species_assets.values())
 
@@ -608,30 +676,43 @@ class AudioAugmenter:
     
 # --------------------- SpeciesRecordingAsset Class ------------
 
-class SpeciesRecordingAsset(dict):
+class SpeciesRecordingAsset:
     '''
     Instances act like dicts that map a full 
     path to a recording to that recording's duration.
     The dict is ordered by raising duration length.
+    
+    Also available is: <inst>.available_seconds, which
+    is the sum of all of this species' recordings' durations.
+    
+    Since determining recording durations is expensive,
+    all duration lookups are done lazily.
     '''
     
     #------------------------------------
     # Constructor
     #-------------------
     
-    def __init__(self, species_path):
+    def __init__(self, 
+                 species_path,
+                 recordings_duration=None
+                 ):
         '''
         Given the root directory with recordings from
         one species, act as a dict that maps each full recording
         path to the number of seconds that is the duration of
-        that recording.
+        that recording. The reading of the number of seconds
+        is lazy, done only when __getitem__() is called.
+
+        In addition, retain the total number of recorded seconds
+        for the species.
         
-        Instances are sortable via the sort/sorted functions.
+        Instances are sortable the total of recorded durations 
+        via the sort/sorted functions.
+        
         Instances are hashable, and can therefore serve as
         keys in a dict. The class implements __eq__.
         
-        In addition, retain the total number of recorded seconds
-        for the species.
         
         Instances provide the following:
             
@@ -642,29 +723,223 @@ class SpeciesRecordingAsset(dict):
             <inst>[<recording_path>] --> number of seconds in that recording
 
         :param species_path: path to recordings of one species
-        :type species_path: src
+        :type species_path: str
+        :param recordings_duration: if already known, the sum of 
+            all recording durations of the species
+        :type recordings_duration: {None | int | float}
         '''
-        
+
+        self.content = {}
         self.species     = Path(species_path).stem
         self.species_dir = species_path
-        self.available_seconds = 0
-        # For each recording: its duration:
-        rec_len_dict = {}
+        # Total number of seconds of recordings
+        # available for this species
+        self._available_seconds = recordings_duration
+        
+        # For each recording: its duration placeholder:
         for recording in Utils.listdir_abs(species_path):
-            # The total_seconds() includes the microseconds,
-            # so the value will be a float: 
-            duration = SoundProcessor.soundfile_metadata(recording)['duration'].total_seconds()
-            self.available_seconds += duration
-            rec_len_dict[recording] = duration
-            
-        # Sort the recording length dict by 
-        # length, smallest to largest and make
-        # this instance's content be that dict:
-        self.update({k : v 
-                     for k, v 
-                     in sorted(rec_len_dict.items(), key=lambda pair: pair[1])
-                     })
+            self.content[recording] = None
+        # No need to sort yet if values()/items()/keys()
+        # methods are called:
+        self.must_sort = False
 
+    #------------------------------------
+    # available_seconds
+    #-------------------
+    
+    @property
+    def available_seconds(self):
+        if self._available_seconds is None:
+            # Initialize sum of recording durations:
+            self.read_recording_lengths()
+        else:
+            return self._available_seconds
+    
+    @available_seconds.setter
+    def available_seconds(self, new_val):
+        self._available_seconds = new_val
+
+    #------------------------------------
+    # __getitem__
+    #-------------------
+    
+    def __getitem__(self, sample_path):
+        if self.content[sample_path] is None:
+            # Have not computed every recording's 
+            # duration yet. So, need to read the
+            # requested recording's duration now:
+            self.read_recording_lengths(sample_path)
+        return self.content[sample_path]
+
+    #------------------------------------
+    # __setitem__
+    #-------------------
+    
+    def __setitem__(self):
+        raise NotImplementedError("Class SpeciesRecordingAsset's individual recordings' durations are read-only")
+
+    #------------------------------------
+    # keys
+    #-------------------
+    
+    def keys(self):
+        if self.must_sort:
+            self.sort()
+        return self.content.keys()
+
+    #------------------------------------
+    # values
+    #-------------------
+    
+    def values(self):
+        '''
+        Implements the dict values() method in this
+        lazy environment. Fills all recording durations
+        that are still None, then sorts by increasing
+        duration, and returns the usual dict-values iterable.
+        
+        :returns: a value iterator
+        :rtype: iter({int | float})
+        '''
+        # Fill in all duration values that are
+        # still null b/c they were never requested:
+        
+        self.read_recording_lengths()
+        if self.must_sort:
+            self.sort()
+
+        return self.content.values()
+
+    #------------------------------------
+    # items
+    #-------------------
+    
+    def items(self):
+        '''
+        Implements the dict items() method in this
+        lazy environment. Fills all recording durations
+        that are still None, then sorts by increasing
+        duration, and returns the usual dict-items iterable.
+        
+        :returns: a key/value iterator
+        :rtype: iter((str, {int | float}))
+        '''
+        
+        # Fill in all duration values that are
+        # still null b/c they were never requested:
+        
+        self.read_recording_lengths()
+        if self.must_sort:
+            self.sort()
+
+        return self.content.items()
+
+    #------------------------------------
+    # read_recording_lengths
+    #-------------------
+
+    def read_recording_lengths(self, path=None):
+        '''
+        Update the self.content dict (audio-path : recording-duration).
+        If path is None, updates all durations of this instance's
+        species that are not yet filled in. Else only updates
+        the recording length of the given path.
+        
+        Sets self.must_sort to True.
+        
+        :param path: if provided, only recording length
+            of given path is updated in self.content dict.
+            Else all paths in the species dir are read and
+            updated.
+        :type path: str
+        '''
+        
+        # Start with the cache of recording
+        # durations we already have: self.content
+        if path is None:
+            paths_to_examine = Utils.listdir_abs(self.species_dir)
+        else:
+            paths_to_examine = [path]
+        for recording in paths_to_examine:
+            # Already looked this one up?
+            try:
+                dur = self.content[recording]
+            except KeyError:
+                # Recording appeared after this instance
+                # was created; unusual, but OK:
+                dur = None
+                
+            if dur is None: 
+                # The total_seconds() includes the microseconds,
+                # so the value will be a float: 
+                duration = SoundProcessor.soundfile_metadata(recording)['duration'].total_seconds()
+                self.content[recording] = duration
+                
+                # Sorting is expensive, setting a var
+                # multiple times is cheap, so do the latter:
+                # we actually did make a change:
+                self.must_sort = True
+
+        if self.must_sort:
+            # Made a change, so update the sum or recorded
+            # sessions:
+            self._available_durations = sum([duration
+                                             for duration 
+                                             in self.content.values()
+                                             if duration is not None
+                                             ])
+        
+    #------------------------------------
+    # sort
+    #-------------------
+    
+    def sort(self):
+        '''
+        Sort the self.content dict by rising
+        recording durations (i.e. by rising values).
+        Have all the entries with values equal None
+        at the end.
+        
+        Sets self.must_sort to False
+        '''
+        
+        # Sort the dict by increasing recording duration:
+        
+        # Make a tmp dict with just the 
+        # values that are already set, i.e. are
+        # not still None:
+        
+        non_nones_dict = {k : v
+                          for k,v
+                          in self.content.items()
+                          if v is not None
+                          }
+        
+        # Keys (i.e. path to recordings) of
+        # entries whose values are still None:
+        nones_entries  = [path 
+                          for path 
+                          in self.content.keys()
+                          if self.content[path] is None
+                          ]
+
+        # Replace the self.content dict with the
+        # sorted non_nones_dict:
+        self.content = {k : v
+                        for k,v
+                        in sorted(non_nones_dict.items(), 
+                                  key=lambda item_pair: item_pair[1])
+                        }
+        
+        # Now add the still-None valued entries
+        # at the end:
+        for path in nones_entries:
+            self.content[path] = None
+
+        # We did the sort:
+        self.must_sort = False
+
+        
     #------------------------------------
     # max
     #-------------------
@@ -827,6 +1102,10 @@ if __name__ == '__main__':
                         help='repeatable: augmentation methods to use',
                         default=None
                         )
+    
+    parser.add_argument('-i', '--inventory',
+                        help='path to .json file of recording seconds available for each species',
+                        default=None)
 
     parser.add_argument('input_dir_path',
                         help='path to .wav files root',
@@ -897,6 +1176,13 @@ if __name__ == '__main__':
             
     else:
         augmethods = None
+        
+    if args.inventory is not None:
+        inventory = Path(args.inventory)
+        if not inventory.is_file() or not inventory.suffix == '.json':
+            print(f"Recording inventory must be a .json file, not '{args.inventory}'")
+            sys.exit(1)
+        
 
     augmenter = AudioAugmenter(args.input_dir_path,
                                args.output_dir_path,
@@ -905,5 +1191,6 @@ if __name__ == '__main__':
                                absolute_seconds=absolute_seconds,
                                aug_methods=augmethods,
                                species_filter=args.species,
-                               noise_sources=noise_sources
+                               noise_sources=noise_sources,
+                               recording_inventory=args.inventory
                                )
