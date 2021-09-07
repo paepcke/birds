@@ -438,6 +438,7 @@ class SoundProcessor:
         
         cls.log.info({f"Analyzing metadata for audio files of {num_species} species..."})
 
+#**********????? Replace
         for species_dir in Utils.listdir_abs(species_root):
             # Skip file names that are at top level;
             # i.e. only consider files under the species
@@ -457,7 +458,7 @@ class SoundProcessor:
             
             rec_len = cls.find_total_recording_length(species_dir)
             num_samples_in[Path(species_dir).stem] = {"total_recording_length (secs)": rec_len}
-
+#**********????? Replace
         if len(num_samples_in) == 0:
             return None 
 
