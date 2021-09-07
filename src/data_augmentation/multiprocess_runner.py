@@ -4,12 +4,15 @@ Created on Sep 6, 2021
 @author: paepcke
 '''
 
+import traceback
+
 from logging_service import LoggingService
 
 from data_augmentation.utils import Utils
 import multiprocessing as mp
 
-from enum import Enum
+# TODO:
+#   o Class level doc
 
 
 class MultiProcessRunner:
@@ -18,12 +21,45 @@ class MultiProcessRunner:
     # Constructor
     #-------------------
     
-    def __init__(self, task_specs, num_workers=None):
+    def __init__(self, task_specs, num_workers=None, synchronous=True):
+        '''
+        Given a list of ready-to-go Task instances,
+        run the tasks in parallel, each on its own CPU. 
+        Use num_workers CPUs if that many are available.
+        If num_workers is None, use Utils.MAX_PERC_OF_CORES_TO_USE
+        percent of available cores.
+        
+        Tasks must return dicts. 
+        
+        This method returns when all tasks are done, unless
+        synchronous is set to False. In that case, returns once
+        all tasks have been submitted to a CPU. Submission can
+        take an arbitrary amount of time, because the runner
+        may need to wait for CPUs to free up.
+         
+        A list of dicts with each task's returned result dict
+        is available in <inst>.results after this constructor
+        returns from synchronous operation. For asynch op, clients
+        can use the running_tasks() method. It returns a dict
+        mapping Task instances (i.e. client task_specs that were
+        passed into this method) to Event instances.
+
+        :param task_specs: list of Task specifications
+        :type task_specs: Task
+        :param num_workers: max number of CPUs to use
+        :type num_workers: {None | int}
+        :param synchronous: if True, returns when all
+            tasks are completed. Else returns when all
+            tasks have been submitted
+        :type synchronous: bool
+        '''
 
         self.log = LoggingService()
         
         if type(task_specs) != list:
             task_specs = [task_specs]
+            
+        self.synchronous = synchronous
         
         # Determine number of workers:
         num_cores = mp.cpu_count()
@@ -34,9 +70,26 @@ class MultiProcessRunner:
             # Limit pool size to number of cores:
             num_workers = num_cores
 
-        self.run_jobs(task_specs, num_workers)
+        # Get a list of multiprocessor dict 
+        # proxy instances. They behave like dicts, but
+        # turn them into basic dicts anyway. For example:
+        # unittest assertDictEqual(d1, d2) complains about
+        # dict not being of the proper type:
         
+        results = self.run_jobs(task_specs, num_workers)
         
+        if not synchronous:
+            self.results = None
+            return
+        
+        res_dicts = []
+        for dict_proxy in results:
+            # Make a native-Python dict from the dict proxy:
+            res_dicts.append({k : v for k,v in dict_proxy.items()})
+            
+        # Make result list available
+        self.results = res_dicts
+
     #------------------------------------
     # run_jobs
     #-------------------
@@ -67,12 +120,19 @@ class MultiProcessRunner:
         manager = mp.Manager()
         
         num_tasks  = len(task_specs)
+        # Save a shallow copy of the task list, 
+        # b/c we will pop() from this list
+        # later:
+        all_task_specs = task_specs.copy()
         
         cpu_budget = min(num_tasks, num_workers)
         self.log.info(f"Working on {len(task_specs)} task(s) using {cpu_budget} CPU(s)")
 
         cpus_available = cpu_budget
-        running_tasks = {}
+        
+        # Map of Task instance to manager Event instance:
+        self.running_tasks = {}
+        
         all_jobs = []
         
         # Start all the workers:
@@ -80,44 +140,124 @@ class MultiProcessRunner:
             if cpus_available > 0: 
                 
                 task = task_specs.pop()
+                
+                if type(task) != Task:
+                    raise TypeError(f"Tasks must be of type Task, not {type(task)} ({task})")
+                
                 ret_value_slot = mp.Value("b", False)
                 done_event = manager.Event()
-                shared_return_struct = self.get_return_structure(manager, task)
+                shared_return_dict = manager.dict()
+                task.shared_return_dict = shared_return_dict
+                
                 job = mp.Process(target=task.run,
-                                 args=(done_event, shared_return_struct)
+                                 args=(done_event, shared_return_dict)
                                  )
 
                 job.ret_value_slot = ret_value_slot
                 all_jobs.append(job)
+                # Allow access to the job process obj
+                # given the Task instance
+                task.job = job
                 
-                running_tasks[task] = done_event
+                self.running_tasks[task] = done_event
                 job.start()
                 cpus_available -= 1
                 
             else:
                 # Wait for a CPU to become available:
-                _done_task = self.await_any_job_done(running_tasks) 
+                _done_task = self._await_any_job_done(self.running_tasks) 
 
         # All tasks have been given to a CPU.
-        # Wait for everyone to finish:
-        self.log.info(f"Going into wait loop for {len(running_tasks)} still running tasks")
-        while len(running_tasks) > 0:
-            completed_task = self.await_any_job_done(running_tasks)
+        # Wait for everyone to finish, unless client
+        # instantiated this runner with synchronous set to False:
+        
+        if not self.synchronous:
+            return
+        
+        self.log.info(f"Going into wait loop for {len(self.running_tasks)} still running tasks")
+        while len(self.running_tasks) > 0:
+            completed_task = self._await_any_job_done(self.running_tasks)
             self.log.info(f"Task {completed_task.name} finished")
-            del running_tasks[completed_task]
+            del self.running_tasks[completed_task]
 
         # Return a dict whose keys are task names, and vals 
         # are the return values. Note that the return 
         # values maybe be exception objects. Clients
         # need to check:
-        results = [job.ret_value_slot for job in all_jobs]
+        #**** REMOVE
+        #******results = [job.ret_value_slot for job in all_jobs]
+        results = [task.shared_return_dict for task in all_task_specs]
         return results
 
     #------------------------------------
-    # await_any_job_done
+    # terminate_task
     #-------------------
     
-    def await_any_job_done(self, running_tasks):
+    def terminate_task(self, task_spec):
+        '''
+        Given a task spec instance, kill the
+        child process that is working on this 
+        task with a SIGTERM
+        
+        :param task_spec: task specification instance
+        :type task_spec: Task
+        :return True if a process was running that worked on
+            the given task, and a SIGTERM was delivered. Else False
+        :rtype: bool
+        :raise TypeError if task_spec not instance of Task
+        :raise RuntimeError if SIGTERM could not be delivered
+        '''
+        
+        if type(task_spec) != Task:
+            raise TypeError(f"Task spec must be a Task instance, not {task_spec}")
+        
+        # Does this job have a running 
+        # process working on it?
+        try:
+            self.running_tasks[task_spec]
+        except KeyError:
+            # No child running
+            return False
+            
+        try:
+            self.log.info(f"Terminating worker {task_spec.name}")
+            task_spec.job.terminate()
+            del self.running_tasks[task_spec]
+            # Successfully delivered SIGTERM.
+            # Hopefully the child processe receives
+            # it:
+            return True
+        except Exception as e:
+            # Something went wrong sending the SIGTERM
+            raise RuntimeError(f"Could not send SIGTERM to {task_spec}: {repr(e)}")
+
+    #------------------------------------
+    # running_tasks
+    #-------------------
+    
+    def running_tasks(self):
+        '''
+        Return dict that maps client Task instances
+        to multiprocessor.manager.Event instances.
+        Clients can thereby:
+           o discern how many tasks are still being
+               worked on
+           o wait for any or all of the tasks to finish
+           
+        NOTE: the default sychronous operation takes
+              care of such waiting.
+        
+        :return dict mapping Task instances to Event instances
+        :rtype {Task : Event} 
+        '''
+        #return list(self.running_tasks.values())
+        return self.running_tasks
+
+    #------------------------------------
+    # _await_any_job_done
+    #-------------------
+    
+    def _await_any_job_done(self, running_tasks):
         '''
     
         :param running_tasks:
@@ -130,36 +270,7 @@ class MultiProcessRunner:
                 if task_is_done:
                     return task_obj
 
-    #------------------------------------
-    # get_return_structure
-    #-------------------
-    
-    def get_return_structure(self, mp_manager, task):
-        
-        struct = task.return_type
-        
-        if type(struct) != ReturnType:
-            raise TypeError(f"Task return types must of a ReturnType enum, not {struct}")
-        
-        if struct == ReturnType.LIST:
-            return mp_manager.list()
-        elif struct == ReturnType.DICT:
-            return mp_manager.dict()
-        elif struct == ReturnType.VALUE:
-            return mp_manager.Value()
-        elif struct == ReturnType.ARRAY:
-            return mp_manager.Array()
-        elif struct == ReturnType.QUEUE:
-            return mp_manager.Queue()
-
 # --------------- Task Class --------------------
-
-class ReturnType(Enum):
-    LIST = 1
-    DICT = 2
-    VALUE = 3
-    ARRAY = 4
-    QUEUE = 5
 
 class Task(dict):
     '''
@@ -173,28 +284,36 @@ class Task(dict):
     def __init__(self, 
                  name, 
                  target_func,
-                 return_type, 
                  *args, **kwargs):
 
         self.name = name
         self.target_func = target_func
         self.func_args = args
         self.func_kwargs = kwargs
-        self.return_type = return_type
 
     #------------------------------------
     # run
     #-------------------
     
-    def run(self, done_event, shared_return_struct):
+    def run(self, done_event, shared_return_dict):
 
-        # Though done_event and shared_return_struct are
+        # Though done_event and shared_return_dict are
         # used only in this method, make them inspectable
         # from the outside:
         self.done_event = done_event
-        self.shared_return_struct = shared_return_struct
-        res = self.target_func(self.func_args, self.func_kwargs)
-        self.shared_return_struct = res
+        
+        try:
+            res = self.target_func(*self.func_args, **self.func_kwargs)
+        except Exception as e:
+            tb = traceback.format_exc()
+            res = {'Exception' : e,
+                   'Traceback' : tb
+                   }
+            
+        if type(res) == dict:
+            shared_return_dict.update(res)
+        else:
+            shared_return_dict['result'] = res
         self.done_event.set()
 
     #------------------------------------
