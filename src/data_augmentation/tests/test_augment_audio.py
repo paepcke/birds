@@ -18,6 +18,10 @@ from data_augmentation.utils import AugmentationGoals, Utils
 import pandas as pd
 import shutil
 
+# NOTE: some code get exercised more than needed,
+#       so testing takes about 45 seconds or so,
+#       with lots of processes starting and finishing.    
+
 TEST_ALL = True
 #TEST_ALL = False
 
@@ -145,9 +149,8 @@ class AudioAugmentationTester(unittest.TestCase):
                                             )
 
         Utils.compute_num_augs_per_species(aug_goals, population)
-        num_samples = population.loc[:,'num_samples']
-        med = num_samples.median()
-        print(f"Median: {med}")
+        _num_samples = population.loc[:,'num_samples']
+        _med = _num_samples.median()
         
         # species foo must receive med-10  = 15           augmentations
         #         bar              med-25  =  0           augmentations
@@ -319,7 +322,6 @@ class AudioAugmentationTester(unittest.TestCase):
     # test_specify_augmentation_tasks
     #-------------------
     
-    #****** TEST NEXT
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_specify_augmentation_tasks(self):
         
@@ -399,7 +401,6 @@ class AudioAugmentationTester(unittest.TestCase):
         new_yceug_durations = SoundProcessor.find_total_recording_length(os.path.join(self.aug_tst_out_dir, 'YCEUG'))
 
         self.assertGreaterEqual(new_yceug_durations + self.totals['YCEUG'], 88)
-        print('foo')
 
     #------------------------------------
     # test_species_filter
