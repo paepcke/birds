@@ -190,7 +190,6 @@ class AudioAugmenter:
         self.overwrite_policy = overwrite_policy
         self.species_filter   = species_filter
         self.out_dir_root     = out_dir
-        self.recording_inventory = recording_inventory
 
         # Determine number of workers:
         num_cores = mp.cpu_count()

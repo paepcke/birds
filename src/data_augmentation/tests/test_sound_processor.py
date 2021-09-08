@@ -16,7 +16,7 @@ from data_augmentation.utils import Interval
 import pandas as pd
 
 
-#*********TEST_ALL = True
+#******TEST_ALL = True
 TEST_ALL = False
 
 # NOTE: SoundProcessor is also exercised in 
@@ -123,7 +123,7 @@ class TestSoundProcessor(unittest.TestCase):
     # test_find_recording_lengths
     #-------------------
     
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #*******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_find_recording_lengths(self):
         
         duration_distrib_df = SoundProcessor.find_recording_lengths(self.snd_file_data)
@@ -169,8 +169,8 @@ class TestSoundProcessor(unittest.TestCase):
         
         dur_distrib_by_species = SoundProcessor.recording_lengths_by_species(self.more_recordings_dir)
 
-        expected = pd.DataFrame([[210, '0:03:30'],
-                                 [144, '0:02:24']
+        expected = pd.DataFrame([[213.89, '0:03:33.890000'],
+                                 [145.59, '0:02:27.590000']
                                  ],
                                  index=['DYSMEN_S', 'HENLES_S'],
                                  columns=['total_recording_length (secs)', 'duration (hrs:mins:secs)']
@@ -182,7 +182,7 @@ class TestSoundProcessor(unittest.TestCase):
     # test_add_background
     #-------------------
     
-    #*******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_add_background(self):
         
         main_species_path    = os.path.join(self.more_recordings_dir,
@@ -212,7 +212,7 @@ class TestSoundProcessor(unittest.TestCase):
             self.assertEqual(after_overlay_dur, overlay_dur)
             
             mix_dur = SoundProcessor.find_total_recording_length(new_fname)
-            self.assertEqual(mix_dur, main_dur)
+            self.assertEqual(int(mix_dur), int(main_dur))
             
             (new_fname, noise_used) = SoundProcessor.add_background(main_species_path,
                                                                     os.path.join(self.more_recordings_dir,

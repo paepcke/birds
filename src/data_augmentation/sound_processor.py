@@ -19,6 +19,7 @@ import skimage.io
 import soundfile
 
 from data_augmentation.utils import Interval, Utils
+from data_augmentation.multiprocess_runner import MultiProcessRunner, Task
 from birdsong.utils.utilities import FileUtils
 import numpy as np
 import pandas as pd
@@ -412,12 +413,13 @@ class SoundProcessor:
         .wav or .mp3 recordings, return a dataframe with 
         recording length information:
         
-                         total_recording_length
-            species1            10.5
-            species2             2.0
+                         total_recording_length (secs)   duration (hrs:mins:secs)
+            species1            10.5                        0:10:30
+            species2             2.0                        0:02:00
                ...              ...
                
         Rows will be alpha-sorted by species_dir.
+        Work is done in parallel
              
         :param species_root: root of the recording subdirectories
         :type species_root: str
@@ -438,27 +440,29 @@ class SoundProcessor:
         
         cls.log.info({f"Analyzing metadata for audio files of {num_species} species..."})
 
-#**********????? Replace
+        inventory_tasks = []
         for species_dir in Utils.listdir_abs(species_root):
             # Skip file names that are at top level;
             # i.e. only consider files under the species
             # subdirs:
             if not os.path.isdir(species_dir):
                 continue
-            
-            # For progress reports, get number of
-            # audio files in this subdir:
-            num_aud_files = sum([1
-                                 for dir_entry
-                                 in os.scandir(species_dir)
-                                 if dir_entry.is_file() and \
-                                    Path(dir_entry).suffix in FileUtils.AUDIO_EXTENSIONS
-                                 ])
-            cls.log.info(f"Analyzing {num_aud_files} audio files of species {Path(species_dir).stem}")
-            
-            rec_len = cls.find_total_recording_length(species_dir)
-            num_samples_in[Path(species_dir).stem] = {"total_recording_length (secs)": rec_len}
-#**********????? Replace
+            species = Path(species_dir).stem
+            inventory_task = Task(f"rec_inventory_{species}",
+                                  cls.inventory_one_species,
+                                  species_dir
+                                  )
+            inventory_tasks.append(inventory_task) 
+
+        mp_runner = MultiProcessRunner(inventory_tasks)
+        # Result for each species subdir will be a one-entry dict:
+        #                 total_recording_length
+        #    species_name : recording-duration-float
+        for res_dict in mp_runner.results:
+            result_species = list(res_dict.keys())[0]
+            result_seconds = list(res_dict.values())[0]
+            num_samples_in[result_species] = {"total_recording_length (secs)": result_seconds}
+
         if len(num_samples_in) == 0:
             return None 
 
@@ -467,7 +471,29 @@ class SoundProcessor:
         df['duration (hrs:mins:secs)'] = \
             df['total_recording_length (secs)'].map(lambda el: 
                                              str(datetime.timedelta(seconds=el)))
-        return df
+            
+        
+        return df.sort_index()
+
+    #------------------------------------
+    # inventory_one_species
+    #-------------------
+    
+    @classmethod
+    def inventory_one_species(cls, species_dir):
+        
+        species = Path(species_dir).stem
+        # For progress reports, get number of
+        # audio files in this subdir:
+        num_aud_files = sum([1
+                             for dir_entry
+                             in os.scandir(species_dir)
+                             if dir_entry.is_file() and \
+                                Path(dir_entry).suffix in FileUtils.AUDIO_EXTENSIONS
+                             ])
+        cls.log.info(f"Analyzing {num_aud_files} audio files of species {species}")
+        rec_len = cls.find_total_recording_length(species_dir)
+        return {species : rec_len}
 
     # --------------- Operations on Spectrograms Files --------------
 

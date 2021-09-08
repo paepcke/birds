@@ -1289,6 +1289,24 @@ class Utils:
                                                                      ignore_index=True)
         return new_series
 
+    #------------------------------------
+    # assertDataframesEqual
+    #-------------------
+    
+    @classmethod
+    def assertDataframesEqual(cls, df1, df2):
+        
+        if (df1.index != df2.index).any():
+            raise AssertionError(f"Index df1 differ from index df2")
+            
+        if (df1.columns != df2.columns).any():
+            raise AssertionError(f"Columns df1 differ from columns df2")
+        
+        if not (df1 == df2).all().all():
+            raise AssertionError(f"Values of df1 differ from values of df2")
+        
+        return
+
 
 # -------------------- Class ProcessWithoutWarnings ----------
 

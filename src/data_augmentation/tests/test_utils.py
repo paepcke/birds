@@ -332,6 +332,47 @@ class Test(unittest.TestCase):
         self.assertEqual(res, '1.0 hour, 10.0 seconds')
 
 
+    #------------------------------------
+    # test_assertDataframesEqual
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_assertDataframesEqual(self):
+        
+        df1 = pd.DataFrame([[1,2,3], [4,5,6]])
+        df2 = pd.DataFrame([[1,2,3], [4,5,6]])
+        
+        Utils.assertDataframesEqual(df1,df2)
+        
+        df1.columns = ['foo', 'bar', 'fum']
+        
+        # Different column names:
+        with self.assertRaises(AssertionError):
+            Utils.assertDataframesEqual(df1,df2)
+
+        # Restore column names
+        df1.columns = [0,1,2]
+        # DFs are equal again:
+        Utils.assertDataframesEqual(df1,df2)
+        
+        # Change one number:
+        df1.iloc[0,0] = 0
+        with self.assertRaises(AssertionError):
+            Utils.assertDataframesEqual(df1,df2)
+        
+        # Back to equal:
+        df1.iloc[0,0] = 1
+        Utils.assertDataframesEqual(df1,df2)
+
+        # Different index (row lables:
+        df1.index = ['blue', 'green']
+        with self.assertRaises(AssertionError):
+            Utils.assertDataframesEqual(df1,df2)
+        
+        # Back to equal:
+        df1.index = [0,1]
+        Utils.assertDataframesEqual(df1,df2)
+
 # ---------------- Main --------------
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']
