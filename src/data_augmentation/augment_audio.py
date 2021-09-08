@@ -173,6 +173,17 @@ class AudioAugmenter:
         else:
             self.noise_sources = noise_sources
 
+        # Determine number of workers:
+        num_cores = mp.cpu_count()
+        # Use only a percentage of the cores:
+        if num_workers is None:
+            self.num_workers = round(num_cores * Utils.MAX_PERC_OF_CORES_TO_USE  / 100)
+        elif num_workers > num_cores:
+            # Limit pool size to number of cores:
+            self.num_workers = num_cores
+        else:
+            self.num_workers = num_workers
+
         # Process requested augmentation 
         # mehods; any specified?
         if aug_methods is None:
@@ -190,15 +201,6 @@ class AudioAugmenter:
         self.overwrite_policy = overwrite_policy
         self.species_filter   = species_filter
         self.out_dir_root     = out_dir
-
-        # Determine number of workers:
-        num_cores = mp.cpu_count()
-        # Use only a percentage of the cores:
-        if num_workers is None:
-            self.num_workers = round(num_cores * Utils.MAX_PERC_OF_CORES_TO_USE  / 100)
-        elif num_workers > num_cores:
-            # Limit pool size to number of cores:
-            self.num_workers = num_cores
 
         # Get a list of AugmentationTask specifications:
         aug_task_list = self.specify_augmentation_tasks(species_root, 
