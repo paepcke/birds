@@ -1065,6 +1065,9 @@ class AugmentationTask:
 #       it was provided on the cmd line.
  
 if __name__ == '__main__':
+    
+    cpu_percentage = Utils.MAX_PERC_OF_CORES_TO_USE
+    
     parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
                                      formatter_class=argparse.RawTextHelpFormatter,
                                      description="Augment existing set of audio recordings."
@@ -1075,7 +1078,13 @@ if __name__ == '__main__':
                         action='store_true',
                         default=False
                         )
-    
+
+    parser.add_argument('-w', '--workers',
+                        type=int,
+                        help=f"maximum number of CPUs to use; default is {cpu_percentage} percent of available",
+                        default=False
+                        )
+
     parser.add_argument('-g', '--goal',
                         help="augmentation goal: 'median', 'max', or seconds as an integer; default is median",
                         default=None
@@ -1186,6 +1195,7 @@ if __name__ == '__main__':
     augmenter = AudioAugmenter(args.input_dir_path,
                                args.output_dir_path,
                                overwrite_policy=overwrite_policy,
+                               num_workers=args.workers,
                                aug_goal=goal,
                                absolute_seconds=absolute_seconds,
                                aug_methods=augmethods,
