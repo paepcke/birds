@@ -407,7 +407,7 @@ class SoundProcessor:
     #-------------------
 
     @classmethod
-    def recording_lengths_by_species(cls, species_root):
+    def recording_lengths_by_species(cls, species_root, num_workers=None):
         '''
         Given directory that contains subidrectories with
         .wav or .mp3 recordings, return a dataframe with 
@@ -423,6 +423,9 @@ class SoundProcessor:
              
         :param species_root: root of the recording subdirectories
         :type species_root: str
+        :param num_workers: maximum number of CPUs to use. Default:
+            Utils.MAX_PERC_OF_CORES_TO_USE
+        :type num_workers: {None | int}
         :return sum of recording length of all recodings
             of each species_dir. If no recordings found, returns
             None
@@ -454,7 +457,7 @@ class SoundProcessor:
                                   )
             inventory_tasks.append(inventory_task) 
 
-        mp_runner = MultiProcessRunner(inventory_tasks)
+        mp_runner = MultiProcessRunner(inventory_tasks, num_workers=num_workers)
         # Result for each species subdir will be a one-entry dict:
         #                 total_recording_length
         #    species_name : recording-duration-float

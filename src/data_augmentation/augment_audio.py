@@ -195,10 +195,10 @@ class AudioAugmenter:
         num_cores = mp.cpu_count()
         # Use only a percentage of the cores:
         if num_workers is None:
-            num_workers = round(num_cores * Utils.MAX_PERC_OF_CORES_TO_USE  / 100)
+            self.num_workers = round(num_cores * Utils.MAX_PERC_OF_CORES_TO_USE  / 100)
         elif num_workers > num_cores:
             # Limit pool size to number of cores:
-            num_workers = num_cores
+            self.num_workers = num_cores
 
         # Get a list of AugmentationTask specifications:
         aug_task_list = self.specify_augmentation_tasks(species_root, 
@@ -214,22 +214,21 @@ class AudioAugmenter:
             self.species_out_dirs[species] = this_out_dir
             os.makedirs(this_out_dir, exist_ok=True)
         
-        self.run_jobs(aug_task_list, num_workers)
+        self.run_jobs(aug_task_list)
 
     #------------------------------------
     # run_jobs
     #-------------------
 
-    def run_jobs(self, task_specs, num_workers):
+    def run_jobs(self, task_specs):
         '''
         Create processes on multiple CPUs, and feed
         them augmentation tasks. Wait for them to finish.
         
+        Assumption: self.num_workers holds number of CPUs to use
+        
         :param task_specs: list of AugmentationTask instances
         :type task_specs: [AugmentationTask]
-        :param num_workers: number of CPUs to use simultaneously.
-            Default is 
-        :type num_workers: {None | int}
         '''
         
         if len(task_specs) == 0:
@@ -253,7 +252,7 @@ class AudioAugmenter:
         aug_jobs = []
 
         # Start all the workers:
-        for i in range(min(num_tasks, num_workers)):
+        for i in range(min(num_tasks, self.num_workers)):
             ret_value_slot = mp.Value("b", False)
             job = mp.Process(target=self.create_new_sample,
                              args=(task_queue,),
@@ -276,14 +275,14 @@ class AudioAugmenter:
         # Indicate end of tasks in to the queue, one
         # 'STOP' str for each worker to see:
         
-        for _i in range(num_workers):
+        for _i in range(self.num_workers):
             task_queue.put('STOP')
 
         # Keep checking on each job, until
         # all are done as indicated by all jobs_done
         # values being True, a.k.a valued 1:
         
-        while sum(global_info['jobs_status']) < num_workers:
+        while sum(global_info['jobs_status']) < self.num_workers:
             for job_idx, job in enumerate(aug_jobs):
                 # Timeout 4 sec
                 job.join(4)
@@ -305,7 +304,7 @@ class AudioAugmenter:
                     res = "OK" if job.ret_val else "Error"
                     # New line after the single-line progress msgs:
                     print("")
-                    print(f"Worker {job.name}/{num_workers} finished with: {res}")
+                    print(f"Worker {job.name}/{self.num_workers} finished with: {res}")
                     #global_info['snips_done'] = self.sign_of_life(job, 
                     #                                              global_info['snips_done'],
                     #                                              outdir,
@@ -610,7 +609,9 @@ class AudioAugmenter:
             self.inventory_df = RecordingsInventory(root_all_species, 
                                                     message=inventory_readme_msg, 
                                                     chart_result=True,
-                                                    print_results=False).inventory
+                                                    print_results=False,
+                                                    num_workers=self.num_workers
+                                                    ).inventory
             end_time = datetime.datetime.now()
             duration_str = Utils.time_delta_str(end_time - start_time)
             self.log.info(f"Finished recording-time inventory ({duration_str})")

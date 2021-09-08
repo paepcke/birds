@@ -56,7 +56,9 @@ class RecordingsInventory:
                  message=None, 
                  chart_result=False, 
                  print_results=True,
-                 inventory=None):
+                 inventory=None,
+                 num_workers=None
+                 ):
         '''
         Given the directory below which species recordings
         subdirectories lie, add all recording durations separately
@@ -90,6 +92,9 @@ class RecordingsInventory:
         :type print_results: bool
         :param inventory: optionally, pre-computed inventory
         :type inventory: {None | pd.DataFrame}
+        :param num_workers: max number of CPUs to use;
+            Default: Utils.MAX_PERC_OF_CORES_TO_USE
+        :type num_workers: {None | int}
         :raise FileNotFoundError if no audio files found.
         '''
 
@@ -109,7 +114,7 @@ class RecordingsInventory:
             #    species1              10.4                  ...
             #    species2            ...
             
-            inventory = SoundProcessor.recording_lengths_by_species(species_root)
+            inventory = SoundProcessor.recording_lengths_by_species(species_root, num_workers=num_workers)
             
             # Could have come out to be None
             if inventory is None:
