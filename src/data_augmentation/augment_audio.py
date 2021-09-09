@@ -1119,7 +1119,7 @@ if __name__ == '__main__':
     
     parser.add_argument('-a', '--augmethods',
                         type=str,
-                        choices=['ADD_NOISE', 'TIME_SHIFT', 'VOLUME'],
+                        choices=['NOISE', 'TIME_SHIFT', 'VOLUME'],
                         nargs='+',
                         help='repeatable: augmentation methods to use',
                         default=None
