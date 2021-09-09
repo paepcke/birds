@@ -66,7 +66,7 @@ class SoundProcessor:
 
     log = LoggingService()
 
-    SPECTRO_WIN_HEIGHT=256
+    SPECTRO_WIN_HEIGHT=224
     '''Number of frequency bands in spectrogram'''
     
     # Pick out the 00:03:34.60 from

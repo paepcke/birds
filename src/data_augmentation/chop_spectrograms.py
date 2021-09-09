@@ -85,7 +85,7 @@ class SpectrogramChopper:
     # Common logger for all workers:
     log = LoggingService()
     
-    MIN_SNIPPET_WIDTH=256
+    MIN_SNIPPET_WIDTH=224
     '''Minimum width of spectrogram snippets to satisfy the 
        torchvision pretrained model minimum value of 
        224 for both width and height'''
