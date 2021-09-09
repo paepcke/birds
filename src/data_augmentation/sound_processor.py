@@ -164,7 +164,7 @@ class SoundProcessor:
         
         # We will be working with 1 second as the smallest unit of time
         # load all of both wav files and determine the length of each
-        noise, noise_sr = SoundProcessor.load_audio(os.path.join(noise_sources, full_background_path))  # type(noise) = np.ndarray
+        noise, noise_sr = SoundProcessor.load_audio(full_background_path)
         orig_recording, orig_sr = SoundProcessor.load_audio(file_name)
     
         new_sr = math.gcd(noise_sr, orig_sr)
