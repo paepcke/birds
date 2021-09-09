@@ -602,7 +602,9 @@ class AudioAugmenter:
                 species_asset.available_seconds = self.inventory_df.loc[species_asset.species,
                                                                         'total_recording_length (secs)' 
                                                                         ]
-                
+            # The assets from the stored inventory
+            # are already sorted:
+            sorted_species_assets = species_assets
         else:
             # Create inventory of already available recording seconds:
             
