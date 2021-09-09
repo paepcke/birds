@@ -38,6 +38,9 @@ class AudioAugmentationTester(unittest.TestCase):
         
         cls.aug_tst_data = os.path.join(cls.curr_dir, 'data/augmentation_tst_data/')
         cls.aug_tst_out_dir = os.path.join(cls.curr_dir, 'data/audio_augmentations/')
+        cls.aug_tst_manifest_dir = os.path.join(cls.curr_dir, 'data/Audio_Manifest_augmentation_tst_data/')
+        cls.aug_tst_manifest_file = os.path.join(cls.curr_dir, 
+                                                 'data/manifest_augmentation_tst_data.json')
 
         #*****cls.dysmen_total = 11.0 + 47.00 = 58.00
         
@@ -62,12 +65,14 @@ class AudioAugmentationTester(unittest.TestCase):
     def setUp(self):
         # Remove previously created augmentations:
         shutil.rmtree(self.aug_tst_out_dir, ignore_errors=True)
+        shutil.rmtree(self.aug_tst_manifest_dir, ignore_errors=True)        
         
         species_root = Path(self.species2_dir).parent.stem
         self.full_species_root = os.path.abspath(species_root)
 
     def tearDown(self):
         shutil.rmtree(self.aug_tst_out_dir, ignore_errors=True)
+        shutil.rmtree(self.aug_tst_manifest_dir, ignore_errors=True)
 
     #------------------------------------
     # test_add_noise 
@@ -400,6 +405,42 @@ class AudioAugmentationTester(unittest.TestCase):
         new_yceug_durations = SoundProcessor.find_total_recording_length(os.path.join(self.aug_tst_out_dir, 'YCEUG'))
 
         self.assertGreaterEqual(new_yceug_durations + self.totals['YCEUG'], 88)
+        
+        # Should have made a manifest directory:
+        self.assertTrue(os.path.exists(self.aug_tst_manifest_dir))
+        
+
+    #------------------------------------
+    # test_manifest_provided
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_manifest_provided(self):
+        
+        # Augment the usual data at self.aug_tst_data,
+        # but provide a manifest.json. Constructor
+        # of AudioAugmenter should not create an inventory
+        
+        _augmenter = AudioAugmenter(self.aug_tst_data,
+                                    self.aug_tst_out_dir,
+                                    num_workers=10,
+                                    aug_goal=AugmentationGoals.MEDIAN,
+                                    recording_inventory=self.aug_tst_manifest_file
+                                    )
+        
+        # Shouldn't have made a manifest directory:
+        self.assertFalse(os.path.exists(self.aug_tst_manifest_dir))
+        
+        # But augmentations should exist for LEGRG:
+        self.assertTrue(os.path.exists(self.aug_tst_out_dir))
+        # Should only have one subdirectory: directory: LEGRG:
+        _root, dirs, _files = next(os.walk(self.aug_tst_out_dir))
+        self.assertListEqual(dirs, ['LEGRG'])
+        
+        # Should have six files:
+        legrg_dir = os.path.join(self.aug_tst_out_dir, 'LEGRG')
+        self.assertEqual(len(os.listdir(legrg_dir)), 6)
+        
 
     #------------------------------------
     # test_species_filter

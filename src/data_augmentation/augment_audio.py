@@ -281,11 +281,13 @@ class AudioAugmenter:
         for _i in range(self.num_workers):
             task_queue.put('STOP')
 
+        self.log.info(f"Waiting for all {len(aug_jobs)} workers to finish...")
+
         # Keep checking on each job, until
         # all are done as indicated by all jobs_done
         # values being True, a.k.a valued 1:
         
-        while sum(global_info['jobs_status']) < self.num_workers:
+        while sum(global_info['jobs_status']) < len(aug_jobs):
             for job_idx, job in enumerate(aug_jobs):
                 # Timeout 4 sec
                 job.join(4)
@@ -305,9 +307,7 @@ class AudioAugmenter:
                     # been logged yet to the console:
                     
                     res = "OK" if job.ret_val else "Error"
-                    # New line after the single-line progress msgs:
-                    print("")
-                    print(f"Worker {job.name}/{self.num_workers} finished with: {res}")
+                    print(f"Worker {job.name}/{len(aug_jobs)} finished with: {res}")
                     #global_info['snips_done'] = self.sign_of_life(job, 
                     #                                              global_info['snips_done'],
                     #                                              outdir,
@@ -602,9 +602,17 @@ class AudioAugmenter:
                 species_asset.available_seconds = self.inventory_df.loc[species_asset.species,
                                                                         'total_recording_length (secs)' 
                                                                         ]
-            # The assets from the stored inventory
-            # are already sorted:
-            sorted_species_assets = species_assets
+            # Sort assets by rising number of total recording time
+            # for the asset's recordings:
+            sorted_asset_list = sorted(species_assets, 
+                                       key=lambda asset: asset.available_seconds)
+            
+            # Make (sorted) dict mapping species
+            # name to the respective recording asset: 
+            sorted_species_assets = {asset.species : asset 
+                                     for asset 
+                                     in sorted_asset_list
+                                     }
         else:
             # Create inventory of already available recording seconds:
             
