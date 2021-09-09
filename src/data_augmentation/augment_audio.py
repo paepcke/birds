@@ -159,9 +159,7 @@ class AudioAugmenter:
         self.log = LoggingService()
         
         self.recording_inventory = recording_inventory
-        if unittesting:
-            return
-        
+
         if not isinstance(overwrite_policy, WhenAlreadyDone):
             raise TypeError(f"Overwrite policy must be a member of WhenAlreadyDone, not {type(overwrite_policy)}") 
 
@@ -183,6 +181,9 @@ class AudioAugmenter:
             self.num_workers = num_cores
         else:
             self.num_workers = num_workers
+
+        if unittesting:
+            return
 
         # Process requested augmentation 
         # mehods; any specified?

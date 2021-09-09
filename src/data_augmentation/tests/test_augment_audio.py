@@ -370,8 +370,7 @@ class AudioAugmentationTester(unittest.TestCase):
                                     num_workers=1,
                                     aug_goal=AugmentationGoals.MEDIAN
                                     )
-        
-        
+
         # Only LEGRG was less than the 
         # median of available recordings across
         # species (~45 sec). So only LEGRG should 
@@ -394,7 +393,7 @@ class AudioAugmentationTester(unittest.TestCase):
         
         _augmenter = AudioAugmenter(self.aug_tst_data,
                                     self.aug_tst_out_dir,
-                                    num_workers=1,
+                                    num_workers=10,
                                     aug_goal=AugmentationGoals.MAX
                                     )
         new_legrg_durations = SoundProcessor.find_total_recording_length(os.path.join(self.aug_tst_out_dir, 'LEGRG'))
@@ -433,7 +432,7 @@ class AudioAugmentationTester(unittest.TestCase):
         # to the duration sum of the WTROS:
         _augmenter = AudioAugmenter(self.aug_tst_data,
                                     self.aug_tst_out_dir,
-                                    num_workers=1,
+                                    num_workers=10,
                                     aug_goal=AugmentationGoals.MAX,
                                     species_filter=['WTROS', 'LEGRG']
                                     )

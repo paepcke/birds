@@ -128,7 +128,7 @@ class MultiProcessRunner:
         cpu_budget = min(num_tasks, num_workers)
         self.log.info(f"Working on {len(task_specs)} task(s) using {cpu_budget} CPU(s)")
 
-        cpus_available = cpu_budget
+        self.cpus_available = cpu_budget
         
         # Map of Task instance to manager Event instance:
         self.running_tasks = {}
@@ -137,7 +137,7 @@ class MultiProcessRunner:
         
         # Start all the workers:
         while len(task_specs) > 0:
-            if cpus_available > 0: 
+            if self.cpus_available > 0: 
                 
                 task = task_specs.pop()
                 
@@ -161,11 +161,11 @@ class MultiProcessRunner:
                 
                 self.running_tasks[task] = done_event
                 job.start()
-                cpus_available -= 1
+                self.cpus_available -= 1
                 
             else:
                 # Wait for a CPU to become available:
-                _done_task = self._await_any_job_done(self.running_tasks) 
+                _done_task = self._await_any_job_done() 
 
         # All tasks have been given to a CPU.
         # Wait for everyone to finish, unless client
@@ -176,9 +176,8 @@ class MultiProcessRunner:
         
         self.log.info(f"Going into wait loop for {len(self.running_tasks)} still running tasks")
         while len(self.running_tasks) > 0:
-            completed_task = self._await_any_job_done(self.running_tasks)
+            completed_task = self._await_any_job_done()
             self.log.info(f"Task {completed_task.name} finished")
-            del self.running_tasks[completed_task]
 
         # Return a dict whose keys are task names, and vals 
         # are the return values. Note that the return 
@@ -257,17 +256,19 @@ class MultiProcessRunner:
     # _await_any_job_done
     #-------------------
     
-    def _await_any_job_done(self, running_tasks):
+    def _await_any_job_done(self):
         '''
     
         :param running_tasks:
         :type running_tasks:
         '''
         while True:
-            for task_obj, done_event in running_tasks.items():
+            for task_obj, done_event in self.running_tasks.items():
                 # Wait a short while for this task to finish...
                 task_is_done = done_event.wait(1.0) # seconds
                 if task_is_done:
+                    del self.running_tasks[task_obj]
+                    self.cpus_available += 1
                     return task_obj
 
 # --------------- Task Class --------------------
