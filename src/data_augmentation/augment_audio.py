@@ -608,7 +608,7 @@ class AudioAugmenter:
             
             self.log.info(f"Start recording-time inventory (long operation)")
             start_time = datetime.datetime.now()
-            inventory_readme_msg = f"Inventory for species under {root_all_species} ({Utils.datetime_str})"
+            inventory_readme_msg = f"Inventory for species under {root_all_species} ({Utils.datetime_str()})"
             self.inventory_df = RecordingsInventory(root_all_species, 
                                                     message=inventory_readme_msg, 
                                                     chart_result=True,
