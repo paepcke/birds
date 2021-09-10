@@ -317,7 +317,7 @@ if __name__ == '__main__':
             continue
         print(f"Culling {Path(species_dir).stem}")
         balancer = DurationsBalancer(
-            args.recording_root,
+            species_dir,
             args.goal_duration,
             excess_dest_dir=args.destination,
             dry_run=args.dryRun,
