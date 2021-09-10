@@ -63,9 +63,9 @@ class DurationsBalancer:
         
         If inventory is provided, the step of tallying all
         recording seconds for the species is skipped, and
-        the file <species>_manifest.json.gz is consulted
-        instead. Once turned into a dataframe, that info
-        looks like:
+        the file <species>_manifest.json.gz in the inventory
+        directory is imported and turned into a dataframe
+        instead. That info looks like:
         
 		  recording_length_secs recording_length_hhs_mins_secs
 		  wtros_bird2.mp3                  14.55                 0:00:14.550000
@@ -74,7 +74,7 @@ class DurationsBalancer:
 		          
         An inventory might have been created explicitly via a call
         to the recording_length_inventory.py script from a 
-        terminal window. By convention manifest.json files are
+        terminal window. By convention manifest files are
         in directories starting with Audio_Manifest_..., or are
         included in an experiment manager.
         
@@ -309,19 +309,25 @@ if __name__ == '__main__':
     # save to /tmp/saved_recordings:
     if len(args.destination) == 0:
         args.destination = None
-    
-    balancer = DurationsBalancer(
-        args.recording_root,
-        args.goal_duration,
-        excess_dest_dir=args.destination,
-        dry_run=args.dryRun,
-        inventory=args.inventory
-        )
 
-    balancer.balance()
-    if args.dryRun:
-        print(f"Dry run would-be actions; goal: {args.goal_duration}")
-        print(balancer.dry_run_log)
-    else:
-        if args.destination is not None:
-            print(f"Any excess files were moved to {args.destination}")
+    # Go through each species subdir,
+    # and cull it:
+    for species_dir in Utils.listdir_abs(args.recording_root):
+        if not os.path.isdir(species_dir):
+            continue
+        print(f"Culling {Path(species_dir).stem}")
+        balancer = DurationsBalancer(
+            args.recording_root,
+            args.goal_duration,
+            excess_dest_dir=args.destination,
+            dry_run=args.dryRun,
+            inventory=args.inventory
+            )
+    
+        balancer.balance()
+        if args.dryRun:
+            print(f"Dry run would-be actions; goal: {args.goal_duration}")
+            print(balancer.dry_run_log)
+        else:
+            if args.destination is not None:
+                print(f"Any excess files were moved to {args.destination}")
