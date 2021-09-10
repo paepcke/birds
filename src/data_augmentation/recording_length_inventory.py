@@ -256,9 +256,6 @@ if __name__ == '__main__':
                                      description="Tally recording length of species tree."
                                      )
 
-    parser.add_argument('species_root',
-                        help='root of species subdirectories'
-                        )
     parser.add_argument('-c', '--chart',
                         help='whether or not to show barchart of result',
                         action='store_true',
@@ -267,6 +264,9 @@ if __name__ == '__main__':
     parser.add_argument('-m', '--message',
                         help='message to include with the manifest',
                         default=None
+                        )
+    parser.add_argument('species_root',
+                        help='root of species subdirectories'
                         )
 
     args = parser.parse_args()

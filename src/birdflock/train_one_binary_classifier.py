@@ -11,7 +11,7 @@ from torchvision import transforms
 from torch import cuda
 from torch.nn import BCEWithLogitsLoss
 
-from birdsong.binary_dataset import BinaryDataset
+from birdflock.binary_dataset import BinaryDataset
 from birdsong.nets import NetUtils
 
 
@@ -27,7 +27,8 @@ class BinaryClassificationTrainer:
     def __init__(self, 
                  species_dirs_root, 
                  target_species,
-                 transforms=None):
+                 transforms=None,
+                 device=None):
         '''
         The species_dirs_root contains one
         subdirectory for each species. The target_species
@@ -57,12 +58,26 @@ class BinaryClassificationTrainer:
         
         transforms = self.create_transforms()
         
+        num_gpus = cuda.device_count()
+
+        if device is None:
+            device = 'cuda:0' if cuda.is_available else 'cpu'
+        else:
+            # Was device given as 'cpu'?
+            if device in ['CPU', 'cpu']:
+                device = 'cpu'
+            elif type(device) == int:
+                if device >= num_gpus:
+                    raise ValueError(f"Machine only has {num_gpus} GPUs, yet {device} were requested")
+                device = f"cuda:{device}" if cuda.is_available else 'cpu'
+        
         self.model    = NetUtils.get_net(self.net_name,
                                  num_classes=self.num_classes,
                                  pretrained=self.pretrained,
                                  freeze=self.freeze,
                                  to_grayscale=self.to_grayscale
                                  )
+        
         
         cv_split = CVSplit()
         dataset  = BinaryDataset(species_dirs_root, target_species, transforms)
@@ -77,7 +92,7 @@ class BinaryClassificationTrainer:
                                         #criterion=nn.CrossEntropyLoss,
                                         criterion=BCEWithLogitsLoss,
                                         dataset=dataset,
-                                        device='cuda' if cuda.is_available() else 'cpu'
+                                        device=device
                                         )
         #****************
         #***********
@@ -108,3 +123,9 @@ class BinaryClassificationTrainer:
             img_transforms.append(transforms.Grayscale())
                           
         return transforms.Compose(img_transforms)
+
+# ------------------------ Main ------------
+if __name__ == '__main__':
+    pass
+    
+    

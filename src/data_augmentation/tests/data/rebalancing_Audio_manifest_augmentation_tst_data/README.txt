@@ -1,0 +1,1 @@
+Detailed manifest for src/data_augmentation/tests/data/augmentation_tst_data/

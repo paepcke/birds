@@ -1333,6 +1333,7 @@ class SoundProcessor:
         :return path to compressed file
         :rtype str
         '''
+
         with open(file_path, 'r') as fd:
             content = fd.read()
         
