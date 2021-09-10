@@ -566,6 +566,31 @@ class FileUtils:
                 all_fnames.extend(glob.glob(f"{maybe_dir}/*"))
         return all_fnames
 
+    #------------------------------------
+    # make_manifest_dir_name
+    #-------------------
+    
+    @classmethod
+    def make_manifest_dir_name(self, species_root_path):
+        '''
+        Given the directory containing species recordings
+        subdirectories, return the standard name for the
+        corresponding manifest directory. That dir resides
+        in the parent of species_root_path as follows:
+        
+        <species_root_path_parent>/Audio_Manifest_<species_root_path-directory name>
+        
+        Example: 
+           given /foo/bar/my_species_recordings
+         returns /foo/bar/Audio_Manifest_my_species_recordings
+
+        :param species_root_path: path to root of species subdirs
+        :type species_root_path: str
+        :return path to corresponding audio manifest directory. 
+        '''
+        root_path_p = Path(species_root_path) 
+        manifest_dir = root_path_p.parent.joinpath(f"Audio_Manifest_{root_path_p.stem}")
+        return str(manifest_dir)
 
     #------------------------------------
     # user_confirm

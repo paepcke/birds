@@ -597,7 +597,7 @@ class AudioAugmenter:
                               in species_subdirs_to_augment
                               ]
             # Set the sum of recording seconds for each species,
-            # which we know from the inventorty_df:
+            # which we know from the inventory_df:
             for species_asset in species_assets:
                 species_asset.available_seconds = self.inventory_df.loc[species_asset.species,
                                                                         'total_recording_length (secs)' 

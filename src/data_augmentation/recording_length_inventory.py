@@ -11,13 +11,14 @@ import os
 from pathlib import Path
 import sys
 
+from logging_service import LoggingService
+
+from birdsong.utils.utilities import FileUtils
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import Utils
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
-
 from result_analysis.charting import Charter
-from logging_service import LoggingService
 
 
 class RecordingsInventory:
@@ -113,8 +114,10 @@ class RecordingsInventory:
             #                   total_recording_length       ...
             #    species1              10.4                  ...
             #    species2            ...
-            
-            inventory = SoundProcessor.recording_lengths_by_species(species_root, num_workers=num_workers)
+            manifest_dir = FileUtils.make_manifest_dir_name(species_root)
+            inventory = SoundProcessor.recording_lengths_by_species(species_root, 
+                                                                    num_workers=num_workers,
+                                                                    save_recording_durations=manifest_dir)
             
             # Could have come out to be None
             if inventory is None:
@@ -147,24 +150,30 @@ class RecordingsInventory:
     # write_inventory
     #-------------------
 
-    def write_inventory(self, inventory, species_root, message):
+    def write_inventory(self, 
+                        inventory, 
+                        species_root, 
+                        message,
+                        dst_file_name='manifest.json'
+                        ):
         '''
-        Given a dataframe (inventory):
+        Given a dataframe (inventory), such as:
 
                          total_recording_length (secs)   duration (hrs:mins:secs)
             species1            10.5                        0:10:30
             species2             2.0                        0:02:00
                ...              ...
                
-        of which only the 'total_recording_length (secs)' is required.
-        Creates a new directory sibling to species_root:
+        creates a new directory sibling to species_root:
         
                 ../Audio_Manifest_<species_root_dir_name>
                 
         Places into that new directory:
         
-               o README.txt     : containing the content of the message argument
-               o manifest.json  : the inventory saved as JSON
+               o README.txt      : containing the content of the message argument
+               o <dst_file_name> : the inventory dataframe saved as JSON
+
+        The dataframe can be any df.
 
         :param inventory: sum of recording lengths of each species
         :type inventory: pd.DataFrame
@@ -179,7 +188,7 @@ class RecordingsInventory:
 
         species_root_path = Path(species_root)
         # Ensure existence of destination for manifest directory:
-        manifest_dir_path = species_root_path.parent.joinpath(f"Audio_Manifest_{species_root_path.stem}")
+        manifest_dir_path = Path(FileUtils.make_manifest_dir_name(species_root_path))
         if not manifest_dir_path.exists():
             manifest_dir_path.mkdir()
             
@@ -189,7 +198,7 @@ class RecordingsInventory:
                 fd.write(message)
         
         # Write inventory as manifest.json:
-        manifest_fname = manifest_dir_path.joinpath('manifest.json')
+        manifest_fname = manifest_dir_path.joinpath(dst_file_name)
         with open(manifest_fname, 'w') as fd:
             inventory.to_json(fd)
 
@@ -236,6 +245,8 @@ class RecordingsInventory:
         # Save as pdf:
         fig_fname = manifest_dir_path.joinpath('audio_recording_distribution.pdf')
         fig.savefig(fig_fname)
+
+# ---------------------- Utilities -------------------
 
 # ------------------------ Main ------------
 if __name__ == '__main__':

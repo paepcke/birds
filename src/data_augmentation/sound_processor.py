@@ -1,4 +1,5 @@
 import datetime
+import gzip
 import math
 import os
 from pathlib import Path
@@ -18,9 +19,9 @@ from scipy.signal import lfilter
 import skimage.io
 import soundfile
 
-from data_augmentation.utils import Interval, Utils
-from data_augmentation.multiprocess_runner import MultiProcessRunner, Task
 from birdsong.utils.utilities import FileUtils
+from data_augmentation.multiprocess_runner import MultiProcessRunner, Task
+from data_augmentation.utils import Interval, Utils
 import numpy as np
 import pandas as pd
 
@@ -388,17 +389,46 @@ class SoundProcessor:
     #-------------------
 
     @classmethod
-    def find_total_recording_length(cls, species_dir_path):
+    def find_total_recording_length(cls, 
+                                    species_dir_path,
+                                    save_recording_durations=None
+                                    ):
         '''
         Given a directory with .wav or .mp3 recordings,
         return the sum of recording lengths.
+        
+        If save_recording_durations a directory path, 
+        write a gzipped json file of a dataframe that
+        lists the durations of each file.
+        
+        If save_recording_durations is absent or False, this
+        detailed information is not saved.
 
         :param species_dir_path: directory containing recordings
         :type species_dir_path: str
+        :param save_recording_durations: directory where to place
+            json-encoded, zipped files of dataframes with recording 
+            lengths for each file. If None, only the duration sums
+            are saved.
+        :type save_recording_durations: {None | str | True}
         :return sum of recording lengths
         :rtype float
         '''
         df_fname_secs = cls.find_recording_lengths(species_dir_path)
+        # Are we to save all individual audio durations?
+        if save_recording_durations is not None:
+            if not os.path.exists(save_recording_durations):
+                os.makedirs(save_recording_durations, exist_ok=True)
+            # Save the df as JSON, and compress it:
+            species = Path(species_dir_path).stem
+            fname = os.path.join(save_recording_durations, f"{species}_manifest.json")
+            
+            cls.log.info(f"Saving {species} recording durations to {save_recording_durations}") 
+            df_fname_secs.to_json(fname)
+            # Compress the manifest file, and 
+            # delete the uncompressed version:
+            cls.gzip_file(fname, delete=True)
+
         total_duration = df_fname_secs['recording_length_secs'].sum()
         return total_duration
 
@@ -407,7 +437,10 @@ class SoundProcessor:
     #-------------------
 
     @classmethod
-    def recording_lengths_by_species(cls, species_root, num_workers=None):
+    def recording_lengths_by_species(cls, 
+                                     species_root, 
+                                     num_workers=None,
+                                     save_recording_durations=None):
         '''
         Given directory that contains subidrectories with
         .wav or .mp3 recordings, return a dataframe with 
@@ -420,17 +453,53 @@ class SoundProcessor:
                
         Rows will be alpha-sorted by species_dir.
         Work is done in parallel
-             
+        
+        If save_recording_durations is a directory, then
+        intermediate files are saved beyond the one above.
+        Each such additional file is named <species_manifest>.json.gz, and
+        contains a dataframe like:
+        
+                       'seconds'
+               file1   10.3
+               file2    4.2
+                ...     ...
+                
+        If save_recording_durations has value True:
+        a standard directory location is chosen:
+        
+          <parent-of-species_dir_path>/Audio_Manifest_<species_dir_path-name>
+          
+        Example:
+          given   /foo/bar
+         manifest directory will be /foo/Audio_Manifest_bar
+        
+        If save_recording_durations is absent or False, this
+        detailed information is not saved.
+
         :param species_root: root of the recording subdirectories
         :type species_root: str
         :param num_workers: maximum number of CPUs to use. Default:
             Utils.MAX_PERC_OF_CORES_TO_USE
         :type num_workers: {None | int}
+        :param save_recording_durations: directory where to place
+            json-encoded, zipped files of dataframes with recording 
+            lengths for each file. If None, only the duration sums
+            are saved.
+        :type save_recording_durations: {None | str | True}
         :return sum of recording length of all recodings
             of each species_dir. If no recordings found, returns
             None
         :rtype {pd.DataFrame | None}
+        :raise RuntimeError if any of the species
+            tallies fails
         '''
+        
+        # If save_recording_durations is set to True,
+        # place detail json files in Audio_Manifest_<species_root-name>
+        # of species_root's parent dir:
+        if save_recording_durations == True:
+            save_recording_durations = FileUtils.make_manifest_dir_name(species_root)
+        
         num_samples_in = {} # initialize dict - usage num_samples_in['CORALT_S'] = 64
         
         # Just for progress reports: get number
@@ -453,11 +522,34 @@ class SoundProcessor:
             species = Path(species_dir).stem
             inventory_task = Task(f"rec_inventory_{species}",
                                   cls.inventory_one_species,
-                                  species_dir
+                                  species_dir,
+                                  save_recording_durations
                                   )
             inventory_tasks.append(inventory_task) 
 
         mp_runner = MultiProcessRunner(inventory_tasks, num_workers=num_workers)
+
+        # Check whether any of the results is an 
+        # exception: a result dict that reports an
+        # error will have two keys: 'Exception', and
+        # 'Traceback'. Get a list of such dicts:
+        exceptions = [res_dict
+                      for res_dict
+                      in mp_runner.results
+                      if 'Exception' in list(res_dict.keys())
+                      ]
+        # If at least one err found, log 
+        # it, and raise a RuntimeError: 
+        if len(exceptions) > 0:
+            # Grab the first one and log it such that 
+            # it includes the traceback:
+            exc_entry = exceptions[0]
+            msg = f"First of {len(exceptions)} exception(s):\n{exc_entry['Traceback']}"
+            cls.log.err(msg)
+            raise RuntimeError(msg)
+
+        # Sigh of relief! All worked.
+        
         # Result for each species subdir will be a one-entry dict:
         #                 total_recording_length
         #    species_name : recording-duration-float
@@ -471,6 +563,7 @@ class SoundProcessor:
 
         # A an hrs:mins:secs column:
         df = pd.DataFrame.from_dict(num_samples_in, orient='index').sort_index()
+        
         df['duration (hrs:mins:secs)'] = \
             df['total_recording_length (secs)'].map(lambda el: 
                                              str(datetime.timedelta(seconds=el)))
@@ -483,7 +576,27 @@ class SoundProcessor:
     #-------------------
     
     @classmethod
-    def inventory_one_species(cls, species_dir):
+    def inventory_one_species(cls, species_dir, save_recording_durations):
+        '''
+        Given directory of recordings of one species,
+        find the duration of each audio file in the
+        directory. Add them up, and return a one-entry
+        dict {<species-name> : <rec-length-in-seconds>}
+        
+        If save_recording_durations is not None, it must
+        be a directory where all the individual audio file recording 
+        lengths will be saved along the way as a compressed json file.
+        
+        If save_recording_durations is absent or False, this
+        detailed information is not saved.
+
+        :param species_dir: root of the recordings to tally
+        :type species_dir: str
+        :param save_recording_durations: directory where to
+            place compressed json export of dataframe with
+            the individual recording durations.
+        :type save_recording_durations: {None | str | True}
+        '''
         
         species = Path(species_dir).stem
         # For progress reports, get number of
@@ -495,7 +608,7 @@ class SoundProcessor:
                                 Path(dir_entry).suffix in FileUtils.AUDIO_EXTENSIONS
                              ])
         cls.log.info(f"Analyzing {num_aud_files} audio files of species {species}")
-        rec_len = cls.find_total_recording_length(species_dir)
+        rec_len = cls.find_total_recording_length(species_dir, save_recording_durations)
         return {species : rec_len}
 
     # --------------- Operations on Spectrograms Files --------------
@@ -1197,4 +1310,50 @@ class SoundProcessor:
             
         img = Image.fromarray(img_arr)
         img.save(dst_path)
+
+    #------------------------------------
+    # gzip_file
+    #-------------------
+    
+    @classmethod
+    def gzip_file(cls, file_path, delete=False):
+        '''
+        reads contents of given file, and writes
+        back a gzip compressed copy to <file_path>.gz
+    
+        If delete is True, the original file is deleted
+        from the file system. Else two files will exist
+        after the call: the original, and the .gz version.
+                  
+        :param file_path: path to file to compress
+        :type file_path: str
+        :param delete: if True, delete original file
+            after saving a compressed version
+        :type delete: bool
+        :return path to compressed file
+        :rtype str
+        '''
+        with open(file_path, 'r') as fd:
+            content = fd.read()
+        
+        compressed_content = gzip.compress(content.encode('utf8'))
+        dest_fpath = file_path + '.gz'
+        with open(dest_fpath, 'bw') as fd:
+            fd.write(compressed_content)
+        
+        if delete:
+            os.remove(file_path)
+        
+        return dest_fpath
+
+    #------------------------------------
+    # read_gzipped_file
+    #-------------------
+    
+    @classmethod
+    def read_gzipped_file(cls, fname):
+        
+        with gzip.open(fname, 'rb') as fd:
+            content = fd.read().decode('utf8')
+        return content 
 
