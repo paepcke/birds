@@ -164,7 +164,9 @@ class Inferencer:
     # prep_model_inference 
     #-------------------
 
-    def prep_model_inference(self, model_name):
+    def prep_model_inference(self, 
+                             model_name,
+                             unknown_species_classes=['OTHRG', 'NOISG']):
         '''
         - Loads experiment configuration from self.training_exp
         - Creates self.writer(), a tensorboard writer with destination dir:
@@ -177,6 +179,11 @@ class Inferencer:
         :param model_path: path to model that will be used for
             inference by this instance of Inferencer
         :type model_path: str
+        :param unknown_species_classes: classes known to the model under
+            which to classify recordings with labels for which the model
+            has not been trained. The first of the list that is found
+            in the model's species names will be chosen.
+        :type unknown_species_classes: {None | str | (str)}
         '''
 
         # Get the experiment configuration used
@@ -233,7 +240,7 @@ class Inferencer:
         self.sample_cid_to_model_cid,  _unmatched_sample_classes = \
             self._build_class_id_xlation(dataset.class_names(), 
                                          self.class_names,
-                                         unknown_species_class='OTHRG'
+                                         unknown_species_classes=unknown_species_classes
                                          )
         if self.save_logits:
             # If we are to save logits, prepare a CSV
@@ -1145,7 +1152,7 @@ class Inferencer:
     def _build_class_id_xlation(self, 
                                 sample_class_names, 
                                 model_class_names,
-                                unknown_species_class='OTHRG'
+                                unknown_species_classes=['OTHRG', 'NOISG']
                                 ):
         '''
         
@@ -1176,11 +1183,11 @@ class Inferencer:
         :param model_class_names: list of all class names known at 
             training time, sorted by class ID. This means alpha sorted
         :type model_class_names: [str]
-        :param unknown_species_class: name of model space class to which
-            to assign species found in sample space, but not in model space
+        :param unknown_species_classes: (list of) name(s) of model space 
+            class(es) to which to assign species found in sample space, but not in model space
             If None, raise ValueError if such a mismatch occurs. By convention,
             OTHRG is the species used for unknown (stands for 'OTHER-General')
-        :type unknown_species_class: {None | str}
+        :type unknown_species_classes: {None | str } (str)}
         :return a tuple whose first element is a dictionary mapping numeric sample 
             space class IDs to numeric model space class IDs. The second
             element is a list of sample space class names that were not
@@ -1189,14 +1196,24 @@ class Inferencer:
         '''
         sample_class_id_to_model_class_id = {}
         unmatched_sample_classes = []
+        unknown_species_class = None
         
         # Find the model space class ID of the unknown_species_class,
         # if unknown_species_class was provided:
-        if unknown_species_class is not None:
-            try:
-                model_space_unknown_id = model_class_names.index(unknown_species_class)
-            except ValueError:
-                raise ValueError(f"Model class names do not include the 'no species match' {unknown_species_class}; specify the 'unknown' class in unknown_species_class") 
+        if unknown_species_classes is not None:
+            if type(unknown_species_classes) != list:
+                unknown_species_classes = [unknown_species_classes]
+            # See whether any of the given 'other' classes
+            # appears in the model class names:
+            for unknown_species_candidate in unknown_species_classes:
+                if unknown_species_candidate in model_class_names:
+                    unknown_species_class    = unknown_species_candidate
+                    unknown_species_model_id = model_class_names.index(unknown_species_class)
+                    break
+            # If none of the unknown-species dump places
+            # is available in the model: error
+            if unknown_species_class is None:
+                raise ValueError(f"Model class names do not include any 'no species match' {unknown_species_classes}; specify the 'unknown' class in unknown_species_class") 
         
         for sample_class_id, sample_class_name in enumerate(sample_class_names):
             try:
@@ -1207,7 +1224,7 @@ class Inferencer:
                 # sample space class. If unknown_species_class was
                 # provided, use it, also bubble the error up:
                 if unknown_species_class is not None:
-                    sample_class_id_to_model_class_id[sample_class_id] = model_space_unknown_id
+                    sample_class_id_to_model_class_id[sample_class_id] = unknown_species_model_id
                     unmatched_sample_classes.append(sample_class_name)
                 else:
                     raise ValueError(f"Sample target class {sample_class_name} not in model classes; specify unknown_species_class to fix.")

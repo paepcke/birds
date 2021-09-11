@@ -92,7 +92,7 @@ class InferenceTester(unittest.TestCase):
             )
         try:
             inferencer.model_key = 'model_0'
-            inferencer.prep_model_inference('model_0')
+            inferencer.prep_model_inference('model_0', unknown_species_classes=None)
             print('Running inference...')
             tally_coll = inferencer.run_inference()
             print('Done running inference.')
@@ -130,7 +130,7 @@ class InferenceTester(unittest.TestCase):
         # will pt to one model to inference with:
         inferencer.model_key = 'model_0'
         try:
-            inferencer.prep_model_inference('model_0')
+            inferencer.prep_model_inference('model_0', unknown_species_classes=None)
             print('Running inference...')
             _tally_coll = inferencer.run_inference()
             print('Done running inference.')
@@ -190,42 +190,42 @@ class InferenceTester(unittest.TestCase):
 
             df = inferencer.testing_exp.read('logits', Datatype.tabular)
             expected = pd.DataFrame(
-                                [
-                                   [552470.50,-577170.75],
-                                   [429042.06,-455358.06],
-                                   [519468.53,-546999.25],
-                                   [339625.40,-358724.50],
-                                   [374372.03,-398033.22],
-                                   [829133.40,-842167.25],
-                                   [509088.16,-534293.40],
-                                   [904704.80,-916578.06],
-                                   [753957.50,-762811.75],
-                                   [632876.10,-651891.40],
-                                   [286517.78,-306404.30],
-                                   [134765.64,-168751.28]
-                                ], columns=['PLANS', 'WBWWS']
-                                )
+             [
+                [552470.500000,-577170.75000,0],
+                [429042.062500,-455358.06250,1],
+                [519468.531250,-546999.25000,0],
+                [339625.406250,-358724.50000,0],
+                [374372.031250,-398033.21875,0],
+                [829133.375000,-842167.25000,1],
+                [509088.156250,-534293.37500,0],
+                [904704.812500,-916578.06250,1],
+                [753957.500000,-762811.75000,1],
+                [632876.125000,-651891.37500,0],
+                [286517.781250,-306404.31250,1],
+                [134765.640625,-168751.28125,1]
+              ], columns=['PLANS','WBWWS','label']
+            )
             self.assertDataframesEqual(df, expected)
             
             df = inferencer.testing_exp.read('probabilities', Datatype.tabular)
-            expected = pd.DataFrame([
-                [1.0,  0.0],
-                [1.0,  0.0],
-                [1.0,  0.0],
-                [1.0,  0.0],
-                [1.0,  0.0],
-                [1.0,  0.0],
-                [1.0,  0.0],
-                [1.0,  0.0],
-                [1.0,  0.0],
-                [1.0,  0.0],
-                [1.0,  0.0],
-                [1.0,  0.0],
-                ], columns = ['PLANS', 'WBWWS']
+            expected = pd.DataFrame(
+               [
+                [1.0,0.0,0],
+                [1.0,0.0,1],
+                [1.0,0.0,0],
+                [1.0,0.0,0],
+                [1.0,0.0,0],
+                [1.0,0.0,1],
+                [1.0,0.0,0],
+                [1.0,0.0,1],
+                [1.0,0.0,1],
+                [1.0,0.0,0],
+                [1.0,0.0,1],
+                [1.0,0.0,1]
+                ], columns=['PLANS','WBWWS','label']
                 )
             self.assertDataframesEqual(df, expected)
-            
-            
+
         finally:
             inferencer.close()
 
@@ -244,7 +244,18 @@ class InferenceTester(unittest.TestCase):
             batch_size=2,
             )
         try:
-            inferencer.prep_model_inference('model_0')
+            with self.assertRaises(ValueError):
+                # Expected:
+                # The default unknown_species_classes kwarg
+                # to the prep_model_inference specified that
+                # in case of class labels unknown to the model
+                # either OTHRG or NOISG should be chosen.
+                # But neither are in model_0.
+                inferencer.prep_model_inference('model_0')
+                
+            # Do it again, specifying not default placement:
+            inferencer.prep_model_inference('model_0', unknown_species_classes=None)
+                
             series = pd.Series([10,20,np.array([100,200]),30,np.array([1000,2000])],
                                index=['meas1', 'meas2', 'prec_by_class', 'meas3', 'recall_by_class']
                                )
@@ -334,9 +345,11 @@ class InferenceTester(unittest.TestCase):
         # Here, 'foo3' is ID 2: 
         model_class_names  = ['foo1', 'foo2', 'foo3']
         
-        xlate_dict, unknown_assignment = inferencer._build_class_id_xlation(sample_class_names, 
-                                                                            model_class_names
-                                                                            )
+        xlate_dict, unknown_assignment = inferencer._build_class_id_xlation(
+                        sample_class_names, 
+                        model_class_names,
+                        unknown_species_classes=None
+                        )
         expected = {0 : 0,
                     1 : 2,
                     } 
@@ -347,10 +360,12 @@ class InferenceTester(unittest.TestCase):
         # not trained for:
         model_class_names  = ['foo1', 'foo2', 'NOIS']
 
-        xlate_dict, unknown_assignment = inferencer._build_class_id_xlation(sample_class_names, 
-                                                                            model_class_names,
-                                                                            unknown_species_class='NOIS'
-                                                                            )
+        # sample_class_names: ['foo1', 'foo3']
+        xlate_dict, unknown_assignment = inferencer._build_class_id_xlation(
+                        sample_class_names, 
+                        model_class_names,
+                        unknown_species_classes='NOIS'
+                        )
         expected = {0 : 0,
                     1 : 2,
                     } 
@@ -365,19 +380,21 @@ class InferenceTester(unittest.TestCase):
         # Model class names does not include the 
         # 'NOIS' class. Expect a value error:
         try:
-            xlate_dict, unknown_assignment = inferencer._build_class_id_xlation(sample_class_names, 
-                                                                                model_class_names
-                                                                                )
+            xlate_dict, unknown_assignment = inferencer._build_class_id_xlation(
+                        sample_class_names, 
+                        model_class_names
+                        )
             self.fail("Should have received ValueError b/c NOIS not in model space")
         except ValueError:
             # Great, got the expected exception
             pass
 
         
-        xlate_dict, unknown_assignment = inferencer._build_class_id_xlation(sample_class_names, 
-                                                                            model_class_names,
-                                                                            unknown_species_class='ABCD'
-                                                                            )
+        xlate_dict, unknown_assignment = inferencer._build_class_id_xlation(
+                        sample_class_names, 
+                        model_class_names,
+                        unknown_species_classes=['ABCD']
+                        )
         expected = {0 : 1,
                     1 : 0,
                     } 
