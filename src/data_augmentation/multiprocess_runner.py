@@ -25,6 +25,7 @@ class MultiProcessRunner:
         '''
         Given a list of ready-to-go Task instances,
         run the tasks in parallel, each on its own CPU. 
+        
         Use num_workers CPUs if that many are available.
         If num_workers is None, use Utils.MAX_PERC_OF_CORES_TO_USE
         percent of available cores.
@@ -39,10 +40,15 @@ class MultiProcessRunner:
          
         A list of dicts with each task's returned result dict
         is available in <inst>.results after this constructor
-        returns from synchronous operation. For asynch op, clients
-        can use the running_tasks() method. It returns a dict
-        mapping Task instances (i.e. client task_specs that were
-        passed into this method) to Event instances.
+        returns from synchronous operation. 
+        
+        For asynch op, clients can use the running_tasks() method. 
+        It returns a dict mapping Task instances (i.e. client task_specs 
+        that were passed into this method) to Event instances. See
+        Python 3 threading.Event. Tasks set() their respective Event 
+        flag when they are done. Clients can wait() on the event instance.
+        Once a task has set() its event flag, task.shared_return_dict provides 
+        results of the task.
 
         :param task_specs: list of Task specifications
         :type task_specs: Task
@@ -150,6 +156,7 @@ class MultiProcessRunner:
                 task.shared_return_dict = shared_return_dict
                 
                 job = mp.Process(target=task.run,
+                                 name=task.name,
                                  args=(done_event, shared_return_dict)
                                  )
 
@@ -183,8 +190,7 @@ class MultiProcessRunner:
         # are the return values. Note that the return 
         # values maybe be exception objects. Clients
         # need to check:
-        #**** REMOVE
-        #******results = [job.ret_value_slot for job in all_jobs]
+
         results = [task.shared_return_dict for task in all_task_specs]
         return results
 
@@ -285,12 +291,14 @@ class Task(dict):
     def __init__(self, 
                  name, 
                  target_func,
-                 *args, **kwargs):
+                 *args, 
+                 **kwargs):
 
         self.name = name
         self.target_func = target_func
         self.func_args = args
-        self.func_kwargs = kwargs
+        for kwarg_name, kwarg_val in kwargs.items():
+            self.__setattr__(kwarg_name, kwarg_val)
 
     #------------------------------------
     # run
