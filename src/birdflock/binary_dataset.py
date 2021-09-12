@@ -64,8 +64,21 @@ class BinaryDataset(torch.utils.data.Dataset):
                  transforms=None
                  ):
         '''
-        Constructor
+        The species_dirs_root should contain subdirectories,
+        each of which holds the spectrogram snippets of one
+        species.
+        
+        The target_species should be a species
+        name, such as VASEG, WTROS, etc.
+        
+        :param species_dirs_root:
+        :type species_dirs_root:
+        :param target_species:
+        :type target_species:
+        :param transforms:
+        :type transforms:
         '''
+
 
         self.transforms = transforms
         

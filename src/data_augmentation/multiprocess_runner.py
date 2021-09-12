@@ -123,7 +123,10 @@ class MultiProcessRunner:
         #      to the console (a list)
         # All Python processes on the various cores
         # will have read/write access:
-        manager = mp.Manager()
+        
+        mp_ctx = mp.get_context('spawn')
+        #mp_ctx = mp.get_context('fork')
+        manager = mp_ctx.Manager()
         
         num_tasks  = len(task_specs)
         # Save a shallow copy of the task list, 
@@ -153,18 +156,22 @@ class MultiProcessRunner:
                 ret_value_slot = mp.Value("b", False)
                 done_event = manager.Event()
                 shared_return_dict = manager.dict()
+                # Make the task instance available
+                # to the receiver:
+                shared_return_dict['_kwargs'] = task.func_kwargs
                 task.shared_return_dict = shared_return_dict
                 
-                job = mp.Process(target=task.run,
-                                 name=task.name,
-                                 args=(done_event, shared_return_dict)
-                                 )
+                job = mp_ctx.Process(target=task.run,
+                                     name=task.name,
+                                     args=(done_event, shared_return_dict)
+                                     )
 
                 job.ret_value_slot = ret_value_slot
                 all_jobs.append(job)
                 # Allow access to the job process obj
                 # given the Task instance
-                task.job = job
+                #NEEDED? May be causing TypeError: cannot pickle 'weakref' object
+                #**********task.job = job
                 
                 self.running_tasks[task] = done_event
                 job.start()
@@ -297,6 +304,9 @@ class Task(dict):
         self.name = name
         self.target_func = target_func
         self.func_args = args
+        # The func_args and func_kwargs will be passed to the
+        # target func:
+        self.func_kwargs = kwargs
         for kwarg_name, kwarg_val in kwargs.items():
             self.__setattr__(kwarg_name, kwarg_val)
 
@@ -310,7 +320,15 @@ class Task(dict):
         # used only in this method, make them inspectable
         # from the outside:
         self.done_event = done_event
+
+        # Last-minute additions to the kwargs of
+        # the target function would be in 
+        # shared_return_dict['_kwargs']. Merge those
+        # into the self.func_kwargs dict that will be
+        # passed to the target function:
         
+        self.func_kwargs.update(shared_return_dict['_kwargs'])
+
         try:
             res = self.target_func(*self.func_args, **self.func_kwargs)
         except Exception as e:
