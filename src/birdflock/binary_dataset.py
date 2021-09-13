@@ -79,6 +79,8 @@ class BinaryDataset(torch.utils.data.Dataset):
         :type transforms:
         '''
 
+        self.target_species = target_species
+        self.samples_root   = species_dirs_root
 
         self.transforms = transforms
         

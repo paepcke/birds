@@ -4,6 +4,8 @@ Created on Sep 6, 2021
 @author: paepcke
 '''
 
+import os
+import signal
 import traceback
 
 from logging_service import LoggingService
@@ -11,10 +13,9 @@ from logging_service import LoggingService
 from data_augmentation.utils import Utils
 import multiprocessing as mp
 
+
 # TODO:
 #   o Class level doc
-
-
 class MultiProcessRunner:
     
     #------------------------------------
@@ -126,7 +127,7 @@ class MultiProcessRunner:
         
         mp_ctx = mp.get_context('spawn')
         #mp_ctx = mp.get_context('fork')
-        manager = mp_ctx.Manager()
+        self.manager = mp_ctx.Manager()
         
         num_tasks  = len(task_specs)
         # Save a shallow copy of the task list, 
@@ -142,7 +143,9 @@ class MultiProcessRunner:
         # Map of Task instance to manager Event instance:
         self.running_tasks = {}
         
-        all_jobs = []
+        # Mapping task instances to job instances;
+        # used to terminate jobs by task:
+        self.all_jobs = {}
         
         # Start all the workers:
         while len(task_specs) > 0:
@@ -154,24 +157,22 @@ class MultiProcessRunner:
                     raise TypeError(f"Tasks must be of type Task, not {type(task)} ({task})")
                 
                 ret_value_slot = mp.Value("b", False)
-                done_event = manager.Event()
-                shared_return_dict = manager.dict()
+                done_event = self.manager.Event()
+                shared_return_dict = self.manager.dict()
                 # Make the task instance available
                 # to the receiver:
                 shared_return_dict['_kwargs'] = task.func_kwargs
+                shared_return_dict['_done_event'] = done_event
                 task.shared_return_dict = shared_return_dict
                 
                 job = mp_ctx.Process(target=task.run,
                                      name=task.name,
-                                     args=(done_event, shared_return_dict)
+                                     #**********args=(done_event, shared_return_dict)
+                                     args=(shared_return_dict,)
                                      )
 
                 job.ret_value_slot = ret_value_slot
-                all_jobs.append(job)
-                # Allow access to the job process obj
-                # given the Task instance
-                #NEEDED? May be causing TypeError: cannot pickle 'weakref' object
-                #**********task.job = job
+                self.all_jobs[task] = job
                 
                 self.running_tasks[task] = done_event
                 job.start()
@@ -233,7 +234,11 @@ class MultiProcessRunner:
             
         try:
             self.log.info(f"Terminating worker {task_spec.name}")
-            task_spec.job.terminate()
+            # Get the Process instance that is running
+            # the task:
+            job = self.all_jobs[task_spec]
+            job.terminate()
+            del self.all_jobs[task_spec]
             del self.running_tasks[task_spec]
             # Successfully delivered SIGTERM.
             # Hopefully the child processe receives
@@ -264,6 +269,14 @@ class MultiProcessRunner:
         '''
         #return list(self.running_tasks.values())
         return self.running_tasks
+
+    #------------------------------------
+    # shutdown
+    #-------------------
+    
+    def shutdown(self):
+        self.manager.stop_event.set()
+
 
     #------------------------------------
     # _await_any_job_done
@@ -314,12 +327,15 @@ class Task(dict):
     # run
     #-------------------
     
-    def run(self, done_event, shared_return_dict):
+    #***********************
+    #def run(self, done_event, shared_return_dict):
+    def run(self, shared_return_dict):
+    #***********************
 
         # Though done_event and shared_return_dict are
         # used only in this method, make them inspectable
         # from the outside:
-        self.done_event = done_event
+        #************self.done_event = done_event
 
         # Last-minute additions to the kwargs of
         # the target function would be in 
@@ -341,7 +357,9 @@ class Task(dict):
             shared_return_dict.update(res)
         else:
             shared_return_dict['result'] = res
-        self.done_event.set()
+        # Indicate to the outside world that
+        # we are done:
+        shared_return_dict['_done_event'].set()
 
     #------------------------------------
     # done

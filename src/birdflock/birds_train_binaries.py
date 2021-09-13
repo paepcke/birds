@@ -17,9 +17,7 @@ import torch
 
 import multiprocessing as mp
 
-from birdflock.binary_dataset import BinaryDataset
 from birdflock.train_one_binary_classifier import BinaryClassificationTrainer
-from birdsong.utils.utilities import FileUtils
 from data_augmentation.multiprocess_runner import Task, MultiProcessRunner
 from data_augmentation.utils import Utils
 
@@ -148,14 +146,6 @@ class BinaryBirdsTrainer(object):
                 # Return GPU to the pool:
                 self.gpu_pool.extend([task.gpu for task in done_task_objs])
     
-                if unittesting:
-                    continue
-                for task in done_task_objs:
-                    ret_dict = task.shared_return_dict
-                    clf = ret_dict['clf']
-                    pytorch_model = clf.model
-                    self.experiment.save(species, pytorch_model)
-                
                 task_batch = []
                 # loop, submitting next training job(s) to 
                 # a new mp_runner
@@ -171,7 +161,7 @@ class BinaryBirdsTrainer(object):
             task = Task(species,                  # Name of task
                         self.create_classifier,   # function to execute
                         self.snippets_root,       # where the snippets are
-                        species,                  # name of species as arg to task
+                        species                   # name of species as arg to task
                         )
             # Species at play to know by the task itself.
             # The species are in the Task() instantiation
@@ -227,7 +217,7 @@ class BinaryBirdsTrainer(object):
                 if task_obj in tasks_done:
                     # Examine next task:
                     continue
-                if task_obj.done_event.wait(3.0): # seconds to wait
+                if task_obj.shared_return_dict['_done_event'].wait(3.0): # seconds to wait
                     # Task was finished:
                     tasks_done.add(task_obj)
                     if extra_time is None:
@@ -265,9 +255,19 @@ class BinaryBirdsTrainer(object):
         
         clf = BinaryClassificationTrainer(snippets_root,
                                           target_species,
-                                          device=gpu #********Need a get_gpu function here.
+                                          device=gpu
                                           )
-        return clf
+        
+        pytorch_model = clf.model
+        self.experiment.save(species, pytorch_model)
+        
+        # Find the task instance we just finished,
+        # and signal its completion:
+        for task in self.tasks_to_run:
+            if task.name == target_species:
+                break
+
+        task.shared_return_dict['_done_event'].set()
 
 # ------------------- Utilities -----------------
 

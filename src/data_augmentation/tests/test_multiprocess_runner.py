@@ -47,8 +47,9 @@ class MultiProcessRunnerTester(unittest.TestCase):
         res = results[0]
         self.assertDictEqual(res,
                              {'arg1'  : 'arg1-task_1', 
-                              'kwarg1': 'kwarg1-task_1'
-        })
+                              'kwarg1': 'kwarg1-task_1',
+                              '_kwargs': {'kwarg1': 'kwarg1-task_1'}
+                              })
 
     #------------------------------------
     # test_two_tasks
@@ -153,6 +154,7 @@ class BusyBody:
 
     def __init__(self, name):
         self.name = name
+        self.keep_going = True
         signal.signal(signal.SIGTERM, self.stop_infinite_loop)
         
     def run(self, arg1, kwarg1=None):
@@ -182,12 +184,11 @@ class BusyBody:
                 'kwarg1' : self.kwarg1
                 }
 
-    def stop_infinite_loop(self):
+    def stop_infinite_loop(self, _signum, _stackframe):
         self.keep_going = False
         
     def run_infinite_loop(self):
         
-        self.keep_going = True
         while self.keep_going:
             time.sleep(1)
             print(f"Task {self.name} running infinite loop")

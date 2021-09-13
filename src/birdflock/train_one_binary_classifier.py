@@ -88,7 +88,8 @@ class BinaryClassificationTrainer:
         #****************
         #net = NeuralNet(self.model, criterion=torch.nn.NLLLoss,)
         net = NeuralNetBinaryClassifier(self.model,
-                                        train_split=cv_split,
+                                        #*****train_split=cv_split,
+                                        train_split=None,
                                         #criterion=nn.CrossEntropyLoss,
                                         criterion=BCEWithLogitsLoss,
                                         dataset=dataset,
@@ -100,7 +101,6 @@ class BinaryClassificationTrainer:
         #    print(f"X: {X}; y: {y}")
         #***********
         net.fit(dataset, y=None)
-
         
     #------------------------------------
     # create_transforms
@@ -114,6 +114,7 @@ class BinaryClassificationTrainer:
         
         img_transforms = [
                           transforms.ToTensor(),
+                          Ensure3Channels(),
                           transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                                 std=[0.229, 0.224, 0.225]),
                           transforms.Resize((sample_width, sample_height))
@@ -123,6 +124,27 @@ class BinaryClassificationTrainer:
             img_transforms.append(transforms.Grayscale())
                           
         return transforms.Compose(img_transforms)
+
+# -------------------- Transform Class Ensure3Channels ------
+
+class Ensure3Channels:
+    '''
+    Given an image tensor, return a 3-channel tensor.
+    Tensors are expected with format (channels, height, width).
+    If the given tensor already has 3 channels, returns
+    the tensor unchanged. If it has 1 channel, replicates that
+    channel 3 times. Else: ValueError.
+    '''
+    
+    def __call__(self, grayscale_tensor):
+        
+        channels, _width, _height = grayscale_tensor.shape
+        if channels == 1:
+            return grayscale_tensor.repeat(3,1,1)
+        elif channels == 3:
+            return grayscale_tensor
+        else:
+            raise ValueError(f"Tensor has shape {grayscale_tensor.shape}; should be (1, h, w) or (3, h, w)")
 
 # ------------------------ Main ------------
 if __name__ == '__main__':
