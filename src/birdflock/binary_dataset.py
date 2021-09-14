@@ -7,6 +7,7 @@ from pathlib import Path
 import random
 
 import torch
+import torchvision
 
 from birdsong.utils.utilities import FileUtils
 from data_augmentation.sound_processor import SoundProcessor
@@ -52,7 +53,7 @@ class BinaryDataset(torch.utils.data.Dataset):
     The class handles both audio and image files.
 
     '''
-
+    
     #------------------------------------
     # Constructor 
     #-------------------
@@ -61,7 +62,8 @@ class BinaryDataset(torch.utils.data.Dataset):
     def __init__(self,
                  species_dirs_root, 
                  target_species,
-                 transforms=None
+                 transforms=None,
+                 random_seed=None
                  ):
         '''
         The species_dirs_root should contain subdirectories,
@@ -77,7 +79,12 @@ class BinaryDataset(torch.utils.data.Dataset):
         :type target_species:
         :param transforms:
         :type transforms:
+        :param random_seed: set random.seed for repeatability
+        :type random_seed: {None | int}
         '''
+
+        if random_seed is not None:
+            random.seed = random_seed
 
         self.target_species = target_species
         self.samples_root   = species_dirs_root
@@ -119,6 +126,39 @@ class BinaryDataset(torch.utils.data.Dataset):
         
         self.data = list(other_tuples) + list(target_tuples)
         random.shuffle(self.data)
+
+    #------------------------------------
+    # split_generator
+    #-------------------
+    
+    def split_generator(self, num_splits=5, test_percentage=20):
+        '''
+        A generator providing successive random
+        splits into train and test indices. Indices
+        are 0..len(data). So successive returns when
+        self.data were to contain 10 entries might be:
+        
+                Train            Test
+            ([0,1,3,4,5,6,7,9], [2,8])
+            ([0,1,2,4,6,7,8,9], [5,3])
+                ...
+        
+        :param num_splits: number of train/test indices
+            array pairs to generate
+        :type num_splits: int
+        :param test_percentage: percentage of all indices
+            to be removed as test indices
+        :type test_percentage: {int | float}
+        :returns repeated array pairs of train/test indices
+        :rtype ((int),(int))
+        '''
+        index_set = set(range(len(self.data)))
+        test_sample_size = int(len(index_set) * test_percentage / 100.)
+        
+        for _i in range(num_splits):
+            test_set  = set(random.sample(index_set, test_sample_size))
+            train_set = index_set - test_set
+            yield (list(train_set), list(test_set))
 
     #------------------------------------
     # __len__ 
@@ -173,7 +213,7 @@ class BinaryDataset(torch.utils.data.Dataset):
             if self.transforms is not None:
                 res_tensor = self.transforms(img_RGB)
             else:
-                res_tensor = torch.tensor(img_RGB, dtype=int)
+                res_tensor = torchvision.transforms.ToTensor()(img_RGB)
         else:
             data_arr, _sample_rate = SoundProcessor.load_audio(str(file_p))
             res_tensor = torch.tensor(data_arr, dtype=float)

@@ -15,11 +15,11 @@ from logging_service import LoggingService
 from torch import cuda
 import torch
 
-import multiprocessing as mp
-
 from birdflock.train_one_binary_classifier import BinaryClassificationTrainer
+from birdsong.utils.utilities import FileUtils
 from data_augmentation.multiprocess_runner import Task, MultiProcessRunner
 from data_augmentation.utils import Utils
+import multiprocessing as mp
 
 
 class BinaryBirdsTrainer(object):
@@ -51,8 +51,6 @@ class BinaryBirdsTrainer(object):
                         'species_list'  : species_list
                         }
 
-        exp = ExperimentManager(experiment_path, initial_info=initial_info)
-        
         self.snippets_root = snippets_root
         if species_list is None:
             # Collect names of species (i.e. subdirectory names),
@@ -90,8 +88,9 @@ class BinaryBirdsTrainer(object):
     # train
     #-------------------
     
-    def train(self, unittesting=False):
+    def train(self):
         
+        mp_runners = []
         task_batch = []
         tasks_left = set(self.tasks_to_run.copy())
         while len(tasks_left) > 0:
@@ -130,9 +129,14 @@ class BinaryBirdsTrainer(object):
                                )
                 # Copy the task_batch to be sure not 
                 # to interfere when we set task_batch to
-                # empty further down:
-                mp_runner = MultiProcessRunner(task_batch.copy(), 
-                                               synchronous=False)
+                # empty further down. Use the runner with
+                # synchronous=False so that it returns immediately,
+                # so we can start another one or more tasks
+                # with another mp_runner. We wait for them all
+                # at the end.
+                mp_runners.append(MultiProcessRunner(task_batch.copy(), 
+                                                     synchronous=False)
+                )
     
                 tasks_left -= set(task_batch)
                 # Wait for any of the classifiers to finish
@@ -149,6 +153,12 @@ class BinaryBirdsTrainer(object):
                 task_batch = []
                 # loop, submitting next training job(s) to 
                 # a new mp_runner
+                
+        # Wait for all tasks in all runners to be done:
+        for mp_runner in mp_runners:
+            finished_tasks = mp_runner.join()
+            done_task_names = [task.species for task in finished_tasks]
+            self.log.info(f"Finished classifier(s) {done_task_names}")
 
     #------------------------------------
     # _create_task_list
@@ -220,6 +230,10 @@ class BinaryBirdsTrainer(object):
                 if task_obj.shared_return_dict['_done_event'].wait(3.0): # seconds to wait
                     # Task was finished:
                     tasks_done.add(task_obj)
+                    # If task signaled an error, raise
+                    # it now, else it will be hidden away:
+                    self._check_task_exception(task_obj)
+                    
                     if extra_time is None:
                         # Return the first done task right away
                         return tasks_done
@@ -240,6 +254,17 @@ class BinaryBirdsTrainer(object):
                 continue
             return tasks_done
 
+    #------------------------------------
+    # _check_task_exception
+    #-------------------
+    
+    def _check_task_exception(self, task):
+        task_keys = task.shared_return_dict.keys()
+        if 'Exception' in task_keys and 'Traceback' in task_keys:
+            msg = (f"Exception in trainer for {task.name}:device_{task.gpu}\n",
+                   task.shared_return_dict['Traceback']
+                   )
+            raise RuntimeError(msg)
 
     #------------------------------------
     # create_classifier
@@ -252,14 +277,20 @@ class BinaryBirdsTrainer(object):
 
         # Create a dataset with target_species
         # against everyone else, and train it:
-        
+
+        experiments_root = os.path.join(os.path.dirname(__file__), 
+                                        f"Experiments_TrainFlock_{FileUtils.file_timestamp()}")
+        exp_path = os.path.join(experiments_root, f"{target_species}")
+        experiment = ExperimentManager(exp_path)
+
         clf = BinaryClassificationTrainer(snippets_root,
                                           target_species,
-                                          device=gpu
+                                          device=gpu,
+                                          experiment=experiment
                                           )
         
         pytorch_model = clf.model
-        self.experiment.save(species, pytorch_model)
+        experiment.save(target_species, pytorch_model)
         
         # Find the task instance we just finished,
         # and signal its completion:

@@ -7,13 +7,12 @@ import os
 import unittest
 
 import torch
+from torchvision import transforms
 
-from birdsong.binary_dataset import BinaryDataset
-
+from birdflock.binary_dataset import BinaryDataset
 
 TEST_ALL = True
 #TEST_ALL = False
-
 
 class BinaryDatasetTest(unittest.TestCase):
 
@@ -93,6 +92,49 @@ class BinaryDatasetTest(unittest.TestCase):
         self.assertEqual(type(label), torch.Tensor)
         self.assertTrue(label.item() in [0,1])
         
+
+    #------------------------------------
+    # test_getitem_with_transforms
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_getitem_with_transforms(self):
+
+        
+        the_transforms = transforms.Compose(
+            [transforms.RandomCrop([100,100]),
+             transforms.ToTensor()
+             ])
+
+        target_species = 'BTSAC'
+        ds = BinaryDataset(self.bin_ds_img_sample_root,
+                           target_species,
+                           transforms=the_transforms
+                           )
+        (img_tensor, _label) = ds[0]
+        self.assertListEqual(list(img_tensor.shape), [1,100,100])
+
+    #------------------------------------
+    # test_dataset_splitting
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_dataset_splitting(self):
+        
+        # Get an image
+        target_species = 'BTSAC'
+        ds = BinaryDataset(self.bin_ds_img_sample_root,
+                           target_species
+                           )
+        
+        tst_fold_size = int(len(ds.data) / 5.)
+        
+        for i, (train_indices, test_indices) in enumerate(ds.split_generator(2, test_percentage=20)):
+            self.assertEqual(len(train_indices), len(ds.data) - tst_fold_size)
+            self.assertEqual(len(test_indices), tst_fold_size)
+            
+        # Should have received 2 splits:
+        self.assertEqual(i+1, 2)
 
 
 if __name__ == "__main__":

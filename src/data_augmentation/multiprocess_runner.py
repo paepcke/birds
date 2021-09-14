@@ -4,8 +4,6 @@ Created on Sep 6, 2021
 @author: paepcke
 '''
 
-import os
-import signal
 import traceback
 
 from logging_service import LoggingService
@@ -141,7 +139,7 @@ class MultiProcessRunner:
         self.cpus_available = cpu_budget
         
         # Map of Task instance to manager Event instance:
-        self.running_tasks = {}
+        self._running_tasks = {}
         
         # Mapping task instances to job instances;
         # used to terminate jobs by task:
@@ -174,7 +172,7 @@ class MultiProcessRunner:
                 job.ret_value_slot = ret_value_slot
                 self.all_jobs[task] = job
                 
-                self.running_tasks[task] = done_event
+                self._running_tasks[task] = done_event
                 job.start()
                 self.cpus_available -= 1
                 
@@ -189,8 +187,8 @@ class MultiProcessRunner:
         if not self.synchronous:
             return
         
-        self.log.info(f"Going into wait loop for {len(self.running_tasks)} still running tasks")
-        while len(self.running_tasks) > 0:
+        self.log.info(f"Going into wait loop for {len(self._running_tasks)} still running tasks")
+        while len(self._running_tasks) > 0:
             completed_task = self._await_any_job_done()
             self.log.info(f"Task {completed_task.name} finished")
 
@@ -227,7 +225,7 @@ class MultiProcessRunner:
         # Does this job have a running 
         # process working on it?
         try:
-            self.running_tasks[task_spec]
+            self._running_tasks[task_spec]
         except KeyError:
             # No child running
             return False
@@ -239,7 +237,7 @@ class MultiProcessRunner:
             job = self.all_jobs[task_spec]
             job.terminate()
             del self.all_jobs[task_spec]
-            del self.running_tasks[task_spec]
+            del self._running_tasks[task_spec]
             # Successfully delivered SIGTERM.
             # Hopefully the child processe receives
             # it:
@@ -267,16 +265,42 @@ class MultiProcessRunner:
         :return dict mapping Task instances to Event instances
         :rtype {Task : Event} 
         '''
-        #return list(self.running_tasks.values())
-        return self.running_tasks
+        #return list(self._running_tasks.values())
+        return self._running_tasks
 
     #------------------------------------
-    # shutdown
+    # join
     #-------------------
     
-    def shutdown(self):
-        self.manager.stop_event.set()
+    def join(self):
+        '''
+        Return when all tasks have finished
+        Needed only by clients who use this
+        facility in synchronous=False mode.
+        
+        :returns possibly empty list of task instances of finished tasks
+        :rtype (Task) 
+        '''
+        
+        finished_jobs = []
+        
+        #****************
+        print("******** Enter join loop")
+        #****************
+        
+        while len(self.running_tasks()) > 0:
+            
+            #****************
+            print("******** Inside join loop")
+            #****************
+            
+            finished_jobs.append(self._await_any_job_done())
 
+        #****************
+        print("******** Exit join loop")
+        #****************
+        
+        return finished_jobs
 
     #------------------------------------
     # _await_any_job_done
@@ -284,16 +308,19 @@ class MultiProcessRunner:
     
     def _await_any_job_done(self):
         '''
-    
-        :param running_tasks:
-        :type running_tasks:
+        Wait for the 'I am done' Event flag to
+        be set in any of the running tasks. Return
+        the first task object that is done.
+        
+        :return first task that has finished
+        :rtype Task
         '''
         while True:
-            for task_obj, done_event in self.running_tasks.items():
+            for task_obj, done_event in self._running_tasks.items():
                 # Wait a short while for this task to finish...
                 task_is_done = done_event.wait(1.0) # seconds
                 if task_is_done:
-                    del self.running_tasks[task_obj]
+                    del self._running_tasks[task_obj]
                     self.cpus_available += 1
                     return task_obj
 
@@ -327,15 +354,7 @@ class Task(dict):
     # run
     #-------------------
     
-    #***********************
-    #def run(self, done_event, shared_return_dict):
     def run(self, shared_return_dict):
-    #***********************
-
-        # Though done_event and shared_return_dict are
-        # used only in this method, make them inspectable
-        # from the outside:
-        #************self.done_event = done_event
 
         # Last-minute additions to the kwargs of
         # the target function would be in 
@@ -356,9 +375,17 @@ class Task(dict):
         if type(res) == dict:
             shared_return_dict.update(res)
         else:
+            #************
+            print(f"******** res: {res}")
+            #************
             shared_return_dict['result'] = res
         # Indicate to the outside world that
         # we are done:
+        
+        #************
+        print(f"******** setting flag")
+        #************
+        
         shared_return_dict['_done_event'].set()
 
     #------------------------------------

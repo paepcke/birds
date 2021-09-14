@@ -12,8 +12,8 @@ from data_augmentation.multiprocess_runner import Task
 import multiprocessing as mp
 
 
-TEST_ALL = True
-#TEST_ALL = False
+#******TEST_ALL = True
+TEST_ALL = False
 
 
 class Test(unittest.TestCase):
@@ -48,6 +48,20 @@ class Test(unittest.TestCase):
         self.assertEqual(len(trainer.tasks_to_run), 3)
         
         trainer.train()
+        print('Nothing was tested, but fit() finished')
+        
+        
+    #------------------------------------
+    # test_callback_scoring
+    #-------------------
+    
+    #********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_callback_scoring(self):
+
+        
+        trainer = BinaryBirdsTrainer(self.snippet_root)
+        trainer.train()
+        
         print('foo')
 
     #------------------------------------

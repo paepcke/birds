@@ -6,7 +6,7 @@ Created on Sep 8, 2021
 import os
 import unittest
 
-from birdsong.train_one_binary_classifier import BinaryClassificationTrainer
+from birdflock.train_one_binary_classifier import BinaryClassificationTrainer
 
 
 class Test(unittest.TestCase):

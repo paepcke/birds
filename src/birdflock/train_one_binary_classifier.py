@@ -4,16 +4,17 @@ Created on Sep 4, 2021
 @author: paepcke
 '''
 
+from skorch.callbacks import EpochScoring, TensorBoard
 from skorch.classifier import NeuralNetBinaryClassifier
 from skorch.dataset import CVSplit
-from torchvision import transforms
-
 from torch import cuda
 from torch.nn import BCEWithLogitsLoss
+from torchvision import transforms
 
 from birdflock.binary_dataset import BinaryDataset
 from birdsong.nets import NetUtils
 
+from birdsong.utils.tensorboard_plotter import SummaryWriterPlus, TensorBoardPlotter
 
 class BinaryClassificationTrainer:
     '''
@@ -27,8 +28,10 @@ class BinaryClassificationTrainer:
     def __init__(self, 
                  species_dirs_root, 
                  target_species,
-                 transforms=None,
-                 device=None):
+                 device=None,
+                 experiment=None,
+                 transforms=None
+                 ):
         '''
         The species_dirs_root contains one
         subdirectory for each species. The target_species
@@ -55,6 +58,9 @@ class BinaryClassificationTrainer:
         self.freeze       = False
         self.to_grayscale = True
         self.net_name     = 'resnet18'
+
+        self.experiment = experiment
+        self.prep_tensorboard()
         
         transforms = self.create_transforms()
         
@@ -79,29 +85,35 @@ class BinaryClassificationTrainer:
                                  )
         
         
-        cv_split = CVSplit()
         dataset  = BinaryDataset(species_dirs_root, target_species, transforms)
+        cv_split = CVSplit(dataset.split_generator(5, test_percentage=20))
+
 
         # Use all defaults for optimizer, loss func, etc.
         # Maybe modify:
         #    o device <--- 'cuda'
-        #****************
-        #net = NeuralNet(self.model, criterion=torch.nn.NLLLoss,)
-        net = NeuralNetBinaryClassifier(self.model,
-                                        #*****train_split=cv_split,
-                                        train_split=None,
-                                        #criterion=nn.CrossEntropyLoss,
-                                        criterion=BCEWithLogitsLoss,
-                                        dataset=dataset,
-                                        device=device
-                                        )
+
+        acc_cb = EpochScoring(scoring='accuracy', lower_is_better=False)
+        tensorboard_cb = TensorBoard(self.tb_writer)
+
+        net = NeuralNetBinaryClassifierTensorBoardReady (
+            self.model,
+            train_split=cv_split,
+            #criterion=nn.CrossEntropyLoss,
+            criterion=BCEWithLogitsLoss,
+            dataset=dataset,
+            device=device,
+            callbacks=[acc_cb, tensorboard_cb]
+            )
+        
         #****************
         #***********
         #for X,y in dataset:
         #    print(f"X: {X}; y: {y}")
         #***********
-        net.fit(dataset, y=None)
         
+        net.fit(dataset, y=None, )
+
     #------------------------------------
     # create_transforms
     #-------------------
@@ -124,6 +136,24 @@ class BinaryClassificationTrainer:
             img_transforms.append(transforms.Grayscale())
                           
         return transforms.Compose(img_transforms)
+
+    #------------------------------------
+    # prep_tensorboard
+    #-------------------
+    
+    def prep_tensorboard(self):
+        
+        tb_path = self.experiment.tensorboard_path
+        self.tb_writer = SummaryWriterPlus(log_dir=tb_path)
+
+
+# --------------------- NeuralNetBinaryClassifierTensorBoardReady --------
+
+class NeuralNetBinaryClassifierTensorBoardReady(NeuralNetBinaryClassifier):
+    
+    def on_epoch_end(self, mystery_arg, **kwargs):
+        pass
+
 
 # -------------------- Transform Class Ensure3Channels ------
 
