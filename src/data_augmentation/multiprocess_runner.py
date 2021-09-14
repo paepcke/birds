@@ -123,8 +123,8 @@ class MultiProcessRunner:
         # All Python processes on the various cores
         # will have read/write access:
         
-        mp_ctx = mp.get_context('spawn')
-        #mp_ctx = mp.get_context('fork')
+        #mp_ctx = mp.get_context('spawn')
+        mp_ctx = mp.get_context('fork')
         self.manager = mp_ctx.Manager()
         
         num_tasks  = len(task_specs)
