@@ -123,8 +123,15 @@ class MultiProcessRunner:
         # All Python processes on the various cores
         # will have read/write access:
         
-        #mp_ctx = mp.get_context('spawn')
-        mp_ctx = mp.get_context('fork')
+        # Must use 'spawn' to allow CUDA initialization
+        # in sub proceses. Though must include statement
+        #
+        #    freeze_support()
+        #
+        # in the if __name == '__main__'... section
+        
+        mp_ctx = mp.get_context('spawn')
+        #mp_ctx = mp.get_context('fork')
         self.manager = mp_ctx.Manager()
         
         num_tasks  = len(task_specs)
