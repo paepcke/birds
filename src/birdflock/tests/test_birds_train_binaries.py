@@ -68,7 +68,7 @@ class Test(unittest.TestCase):
     def test_supplying_species_list(self):
         species_to_train = ['VASEG', 'YOFLG']
         trainer = BinaryBirdsTrainer(self.snippet_root,
-                                     species_list=species_to_train
+                                     focals_list=species_to_train
                                      )
         self.assertEqual(trainer.tasks, species_to_train)
 

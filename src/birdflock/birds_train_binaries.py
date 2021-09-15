@@ -49,11 +49,37 @@ class BinaryBirdsTrainer(object):
 
     def __init__(self, 
                  snippets_root,
-                 species_list=None,
+                 focals_list=None,
                  experiment_path=None,
                  balancing_strategy=None,
                  balancing_ratio=None
                  ):
+        '''
+        Train a flock of binary bird call classifiers in parallel,
+        optionally balancing each focal species against the other
+        samples.
+        
+        Which species are in turn taken as a focal species for
+        training a binary focalSpecies-against-all is controlled as
+        follows:
+        
+           o snippets_root is the required root of subdirectories, each
+             of which contains spectrogram samples of one species
+           o focals_list is another optional subset that limits for which 
+             species a classifier is trained. The 'others' may still 
+             include all of species_list or the subdirectories of snippets_root.
+        
+        :param snippets_root:
+        :type snippets_root:
+        :param focals_list:
+        :type focals_list:
+        :param experiment_path:
+        :type experiment_path:
+        :param balancing_strategy:
+        :type balancing_strategy:
+        :param balancing_ratio:
+        :type balancing_ratio:
+        '''
         '''
         Constructor
         '''
@@ -61,21 +87,20 @@ class BinaryBirdsTrainer(object):
         self.log = LoggingService()
 
         self.snippets_root = snippets_root
+        self.focals_list = focals_list
         self.balancing_strategy = balancing_strategy
         self.balancing_ratio    = balancing_ratio
         
         if experiment_path is None:
             experiment_path = os.path.join(os.path.dirname(__file__), 'Experiments')
-        
-        #initial_info = {'snippets_root' : snippets_root,
-        #                'species_list'  : species_list
-        #                }
 
         self.snippets_root = snippets_root
-        if species_list is None:
+        # If no species_list is specified, use
+        # all species subdirectories:
+        if focals_list is None:
             # Collect names of species (i.e. subdirectory names),
             # i.e. species for which to create classifiers:
-            species_list = [Path(species_dir).stem
+            focals_list = [Path(species_dir).stem
                             for species_dir
                             in Utils.listdir_abs(snippets_root)
                             if os.path.isdir(species_dir)
@@ -90,7 +115,7 @@ class BinaryBirdsTrainer(object):
             # the CPUs instead:
             num_cpus = mp.cpu_count()
             # Leave 2 CPUs unused:
-            self.gpu_pool = ['cpu']*min(len(species_list), (num_cpus - 2))
+            self.gpu_pool = ['cpu']*min(len(focals_list), (num_cpus - 2))
         else:
             # Grab all unused GPUs:
             for i in range(num_gpus):
@@ -99,7 +124,7 @@ class BinaryBirdsTrainer(object):
                 if not self._gpu_in_use(i):
                     self.gpu_pool.append(i)
 
-        self.tasks_to_run = self._create_task_list(species_list)
+        self.tasks_to_run = self._create_task_list(focals_list)
 
     #------------------------------------
     # train
@@ -190,10 +215,10 @@ class BinaryBirdsTrainer(object):
     # _create_task_list
     #-------------------
     
-    def _create_task_list(self, species_list):
-        
+    def _create_task_list(self, focals_list):
+    
         task_list = []
-        for species in species_list:
+        for species in focals_list:
             task = Task(species,                  # Name of task
                         self._create_classifier,  # function to execute
                         self.snippets_root,       # where the snippets are

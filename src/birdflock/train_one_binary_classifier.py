@@ -11,7 +11,7 @@ from torch import cuda
 from torch.nn import BCEWithLogitsLoss
 from torchvision import transforms
 
-from birdflock.binary_dataset import BinaryDataset, BalancingStrategy
+from birdflock.binary_dataset import BinaryDataset
 from birdsong.nets import NetUtils
 
 from birdsong.utils.tensorboard_plotter import SummaryWriterPlus
@@ -109,14 +109,14 @@ class BinaryClassificationTrainer:
         early_stop = EarlyStopping(monitor='balanced_accuracy', patience=3, threshold=0.01)
         tensorboard_cb = TensorBoard(self.tb_writer)
 
-        self.net = NeuralNetBinaryClassifierTensorBoardReady (
+        self.net = NeuralNetBinaryClassifier(
             self.model,
             train_split=cv_split,
             #criterion=nn.CrossEntropyLoss,
             criterion=BCEWithLogitsLoss,
             dataset=dataset,
             device=device,
-            callbacks=[acc_cb, tensorboard_cb, bal_acc_cb, f1_cb, early_stop]
+            callbacks=[tensorboard_cb, bal_acc_cb, f1_cb, acc_cb, early_stop]
             )
         
         #****************
@@ -162,10 +162,10 @@ class BinaryClassificationTrainer:
 
 # --------------------- NeuralNetBinaryClassifierTensorBoardReady --------
 
-class NeuralNetBinaryClassifierTensorBoardReady(NeuralNetBinaryClassifier):
-    
-    def on_epoch_end(self, mystery_arg, **kwargs):
-        pass
+# class NeuralNetBinaryClassifierTensorBoardReady(NeuralNetBinaryClassifier):
+#
+#     def on_epoch_end(self, mystery_arg, **kwargs):
+#         pass
 
 
 # -------------------- Transform Class Ensure3Channels ------

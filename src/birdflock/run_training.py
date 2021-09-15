@@ -54,7 +54,19 @@ if __name__ == '__main__':
     if not os.path.isdir(snips_root):
         print(f"Cannot find {snips_root}")
         sys.exit(1)
+    
+    focal_species = ['BANAG','BBFLG','BCMMG','BHPAG','BHTAG',
+                     'BTSAC','BTSAS','CCROC','CCROS','CFPAG',
+                     'CMTOG','CTFLG','DCFLC','DCFLS','FBARG',
+                     'GCFLG','GHCHG','GHTAG','GRHEG','LEGRG',
+                     'NOISG','OBNTC','OBNTS','OLPIG','PATYG',
+                     'RBWRC','RBWRS','SHWCG','SOFLG','SPTAG',
+                     'SQCUC','SQCUS','STTAG','TRGNC','TRGNS',
+                     'WCPAG','WTDOG','WTROC','WTROS','YCEUG'] 
+
+    # Only create classifiers for the 40 focal species:
     trainer = BinaryBirdsTrainer(snips_root,
+                                 focal_species=focal_species,
                                  balancing_strategy=BalancingStrategy.UNDERSAMPLE,
                                  balancing_ratio=args.balance
                                  )
