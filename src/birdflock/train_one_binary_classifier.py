@@ -4,7 +4,7 @@ Created on Sep 4, 2021
 @author: paepcke
 '''
 
-from skorch.callbacks import EpochScoring, TensorBoard
+from skorch.callbacks import EpochScoring, TensorBoard, EarlyStopping
 from skorch.classifier import NeuralNetBinaryClassifier
 from skorch.dataset import CVSplit
 from torch import cuda
@@ -106,6 +106,7 @@ class BinaryClassificationTrainer:
         acc_cb = EpochScoring(scoring='accuracy', lower_is_better=False)
         bal_acc_cb = EpochScoring(scoring='balanced_accuracy', lower_is_better=False)
         f1_cb = EpochScoring(scoring='f1', lower_is_better=False)
+        early_stop = EarlyStopping(monitor='balanced_accuracy', patience=3, threshold=0.01)
         tensorboard_cb = TensorBoard(self.tb_writer)
 
         self.net = NeuralNetBinaryClassifierTensorBoardReady (
@@ -115,7 +116,7 @@ class BinaryClassificationTrainer:
             criterion=BCEWithLogitsLoss,
             dataset=dataset,
             device=device,
-            callbacks=[acc_cb, tensorboard_cb, bal_acc_cb, f1_cb]
+            callbacks=[acc_cb, tensorboard_cb, bal_acc_cb, f1_cb, early_stop]
             )
         
         #****************
