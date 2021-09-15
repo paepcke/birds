@@ -390,7 +390,7 @@ if __name__ == '__main__':
                                      args.output_dir_path,
                                      plot=args.plot,
                                      overwrite_policy=overwrite_policy,
-                                     aug_goals=goal
+                                     aug_goal=goal
                                      )
 
     augmenter.generate_all_augmentations()
