@@ -64,6 +64,10 @@ class MultiProcessRunner:
         if type(task_specs) != list:
             task_specs = [task_specs]
             
+        for task in task_specs:
+            if type(task) != Task:
+                raise TypeError(f"Tasks must be of type Task, not {type(task)} ({task})")
+
         self.synchronous = synchronous
         
         # Determine number of workers:
@@ -75,11 +79,10 @@ class MultiProcessRunner:
             # Limit pool size to number of cores:
             num_workers = num_cores
 
+        self._prep_tasks_for_parallelism(task_specs)
+
         # Get a list of multiprocessor dict 
-        # proxy instances. They behave like dicts, but
-        # turn them into basic dicts anyway. For example:
-        # unittest assertDictEqual(d1, d2) complains about
-        # dict not being of the proper type:
+        # proxy instances. 
         
         results = self.run_jobs(task_specs, num_workers)
         
@@ -87,6 +90,10 @@ class MultiProcessRunner:
             self.results = None
             return
         
+        # The result dicts behave like dicts, but
+        # we will turn them into basic dicts anyway. For example:
+        # unittest assertDictEqual(d1, d2) complains about
+        # dict not being of the proper type:        
         res_dicts = []
         for dict_proxy in results:
             # Make a native-Python dict from the dict proxy:
@@ -130,10 +137,6 @@ class MultiProcessRunner:
         #
         # in the if __name == '__main__'... section
         
-        mp_ctx = mp.get_context('spawn')
-        #mp_ctx = mp.get_context('fork')
-        self.manager = mp_ctx.Manager()
-        
         num_tasks  = len(task_specs)
         # Save a shallow copy of the task list, 
         # b/c we will pop() from this list
@@ -158,28 +161,16 @@ class MultiProcessRunner:
                 
                 task = task_specs.pop()
                 
-                if type(task) != Task:
-                    raise TypeError(f"Tasks must be of type Task, not {type(task)} ({task})")
                 
-                ret_value_slot = mp.Value("b", False)
-                done_event = self.manager.Event()
-                shared_return_dict = self.manager.dict()
-                # Make the task instance available
-                # to the receiver:
-                shared_return_dict['_kwargs'] = task.func_kwargs
-                shared_return_dict['_done_event'] = done_event
-                task.shared_return_dict = shared_return_dict
-                
-                job = mp_ctx.Process(target=task.run,
-                                     name=task.name,
-                                     #**********args=(done_event, shared_return_dict)
-                                     args=(shared_return_dict,)
+                job = self.mp_ctx.Process(target=task.run,
+                                     name=task.name
                                      )
 
+                ret_value_slot = mp.Value("b", False)
                 job.ret_value_slot = ret_value_slot
                 self.all_jobs[task] = job
                 
-                self._running_tasks[task] = done_event
+                self._running_tasks[task] = task.shared_return_dict['_done_event']
                 job.start()
                 self.cpus_available -= 1
                 
@@ -284,30 +275,12 @@ class MultiProcessRunner:
         Return when all tasks have finished
         Needed only by clients who use this
         facility in synchronous=False mode.
-        
-        :returns possibly empty list of task instances of finished tasks
-        :rtype (Task) 
+        When synchronous is set to True, this
+        method is called internally.
         '''
         
-        finished_jobs = []
-        
-        #****************
-        print("******** Enter join loop")
-        #****************
-        
-        while len(self.running_tasks()) > 0:
-            
-            #****************
-            print("******** Inside join loop")
-            #****************
-            
-            finished_jobs.append(self._await_any_job_done())
-
-        #****************
-        print("******** Exit join loop")
-        #****************
-        
-        return finished_jobs
+        for job in self.all_jobs.values():
+            job.join()
 
     #------------------------------------
     # _await_any_job_done
@@ -330,6 +303,38 @@ class MultiProcessRunner:
                     del self._running_tasks[task_obj]
                     self.cpus_available += 1
                     return task_obj
+
+    #------------------------------------
+    # _prep_tasks_for_parallelism
+    #-------------------
+    
+    def _prep_tasks_for_parallelism(self, task_specs):
+        '''
+        For each task to run on a different CPU, 
+        the Task instances need special data structs
+        for communication with the parent. 
+        
+        Use multiprocessing.Manager' shared dict 
+        for that purpose. This method adds a shared dict
+        to each Task instance. Each dict is initialized
+        with an entry _done_event : mp.Event. where the
+        event will be set by the task when it is done. 
+        That event is the method for awaiting a task's 
+        completion.
+        
+        :param task_specs: tasks to be processed
+        :type task_specs: (Task)
+        '''
+        
+        self.mp_ctx = mp.get_context('spawn')
+        #mp_ctx = mp.get_context('fork')
+        self.manager = self.mp_ctx.Manager()
+
+        for task in task_specs:
+            done_event = self.manager.Event()
+            shared_return_dict = self.manager.dict()
+            shared_return_dict['_done_event'] = done_event
+            task.shared_return_dict = shared_return_dict
 
 # --------------- Task Class --------------------
 
@@ -361,15 +366,7 @@ class Task(dict):
     # run
     #-------------------
     
-    def run(self, shared_return_dict):
-
-        # Last-minute additions to the kwargs of
-        # the target function would be in 
-        # shared_return_dict['_kwargs']. Merge those
-        # into the self.func_kwargs dict that will be
-        # passed to the target function:
-        
-        self.func_kwargs.update(shared_return_dict['_kwargs'])
+    def run(self):
 
         try:
             res = self.target_func(*self.func_args, **self.func_kwargs)
@@ -380,20 +377,12 @@ class Task(dict):
                    }
             
         if type(res) == dict:
-            shared_return_dict.update(res)
+            self.shared_return_dict.update(res)
         else:
-            #************
-            print(f"******** res: {res}")
-            #************
-            shared_return_dict['result'] = res
+            self.shared_return_dict['result'] = res
         # Indicate to the outside world that
         # we are done:
-        
-        #************
-        print(f"******** setting flag")
-        #************
-        
-        shared_return_dict['_done_event'].set()
+        self.shared_return_dict['_done_event'].set()
 
     #------------------------------------
     # done

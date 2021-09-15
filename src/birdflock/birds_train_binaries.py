@@ -47,9 +47,9 @@ class BinaryBirdsTrainer(object):
         if experiment_path is None:
             experiment_path = os.path.join(os.path.dirname(__file__), 'Experiments')
         
-        initial_info = {'snippets_root' : snippets_root,
-                        'species_list'  : species_list
-                        }
+        #initial_info = {'snippets_root' : snippets_root,
+        #                'species_list'  : species_list
+        #                }
 
         self.snippets_root = snippets_root
         if species_list is None:
@@ -80,9 +80,6 @@ class BinaryBirdsTrainer(object):
                     self.gpu_pool.append(i)
 
         self.tasks_to_run = self._create_task_list(species_list)
-
-        #models_dir = exp.models_path
-        #self.log.info(f"Finished training all classifiers; models in {models_dir}")
 
     #------------------------------------
     # train
@@ -139,9 +136,11 @@ class BinaryBirdsTrainer(object):
                 )
     
                 tasks_left -= set(task_batch)
+                
                 # Wait for any of the classifiers to finish
-                # training, and run more: done_task_objs will
-                # be a set:
+                # training and free up a GPU, then run more: 
+                # done_task_objs will be a set on a task when
+                # it's done:
                 
                 done_task_objs = self._await_any_job_done(self.tasks_to_run)
                 done_task_names = [task.species for task in done_task_objs]
@@ -156,9 +155,15 @@ class BinaryBirdsTrainer(object):
                 
         # Wait for all tasks in all runners to be done:
         for mp_runner in mp_runners:
-            finished_tasks = mp_runner.join()
-            done_task_names = [task.species for task in finished_tasks]
-            self.log.info(f"Finished classifier(s) {done_task_names}")
+            mp_runner.join()
+
+    #------------------------------------
+    # tasks
+    #-------------------
+
+    @property
+    def tasks(self):
+        return [task.species for task in self.tasks_to_run]
 
     #------------------------------------
     # _create_task_list
@@ -169,13 +174,13 @@ class BinaryBirdsTrainer(object):
         task_list = []
         for species in species_list:
             task = Task(species,                  # Name of task
-                        self.create_classifier,   # function to execute
+                        self._create_classifier,   # function to execute
                         self.snippets_root,       # where the snippets are
                         species                   # name of species as arg to task
                         )
             # Species at play to know by the task itself.
             # The species are in the Task() instantiation
-            # above will be for the create_classifier() call
+            # above will be for the _create_classifier() call
             # at runtime:
             task.species = species
             task_list.append(task)
@@ -267,10 +272,10 @@ class BinaryBirdsTrainer(object):
             raise RuntimeError(msg)
 
     #------------------------------------
-    # create_classifier
+    # _create_classifier
     #-------------------
     
-    def create_classifier(self, 
+    def _create_classifier(self, 
                           snippets_root, 
                           target_species,
                           gpu=None):
@@ -289,8 +294,8 @@ class BinaryBirdsTrainer(object):
                                           experiment=experiment
                                           )
         
-        pytorch_model = clf.model
-        experiment.save(target_species, pytorch_model)
+        net = clf.net
+        experiment.save(target_species, net)
         
         # Find the task instance we just finished,
         # and signal its completion:
@@ -298,6 +303,9 @@ class BinaryBirdsTrainer(object):
             if task.name == target_species:
                 break
 
+        # NOTE: cannot return clf itself,
+        #       because it cannot be pickled.
+        task.shared_return_dict['result'] = task.species
         task.shared_return_dict['_done_event'].set()
 
 # ------------------- Utilities -----------------

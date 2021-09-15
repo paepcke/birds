@@ -96,7 +96,7 @@ class BinaryClassificationTrainer:
         acc_cb = EpochScoring(scoring='accuracy', lower_is_better=False)
         tensorboard_cb = TensorBoard(self.tb_writer)
 
-        net = NeuralNetBinaryClassifierTensorBoardReady (
+        self.net = NeuralNetBinaryClassifierTensorBoardReady (
             self.model,
             train_split=cv_split,
             #criterion=nn.CrossEntropyLoss,
@@ -112,7 +112,7 @@ class BinaryClassificationTrainer:
         #    print(f"X: {X}; y: {y}")
         #***********
         
-        net.fit(dataset, y=None, )
+        self.net.fit(dataset, y=None, )
 
     #------------------------------------
     # create_transforms

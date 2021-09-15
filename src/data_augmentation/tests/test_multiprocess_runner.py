@@ -9,6 +9,7 @@ import signal
 import time
 import unittest
 
+import multiprocessing as mp
 from data_augmentation.multiprocess_runner import MultiProcessRunner, Task
 
 
@@ -45,11 +46,10 @@ class MultiProcessRunnerTester(unittest.TestCase):
         # Only one task, so only one result:
         self.assertEqual(len(results), 1)
         res = results[0]
-        self.assertDictEqual(res,
-                             {'arg1'  : 'arg1-task_1', 
-                              'kwarg1': 'kwarg1-task_1',
-                              '_kwargs': {'kwarg1': 'kwarg1-task_1'}
-                              })
+        self.assertEqual(len(res), 3)
+        self.assertEqual(type(res['_done_event']), mp.managers.EventProxy)
+        self.assertEqual(res['arg1'], 'arg1-task_1')
+        self.assertEqual(res['kwarg1'], 'kwarg1-task_1')
 
     #------------------------------------
     # test_two_tasks
@@ -111,7 +111,7 @@ class MultiProcessRunnerTester(unittest.TestCase):
         time.sleep(5)
         mp_runner.terminate_task(task)
         
-        self.assertDictEqual(mp_runner.running_tasks, {})
+        self.assertDictEqual(mp_runner.running_tasks(), {})
 
 # ------------------- Utilities -------------------
 

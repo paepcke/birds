@@ -12,7 +12,7 @@ from data_augmentation.multiprocess_runner import Task
 import multiprocessing as mp
 
 
-#******TEST_ALL = True
+#*********TEST_ALL = True
 TEST_ALL = False
 
 
@@ -55,14 +55,25 @@ class Test(unittest.TestCase):
     # test_callback_scoring
     #-------------------
     
-    #********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_callback_scoring(self):
+        # To be added; or not.
+        pass
+    
+    #------------------------------------
+    # test_supplying_species_list
+    #-------------------
 
-        
-        trainer = BinaryBirdsTrainer(self.snippet_root)
+    #*******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_supplying_species_list(self):
+        species_to_train = ['VASEG', 'YOFLG']
+        trainer = BinaryBirdsTrainer(self.snippet_root,
+                                     species_list=species_to_train
+                                     )
+        self.assertEqual(trainer.tasks, species_to_train)
+
         trainer.train()
-        
-        print('foo')
+
 
     #------------------------------------
     # test_await_any_job_done
