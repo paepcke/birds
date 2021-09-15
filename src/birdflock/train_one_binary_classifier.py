@@ -94,6 +94,8 @@ class BinaryClassificationTrainer:
         #    o device <--- 'cuda'
 
         acc_cb = EpochScoring(scoring='accuracy', lower_is_better=False)
+        bal_acc_cb = EpochScoring(scoring='balanced_accuracy', lower_is_better=False)
+        f1_cb = EpochScoring(scoring='f1', lower_is_better=False)
         tensorboard_cb = TensorBoard(self.tb_writer)
 
         self.net = NeuralNetBinaryClassifierTensorBoardReady (
@@ -103,7 +105,7 @@ class BinaryClassificationTrainer:
             criterion=BCEWithLogitsLoss,
             dataset=dataset,
             device=device,
-            callbacks=[acc_cb, tensorboard_cb]
+            callbacks=[acc_cb, tensorboard_cb, bal_acc_cb, f1_cb]
             )
         
         #****************
