@@ -27,14 +27,14 @@ class BinaryClassificationTrainer:
 
     def __init__(self, 
                  species_dirs_root, 
-                 target_species,
+                 focal_species,
                  device=None,
                  experiment=None,
                  transforms=None
                  ):
         '''
         The species_dirs_root contains one
-        subdirectory for each species. The target_species
+        subdirectory for each species. The focal_species
         is the name of the subdirectory whose recordings
         are examples of the binary classifier's target.
         The other subdirectories contain negative example
@@ -46,8 +46,8 @@ class BinaryClassificationTrainer:
         :param species_dirs_root: root of species-specific
             subdirectories
         :type species_dirs_root: str
-        :param target_species: name of species to recognize
-        :type target_species: str
+        :param focal_species: name of species to recognize
+        :type focal_species: str
         :param transforms: list of filters to apply to
             every file before usage
         :type trnasfo: {None | [Filter]
@@ -85,7 +85,7 @@ class BinaryClassificationTrainer:
                                  )
         
         
-        dataset  = BinaryDataset(species_dirs_root, target_species, transforms)
+        dataset  = BinaryDataset(species_dirs_root, focal_species, transforms)
         cv_split = CVSplit(dataset.split_generator(5, test_percentage=20))
 
 
