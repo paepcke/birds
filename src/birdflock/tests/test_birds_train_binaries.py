@@ -12,8 +12,8 @@ from data_augmentation.multiprocess_runner import Task
 import multiprocessing as mp
 
 
-#*********TEST_ALL = True
-TEST_ALL = False
+TEST_ALL = True
+#TEST_ALL = False
 
 
 class Test(unittest.TestCase):
@@ -64,7 +64,7 @@ class Test(unittest.TestCase):
     # test_supplying_species_list
     #-------------------
 
-    #*******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_supplying_species_list(self):
         species_to_train = ['VASEG', 'YOFLG']
         trainer = BinaryBirdsTrainer(self.snippet_root,

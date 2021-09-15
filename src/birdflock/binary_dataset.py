@@ -13,173 +13,6 @@ import torchvision
 from birdsong.utils.utilities import FileUtils
 from data_augmentation.sound_processor import SoundProcessor
 
-class ClassBalancer:
-    '''
-    Given a dataset and a focus class, find 
-    the number of samples in the focus class,
-    and the sum of samples in all other classes.
-    
-    Determines which of the two sample sets is 
-    a minority class. This will often be the focus
-    
-    Using techniques such as undersampling and oversampling,
-    generates a list of datset indices. The indices 
-    can be used during train/split.
-    '''
-    
-    #------------------------------------
-    # Constructor
-    #-------------------
-    
-    def __init__(self, balancing_strategy, minority_to_majority_target=1.0):
-        '''
-        The balancing_strategy specifies how class balancing
-        will be accomplished. The value must be a member of
-        the BalancingStrategy enum. 
-        
-        The minority_to_majority_target is a target ratio
-        for how many samples the (initially) minority class should
-        in the end contain relative to the (initially) majority class.
-        I.e. the number is:
-        
-                number minority samples after balancing
-                ----------------------------------------
-                number majority samples after balancing
-        
-        It is legal to specify a number greater than 1.0,
-        turning the minority class into a majority.
-        
-        Example balancing_strategy OVERSAMPLING
-            Initial minority samples: 100
-            Initial majority samples: 200
-            
-            minority_to_majority_target: 1.0
-               final minority samples: 200
-               final majority samples: 200
-               
-            minority_to_majority_target: 0.5
-               final minority samples: 100
-               final majority samples: 200
-               
-            minority_to_majority_target: 0.8
-               final minority samples: 160
-               final majority samples: 200
-               
-        Example balancing_strategy UNDERSAMPLING
-            Initial minority samples: 100
-            Initial majority samples: 200
-            
-            minority_to_majority_target: 1.0
-               final minority samples: 100
-               final majority samples: 100
-               
-            minority_to_majority_target: 0.5
-               final minority samples: 100
-               final majority samples: 200
-               
-            minority_to_majority_target: 0.8
-               final minority samples: 100
-               final majority samples: 125
-
-
-        :param balancing_strategy: which of the BalancingStrategy 
-            methods to deploy
-        :type balancing_strategy: BalancingStrategy
-        :param minority_to_majority_target: target ratio minority to majority class
-        :type minority_to_majority_target: float
-        '''
-
-        if type(balancing_strategy) != BalancingStrategy:
-            raise TypeError(f"Balancing strategy must be a member of the enum BalancingStrategy, not {type(balancing_strategy)}")
-        
-        self.balancing_strategy = balancing_strategy
-        self.target_ratio = minority_to_majority_target
-
-    #------------------------------------
-    # balance_oversample
-    #-------------------
-    
-    def balance_oversample(self):
-        '''
-        From the list of indices self.minority,
-        randomly choose self.minority_oversampling_needed
-        indices, and return a list containing the 
-        oversampled minority, and all of self.majority
-        in unspecified order
-        
-        :return list of indices to use from dataset
-            such that classes are balanced to the 
-            ratio given in the initialization (minority_to_majority_target)
-        :rtype (int)
-        '''
-        pass
-
-    #------------------------------------
-    # balance_undersample
-    #-------------------
-    
-    def balance_undersample(self):
-        '''
-        From the list of indices self.majority,
-        randomly cull self.majority_undersampling_to_cull
-        indices, and return a list containing the 
-        undersampled majority, and the unchanged minority
-        sample indices in unspecified order.
-
-        :return list of indices to use from dataset
-            such that classes are balanced to the 
-            ratio given in the initialization (minority_to_majority_target)
-        :rtype (int)
-        '''
-        pass
-
-    #------------------------------------
-    # tally_sample_composition
-    #-------------------
-    
-    def tally_sample_composition(self, dataset):
-        '''
-        Determine which is the minority class, and
-        which the majority. Initializes self.minority and self.majority.
-        The self.minority is a list of dataset indices that would
-        retrieve members of the minority class. Analogously
-        for self.majority.
-        
-        Example outcome:
-            self.minority: [0,1,5,10]
-            self.majority: [2,3,4,5,6,7,8,9]
-            
-        Also initializes:
-        
-           o self.minority_oversampling_needed:
-             The number of minority samples to use multiple
-             times in case minority oversampling is used to
-             balance.
-             
-           o self.majority_undersampling_to_cull
-             The number of majority samples to cull
-             in case majority oversampling is used to
-             balance.
-        
-        :param dataset: dataset from which to obtain sample counts
-        :type dataset: BinaryDataset
-        '''
-        if len(dataset.focal_indices) <= len(dataset.others_indices):
-            self.minority = dataset.focal_indices
-            self.majority = dataset.others_indices
-        else:
-            self.minority = dataset.others_indices
-            self.majority = dataset.focal_indices
-
-        # Determine how many minority samples would
-        # be needed after balancing if oversampling:
-        minority_oversampling_wanted = len(self.majority) * self.target_ratio
-        # Still needed: the target number minus what's already available
-        self.minority_oversampling_needed = minority_oversampling_wanted - len(self.minority)
-
-        # For the majority undersampling case:
-        majority_undersampling_wanted   = len(self.minority) / self.target_ratio
-        self.majority_undersampling_to_cull  = len(self.majority) - majority_undersampling_wanted
 
 class BalancingStrategy(Enum):
     '''
@@ -251,7 +84,9 @@ class BinaryDataset(torch.utils.data.Dataset):
                  species_dirs_root, 
                  focal_species,
                  transforms=None,
-                 random_seed=None
+                 random_seed=None,
+                 balancing_strategy=None,
+                 balancing_ratio=1.0
                  ):
         '''
         The species_dirs_root should contain subdirectories,
@@ -261,6 +96,20 @@ class BinaryDataset(torch.utils.data.Dataset):
         The focal_species should be a species
         name, such as VASEG, WTROS, etc.
         
+        If balancing in the number samples of the
+        focal species compared to all other samples is
+        desired, set balancing_strategy to an element
+        of the BalancingStrategy enum (OVERSAMPLE, UNDERSAMPLE).
+        If balancing_strategy is specified, can also specify
+        the target ratio
+         
+                num-minority-samples
+                --------------------
+                num-majority-samples
+                
+        If balancing_strategy is None, balancing_ratio is
+        ignored.
+        
         :param species_dirs_root:
         :type species_dirs_root:
         :param focal_species:
@@ -269,6 +118,14 @@ class BinaryDataset(torch.utils.data.Dataset):
         :type transforms:
         :param random_seed: set random.seed for repeatability
         :type random_seed: {None | int}
+        :param balancing_strategy: if non-None, balance the
+            dataset to reflect balancing_ratio between the
+            minority and majority classes
+        :type balancing_strategy: BalancingStrategy
+        :param balancing_ratio: final desired ratio between
+            the number of samples in the minority over majority
+            classes.
+        :type balancing_ratio: float
         '''
 
         if random_seed is not None:
@@ -319,8 +176,7 @@ class BinaryDataset(torch.utils.data.Dataset):
         # For convenience in class balancing,
         # collect the indices of focal, and of
         # others samples:
-        
-        
+
         self.focal_indices  = [i
                                for i, (_sample_path, is_focal_class)
                                in enumerate(self.data)
@@ -329,8 +185,15 @@ class BinaryDataset(torch.utils.data.Dataset):
         # The indices of non-focal samples
         # are the set difference between all 
         # data and the focal indices:
-        self.others_indices = set(range(len(self.data))) - set(self.focal_indices)
+        self.others_indices = list(set(range(len(self.data))) - set(self.focal_indices))
         
+        if balancing_strategy:
+            balancer = ClassBalancer(self, balancing_strategy, balancing_ratio)
+            self.original_data = self.data
+            self.data = [self.original_data[idx]
+                         for idx 
+                         in balancer.new_data
+                         ]
 
     #------------------------------------
     # split_generator
@@ -338,8 +201,7 @@ class BinaryDataset(torch.utils.data.Dataset):
     
     def split_generator(self, 
                         num_splits=5, 
-                        test_percentage=20,
-                        balancing_strategy=None):
+                        test_percentage=20):
         '''
         A generator providing successive random
         splits into train and test indices. Indices
@@ -357,7 +219,6 @@ class BinaryDataset(torch.utils.data.Dataset):
         :param test_percentage: percentage of all indices
             to be removed as test indices
         :type test_percentage: {int | float}
-        :param stratified: make the 
         :returns repeated array pairs of train/test indices
         :rtype ((int),(int))
         '''
@@ -429,3 +290,216 @@ class BinaryDataset(torch.utils.data.Dataset):
         
 
         return res_tensor, torch.tensor(float(bin_class))
+
+# -------------------- Class ClassBalancer -------------- 
+
+class ClassBalancer:
+    '''
+    Given a dataset and a focus class, find 
+    the number of samples in the focus class,
+    and the sum of samples in all other classes.
+    
+    Determines which of the two sample sets is 
+    a minority class. This will often be the focus
+    class in one-against-all-others cases.
+    
+    Using techniques such as undersampling and oversampling,
+    generates a list of datset indices. The indices 
+    can be used by BinaryDataset during train/split.
+    '''
+    
+    #------------------------------------
+    # Constructor
+    #-------------------
+    
+    def __init__(self, 
+                 dataset, 
+                 balancing_strategy, 
+                 minority_to_majority_target=1.0):
+        '''
+        Analyzes the dataset's minority to majority 
+        ratio. Makes a new set of data sample indices
+        available in self.new_data, but does not make
+        any changes in the dataset itself.
+                
+        The balancing_strategy specifies how class balancing
+        will be accomplished. The value must be a member of
+        the BalancingStrategy enum. 
+        
+        The minority_to_majority_target is a target ratio
+        for how many samples the (initially) minority class should
+        in the end contain relative to the (initially) majority class.
+        I.e. the number is:
+        
+                number minority samples after balancing
+                ----------------------------------------
+                number majority samples after balancing
+        
+        It is legal to specify a number greater than 1.0,
+        turning the minority class into a majority.
+        
+        Example balancing_strategy OVERSAMPLING
+            Initial minority samples: 100
+            Initial majority samples: 200
+            
+            minority_to_majority_target: 1.0
+               final minority samples: 200
+               final majority samples: 200
+               
+            minority_to_majority_target: 0.5
+               final minority samples: 100
+               final majority samples: 200
+               
+            minority_to_majority_target: 0.8
+               final minority samples: 160
+               final majority samples: 200
+               
+        Example balancing_strategy UNDERSAMPLING
+            Initial minority samples: 100
+            Initial majority samples: 200
+            
+            minority_to_majority_target: 1.0
+               final minority samples: 100
+               final majority samples: 100
+               
+            minority_to_majority_target: 0.5
+               final minority samples: 100
+               final majority samples: 200
+               
+            minority_to_majority_target: 0.8
+               final minority samples: 100
+               final majority samples: 125
+
+        :param dataset: the dataset over which balancing is
+            to be accomplished. The dataset itself is not
+            modified.
+        :type dataset: BinaryDataset
+        :param balancing_strategy: which of the BalancingStrategy 
+            methods to deploy
+        :type balancing_strategy: BalancingStrategy
+        :param minority_to_majority_target: target ratio minority to majority class
+        :type minority_to_majority_target: float
+        '''
+
+        if type(balancing_strategy) != BalancingStrategy:
+            raise TypeError(f"Balancing strategy must be a member of the enum BalancingStrategy, not {type(balancing_strategy)}")
+        
+        self.balancing_strategy = balancing_strategy
+        self.target_ratio = minority_to_majority_target
+        
+        self._tally_sample_composition(dataset)
+
+        if balancing_strategy == BalancingStrategy.UNDERSAMPLE:
+            self.new_data = self._balance_undersample()
+        elif balancing_strategy == BalancingStrategy.OVERSAMPLE:
+            self.new_data = self._balance_oversample()
+        else:
+            raise NotImplementedError(f"Strategy {balancing_strategy} is not implemented")
+
+    #------------------------------------
+    # _balance_oversample
+    #-------------------
+    
+    def _balance_oversample(self):
+        '''
+        From the list of indices self.minority,
+        randomly choose self.minority_oversampling_needed
+        indices, and return a list containing the 
+        oversampled minority, mixed with all of self.majority
+        in unspecified order
+        
+        :return list of indices to use from dataset
+            such that classes are balanced to the 
+            ratio given in the initialization (minority_to_majority_target)
+        :rtype (int)
+        '''
+        # If the samples needed are more than
+        # the samples available, random.sample would
+        # throw ValueError: Sample larger than population or is negative
+        # In that case, repeat sampling at the population
+        # size till the oversampling goal is reached:
+
+        if self.minority_oversampling_needed <= len(self.minority):
+            oversamples = random.sample(self.minority, self.minority_oversampling_needed)
+        else:
+            # Replicate all of minority as often
+            # as needed: round up, and snip excess
+            # after:
+            replicas = int(0.5 + self.minority_oversampling_needed / len(self.minority))
+            oversamples = (self.minority * replicas)[:self.minority_oversampling_needed] 
+
+
+        new_data = self.minority + oversamples + self.majority
+        random.shuffle(new_data)
+        return new_data
+
+    #------------------------------------
+    # _balance_undersample
+    #-------------------
+    
+    def _balance_undersample(self):
+        '''
+        From the list of indices self.majority,
+        randomly cull self.majority_undersampling_to_cull
+        indices, and return a list containing the 
+        undersampled majority, and the unchanged minority
+        sample indices in unspecified order.
+
+        :return list of indices to use from dataset
+            such that classes are balanced to the 
+            ratio given in the initialization (minority_to_majority_target)
+        :rtype (int)
+        '''
+        undersamples = random.sample(self.majority, self.majority_undersampling_to_cull)
+        remaining_majority = list(set(self.majority) - set(undersamples))
+        new_data = self.minority + remaining_majority
+        random.shuffle(new_data)
+        return new_data
+
+    #------------------------------------
+    # tally_sample_composition
+    #-------------------
+    
+    def _tally_sample_composition(self, dataset):
+        '''
+        Determine which is the minority class, and
+        which the majority. Initializes self.minority and self.majority.
+        The self.minority is a list of dataset indices that would
+        retrieve members of the minority class. Analogously
+        for self.majority.
+        
+        Example outcome:
+            self.minority: [0,1,5,10]
+            self.majority: [2,3,4,5,6,7,8,9]
+            
+        Also initializes:
+        
+           o self.minority_oversampling_needed:
+             The number of minority samples to use multiple
+             times in case minority oversampling is used to
+             balance.
+             
+           o self.majority_undersampling_to_cull
+             The number of majority samples to cull
+             in case majority oversampling is used to
+             balance.
+        
+        :param dataset: dataset from which to obtain sample counts
+        :type dataset: BinaryDataset
+        '''
+        if len(dataset.focal_indices) <= len(dataset.others_indices):
+            self.minority = dataset.focal_indices
+            self.majority = dataset.others_indices
+        else:
+            self.minority = dataset.others_indices
+            self.majority = dataset.focal_indices
+
+        # Determine how many minority samples would
+        # be needed after balancing if oversampling:
+        minority_oversampling_wanted = len(self.majority) * self.target_ratio
+        # Still needed: the target number minus what's already available
+        self.minority_oversampling_needed = int(minority_oversampling_wanted - len(self.minority))
+
+        # For the majority undersampling case:
+        majority_undersampling_wanted   = len(self.minority) / self.target_ratio
+        self.majority_undersampling_to_cull  = int(len(self.majority) - majority_undersampling_wanted)

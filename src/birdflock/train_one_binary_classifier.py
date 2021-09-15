@@ -11,10 +11,10 @@ from torch import cuda
 from torch.nn import BCEWithLogitsLoss
 from torchvision import transforms
 
-from birdflock.binary_dataset import BinaryDataset
+from birdflock.binary_dataset import BinaryDataset, BalancingStrategy
 from birdsong.nets import NetUtils
 
-from birdsong.utils.tensorboard_plotter import SummaryWriterPlus, TensorBoardPlotter
+from birdsong.utils.tensorboard_plotter import SummaryWriterPlus
 
 class BinaryClassificationTrainer:
     '''
@@ -30,6 +30,8 @@ class BinaryClassificationTrainer:
                  focal_species,
                  device=None,
                  experiment=None,
+                 balancing_strategy=None,
+                 balancing_ratio=None,
                  transforms=None
                  ):
         '''
@@ -48,6 +50,10 @@ class BinaryClassificationTrainer:
         :type species_dirs_root: str
         :param focal_species: name of species to recognize
         :type focal_species: str
+        :param balancing_strategy:
+        :type balancing_strategy:
+        :param balancing_ratio:
+        :type balancing_ratio:
         :param transforms: list of filters to apply to
             every file before usage
         :type trnasfo: {None | [Filter]
@@ -85,7 +91,11 @@ class BinaryClassificationTrainer:
                                  )
         
         
-        dataset  = BinaryDataset(species_dirs_root, focal_species, transforms)
+        dataset  = BinaryDataset(species_dirs_root, 
+                                 focal_species,
+                                 balancing_strategy=balancing_strategy,
+                                 balancing_ratio=balancing_ratio,
+                                 transforms=transforms)
         cv_split = CVSplit(dataset.split_generator(5, test_percentage=20))
 
 

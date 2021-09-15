@@ -1,14 +1,28 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 '''
 Created on Sep 13, 2021
 
 @author: paepcke
+
+Command line script to conveniently start
+a training. Opportunity to balance the dataset
+via undersampling the majority class is available
+in the --balance option, which takes a target ratio
+of 
+      num-minority-samples
+      --------------------
+      num-majority-samples
+
+If oversampling the focal species is preferred, change
+the call that instantiates BinaryBirdsTrainer.
+
 '''
 
 import argparse
 import os
 import sys
 
+from birdflock.binary_dataset import BalancingStrategy
 from birdflock.birds_train_binaries import BinaryBirdsTrainer
 import multiprocessing as mp
 
@@ -23,6 +37,12 @@ if __name__ == '__main__':
                                      formatter_class=argparse.RawTextHelpFormatter,
                                      description="Run the binary classifier training for all species"
                                      )
+    parser.add_argument('-b', '--balance',
+                        type=float,
+                        help='balance dataset so that num-minority/num-majority is given value',
+                        default=None
+                        )
+
 
     parser.add_argument('snippets_dir',
                         help='path to root of all species spectrogram snippets'
@@ -34,6 +54,9 @@ if __name__ == '__main__':
     if not os.path.isdir(snips_root):
         print(f"Cannot find {snips_root}")
         sys.exit(1)
-    trainer = BinaryBirdsTrainer(snips_root)
+    trainer = BinaryBirdsTrainer(snips_root,
+                                 balancing_strategy=BalancingStrategy.UNDERSAMPLE,
+                                 balancing_ratio=args.balance
+                                 )
     trainer.train()
 

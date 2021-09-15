@@ -10,6 +10,7 @@ import torch
 from torchvision import transforms
 
 from birdflock.binary_dataset import BinaryDataset
+from birdflock.binary_dataset import ClassBalancer, BalancingStrategy
 
 TEST_ALL = True
 #TEST_ALL = False
@@ -136,7 +137,75 @@ class BinaryDatasetTest(unittest.TestCase):
         # Should have received 2 splits:
         self.assertEqual(i+1, 2)
 
+    #------------------------------------
+    # test_class_balancer
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_class_balancer(self):
+        
+        target_species = 'BTSAC'
+        ds = BinaryDataset(self.bin_ds_img_sample_root,
+                           target_species
+                           )
+        
+        # There is only one BTSAC in the 
+        # test collection, so we can find it:
+        minority_idx = ds.focal_indices[0]
+        
+        balancer = ClassBalancer(ds, 
+                                 BalancingStrategy.OVERSAMPLE,
+                                 minority_to_majority_target=1.0)
 
+        data = balancer.new_data
+        # Number of occurrences of the minority
+        # index should equal the number of other
+        # indices (since we by default asked for 1:1
+        # ratio:
+        self.assertEqual(data.count(minority_idx),
+                         len(list(filter(lambda el: el != minority_idx, data)))
+                         )
+        
+        # Try undersampling:
+        balancer = ClassBalancer(ds, 
+                                 BalancingStrategy.UNDERSAMPLE,
+                                 minority_to_majority_target=1.0)
+        data = balancer.new_data
+        
+        # Should have the single minority sample,
+        # and one of the majority:
+        self.assertEqual(len(data), 2)
+        
+        # Try a non-1:1 ratio:
+        balancer = ClassBalancer(ds, 
+                                 BalancingStrategy.UNDERSAMPLE,
+                                 minority_to_majority_target=0.5)
+        data = balancer.new_data
+        # We should have 2 remaining majority
+        # members:
+        self.assertEqual(len(data), 3)
+        self.assertEqual(data.count(minority_idx), 1)
+        
+
+    #------------------------------------
+    # test_dataset_class_balancing
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_dataset_class_balancing(self):
+        target_species = 'BTSAC'
+        ds = BinaryDataset(self.bin_ds_img_sample_root,
+                           target_species,
+                           balancing_strategy=BalancingStrategy.UNDERSAMPLE
+                           )
+        # Are undersampling the majority down
+        # having only as many samples as BTSAC,
+        # which is 1:
+        self.assertEqual(len(ds.data), 2)
+        
+
+
+# ------------------------- Main -----------------
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']
     unittest.main()

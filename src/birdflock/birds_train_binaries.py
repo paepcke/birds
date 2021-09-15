@@ -24,7 +24,23 @@ import multiprocessing as mp
 
 class BinaryBirdsTrainer(object):
     '''
-    classdocs
+    Given the root of subdirectories with training
+    samples:
+       o Make each species a focal species in turn
+       o For each case, create a trainer that
+         trains a binary classifier focalSpecies-against-all-others.
+       o Resulting models will be in the models path of
+         the ExperimentManager experiment whose directory
+         root is provided, or is under 'Experiment_<date-time>'
+         in this file's directory
+       o Init args enable requests for balancing each
+         dataset to a specific ratio:
+         
+             num-focal-species-samples
+             -------------------------
+                num-other-samples
+                
+       o Each training runs on its own CPU and GPU
     '''
 
     #------------------------------------
@@ -34,7 +50,9 @@ class BinaryBirdsTrainer(object):
     def __init__(self, 
                  snippets_root,
                  species_list=None,
-                 experiment_path=None
+                 experiment_path=None,
+                 balancing_strategy=None,
+                 balancing_ratio=None
                  ):
         '''
         Constructor
@@ -43,6 +61,8 @@ class BinaryBirdsTrainer(object):
         self.log = LoggingService()
 
         self.snippets_root = snippets_root
+        self.balancing_strategy = balancing_strategy
+        self.balancing_ratio    = balancing_ratio
         
         if experiment_path is None:
             experiment_path = os.path.join(os.path.dirname(__file__), 'Experiments')
@@ -175,9 +195,11 @@ class BinaryBirdsTrainer(object):
         task_list = []
         for species in species_list:
             task = Task(species,                  # Name of task
-                        self._create_classifier,   # function to execute
+                        self._create_classifier,  # function to execute
                         self.snippets_root,       # where the snippets are
-                        species                   # name of species as arg to task
+                        species,                  # name of species as arg to task
+                        self.balancing_strategy,
+                        self.balancing_ratio
                         )
             # Species at play to know by the task itself.
             # The species are in the Task() instantiation
@@ -279,6 +301,8 @@ class BinaryBirdsTrainer(object):
     def _create_classifier(self, 
                           snippets_root, 
                           target_species,
+                          balancing_strategy=None,
+                          balancing_ratio=None,
                           gpu=None):
 
         # Create a dataset with target_species
@@ -292,6 +316,8 @@ class BinaryBirdsTrainer(object):
         clf = BinaryClassificationTrainer(snippets_root,
                                           target_species,
                                           device=gpu,
+                                          balancing_strategy=balancing_strategy,
+                                          balancing_ratio=balancing_ratio,
                                           experiment=experiment
                                           )
         
