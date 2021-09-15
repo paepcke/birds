@@ -143,7 +143,7 @@ class BinaryBirdsTrainer(object):
                 # done_task_objs will be a set on a task when
                 # it's done:
                 
-                done_task_objs = self._await_any_job_done(tasks_batch)
+                done_task_objs = self._await_any_job_done(task_batch)
                 done_task_names = [task.species for task in done_task_objs]
                 self.log.info(f"Finished classifier(s) {done_task_names}")
                 
