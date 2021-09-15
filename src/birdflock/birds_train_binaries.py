@@ -122,8 +122,9 @@ class BinaryBirdsTrainer(object):
                 # them to finish, because if some finish
                 # early, we want to train the next:
                 self.log.info((f"Start training classifier(s) "
-                               f"{[task.name for task in self.tasks_to_run]}")
+                               f"{[task.name for task in task_batch]}")
                                )
+                
                 # Copy the task_batch to be sure not 
                 # to interfere when we set task_batch to
                 # empty further down. Use the runner with
@@ -142,7 +143,7 @@ class BinaryBirdsTrainer(object):
                 # done_task_objs will be a set on a task when
                 # it's done:
                 
-                done_task_objs = self._await_any_job_done(self.tasks_to_run)
+                done_task_objs = self._await_any_job_done(tasks_batch)
                 done_task_names = [task.species for task in done_task_objs]
                 self.log.info(f"Finished classifier(s) {done_task_names}")
                 
