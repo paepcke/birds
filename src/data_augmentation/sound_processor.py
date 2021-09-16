@@ -1159,8 +1159,11 @@ class SoundProcessor:
         
         if not os.path.exists(fname):
             raise FileNotFoundError(f"File {fname} does not exist.")
-
-        png_img = PngImageFile(fname)
+        
+        try:
+            png_img = PngImageFile(fname)
+        except Exception as e:
+            raise RuntimeError(f"Error opening {fname}: {repr(e)}")
         try:
             info = png_img.text
         except Exception as e:

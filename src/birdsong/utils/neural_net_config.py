@@ -23,9 +23,11 @@ class NeuralNetConfig(DottableConfigParser):
     '''
     A configuration with special knowledge
     (and expectations) of neural net training
-    procedures.
+    procedures. Based on DottableConfigParser
+    in dottable_config.py. See lots of documentation
+    there.
     
-    Adds setters for (example values just for
+    This module adds setters for (example values just for
     guidance)
         Training.
 			 net_name      = resnet18
@@ -120,6 +122,10 @@ class NeuralNetConfig(DottableConfigParser):
     #-------------------
     
     def define_nn_properties(self):
+        '''
+        Create getter and setter attributes for common neural
+        net attributes, such as 'min_epochs', 'batch_size':
+        '''
         
         for prop_name in self.NEURAL_NET_ATTRS.keys():
             fset = NeuralNetConfig.__dict__[f"set_{prop_name}"]

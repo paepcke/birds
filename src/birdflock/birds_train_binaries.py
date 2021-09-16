@@ -8,10 +8,12 @@ import argparse
 import datetime
 import os
 from pathlib import Path
+import random
 import sys
 
 from experiment_manager.experiment_manager import ExperimentManager
 from logging_service import LoggingService
+from neural_net_config import NeuralNetConfig, ConfigError
 from torch import cuda
 import torch
 
@@ -48,11 +50,9 @@ class BinaryBirdsTrainer(object):
     #-------------------
 
     def __init__(self, 
-                 snippets_root,
+                 config_info, 
                  focals_list=None,
                  experiment_path=None,
-                 balancing_strategy=None,
-                 balancing_ratio=None
                  ):
         '''
         Train a flock of binary bird call classifiers in parallel,
@@ -68,33 +68,35 @@ class BinaryBirdsTrainer(object):
            o focals_list is another optional subset that limits for which 
              species a classifier is trained. The 'others' may still 
              include all of species_list or the subdirectories of snippets_root.
-        
-        :param snippets_root:
-        :type snippets_root:
+    
+        :param config_info: a path to the files with all path 
+            and training parameters, or a config instance if
+            client has already loaded from a config file
+        :type config_info: {str | NeuralNetConfig}
         :param focals_list:
         :type focals_list:
         :param experiment_path:
         :type experiment_path:
-        :param balancing_strategy:
-        :type balancing_strategy:
-        :param balancing_ratio:
-        :type balancing_ratio:
-        '''
-        '''
-        Constructor
         '''
 
         self.log = LoggingService()
+        
+        try:
+            self.config = self._initialize_config_struct(config_info)
+        except Exception as e:
+            msg = f"During config init: {repr(e)}"
+            self.log.err(msg)
+            raise RuntimeError(msg) from e
 
-        self.snippets_root = snippets_root
+        self.snippets_root = self.config['Paths']['root_train_test_data']
+        self.set_seed(self.config.Training.getint('seed', 42))
+
         self.focals_list = focals_list
-        self.balancing_strategy = balancing_strategy
-        self.balancing_ratio    = balancing_ratio
         
         if experiment_path is None:
             experiment_path = os.path.join(os.path.dirname(__file__), 'Experiments')
+        self.experiment_path = experiment_path
 
-        self.snippets_root = snippets_root
         # If no species_list is specified, use
         # all species subdirectories:
         if focals_list is None:
@@ -102,7 +104,7 @@ class BinaryBirdsTrainer(object):
             # i.e. species for which to create classifiers:
             focals_list = [Path(species_dir).stem
                             for species_dir
-                            in Utils.listdir_abs(snippets_root)
+                            in Utils.listdir_abs(self.snippets_root)
                             if os.path.isdir(species_dir)
                             ]
 
@@ -187,8 +189,35 @@ class BinaryBirdsTrainer(object):
                 # training and free up a GPU, then run more: 
                 # done_task_objs will be a set on a task when
                 # it's done:
-                
-                done_task_objs = self._await_any_job_done(task_batch)
+                try:
+                    done_task_objs = self._await_any_job_done(task_batch)
+                except Exception as e:
+                    
+                    # Give up on this batch of tasks. 
+                    
+                    # Print the msg, which will include a traceback,
+                    # and use the species attribute added down
+                    # in _check_task_exception for pinpointing.
+                    # then continue chugging:
+                    try:
+                        species = e.species
+                    except AttributeError:
+                        species = "unavailable"
+                    self.log.err(f"In task (species {species}): {repr(e)}")
+                    for task in task_batch:
+                        try:
+                            mp_runners[-1].terminate_task(task)
+                        except Exception:
+                            # Maybe we can't terminate b/c already 
+                            # dead...best effort:
+                            pass
+                        self.gpu_pool.append(task.gpu)
+                    task_batch = []
+                    done_task_objs = task_batch
+                    done_task_names = [task.species for task in done_task_objs]
+                    self.log.err(f"Continuing to next species; don't trust classifiers for {done_task_names}")
+                    continue
+
                 done_task_names = [task.species for task in done_task_objs]
                 self.log.info(f"Finished classifier(s) {done_task_names}")
                 
@@ -212,6 +241,27 @@ class BinaryBirdsTrainer(object):
         return [task.species for task in self.tasks_to_run]
 
     #------------------------------------
+    # set_seed  
+    #-------------------
+
+    def set_seed(self, seed):
+        '''
+        Set the seed across all different necessary platforms
+        to allow for comparison of different models and runs
+        
+        :param seed: random seed to set for all random num generators
+        :type seed: int
+        '''
+        torch.manual_seed(seed)
+        cuda.manual_seed_all(seed)
+        # Not totally sure what these two do!
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        #np.random.seed(seed)
+        os.environ['PYTHONHASHSEED'] = str(seed)
+        random.seed(seed)
+
+    #------------------------------------
     # _create_task_list
     #-------------------
     
@@ -221,10 +271,8 @@ class BinaryBirdsTrainer(object):
         for species in focals_list:
             task = Task(species,                  # Name of task
                         self._create_classifier,  # function to execute
-                        self.snippets_root,       # where the snippets are
-                        species,                  # name of species as arg to task
-                        self.balancing_strategy,
-                        self.balancing_ratio
+                        self.config,              # where the snippets are
+                        species                   # name of species as arg to task
                         )
             # Species at play to know by the task itself.
             # The species are in the Task() instantiation
@@ -317,7 +365,11 @@ class BinaryBirdsTrainer(object):
             msg = (f"Exception in trainer for {task.name}:device_{task.gpu}\n",
                    task.shared_return_dict['Traceback']
                    )
-            raise RuntimeError(msg)
+            e = RuntimeError(msg)
+            # Add attribute 'species'
+            # for the higher-ups to add info: 
+            e.species = task.species
+            raise e
 
     #------------------------------------
     # _create_classifier
@@ -333,10 +385,9 @@ class BinaryBirdsTrainer(object):
         # Create a dataset with target_species
         # against everyone else, and train it:
 
-        experiments_root = os.path.join(os.path.dirname(__file__), 
-                                        f"Experiments_TrainFlock_{FileUtils.file_timestamp()}")
-        exp_path = os.path.join(experiments_root, f"{target_species}")
-        experiment = ExperimentManager(exp_path)
+        experiments_root = os.path.join(self.experiment_path,
+                                        f"Classifier_{target_species}_{FileUtils.file_timestamp()}")
+        experiment = ExperimentManager(experiments_root)
 
         clf = BinaryClassificationTrainer(snippets_root,
                                           target_species,
@@ -348,6 +399,8 @@ class BinaryBirdsTrainer(object):
         
         net = clf.net
         experiment.save(target_species, net)
+        
+        # Note some settings:*******
         
         # Find the task instance we just finished,
         # and signal its completion:
@@ -377,6 +430,60 @@ class BinaryBirdsTrainer(object):
             return False
         else:
             return True
+
+    #------------------------------------
+    # _initialize_config_struct 
+    #-------------------
+    
+    def _initialize_config_struct(self, config_info):
+        '''
+        Initialize a config dict of dict with
+        the application's configurations. Sections
+        will be:
+        
+          config['Paths']       -> dict[attr : val]
+          config['Training']    -> dict[attr : val]
+          config['Parallelism'] -> dict[attr : val]
+        
+        The config read method will handle config_info
+        being None. 
+        
+        If config_info is a string, it is assumed either 
+        to be a file containing the configuration, or
+        a JSON string that defines the config.
+         
+        Else config_info is assumed to be a NeuralNetConfig.
+        The latter is relevant only if using this file
+        as a library, rather than a command line tool.
+        
+        If given a NeuralNetConfig instance, it is returned
+        unchanged. 
+        
+        :param config_info: the information needed to construct
+            the structure
+        :type config_info: {NeuralNetConfig | str}
+        :return a NeuralNetConfig instance with all parms
+            initialized
+        :rtype NeuralNetConfig
+        '''
+
+        if isinstance(config_info, str):
+            # Is it a JSON str? Should have a better test!
+            if config_info.startswith('{'):
+                # JSON String:
+                config = NeuralNetConfig.from_json(config_info)
+            else: 
+                config = Utils.read_configuration(config_info)
+        elif isinstance(config_info, NeuralNetConfig):
+            config = config_info
+        else:
+            msg = f"Error: must have a config file, not {config_info}. See config.cfg.Example in project root"
+            # Since logdir may be in config, need to use print here:
+            print(msg)
+            raise ConfigError(msg)
+            
+        return config
+
 
 # ------------------------ Main ------------
 if __name__ == '__main__':

@@ -8,13 +8,13 @@ from skorch.callbacks import EpochScoring, TensorBoard, EarlyStopping
 from skorch.classifier import NeuralNetBinaryClassifier
 from skorch.dataset import CVSplit
 from torch import cuda
-from torch.nn import BCEWithLogitsLoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss
 from torchvision import transforms
 
-from birdflock.binary_dataset import BinaryDataset
+from birdflock.binary_dataset import BinaryDataset, BalancingStrategy
 from birdsong.nets import NetUtils
-
 from birdsong.utils.tensorboard_plotter import SummaryWriterPlus
+
 
 class BinaryClassificationTrainer:
     '''
@@ -25,13 +25,11 @@ class BinaryClassificationTrainer:
     # Constructor
     #-------------------
 
-    def __init__(self, 
-                 species_dirs_root, 
+    def __init__(self,
+                 config,
                  focal_species,
                  device=None,
                  experiment=None,
-                 balancing_strategy=None,
-                 balancing_ratio=None,
                  transforms=None
                  ):
         '''
@@ -45,25 +43,46 @@ class BinaryClassificationTrainer:
         transforms are instances of signal processing
         filters to apply.
         
-        :param species_dirs_root: root of species-specific
-            subdirectories
-        :type species_dirs_root: str
+        :param config: a configuration instance read
+            from a config file. Client is expected to 
+            have loaded the config from the file successfully. 
+        :type NeuralNetConfig
         :param focal_species: name of species to recognize
         :type focal_species: str
-        :param balancing_strategy:
-        :type balancing_strategy:
-        :param balancing_ratio:
-        :type balancing_ratio:
         :param transforms: list of filters to apply to
             every file before usage
         :type trnasfo: {None | [Filter]
         '''
+ 
+        species_dirs_root = config['root_train_test_data']
+
+        balancing_strategy = config['Training']['balancing_strategy']
+        # Replace the string from the config file
+        # with an element of the BalancingStrategy enum
+        # or raise an exception if str doesn't name one
+        # of the enum elements:
+        balancing_strategy = self._ensure_balance_strategy_available(balancing_strategy)
         
-        self.num_classes  = 1
-        self.pretrained   = True
-        self.freeze       = False
-        self.to_grayscale = True
-        self.net_name     = 'resnet18'
+        balancing_ratio = config.getfloat('Training', 'balancing_ratio')
+
+        batch_size = config.getint('Training', 'batch_size')
+        #kernel_size= config.getint('Training', 'kernel_size')
+        max_epochs = config.getint('Training', 'max_epochs')
+        optimizer  = config['Training']['opt_name']
+        lr         = config.Training.getfloat('lr')
+        momentum   = config.Training.getfloat('momentum')
+        loss_fn_nm = config['Training']['loss_fn']
+        loss_fn    = self._ensure_implemented_loss_fn(loss_fn_nm)
+        net_name   = config.Training.net_name
+        pretrained = config.Training.getboolean('pretrained', False)
+        num_folds  = config.Training.getint('num_folds')
+        freeze     = config.Training.getint('freeze', 0)
+        to_grayscale = config.Training.getboolean('to_grayscale', True)
+        self.save_logits  = config.Training.getboolean('save_logits', False)
+        
+        early_stop = config.Training.getboolean['early_stop', True]
+       
+        num_classes  = 1
 
         self.experiment = experiment
         self.prep_tensorboard()
@@ -83,11 +102,11 @@ class BinaryClassificationTrainer:
                     raise ValueError(f"Machine only has {num_gpus} GPUs, yet {device} were requested")
                 device = f"cuda:{device}" if cuda.is_available else 'cpu'
         
-        self.model    = NetUtils.get_net(self.net_name,
-                                 num_classes=self.num_classes,
-                                 pretrained=self.pretrained,
-                                 freeze=self.freeze,
-                                 to_grayscale=self.to_grayscale
+        self.model    = NetUtils.get_net(net_name,
+                                 num_classes=num_classes,
+                                 pretrained=pretrained,
+                                 freeze=freeze,
+                                 to_grayscale=to_grayscale
                                  )
         
         
@@ -96,7 +115,7 @@ class BinaryClassificationTrainer:
                                  balancing_strategy=balancing_strategy,
                                  balancing_ratio=balancing_ratio,
                                  transforms=transforms)
-        cv_split = CVSplit(dataset.split_generator(5, test_percentage=20))
+        cv_split = CVSplit(dataset.split_generator(num_folds, test_percentage=20))
 
 
         # Use all defaults for optimizer, loss func, etc.
@@ -106,17 +125,26 @@ class BinaryClassificationTrainer:
         acc_cb = EpochScoring(scoring='accuracy', lower_is_better=False)
         bal_acc_cb = EpochScoring(scoring='balanced_accuracy', lower_is_better=False)
         f1_cb = EpochScoring(scoring='f1', lower_is_better=False)
-        early_stop = EarlyStopping(monitor='balanced_accuracy', patience=3, threshold=0.01)
         tensorboard_cb = TensorBoard(self.tb_writer)
+        callbacks = [tensorboard_cb, bal_acc_cb, f1_cb, acc_cb]
+        if early_stop:
+            early_stop_cb = EarlyStopping(monitor='balanced_accuracy', patience=3, threshold=0.01)
+            callbacks.append(early_stop_cb)
+
 
         self.net = NeuralNetBinaryClassifier(
             self.model,
             train_split=cv_split,
             #criterion=nn.CrossEntropyLoss,
-            criterion=BCEWithLogitsLoss,
+            criterion=loss_fn,
             dataset=dataset,
             device=device,
-            callbacks=[tensorboard_cb, bal_acc_cb, f1_cb, acc_cb, early_stop]
+            callbacks=callbacks,
+            optimizer=optimizer,
+            optimizer__momentum=momentum,
+            optimizer__lr=lr,
+            max_epochs=max_epochs,
+            batch_size=batch_size
             )
         
         #****************
@@ -158,6 +186,44 @@ class BinaryClassificationTrainer:
         
         tb_path = self.experiment.tensorboard_path
         self.tb_writer = SummaryWriterPlus(log_dir=tb_path)
+
+    #------------------------------------
+    # _ensure_balance_strategy_available
+    #-------------------
+    
+    def _ensure_balance_strategy_available(self, balancing_strategy_str):
+        '''
+        Given a string like UNDERSAMPLE or OVERSAMPLE,
+        ensure that the str names a member of the 
+        BalancingStrategy enum, and return the respective
+        enum element for use in place of the given string.
+        
+        :param balancing_strategy_str: proposed balancing strategy name
+        :type balancing_strategy_str: str
+        :return enum element that corresponds to the balancing_strategy_str
+        :rtype BalancingStrategy
+        :raise NotImplementedError if given str does not match a BalancingStrategy
+            element name
+        '''
+
+        for bal_strat in BalancingStrategy:
+            if bal_strat.name == balancing_strategy_str:
+                return bal_strat
+        raise NotImplementedError(f"Balancing strategy '{balancing_strategy_str}' is not available")
+        
+    #------------------------------------
+    # _ensure_implemented_loss_fn 
+    #-------------------
+    
+    def _ensure_implemented_loss_fn(self, loss_fn_str):
+        
+        if loss_fn_str == 'BCEWithLogitsLoss':
+            loss_fn = BCEWithLogitsLoss
+        elif loss_fn_str == 'CrossEntropyLoss':
+            loss_fn = CrossEntropyLoss
+        else:
+            raise NotImplementedError(f"Loss function {loss_fn_str} is not supported")
+        return loss_fn
 
 
 # --------------------- NeuralNetBinaryClassifierTensorBoardReady --------

@@ -8,7 +8,7 @@ import random
 import shutil
 import warnings
 
-from experiment_manager.neural_net_config import NeuralNetConfig
+from neural_net_config import NeuralNetConfig
 from matplotlib import MatplotlibDeprecationWarning
 from natsort import natsorted
 from torch import cuda
