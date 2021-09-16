@@ -20,12 +20,14 @@ the call that instantiates BinaryBirdsTrainer.
 
 import argparse
 import os
+import socket
 import sys
+
+import multiprocessing as mp
 
 from birdflock.binary_dataset import BalancingStrategy
 from birdflock.birds_train_binaries import BinaryBirdsTrainer
-import multiprocessing as mp
-
+from experiment_manager.neural_net_config import NeuralNetConfig
 
 if __name__ == '__main__':
     # Must be first statement: needed because
@@ -37,38 +39,51 @@ if __name__ == '__main__':
                                      formatter_class=argparse.RawTextHelpFormatter,
                                      description="Run the binary classifier training for all species"
                                      )
-    parser.add_argument('-b', '--balance',
-                        type=float,
-                        help='balance dataset so that num-minority/num-majority is given value',
-                        default=None
+    parser.add_argument('config_file',
+                        help='path to the training config file (often called config.cfg)'
                         )
-
-
-    parser.add_argument('snippets_dir',
-                        help='path to root of all species spectrogram snippets'
-                        )
+    
+    
 
     args = parser.parse_args()
     
-    snips_root = args.snippets_dir
+    cnf_path = os.path.abspath(args.config_file)
+    if not os.path.exists(cnf_path):
+        print(f"Cannot find {cnf_path}")
+        sys.exit(1)
+    
+    try:
+        config = NeuralNetConfig(cnf_path)
+    except Exception as e:
+        print("Error loading config file:")
+        print(f"{repr(e)}")
+        sys.exit(1)
+        
+    snips_root = config['Paths']['root_train_test_data']
+
     if not os.path.isdir(snips_root):
         print(f"Cannot find {snips_root}")
         sys.exit(1)
     
-    focal_species = ['BANAG','BBFLG','BCMMG','BHPAG','BHTAG',
-                     'BTSAC','BTSAS','CCROC','CCROS','CFPAG',
-                     'CMTOG','CTFLG','DCFLC','DCFLS','FBARG',
-                     'GCFLG','GHCHG','GHTAG','GRHEG','LEGRG',
-                     'NOISG','OBNTC','OBNTS','OLPIG','PATYG',
-                     'RBWRC','RBWRS','SHWCG','SOFLG','SPTAG',
-                     'SQCUC','SQCUS','STTAG','TRGNC','TRGNS',
-                     'WCPAG','WTDOG','WTROC','WTROS','YCEUG'] 
-
+    # From config file, get the focal species
+    # to train on this machine:
+    
+    this_machine = socket.gethostname()
+    if this_machine == 'quatro':
+        focal_species = config.getarray('Training', 'focal_species_quatro')
+        print("Will train only species for machine quatro")
+    elif this_machine == 'quintus':
+        focal_species = config.getarray('Training', 'focal_species_quintus')
+        print("Will train only species for machine quintus")
+    else:
+        # Running on some other machine, just
+        # use the species in the samples root dir
+        # as given in the config file:
+        focal_species = None
+                        
     # Only create classifiers for the 40 focal species:
-    trainer = BinaryBirdsTrainer(snips_root,
-                                 focal_species=focal_species,
-                                 balancing_strategy=BalancingStrategy.UNDERSAMPLE,
-                                 balancing_ratio=args.balance
+    trainer = BinaryBirdsTrainer(config,
+                                 focals_list=focal_species
                                  )
     trainer.train()
 

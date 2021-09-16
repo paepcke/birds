@@ -14,8 +14,8 @@ import multiprocessing as mp
 
 
 #from sched import scheduler
-#*****TEST_ALL = True
-TEST_ALL = False
+TEST_ALL = True
+#TEST_ALL = False
 
 
 class BirdsBinaryTrainerTester(unittest.TestCase):
@@ -50,7 +50,7 @@ class BirdsBinaryTrainerTester(unittest.TestCase):
     # test_constructor
     #-------------------
     
-    #************@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_constructor(self):
         
         trainer = BinaryBirdsTrainer(self.config)
@@ -58,6 +58,8 @@ class BirdsBinaryTrainerTester(unittest.TestCase):
         self.assertEqual(len(trainer.tasks_to_run), 3)
         
         trainer.train()
+        for task in trainer.tasks_to_run:
+            self.assertIsNone(task.error)
         print('Nothing was tested, but fit() finished')
         
         
@@ -81,6 +83,11 @@ class BirdsBinaryTrainerTester(unittest.TestCase):
                                      focals_list=species_to_train
                                      )
         self.assertEqual(trainer.tasks, species_to_train)
+        
+        trainer.train()
+        
+        for task in trainer.tasks_to_run:
+            self.assertIsNone(task.error)
 
         trainer.train()
 

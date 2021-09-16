@@ -43,6 +43,11 @@ class BinaryBirdsTrainer(object):
                 num-other-samples
                 
        o Each training runs on its own CPU and GPU
+       
+    After training, task instances are available in 
+    attribute 'tasks_to_run'. Each task instance in that
+    list will have an attribute 'error'. If it is None,
+    all ran fine, else it will contain an exception instance.
     '''
 
     #------------------------------------
@@ -206,6 +211,7 @@ class BinaryBirdsTrainer(object):
                     self.log.err(f"In task (species {species}): {repr(e)}")
                     for task in task_batch:
                         try:
+                            task.error = e
                             mp_runners[-1].terminate_task(task)
                         except Exception:
                             # Maybe we can't terminate b/c already 
@@ -231,6 +237,17 @@ class BinaryBirdsTrainer(object):
         # Wait for all tasks in all runners to be done:
         for mp_runner in mp_runners:
             mp_runner.join()
+            # Check the tasks for errors, when
+            # no 'error' attribute was assigned
+            # in the above loop, set 'error' to None
+            # for each task:
+            for task in mp_runner.task_reference().keys():
+                try:
+                    task.error
+                except AttributeError:
+                    # No error was set in the loop above; great!
+                    task.error = None
+            
 
     #------------------------------------
     # tasks
@@ -392,8 +409,6 @@ class BinaryBirdsTrainer(object):
         clf = BinaryClassificationTrainer(snippets_root,
                                           target_species,
                                           device=gpu,
-                                          balancing_strategy=balancing_strategy,
-                                          balancing_ratio=balancing_ratio,
                                           experiment=experiment
                                           )
         

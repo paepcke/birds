@@ -9,6 +9,7 @@ from skorch.classifier import NeuralNetBinaryClassifier
 from skorch.dataset import CVSplit
 from torch import cuda
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss
+from torch.optim import Adam,SGD
 from torchvision import transforms
 
 from birdflock.binary_dataset import BinaryDataset, BalancingStrategy
@@ -53,9 +54,7 @@ class BinaryClassificationTrainer:
             every file before usage
         :type trnasfo: {None | [Filter]
         '''
- 
-        species_dirs_root = config['root_train_test_data']
-
+        species_dirs_root = config['Paths']['root_train_test_data']
         balancing_strategy = config['Training']['balancing_strategy']
         # Replace the string from the config file
         # with an element of the BalancingStrategy enum
@@ -68,7 +67,8 @@ class BinaryClassificationTrainer:
         batch_size = config.getint('Training', 'batch_size')
         #kernel_size= config.getint('Training', 'kernel_size')
         max_epochs = config.getint('Training', 'max_epochs')
-        optimizer  = config['Training']['opt_name']
+        opt_str    = config['Training']['opt_name']
+        optimizer  = self._ensure_implemented_optimizer(opt_str)
         lr         = config.Training.getfloat('lr')
         momentum   = config.Training.getfloat('momentum')
         loss_fn_nm = config['Training']['loss_fn']
@@ -80,7 +80,7 @@ class BinaryClassificationTrainer:
         to_grayscale = config.Training.getboolean('to_grayscale', True)
         self.save_logits  = config.Training.getboolean('save_logits', False)
         
-        early_stop = config.Training.getboolean['early_stop', True]
+        early_stop = config.Training.getboolean('early_stop', True)
        
         num_classes  = 1
 
@@ -131,20 +131,23 @@ class BinaryClassificationTrainer:
             early_stop_cb = EarlyStopping(monitor='balanced_accuracy', patience=3, threshold=0.01)
             callbacks.append(early_stop_cb)
 
+        classifier_kwargs = {
+            'train_split'   : cv_split,
+            'criterion'     : loss_fn,
+            'dataset'       : dataset,
+            'device'        : device,
+            'callbacks'     : callbacks,
+            'optimizer'     : optimizer,
+            'optimizer__lr' : lr,
+            'max_epochs'    : max_epochs,
+            'batch_size'    : batch_size
+            }
+        if optimizer == SGD:
+            classifier_kwargs['optimizer__momentum'] =momentum
 
         self.net = NeuralNetBinaryClassifier(
             self.model,
-            train_split=cv_split,
-            #criterion=nn.CrossEntropyLoss,
-            criterion=loss_fn,
-            dataset=dataset,
-            device=device,
-            callbacks=callbacks,
-            optimizer=optimizer,
-            optimizer__momentum=momentum,
-            optimizer__lr=lr,
-            max_epochs=max_epochs,
-            batch_size=batch_size
+            **classifier_kwargs
             )
         
         #****************
@@ -210,7 +213,22 @@ class BinaryClassificationTrainer:
             if bal_strat.name == balancing_strategy_str:
                 return bal_strat
         raise NotImplementedError(f"Balancing strategy '{balancing_strategy_str}' is not available")
+
+    #------------------------------------
+    # _ensure_implemented_optimizer
+    #-------------------
+    
+    def _ensure_implemented_optimizer(self, opt_nm_str):
         
+        if opt_nm_str == 'Adam':
+            optimizer = Adam
+        elif opt_nm_str == 'SGD':
+            optimizer = SGD
+        else:
+            raise NotImplementedError(f"Optimizer {opt_nm_str} unavailable")
+
+        return optimizer
+
     #------------------------------------
     # _ensure_implemented_loss_fn 
     #-------------------

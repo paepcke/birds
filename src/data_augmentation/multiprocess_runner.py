@@ -41,7 +41,7 @@ class MultiProcessRunner:
         is available in <inst>.results after this constructor
         returns from synchronous operation. 
         
-        For asynch op, clients can use the running_tasks() method. 
+        For asynch op, clients can use the task_reference() method. 
         It returns a dict mapping Task instances (i.e. client task_specs 
         that were passed into this method) to Event instances. See
         Python 3 threading.Event. Tasks set() their respective Event 
@@ -251,7 +251,7 @@ class MultiProcessRunner:
     # running_tasks
     #-------------------
     
-    def running_tasks(self):
+    def task_reference(self):
         '''
         Return dict that maps client Task instances
         to multiprocessor.manager.Event instances.
@@ -329,8 +329,8 @@ class MultiProcessRunner:
         :type task_specs: (Task)
         '''
         
-        self.mp_ctx = mp.get_context('spawn')
-        #mp_ctx = mp.get_context('fork')
+        #self.mp_ctx = mp.get_context('spawn')
+        self.mp_ctx = mp.get_context('fork')
         self.manager = self.mp_ctx.Manager()
 
         for task in task_specs:

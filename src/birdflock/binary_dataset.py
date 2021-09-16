@@ -450,8 +450,17 @@ class ClassBalancer:
             ratio given in the initialization (minority_to_majority_target)
         :rtype (int)
         '''
-        undersamples = random.sample(self.majority, self.majority_undersampling_to_cull)
-        remaining_majority = list(set(self.majority) - set(undersamples))
+        #***************
+        #print(f"******** to cull: {self.majority_undersampling_to_cull}")
+        #print(f"****** len(majority): {len(self.majority)}")
+        #***************
+        if self.majority_undersampling_to_cull <= len(self.majority):
+            removals = random.sample(self.majority, self.majority_undersampling_to_cull)
+        else:
+            # Keep just one sample:
+            removals = random.sample(self.majority, len(self.majority) - 1)
+            
+        remaining_majority = list(set(self.majority) - set(removals))
         new_data = self.minority + remaining_majority
         random.shuffle(new_data)
         return new_data

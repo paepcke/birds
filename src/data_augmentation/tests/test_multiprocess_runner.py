@@ -111,7 +111,7 @@ class MultiProcessRunnerTester(unittest.TestCase):
         time.sleep(5)
         mp_runner.terminate_task(task)
         
-        self.assertDictEqual(mp_runner.running_tasks(), {})
+        self.assertDictEqual(mp_runner.task_reference(), {})
 
 # ------------------- Utilities -------------------
 
