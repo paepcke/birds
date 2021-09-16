@@ -13,7 +13,7 @@ import sys
 
 from experiment_manager.experiment_manager import ExperimentManager
 from logging_service import LoggingService
-from neural_net_config import NeuralNetConfig, ConfigError
+from experiment_manager.neural_net_config import NeuralNetConfig, ConfigError
 from torch import cuda
 import torch
 
