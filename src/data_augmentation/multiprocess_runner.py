@@ -9,7 +9,7 @@ import traceback
 from logging_service import LoggingService
 
 from data_augmentation.utils import Utils
-import multiprocessing as mp
+import torch.multiprocessing as mp
 
 
 # TODO:

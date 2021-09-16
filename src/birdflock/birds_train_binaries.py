@@ -21,7 +21,7 @@ from birdflock.train_one_binary_classifier import BinaryClassificationTrainer
 from birdsong.utils.utilities import FileUtils
 from data_augmentation.multiprocess_runner import Task, MultiProcessRunner
 from data_augmentation.utils import Utils
-import multiprocessing as mp
+import torch.multiprocessing as mp
 
 
 class BinaryBirdsTrainer(object):

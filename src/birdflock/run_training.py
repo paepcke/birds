@@ -23,9 +23,8 @@ import os
 import socket
 import sys
 
-import multiprocessing as mp
+import torch.multiprocessing as mp
 
-from birdflock.binary_dataset import BalancingStrategy
 from birdflock.birds_train_binaries import BinaryBirdsTrainer
 from experiment_manager.neural_net_config import NeuralNetConfig
 
