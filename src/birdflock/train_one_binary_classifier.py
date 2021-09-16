@@ -85,7 +85,7 @@ class BinaryClassificationTrainer:
         num_classes  = 1
 
         self.experiment = experiment
-        self.prep_tensorboard()
+        self._prep_tensorboard()
         
         transforms = self.create_transforms()
         
@@ -179,10 +179,10 @@ class BinaryClassificationTrainer:
         return transforms.Compose(img_transforms)
 
     #------------------------------------
-    # prep_tensorboard
+    # _prep_tensorboard
     #-------------------
     
-    def prep_tensorboard(self):
+    def _prep_tensorboard(self):
         
         tb_path = self.experiment.tensorboard_path
         self.tb_writer = SummaryWriterPlus(log_dir=tb_path)

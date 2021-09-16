@@ -171,7 +171,10 @@ class MultiProcessRunner:
                 self.all_jobs[task] = job
                 
                 self._running_tasks[task] = task.shared_return_dict['_done_event']
-                job.start()
+                try:
+                    job.start()
+                except TypeError as e:
+                    print(e)
                 self.cpus_available -= 1
                 
             else:
