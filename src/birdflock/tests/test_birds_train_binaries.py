@@ -50,7 +50,7 @@ class BirdsBinaryTrainerTester(unittest.TestCase):
     # test_constructor
     #-------------------
     
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #*******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_constructor(self):
         
         trainer = BinaryBirdsTrainer(self.config)
@@ -108,3 +108,4 @@ class BirdsBinaryTrainerTester(unittest.TestCase):
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']
     unittest.main()
+    

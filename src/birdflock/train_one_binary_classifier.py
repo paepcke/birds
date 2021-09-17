@@ -69,18 +69,18 @@ class BinaryClassificationTrainer:
         max_epochs = config.getint('Training', 'max_epochs')
         opt_str    = config['Training']['opt_name']
         optimizer  = self._ensure_implemented_optimizer(opt_str)
-        lr         = config.Training.getfloat('lr')
-        momentum   = config.Training.getfloat('momentum')
+        lr         = config.getfloat('Training', 'lr')
+        momentum   = config.getfloat('Training', 'momentum')
         loss_fn_nm = config['Training']['loss_fn']
         loss_fn    = self._ensure_implemented_loss_fn(loss_fn_nm)
-        net_name   = config.Training.net_name
-        pretrained = config.Training.getboolean('pretrained', False)
-        num_folds  = config.Training.getint('num_folds')
-        freeze     = config.Training.getint('freeze', 0)
-        to_grayscale = config.Training.getboolean('to_grayscale', True)
-        self.save_logits  = config.Training.getboolean('save_logits', False)
+        net_name   = config['Training']['net_name']
+        pretrained = config.getboolean('Training', 'pretrained', False)
+        num_folds  = config.getint('Training', 'num_folds')
+        freeze     = config.getint('Training', 'freeze', 0)
+        to_grayscale = config.getboolean('Training', 'to_grayscale', True)
+        self.save_logits = config.getboolean('Training', 'save_logits', False)
         
-        early_stop = config.Training.getboolean('early_stop', True)
+        early_stop = config.getboolean('Training', 'early_stop', True)
        
         num_classes  = 1
 

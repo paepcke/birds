@@ -14,6 +14,7 @@ import torch.multiprocessing as mp
 
 # TODO:
 #   o Class level doc
+
 class MultiProcessRunner:
     
     #------------------------------------
@@ -161,16 +162,15 @@ class MultiProcessRunner:
                 
                 task = task_specs.pop()
                 
-                
                 job = self.mp_ctx.Process(target=task.run,
-                                     name=task.name
-                                     )
+                                          name=task.name
+                                          )
 
                 ret_value_slot = mp.Value("b", False)
                 job.ret_value_slot = ret_value_slot
                 self.all_jobs[task] = job
-                
                 self._running_tasks[task] = task.shared_return_dict['_done_event']
+                
                 try:
                     job.start()
                 except TypeError as e:
@@ -329,8 +329,8 @@ class MultiProcessRunner:
         :type task_specs: (Task)
         '''
         
-        #self.mp_ctx = mp.get_context('spawn')
-        self.mp_ctx = mp.get_context('fork')
+        self.mp_ctx = mp.get_context('spawn')
+        #self.mp_ctx = mp.get_context('fork')
         self.manager = self.mp_ctx.Manager()
 
         for task in task_specs:
@@ -362,8 +362,6 @@ class Task(dict):
         # The func_args and func_kwargs will be passed to the
         # target func:
         self.func_kwargs = kwargs
-        for kwarg_name, kwarg_val in kwargs.items():
-            self.__setattr__(kwarg_name, kwarg_val)
 
     #------------------------------------
     # run
@@ -378,7 +376,7 @@ class Task(dict):
             res = {'Exception' : e,
                    'Traceback' : tb
                    }
-            
+        
         if type(res) == dict:
             self.shared_return_dict.update(res)
         else:

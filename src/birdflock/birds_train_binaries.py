@@ -142,6 +142,7 @@ class BinaryBirdsTrainer(object):
         mp_runners = []
         task_batch = []
         tasks_left = set(self.tasks_to_run.copy())
+
         while len(tasks_left) > 0:
             for task in self.tasks_to_run:
                 gpu = self.gpu_pool.pop()
@@ -414,8 +415,6 @@ class BinaryBirdsTrainer(object):
         
         net = clf.net
         experiment.save(target_species, net)
-        
-        # Note some settings:*******
         
         # Find the task instance we just finished,
         # and signal its completion:
