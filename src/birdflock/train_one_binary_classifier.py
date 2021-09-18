@@ -4,12 +4,13 @@ Created on Sep 4, 2021
 @author: paepcke
 '''
 
+from experiment_manager.experiment_manager import Datatype
 from skorch.callbacks import EpochScoring, TensorBoard, EarlyStopping
 from skorch.classifier import NeuralNetBinaryClassifier
 from skorch.dataset import CVSplit
 from torch import cuda
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss
-from torch.optim import Adam,SGD
+from torch.optim import Adam, SGD
 from torchvision import transforms
 
 from birdflock.binary_dataset import BinaryDataset, BalancingStrategy

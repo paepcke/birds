@@ -389,8 +389,8 @@ class TensorBoardPlotter:
                        img_root_dir, 
                        num_imgs=4, 
                        class_sample_file_pairs=None,
-                       img_height=200,    # px
-                       img_width=400,     # px
+                       img_height=224,    # px
+                       img_width=224,     # px
                        to_grayscale=True,
                        tensorboard_tag='Input Examples',
                        unittesting=False):

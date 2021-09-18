@@ -112,7 +112,7 @@ class Inferencer:
 
         # Create an experiment instance filled with 
         # data created during training:
-        self.training_exp = ExperimentManager(training_exp_path)
+        self.training_exp = ExperimentManager(training_exp_path.strip())
         
         # An ExperimentManager instance to hold data 
         # from this test run:
@@ -122,12 +122,16 @@ class Inferencer:
             model_names = [model_names]
 
         # Check that all requested models exist:
+        model_paths = []
         for model_name in model_names:
             # Remove any extension, such as .pth that
             # the caller may have included
             model_key = Path(model_name).stem
-            if not os.path.exists(self.training_exp.abspath(model_key, Datatype.model)):
-                raise FileNotFoundError(f"Model {model_key} does not exist")
+            model_path = self.training_exp.abspath(model_key, Datatype.model)
+            if not os.path.exists(model_path):
+                raise FileNotFoundError(f"Model {model_path} does not exist")
+            else:
+                model_paths.append(model_path)
 
         # Copy all hparams from the training exp manager
         # to the inference manager for easy reference:
@@ -140,11 +144,10 @@ class Inferencer:
         # them in the file system, rather than loading
         # them:
         
-        train_models_path = self.training_exp.models_path
         test_models_path  = self.testing_exp.models_path
-        for model_key in model_names:
-            src = os.path.join(train_models_path, f"{model_key}.pth")
-            shutil.copy(src, test_models_path)
+        for model_path in model_paths:
+            # Ok, we are calling abspath twice 
+            shutil.copy(model_path, test_models_path)
 
         self.model_names  = model_names
         self.samples_path = samples_path
@@ -220,12 +223,18 @@ class Inferencer:
         # csv file under the key 'class_names':
 
         self.class_names = self.training_exp['class_label_names']
+        #***************
+        # Is this the correct way to do this?
+        if len(self.class_names) == 1:
+            # Binary classification:
+            self.class_names.append('OTHRG')
+        #***************
         self.num_classes = len(self.class_names)
         
         if self.save_logits:
             header = self.class_names.copy()
             header.extend(['label'])
-        self.testing_exp.save('logits', header=header)
+            self.testing_exp.save('logits', header=header)
 
         # Build translation dict between the numeric
         # class IDs built by the SingleRootImageDataset from
@@ -267,12 +276,11 @@ class Inferencer:
         
         # Log a few example spectrograms to tensorboard;
         # one per class:
-        TensorBoardPlotter.write_img_grid(self.writer,
-                                          self.samples_path,
-                                          len(self.class_names), # Num of train examples
-                                          tensorboard_tag='Inference Input Examples'
-                                          )
-        
+        # TensorBoardPlotter.write_img_grid(self.writer,
+        #                                   self.samples_path,
+        #                                   len(self.class_names), # Num of train examples
+        #                                   tensorboard_tag='Inference Input Examples'
+        #                                   )
 
         self.log.info(f"Tensorboard info will be written to {tb_dir}")
         predictions_path = self.testing_exp.abspath('predictions', Datatype.tabular)
@@ -350,7 +358,7 @@ class Inferencer:
         # Init the model from the requested model's
         # state dict. The path to that data is available
         # from the experiment instance:
-        sko_net.load_params(self.training_exp.abspath(self.model_key, Datatype.model))
+        sko_net = self.testing_exp.read('WTROC', Datatype.model, sko_net)
 
         res_coll = ResultCollection()
         display_counter = 0

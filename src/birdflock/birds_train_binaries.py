@@ -101,7 +101,7 @@ class BinaryBirdsTrainer(object):
         if experiment_path is None:
             experiment_path = os.path.join(os.path.dirname(__file__), 'Experiments')
         self.experiment_path = experiment_path
-
+        
         # If no species_list is specified, use
         # all species subdirectories:
         if focals_list is None:
@@ -396,8 +396,6 @@ class BinaryBirdsTrainer(object):
     def _create_classifier(self, 
                           snippets_root, 
                           target_species,
-                          balancing_strategy=None,
-                          balancing_ratio=None,
                           gpu=None):
 
         # Create a dataset with target_species
@@ -406,6 +404,11 @@ class BinaryBirdsTrainer(object):
         experiments_root = os.path.join(self.experiment_path,
                                         f"Classifier_{target_species}_{FileUtils.file_timestamp()}")
         experiment = ExperimentManager(experiments_root)
+        
+        # Remember the network configuration:
+        experiment.save('hparams', self.config)
+        experiment['class_label_names'] = [target_species]
+        experiment.save()
 
         clf = BinaryClassificationTrainer(snippets_root,
                                           target_species,
