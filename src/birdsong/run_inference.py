@@ -147,7 +147,9 @@ class Inferencer:
         test_models_path  = self.testing_exp.models_path
         for model_path in model_paths:
             # Ok, we are calling abspath twice 
-            shutil.copy(model_path, test_models_path)
+            shutil.copytree(Path(model_path).parent,
+                            test_models_path,
+                            dirs_exist_ok=True)
 
         self.model_names  = model_names
         self.samples_path = samples_path
@@ -223,12 +225,6 @@ class Inferencer:
         # csv file under the key 'class_names':
 
         self.class_names = self.training_exp['class_label_names']
-        #***************
-        # Is this the correct way to do this?
-        if len(self.class_names) == 1:
-            # Binary classification:
-            self.class_names.append('OTHRG')
-        #***************
         self.num_classes = len(self.class_names)
         
         if self.save_logits:
