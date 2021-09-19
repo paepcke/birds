@@ -4,7 +4,6 @@ Created on Sep 4, 2021
 @author: paepcke
 '''
 
-from experiment_manager.experiment_manager import Datatype
 from skorch.callbacks import EpochScoring, TensorBoard, EarlyStopping
 from skorch.classifier import NeuralNetBinaryClassifier
 from skorch.dataset import CVSplit
