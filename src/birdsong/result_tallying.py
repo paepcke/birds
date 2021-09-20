@@ -729,7 +729,8 @@ class ResultTally:
         '''
         Convert outputs logits first into probabilities
         via softmax, then into class IDs via argmax. 
-        The result is assigned to self.preds.
+        The prediction result is assigned to self.preds,
+        the probabilities will be in self.probs.
        
         :param outputs: raw outputs from model
         :type outputs: torch.Tensor

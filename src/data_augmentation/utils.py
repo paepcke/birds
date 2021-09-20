@@ -99,6 +99,9 @@ class Utils:
     # be nice:
     
     MAX_PERC_OF_CORES_TO_USE = 50
+    
+    random_seed = None
+    '''Currently installed random seed; applies to all modules. Set by set_seed()'''
 
     #------------------------------------
     # create_folder 
@@ -784,6 +787,8 @@ class Utils:
         np.random.seed(seed)
         os.environ['PYTHONHASHSEED'] = str(seed)
         random.seed(seed)
+        # Make the seed findable:
+        cls.random_seed = seed
 
     #------------------------------------
     # random_list_percentage 

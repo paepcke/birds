@@ -413,6 +413,13 @@ class Charter:
             and rows (i.e. index) set to class ids
         :rtype: pd.DataFrame 
         '''
+        
+        # Adjust class name list for binary classifier:
+        # add a class called "^<single-class>":
+        
+        if len(class_names) == 1:
+            class_names = class_names + [f"^{class_names[0]}"]
+        
         conf_matrix = torch.tensor(confusion_matrix(
             truth_labels,          # Truth
             predicted_class_ids,   # Prediction
@@ -672,13 +679,17 @@ class Charter:
     def fig_black_white_from_conf_matrix(cls,
                                          conf_matrix, 
                                          supertitle='Confusion Matrix (percentages)',
-                                         subtitle=''):
+                                         subtitle='',
+                                         sparse=True):
         '''
         Create a figure from the given conf_matrix
         dataframe. Produces a non-nonsense chart without
         color, but it handles larger numbers of classes
         than other facilities. For example, 30+ classes
         produce reasonable results.
+        
+        Set sparse to True if matrix has many cells. In that
+        case all cells <<1 are left blank.
         
         :param conf_matrix: the confusion matrix. Assumed
             to be normalized to values 0-1
@@ -687,6 +698,8 @@ class Charter:
         :type supertitle: str
         :param subtitle: optional subtitle
         :type subtitle: str
+        :param sparse: set to True if matrix has many cells
+        :type sparse: boolean
         :return: the generated figure
         :rtype pyplot.Figure
         '''
@@ -694,15 +707,22 @@ class Charter:
         class_names = conf_matrix.columns.to_list()
         fig, ax = plt.subplots()
         
-        # Adjust the figure size by the number
-        # of species to show: result in inches.
-        # The 2.5 is empirical:
         
-        fig_height = len(class_names) / 2.5
-        fig_width  = fig_height * 0.67
-        
-        fig.set_size_inches(fig_height, fig_width)
-        fig.suptitle(supertitle, fontsize='large', fontweight='extra bold')
+        if sparse:
+            # Adjust the figure size by the number
+            # of species to show: result in inches.
+            # The 2.5 is empirical:
+            
+            fig_height = len(class_names) / 2.5
+            fig_width  = fig_height * 0.67
+            
+            fig.set_size_inches(fig_height, fig_width)
+            fig.suptitle(supertitle, fontsize='large', fontweight='extra bold')
+            
+        else:
+            fig_width = 5.0
+            fig_height = 5.0
+            fig.set_size_inches(fig_height, fig_width)
         
         # X-Axis Labels:
         # Later matplotlib versions want us
@@ -753,12 +773,12 @@ class Charter:
             for cm_ylabel in conf_matrix.index:
                 val = conf_matrix.loc[cm_xlabel,cm_ylabel]
                 # Leave all 0 and NaN valued cells blank:
-                if val == 0 or pd.isna(val):
+                if pd.isna(val) or (sparse and val == 0):
                     continue
                 # If confusions are observed less than
                 # 1% of the time, leave the cell blank:
                 val_perc = 100*val
-                if val_perc >= 1:
+                if val_perc >= 1 or not sparse:
                     val_str = str(int(val_perc))
                 else:
                     continue
@@ -781,7 +801,10 @@ class Charter:
         
         ax.grid(b=True)
         ax.set_facecolor('lightgray')
-
+        
+        if not sparse:
+            fig.subplots_adjust(bottom=0.2)
+            
         return fig
 
 # -------------------- Utilities for Charter Class --------------
