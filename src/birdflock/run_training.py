@@ -68,17 +68,20 @@ if __name__ == '__main__':
     # to train on this machine:
     
     this_machine = socket.gethostname()
-    if this_machine == 'quatro':
-        focal_species = config.getarray('Training', 'focal_species_quatro')
-        print("Will train only species for machine quatro")
-    elif this_machine == 'quintus':
-        focal_species = config.getarray('Training', 'focal_species_quintus')
-        print("Will train only species for machine quintus")
-    else:
-        # Running on some other machine, just
-        # use the species in the samples root dir
-        # as given in the config file:
-        focal_species = None
+    # Uncomment to train some on quatro, and others on quintus:
+    # if this_machine == 'quatro':
+    #     focal_species = config.getarray('Training', 'focal_species_quatro')
+    #     print("Will train only species for machine quatro")
+    # elif this_machine == 'quintus':
+    #     focal_species = config.getarray('Training', 'focal_species_quintus')
+    #     print("Will train only species for machine quintus")
+    # else:
+    #     # Running on some other machine, just
+    #     # use the species in the samples root dir
+    #     # as given in the config file:
+    #     focal_species = None
+    
+    focal_species = None
                         
     # Only create classifiers for the 40 focal species:
     trainer = BinaryBirdsTrainer(config,
