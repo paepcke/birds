@@ -50,7 +50,7 @@ class BirdsBinaryTrainerTester(unittest.TestCase):
     # test_constructor
     #-------------------
     
-    #*******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_constructor(self):
         
         trainer = BinaryBirdsTrainer(self.config)

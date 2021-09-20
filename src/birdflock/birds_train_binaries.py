@@ -286,11 +286,16 @@ class BinaryBirdsTrainer(object):
     def _create_task_list(self, focals_list):
     
         task_list = []
+        # Timestamp to use in all the experiment directory
+        # names: 
+        #    .../Experiment/Classifier_<species>_<common_time_stamp>
+        common_time_stamp = FileUtils.file_timestamp()
         for species in focals_list:
             task = Task(species,                  # Name of task
                         self._create_classifier,  # function to execute
                         self.config,              # where the snippets are
-                        species                   # name of species as arg to task
+                        species,                  # name of species as arg to task
+                        common_time_stamp         # part of experiment directory filename
                         )
             # Species at play to know by the task itself.
             # The species are in the Task() instantiation
@@ -396,13 +401,14 @@ class BinaryBirdsTrainer(object):
     def _create_classifier(self, 
                           snippets_root, 
                           target_species,
+                          common_time_stamp,
                           gpu=None):
 
         # Create a dataset with target_species
         # against everyone else, and train it:
 
         experiments_root = os.path.join(self.experiment_path,
-                                        f"Classifier_{target_species}_{FileUtils.file_timestamp()}")
+                                        f"Classifier_{target_species}_{common_time_stamp}")
         experiment = ExperimentManager(experiments_root)
         
         # Remember the network configuration:
