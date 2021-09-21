@@ -1400,10 +1400,10 @@ if __name__ == '__main__':
     
     exp_path = os.path.expanduser(os.path.expandvars(args.train_exp_path))
     
-    if type(args.model_name) != list:
-        model_names = [args.model_name]
+    if type(args.train_exp_path) != list:
+        model_names = [args.train_exp_path]
     else:
-        model_names = args.model_name
+        model_names = args.train_exp_path
         
     # Ensure samples path is OK:
     samples_path = os.path.expanduser(os.path.expandvars(args.samples_path))
