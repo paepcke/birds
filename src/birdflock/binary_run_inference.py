@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#run_!/usr/bin/env python3
 '''
 Created on Mar 12, 2021
 
@@ -12,83 +12,86 @@ import argparse
 from multiprocessing import Pool
 import os
 from pathlib import Path
-import shutil
 import sys
 import warnings
 
 from experiment_manager.experiment_manager import ExperimentManager, Datatype
 from logging_service.logging_service import LoggingService
-from sklearn.metrics import accuracy_score, balanced_accuracy_score
-from sklearn.metrics import f1_score
-from sklearn.metrics import precision_score, recall_score, classification_report 
+from skorch import NeuralNet
 import torch
 from torch.utils.data.dataloader import DataLoader
 
+from birdflock.binary_dataset import BinaryDataset
 from birdsong.ml_plotting.classification_charts import ClassificationPlotter
 from birdsong.nets import NetUtils
 from birdsong.result_tallying import ResultTally, ResultCollection
-from birdsong.rooted_image_dataset import SingleRootImageDataset
 from birdsong.utils.github_table_maker import GithubTableMaker
 from birdsong.utils.learning_phase import LearningPhase
 from birdsong.utils.tensorboard_plotter import SummaryWriterPlus, \
     TensorBoardPlotter
 from birdsong.utils.utilities import FileUtils
+from data_augmentation.multiprocess_runner import Task, MultiProcessRunner
 from data_augmentation.utils import Utils
 import numpy as np
 import pandas as pd
 from result_analysis.charting import Charter, CurveSpecification
-from skorch import NeuralNet
+import sklearn.metrics as sklm
+import traceback as tb
 
 
+#*******************
+#*******************
 #import traceback as tb
 class Inferencer:
     '''
     classdocs
     '''
 
+    RANDOM_SEED  = 42
     REPORT_EVERY = 50
     #REPORT_EVERY = 4
     '''How many inferences to make before writing to tensorboard and disk'''
+
+    MODEL_FNAME_SUFFIXES=['.pkl', '.pth']
 
     #------------------------------------
     # Constructor 
     #-------------------
 
     def __init__(self, 
-                 training_exp_paths,
-                 testing_exp_path,
+                 train_exp_paths,
                  samples_path,
-                 model_names, 
-                 batch_size=1,
+                 batch_size=128,
                  save_logits=False, 
                  gpu_ids=0,
                  sampling=None,
                  unittesting=False
                  ):
         '''
-        Given the path to a trained model,
+        Given the path to the root of an experiment,
         and the path to the root of a set
-        of data, compute predictions.
+        of samples, compute predictions.
         
-        By default: run batches of size 1,
-        because we always have drop_last set
-        to True. For small test sets leaving
-        out any data at all isn't good. Caller
-        can still set batch_size higher to gain
-        speed if the testset is very large, so that
-        not inferencing on up to batch_size - 1 
-        samples is OK
+        A new experiment is constructed as a sibling
+        to train_exp_paths, with the same name as
+        train_exp_paths, but with '_inference' appended.
         
-        :param training_exp_paths: path to ExperimentManager experiment root
+        The model will be taken from the experiment manager's
+        models subdirectory. If multiple models are present there,
+        an unspecified choice is made among them. I.e. right
+        now we just assume a single model per experiment that
+        was created by a training.
+        
+        For datasets smaller than 128 samples, set
+        batch_size lower than 128, because we always 
+        have drop_last set to True. So, for small test 
+        sets no data would be processed.
+        
+        :param train_exp_paths: path to ExperimentManager experiment root
             directory; this is the EM that holds data from training
-        :type training_exp_paths: str
-        :param testing_exp_path: directory to put dir root of new ExperimentManager
-            that stores all testing results
-        :type testing_exp_path: str 
+        :type train_exp_paths: str
         :param samples_path: path to samples to test against trained model
         :type samples_path: str
-        :param model_names: list of models to try, or individual model key
-        :type model_names: {[str] | str}
         :param batch_size: how many samples to run inference over at once
         :type batch_size: int
         :param save_logits: set True to have the logits of
@@ -108,58 +111,60 @@ class Inferencer:
         if unittesting:
             return
         
+        if type(train_exp_paths) != list:
+            train_exp_paths = [train_exp_paths]
+        
         self.save_logits = save_logits
 
-        # Create an experiment instance filled with 
-        # data created during training:
-        self.training_exp = ExperimentManager(training_exp_paths.strip())
+        # Create dict keyed on focal species, yielding 
+        # experiment instances:
+        self.train_exps = {}
+        for train_exp_path in train_exp_paths:
+            exp = ExperimentManager(train_exp_path.strip())
+            focal_species = exp['class_label_names'][0]
+            self.train_exps[focal_species] = exp
+            # For convenience: add the focal species as
+            # a dict entry:
+            exp['focal_species'] = focal_species 
+
+        # Create an ExperimentManager for the inference
+        # of each training experiment. Again, a dict 
+        # mapping focal species to exp managers:
         
-        # An ExperimentManager instance to hold data 
-        # from this test run:
-        self.testing_exp = ExperimentManager(testing_exp_path)
+        self.test_exps = {}
+        for train_focal_species, train_exp in self.train_exps.items():
+            train_path_p = Path(train_exp['root_path'])
+            # From /foo/bar/Classifier_<datetime>, make
+            # /foo/bar/Classifier_<datetime>_inference, make
+            test_exp_path = train_path_p.parent.joinpath(f"{train_path_p.stem}_inference")
+            test_exp = ExperimentManager(str(test_exp_path))
+            self.test_exps[train_focal_species] = test_exp
+            test_exp['focal_species'] = train_exp['focal_species']
 
-        if type(model_names) != list:
-            model_names = [model_names]
-
-        # Check that all requested models exist:
-        model_paths = []
-        for model_name in model_names:
-            # Remove any extension, such as .pth that
-            # the caller may have included
-            model_key = Path(model_name).stem
-            model_path = self.training_exp.abspath(model_key, Datatype.model)
-            if not os.path.exists(model_path):
-                raise FileNotFoundError(f"Model {model_path} does not exist")
-            else:
-                model_paths.append(model_path)
+        
+        self.trained_model_paths = [self._find_model_from_exp(train_exp)
+                                    for train_exp
+                                    in self.train_exps.values()
+                                    ]
 
         # Copy all hparams from the training exp manager
         # to the inference manager for easy reference:
-        for hparm_fname in os.listdir(self.training_exp.hparams_path):
-            key = Path(hparm_fname).stem
-            net_conf = self.training_exp.read(key, Datatype.hparams)
-            self.testing_exp.save(key, net_conf)
+        for train_exp, test_exp in zip(self.train_exps.values(),
+                                          self.test_exps.values()):
+            for hparm_fname in os.listdir(train_exp.hparams_path):
+                key = Path(hparm_fname).stem
+                self.config = train_exp.read(key, Datatype.hparams)
+                test_exp.save(key, self.config)
 
-        # Same with models, except that we just copy
-        # them in the file system, rather than loading
-        # them:
-        
-        test_models_path  = self.testing_exp.models_path
-        for model_path in model_paths:
-            # Ok, we are calling abspath twice 
-            shutil.copytree(Path(model_path).parent,
-                            test_models_path,
-                            dirs_exist_ok=True)
-
-        self.model_names  = model_names
         self.samples_path = samples_path
         self.gpu_ids      = gpu_ids if type(gpu_ids) == list else [gpu_ids]
         self.sampling     = sampling
-        self.csv_dir      = self.testing_exp.csv_files_path
         if batch_size is not None:
             self.batch_size = batch_size
         else:
-            self.batch_size = 1
+            #self.batch_size = 1
+            # Use same batch size as during training
+            self.batch_size = self.config.getint('Training', 'batch_size')
         
         self.IMG_EXTENSIONS = FileUtils.IMG_EXTENSIONS
         self.log      = LoggingService()
@@ -169,11 +174,12 @@ class Inferencer:
     # prep_model_inference 
     #-------------------
 
-    def prep_model_inference(self, 
-                             model_path,
-                             unknown_species_classes=['OTHRG', 'NOISG']):
+    def prep_model_inference(self, train_exp, test_exp):
+
         '''
-        - Loads experiment configuration from self.training_exp
+        Intended to be called after fork/spawn
+        
+        - Loads experiment configuration from self.train_exp
         - Creates self.writer(), a tensorboard writer with destination dir:
                 <script_dir>/runs_inferences/inf_results_<datetime>
         - Creates an ImageFolder classed dataset to self.samples_path
@@ -181,90 +187,60 @@ class Inferencer:
         - Initializes self.num_classes and self.class_names
         - Creates self.model from the passed-in model_path name
         
+        Assumption: self.config contains the NeuralNetConfig instance
+            from training.
+            
         :param model_path: path to model that will be used for
             inference by this instance of Inferencer
         :type model_path: str
-        :param unknown_species_classes: classes known to the model under
-            which to classify recordings with labels for which the model
-            has not been trained. The first of the list that is found
-            in the model's species names will be chosen.
-        :type unknown_species_classes: {None | str | (str)}
         '''
 
-        # Get the experiment configuration used
-        # for training:
-        self.config = self.training_exp.read('hparams', Datatype.hparams)
-        
+        model_name = train_exp['focal_species'] 
         # Are we to save the raw logits so that
         # we can later do saliency analysis?
         self.save_logits  = self.config.Training.getboolean('save_logits', False)
         # Add a separate tensorboard directory 
         # for testing this model:
-        tb_name = f"tensorboardTesting_{model_path}"
-        self.testing_exp.save(tb_name)
-        tb_dir = self.testing_exp.abspath(tb_name, Datatype.tensorboard)
+        tb_name = f"tensorboardTesting_{model_name}"
+        test_exp.save(tb_name)
+        tb_dir = test_exp.abspath(tb_name, Datatype.tensorboard)
         self.writer = SummaryWriterPlus(log_dir=tb_dir)
-        
-        dataset = SingleRootImageDataset(
-            self.samples_path,
-            to_grayscale=self.config.getboolean('Training', 'to_grayscale'),
-            percentage=self.sampling
-            )
 
+        # Focal species will be the single class_labels_names
+        # entry of the training experiment:
+        
+        self.focal_species = train_exp['focal_species']
+        self.class_names   = [self.focal_species]
+        self.num_classes   = 1 
+        
         # Make reproducible:
         Utils.set_seed(42)
+        
+        dataset = BinaryDataset(
+            self.samples_path,
+            self.focal_species,
+            random_seed=Utils.random_seed
+            )
+
         self.loader = DataLoader(dataset,
                                  batch_size=self.batch_size, 
                                  shuffle=True, 
                                  drop_last=True 
                                  )
-        # During training, the training software leaves
-        # the human-readable labels with which the model
-        # was trained in two places as in the experiment manager
-        # dict as key 'class_label_names' and as a header-only
-        # csv file under the key 'class_names':
 
-        self.class_names = self.training_exp['class_label_names']
-        self.num_classes = len(self.class_names)
-        
         if self.save_logits:
-            header = self.class_names.copy()
+            header = self.focal_species
             header.extend(['label'])
-            self.testing_exp.save('logits', header=header)
-
-        # Build translation dict between the numeric
-        # class IDs built by the SingleRootImageDataset from
-        # the samples directory hierarchy, and the (possibly)
-        # super set of the class IDs over which the model was
-        # trained. Setting unknown_species_class forces a
-        # ValueError if any species is in the samples, but not
-        # in the classes over which the model was trained. 
-        # To tolerate this situation, set unknown_species_class to 
-        # 'NOISG' or 'OTHRG', so that such classes will be mapped to 
-        # the NOISG/OTHRG model class ID species:
-        self.sample_cid_to_model_cid,  _unmatched_sample_classes = \
-            self._build_class_id_xlation(dataset.class_names(), 
-                                         self.class_names,
-                                         unknown_species_classes=unknown_species_classes
-                                         )
-        if self.save_logits:
-            # If we are to save logits, prepare a CSV
-            # file for that too:
-            csv_data_header_logits = self.class_names
-            try:
-                self.testing_exp.save('logits', header=csv_data_header_logits)
-            except ValueError:
-                # File may already exist, which is fine:
-                pass
+            test_exp.save('logits', header=header)
 
         # Get the right type of model,
         # Don't bother getting it pretrained,
-        # of freezing it, b/c we will overwrite 
+        # or freezing it, b/c we will overwrite 
         # the weights:
-        
+
         self.model = NetUtils.get_net(
             self.config.Training.net_name,
-            num_classes=self.num_classes,
+            num_classes=1,
             pretrained=False,
             freeze=0,
             to_grayscale=self.config.Training.getboolean('to_grayscale', True)
@@ -279,19 +255,22 @@ class Inferencer:
         #                                   )
 
         self.log.info(f"Tensorboard info will be written to {tb_dir}")
-        predictions_path = self.testing_exp.abspath('predictions', Datatype.tabular)
+        predictions_path = test_exp.abspath('predictions', Datatype.tabular)
         self.log.info(f"Result measurement CSV file(s) will be written to {predictions_path}")
-        
+
     #------------------------------------
     # __call__ 
     #-------------------
     
-    def __call__(self, gpu_id_model_path_pair):
-        gpu_id, self.model_key = gpu_id_model_path_pair
-        self.prep_model_inference(self.model_key)
-        self.log.info(f"Beginning inference with model {FileUtils.ellipsed_file_path(self.model_key)} on gpu_id {gpu_id}")
+    def __call__(self, gpu_id_exp_pair):
+        
+        gpu_id, train_exp = gpu_id_exp_pair
+        test_exp = self.test_exps[train_exp['focal_species']]
+        self.prep_model_inference(train_exp, test_exp)
+        model_path = train_exp.abspath(self.focal_species, Datatype.model)
+        self.log.info(f"Beginning inference with model {FileUtils.ellipsed_file_path(model_path)} on gpu_id {gpu_id}")
         #****************
-        return self.run_inference(gpu_to_use=gpu_id)
+        return self.run_inference(gpu_id_exp_pair)
         # Parallelism:
         # dicts_from_runs = []
         # for _i in range(3):
@@ -310,36 +289,68 @@ class Inferencer:
         # self.gpu_ids == [0,4], and three models:
         #    [(gpu0, model0) (gpu4, model1), (gpu0, model3)]
         
-        repeats = int(np.ceil(len(self.model_names) / len(self.gpu_ids)))
-        gpu_model_pairings = list(zip(self.gpu_ids*repeats, self.model_names))
+        if torch.cuda.is_available():
+            # Evenly distrib models across GPUs:
+            num_models_to_inference = len(self.train_exps)
+            repeats = min(num_models_to_inference, 
+                          np.ceil(len(self.gpu_ids) / num_models_to_inference))
+            # Number of models to assign to each CPU with an available GPU:
+            gpu_exp_pairings = list(zip(self.gpu_ids*repeats, 
+                                        list(self.train_exps.values())))
+        else:
+            available_cpus = os.cpu_count()
+            num_models_to_inference = len(self.train_exps)
+            # Number of models to assign to each CPU
+            repeats = min(num_models_to_inference, 
+                          np.ceil(available_cpus / num_models_to_inference))
+            gpu_exp_pairings = list(zip(['cpu']*repeats, list(self.train_exps.values())))
+                          
         
         #************* No parallelism for debugging
         result_collections = {}
-        for gpu_model_pairing in gpu_model_pairings:
-            result_collection = self(gpu_model_pairings[0])
-            _gpu, model_name = gpu_model_pairing
-            result_collections[model_name] = result_collection
+        for gpu_exp_pairing in gpu_exp_pairings:
+        
+            _gpu, _train_exp = gpu_exp_pairing 
+        
+            # Here is where the inference is run: the
+            # 'call' to self runs __call__(), which triggers
+            # the work:
+            result_collection = self(gpu_exp_pairing)
+        
+            result_collections[self.focal_species] = result_collection
         return result_collections
         #************* END No parallelism for debugging
         
-        with Pool(len(self.gpu_ids)) as inf_pool:
-            # Run as many inferences in parallel as
-            # there are models to try. The first arg,
-            # (self): means to invoke the __call__() method
-            # on self.
-            result_it = inf_pool.imap(self, 
-                                      gpu_model_pairings,
-                                      chunksize=len(self.gpu_ids)
-                                      )
-            results = [res.get() for res in result_it]
-            print(f"******Results: {results}")
+        # tasks = []
+        # for gpu, exp in gpu_exp_pairings:
+        #     tasks.append(Task(exp['focal_species'],
+        #                       self.__call__,
+        #                       (gpu, exp)
+        #                       ))
+        #
+        # mp_runner = MultiProcessRunner(tasks, num_workers=repeats)
+        # mp_runner.join()
+        
+        # with Pool(max(1, len(self.gpu_ids))) as inf_pool:
+        #     # Run as many inferences in parallel as
+        #     # there are models to try. The first arg,
+        #     # (self): means to invoke the __call__() method
+        #     # on self.
+        #     result_it = inf_pool.imap(self, 
+        #                               gpu_exp_pairings,
+        #                               chunksize=len(self.gpu_ids)
+        #                               )
+        #     results = [res.get() for res in result_it]
+        #     print(f"******Results: {results}")
 
     #------------------------------------
     # run_inference 
     #-------------------
     
-    def run_inference(self, gpu_to_use=0):
+    def run_inference(self, gpu_id_exp_pair):
 
+        gpu_to_use, train_exp = gpu_id_exp_pair
+        #test_exp = self.test_exps[train_exp['focal_species']]
         
         sko_net = NeuralNet(
             module=self.model,
@@ -351,27 +362,22 @@ class Inferencer:
             )
 
         sko_net.initialize()  # This is important!
+
         # Init the model from the requested model's
         # state dict. The path to that data is available
         # from the experiment instance:
-        sko_net = self.testing_exp.read('WTROC', Datatype.model, sko_net)
+        sko_net = train_exp.read(self.focal_species, Datatype.model, sko_net)
 
         res_coll = ResultCollection()
         display_counter = 0
         # For keeping track what's been written to disk:
         start_idx = 0
         for batch_num, (X,y) in enumerate(self.loader):
-            # Convert the list of truth labels from the
-            # dataloaders class IDs to the corresponding
-            # model class IDs:
-            y_model = [torch.tensor(self.sample_cid_to_model_cid[t.item()])
-                       for t in y
-                       ]
             outputs = sko_net.predict(X)
             tally = ResultTally(batch_num,
                                 LearningPhase.TESTING,
                                 torch.tensor(outputs),
-                                y_model,  # Labels
+                                y,  # Labels
                                 torch.tensor(0),  # Don't track loss
                                 self.class_names,
                                 self.batch_size
@@ -385,7 +391,7 @@ class Inferencer:
                 logits_df = pd.DataFrame(outputs, columns=self.class_names)
                 # Add the truth labels as a column on the right:
                 logits_df['label'] = y
-                self.testing_exp.save('logits', logits_df)
+                self.test_exp.save('logits', logits_df)
 
             if batch_num > 0 and batch_num % self.REPORT_EVERY == 0:
                 tmp_coll = ResultCollection(res_coll[start_idx:])
@@ -407,12 +413,13 @@ class Inferencer:
                 display_counter += 1
 
             #************
-            #if batch_num >= 7:
-            #    break
+            if batch_num >= 2:
+                break
             #************
         try:
             self.report_results(res_coll)
         except Exception as e:
+            raise e
             self.log.err(f"Error while trying to report results: {repr(e)}")
         finally:
             self.writer.close()
@@ -541,7 +548,7 @@ class Inferencer:
 
             # Write rows to CSV as floats:
             # NOTE: Now done as a whole in report_results():
-            #self.testing_exp.save('probabilities', batch_results)
+            #self.test_exp.save('probabilities', batch_results)
 
     #------------------------------------
     # report_results 
@@ -567,8 +574,8 @@ class Inferencer:
                                                    predicted_classes,
                                                    show=False, # Don't try to show pyplot fig on server
                                                    show_in_tensorboard=True)
-        self.testing_exp.save('conf_matrix', conf_matrix_fig)
-        self.log.info(f"Saved confusion matrix fig in {self.testing_exp.abspath('conf_matrix', Datatype.figure)}")
+        self.test_exp.save('conf_matrix', conf_matrix_fig)
+        self.log.info(f"Saved confusion matrix fig in {self.test_exp.abspath('conf_matrix', Datatype.figure)}")
 
         pred_probs_df = result_coll.flattened_probabilities(phase=LearningPhase.TESTING)
         # Get mean average precision and the number
@@ -583,18 +590,70 @@ class Inferencer:
         pred_probs_df.columns = self.class_names
         # Add the truth label col on the right:
         pred_probs_df['label'] = [int(tns) for tns in truths]
-        self.testing_exp.save('probabilities', pred_probs_df)
-        self.log.info(f"Saved probabilities in {self.testing_exp.abspath('probabilities', Datatype.tabular)}")
+        self.test_exp.save('probabilities', pred_probs_df)
+        self.log.info(f"Saved probabilities in {self.test_exp.abspath('probabilities', Datatype.tabular)}")
         
         # Save pr_curve figure:
-        self.testing_exp.save('pr_curve', pr_curve_fig)
-        self.log.info(f"Saved pr-curve at {self.testing_exp.abspath('pr_curve', Datatype.figure)}")
+        self.test_exp.save('pr_curve', pr_curve_fig)
+        self.log.info(f"Saved pr-curve at {self.test_exp.abspath('pr_curve', Datatype.figure)}")
 
         # Text tables results to tensorboard:
         self._report_textual_results(predicted_classes, 
                                      truths, 
                                      (mAP,num_classes) 
                                      )
+
+    #------------------------------------
+    # compute_confusion_matrix
+    #-------------------
+
+    def compute_confusion_matrix(self, 
+                                 truth_labels, 
+                                 binary_predictions,
+                                 ):
+        '''
+        Result entries in the CM cells are percentage
+        correct.
+        
+        Result example:
+        
+                     WTROC     ^WTROC
+            WTROC     99.1        0
+           ^WTROC     2.0         0
+        
+        Assumption: self.class_names contains the single
+        class, namely the focal class. 
+
+        :param truth_labels: truth labels as list of class ids
+        :type truth_labels: [int]
+        :param binary_predictions: list of 1s and 0s corresponding
+            to whether or not a sample was predicted to be of the
+            focal class
+        :type binary_predictions: [int | float]
+        :return: a dataframe of the confusion matrix; columns 
+            and rows (i.e. index) set to class names
+        :rtype: pd.DataFrame 
+        '''
+        
+        # Adjust class name list for binary classifier:
+        # add a class called "^<single-class>":
+        class_names = self.class_names + [self._get_non_focal_display_name()]
+        
+        conf_matrix = torch.tensor(sklm.confusion_matrix(
+            truth_labels,          # Truth
+            binary_predictions,    # Prediction
+            labels=list(range(len(class_names))), # Numeric class ID labels
+            normalize='pred'
+            ))
+
+        # Turn conf matrix from tensors to numpy, and
+        # from there to a dataframe:
+        conf_matrix_df = pd.DataFrame(conf_matrix.numpy(),
+                                      index=class_names,
+                                      columns=class_names
+                                      )        
+        return conf_matrix_df
+
 
 
     #------------------------------------
@@ -634,16 +693,23 @@ class Inferencer:
         '''
 
         # Get dataframe of confusion matrix
-        conf_matrix = Charter.compute_confusion_matrix(truth_series,
-                                                       predicted_classes,
-                                                       self.class_names,
-                                                       normalize=True
-                                                       )
+        conf_matrix = self.compute_confusion_matrix(truth_series,
+                                                    predicted_classes) 
 
-        self.testing_exp.save('conf_matrix', conf_matrix, index_col='True Class')
-        self.log.info(f"Wrote conf_matrix.csv to {self.testing_exp.abspath('conf_matrix', Datatype.tabular)}")
+        self.test_exp.save('conf_matrix', 
+                              index_col='True Class',
+                              header=list(conf_matrix.columns))
+        self.test_exp.save('conf_matrix', 
+                              conf_matrix, 
+                              index_col='True Class'
+                              )
 
-        fig = Charter.fig_black_white_from_conf_matrix(conf_matrix)
+        
+        self.log.info(f"Wrote conf_matrix.csv to {self.test_exp.abspath('conf_matrix', Datatype.tabular)}")
+
+        # Only have 4 cells, so don't take measures
+        # to leave out near-zero values, etc. (sparse=False):
+        fig = Charter.fig_black_white_from_conf_matrix(conf_matrix, sparse=False)
         if show_in_tensorboard:
             self.writer.add_figure('Inference Confusion Matrix', 
                                    fig,
@@ -699,7 +765,8 @@ class Inferencer:
         
         if len(well_defined_curves) == 0:
             self.log.warn(f"For all thresholds, one or more of precision, recall or f1 are undefined. No p/r curves to show")
-            return False
+            # No mAP_and_numAPs, and no figure to return:
+            return (np.nan,0) , None
         
         # Too many curves are clutter. Only
         # show the best, worst, and median by optimal f1;
@@ -757,7 +824,7 @@ class Inferencer:
         :param all_preds: list of all predictions made
         :type all_preds: [int]
         :param all_labels: list of all truth labels
-        :type all_labels: [tensor(int)]
+        :type all_labels: [{tensor(int) | int | float]
         :param mAP_info: the previously calculated mean average
             precision, and the number of classes from which the
             quantity was calculated
@@ -765,12 +832,19 @@ class Inferencer:
         '''
 
         res = self._compute_ir_values(all_preds, all_labels)
-        # 
-        pred_df = pd.DataFrame(zip(all_preds, [label.item() for label in all_labels]),
-                               columns=['prediction', 'truth']
-                               )
-        self.testing_exp.save('predictions', pred_df)
-        self.log.info(f"Saved predictions in {self.testing_exp.abspath('predictions', Datatype.tabular)}")
+        # Labels sometimes come as single-int tensors, 
+        # other times as ints or floats:
+        if type(all_labels[0]) in [int, float]:
+            pred_df = pd.DataFrame(zip(all_preds, all_labels),
+                                   columns=['prediction', 'truth']
+                                   )
+        else:
+            pred_df = pd.DataFrame(zip(all_preds, [label.item() for label in all_labels]),
+                                   columns=['prediction', 'truth']
+                                   )
+            
+        self.test_exp.save('predictions', pred_df)
+        self.log.info(f"Saved predictions in {self.test_exp.abspath('predictions', Datatype.tabular)}")
         
         # Get a Series looks like:
         #    prec_macro,0.04713735383721669
@@ -792,26 +866,21 @@ class Inferencer:
         res_df['num_classes_total'] = len(self.class_names)
         
         # Write to csv file:
-        self.testing_exp.save('ir_results', res_df)
-        self.log.info(f"Saved IR results in {self.testing_exp.abspath('ir_results', Datatype.tabular)}")
+        self.test_exp.save('ir_results', res_df)
+        self.log.info(f"Saved IR results in {self.test_exp.abspath('ir_results', Datatype.tabular)}")
 
         # Get the per-class prec/rec/f1/support:
 
         # Convert labels from tensors to ints:        
         all_int_labels    = [int(lbl) for lbl in all_labels]
         
-        # Get set of labels that were in truth set:
-        all_int_lbl_set   = set(all_int_labels)
-        
         # Get corresponding lists of labels and class
         # names:
-        occurring_labels       = []
-        occurring_target_names = []
-        for occurring_lbl in all_int_lbl_set:
-            occurring_labels.append(occurring_lbl)
-            occurring_target_names.append(self.class_names[occurring_lbl])
 
-        classification_report_dict = classification_report(
+        occurring_labels       = [0,1]
+        occurring_target_names = [self.focal_species, self._get_non_focal_display_name()]
+
+        classification_report_dict = sklm.classification_report(
             all_int_labels, 
             all_preds, 
             output_dict=True,
@@ -846,8 +915,8 @@ class Inferencer:
         ir_per_cl_df = ir_per_cl_df.T
         
         # Write perfomance per class to file:
-        self.testing_exp.save('performance_per_class', ir_per_cl_df, index_col='species')
-        self.log.info(f"Saved performance per class in {self.testing_exp.abspath('performance_per_class', Datatype.tabular)}")
+        self.test_exp.save('performance_per_class', ir_per_cl_df, index_col='species')
+        self.log.info(f"Saved performance per class in {self.test_exp.abspath('performance_per_class', Datatype.tabular)}")
         
         # Write results to tensorboard as well:
         
@@ -882,7 +951,7 @@ class Inferencer:
             'num_classes'    : len(self.class_names)
             }]) 
 
-        self.testing_exp.save('accuracy_mAP', acc_mAP_df)
+        self.test_exp.save('accuracy_mAP', acc_mAP_df)
 
         # Write the same info to tensorboard:
         accuracy_skel = {'col_header' : ['accuracy', 
@@ -901,6 +970,7 @@ class Inferencer:
         accuracy_tbl     = GithubTableMaker.make_table(accuracy_skel, sep_lines=False)
         
         self.log.info("Writing IR measures to tensorflow Text tab")
+        self.log_info(f"    To view: tensorboard --logdir={self.test_exp.tensorboard_path}")
         
         # Write the markup tables to Tensorboard:
         self.writer.add_text('Information retrieval measures', ir_measures_tbl, global_step=0)
@@ -928,44 +998,72 @@ class Inferencer:
         '''
         with np.errstate(divide='ignore',invalid='ignore'):
             res = OrderedDict({})
-            res['prec_macro'] = precision_score(all_labels, all_preds, 
+            res['prec_macro'] = sklm.precision_score(all_labels, all_preds, 
                 average='macro', 
                 zero_division=0)
-            res['prec_micro'] = precision_score(all_labels, 
+            res['prec_micro'] = sklm.precision_score(all_labels, 
                 all_preds, 
                 average='micro', 
                 zero_division=0)
-            res['prec_weighted'] = precision_score(all_labels, 
+            res['prec_weighted'] = sklm.precision_score(all_labels, 
                 all_preds, 
                 average='weighted', 
                 zero_division=0)
-            res['recall_macro'] = recall_score(all_labels, 
+            res['recall_macro'] = sklm.recall_score(all_labels, 
                 all_preds, 
                 average='macro', 
                 zero_division=0)
-            res['recall_micro'] = recall_score(all_labels, 
+            res['recall_micro'] = sklm.recall_score(all_labels, 
                 all_preds, 
                 average='micro', 
                 zero_division=0)
-            res['recall_weighted'] = recall_score(all_labels, 
+            res['recall_weighted'] = sklm.recall_score(all_labels, 
                 all_preds, 
                 average='weighted', 
                 zero_division=0)
-            res['f1_macro'] = f1_score(all_labels, 
+            res['f1_macro'] = sklm.f1_score(all_labels, 
                 all_preds, 
                 average='macro', 
                 zero_division=0)
-            res['f1_micro'] = f1_score(all_labels, 
+            res['f1_micro'] = sklm.f1_score(all_labels, 
                 all_preds, 
                 average='micro', 
                 zero_division=0)
-            res['f1_weighted'] = f1_score(all_labels, 
+            res['f1_weighted'] = sklm.f1_score(all_labels, 
                 all_preds, 
                 average='weighted', 
                 zero_division=0)
-            res['accuracy'] = accuracy_score(all_labels, all_preds)
-            res['balanced_accuracy'] = balanced_accuracy_score(all_labels, all_preds)
+            res['accuracy'] = sklm.accuracy_score(all_labels, all_preds)
+            # The 'adjusted=True' shifts the score down, so that 
+            # zero is chance.
+            res['balanced_accuracy'] = sklm.balanced_accuracy_score(all_labels, 
+                                                                    all_preds,
+                                                                    adjusted=True)
         return res
+
+    #------------------------------------
+    # def _find_model_from_exp
+    #-------------------
+    
+    def _find_model_from_exp(self, exp):
+        '''
+        Given and ExperimentManager, return the
+        model in its models subdir. If more than
+        one model is present in that subdir, the
+        one returned is indeterminate.
+        
+        :param exp: experiment manager under which
+            trained model is stored
+        :type exp: ExperimentManager
+        :return the full path to a trained model
+            in the given experiment
+        :rtype: {str | None}
+        '''
+        
+        for fpath in Utils.listdir_abs(exp.models_path):
+            if Path(fpath).suffix in self.MODEL_FNAME_SUFFIXES:
+                return fpath
+
 
     #------------------------------------
     # close 
@@ -977,11 +1075,11 @@ class Inferencer:
         except Exception as e:
             self.log.err(f"Could not close tensorboard writer: {repr(e)}")
         try:
-            self.training_exp.close()
+            self.train_exp.close()
         except Exception as e:
             self.log.err(f"Could not close tabular training data reading during close(): {repr(e)}")
         try:
-            self.testing_exp.close()
+            self.test_exp.close()
         except Exception as e:
             self.log.err(f"Could not close tabular testing data writing during close(): {repr(e)}")
             
@@ -1234,6 +1332,28 @@ class Inferencer:
                     raise ValueError(f"Sample target class {sample_class_name} not in model classes; specify unknown_species_class to fix.")
 
         return sample_class_id_to_model_class_id, unmatched_sample_classes
+    
+    #------------------------------------
+    # _get_non_focal_display_name
+    #-------------------
+    
+    def _get_non_focal_display_name(self):
+        '''
+        Returns the display name for the non-focal
+        species.
+        Example: if focal species is "WROCG", return
+        "^WROCG".
+        
+        Assumption: self.focal_species contains the 
+            display name of the focal species
+        
+        :return display to use for the "is not the focal
+            species" in charts
+        :rtype str
+                 
+        '''
+        return f"^{self.focal_species}"
+
 
 # ------------------------ Main ------------
 if __name__ == '__main__':
@@ -1260,20 +1380,11 @@ if __name__ == '__main__':
                         default=None 
                         )
 
-    parser.add_argument('--model_name',
-                        required=True,
-                        nargs='+',
-                        help='file name(s) from among the saved Pytorch model(s); repeatable, if more than one, composites of results from all models. ',
-                        default=None)
-    
     parser.add_argument('train_exp_path',
+                        nargs='+',
                         help="path to ExperimentManager's experiment root with results from training",
                         default=None)
         
-    parser.add_argument('test_exp_path',
-                        help="path to new ExperimentManager's experiment as dest for inference results",
-                        default=None)
-
     parser.add_argument('samples_path',
                         help='path to samples to run through model',
                         default=None)
@@ -1335,12 +1446,9 @@ if __name__ == '__main__':
         break
 
     inferencer = Inferencer(exp_path,
-                            args.test_exp_path,
                             samples_path,
-                            model_names,
                             gpu_ids=args.device if type(args.device) == list else [args.device],
-                            sampling=args.sampling,
-                            batch_size=args.batch_size
+                            sampling=args.sampling
                             )
     result_collection = inferencer.go()
     #*************

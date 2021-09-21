@@ -5,6 +5,7 @@ Created on Sep 4, 2021
 '''
 
 from skorch.callbacks import EpochScoring, TensorBoard, EarlyStopping
+from skorch.callbacks.scoring import ScoringBase
 from skorch.classifier import NeuralNetBinaryClassifier
 from skorch.dataset import CVSplit
 from torch import cuda
@@ -88,16 +89,15 @@ class BinaryClassificationTrainer:
         self._prep_tensorboard()
         
         transforms = self.create_transforms()
-        
-        num_gpus = cuda.device_count()
 
         if device is None:
-            device = 'cuda:0' if cuda.is_available else 'cpu'
+            device = 'cuda:0' if cuda.is_available() else 'cpu'
         else:
             # Was device given as 'cpu'?
             if device in ['CPU', 'cpu']:
                 device = 'cpu'
             elif type(device) == int:
+                num_gpus = cuda.device_count()
                 if device >= num_gpus:
                     raise ValueError(f"Machine only has {num_gpus} GPUs, yet {device} were requested")
                 device = f"cuda:{device}" if cuda.is_available else 'cpu'
@@ -122,11 +122,18 @@ class BinaryClassificationTrainer:
         # Maybe modify:
         #    o device <--- 'cuda'
 
+        species_info_cb = ConstantScoring(focal_species)
         acc_cb = EpochScoring(scoring='accuracy', lower_is_better=False)
         bal_acc_cb = EpochScoring(scoring='balanced_accuracy', lower_is_better=False)
         f1_cb = EpochScoring(scoring='f1', lower_is_better=False)
         tensorboard_cb = TensorBoard(self.tb_writer)
-        callbacks = [tensorboard_cb, bal_acc_cb, f1_cb, acc_cb]
+        callbacks = [
+                     tensorboard_cb, 
+                     bal_acc_cb, 
+                     f1_cb, 
+                     acc_cb,
+                     species_info_cb
+                     ]
         if early_stop:
             early_stop_cb = EarlyStopping(monitor='balanced_accuracy', patience=3, threshold=0.01)
             callbacks.append(early_stop_cb)
@@ -244,13 +251,20 @@ class BinaryClassificationTrainer:
         return loss_fn
 
 
-# --------------------- NeuralNetBinaryClassifierTensorBoardReady --------
+# --------------------- SpeciesCallback --------
 
-# class NeuralNetBinaryClassifierTensorBoardReady(NeuralNetBinaryClassifier):
-#
-#     def on_epoch_end(self, mystery_arg, **kwargs):
-#         pass
+class ConstantScoring(ScoringBase):
+    
+    def __init__(self, constant):
+        # Need to also include in super() call: target_extractor, use_caching ?
+        super().__init__(lambda _net, _x, _y: constant,
+                         name='species'
+                         )
+        
+        self.constant = constant
 
+    def on_epoch_end(self, net, **kwargs):
+        net.history.record(self.name_, self.constant)
 
 # -------------------- Transform Class Ensure3Channels ------
 

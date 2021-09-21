@@ -524,7 +524,11 @@ class ResultTally:
         if type(labels) == list:
             self.labels = labels
         else:
-            self.labels         = labels.tolist()
+            self.labels = labels.tolist()
+        
+        # Ensure that labels are ints:
+        if self.labels is not None and type(self.labels[0]) == float:
+            self.labels = [int(label) for label in self.labels]
         
         # Remember the attrs that don't need
         # to be computed, and access to which 

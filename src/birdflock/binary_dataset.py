@@ -129,7 +129,7 @@ class BinaryDataset(torch.utils.data.Dataset):
         '''
 
         if random_seed is not None:
-            random.seed = random_seed
+            random.seed(random_seed)
 
         self.focal_species = focal_species
         self.samples_root   = species_dirs_root

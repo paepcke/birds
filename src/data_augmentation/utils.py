@@ -771,24 +771,24 @@ class Utils:
     #-------------------
 
     @classmethod
-    def set_seed(cls, seed):
+    def set_seed(cls, the_seed):
         '''
         Set the seed across all different necessary platforms
         to allow for comparison of different models and runs
         
-        :param seed: random seed to set for all random num generators
-        :type seed: int
+        :param the_seed: random seed to set for all random num generators
+        :type the_seed: int
         '''
-        torch.manual_seed(seed)
-        cuda.manual_seed_all(seed)
+        torch.manual_seed(the_seed)
+        cuda.manual_seed_all(the_seed)
         # Not totally sure what these two do!
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
-        np.random.seed(seed)
-        os.environ['PYTHONHASHSEED'] = str(seed)
-        random.seed(seed)
+        np.random.seed(the_seed)
+        os.environ['PYTHONHASHSEED'] = str(the_seed)
+        random.seed(the_seed)
         # Make the seed findable:
-        cls.random_seed = seed
+        cls.random_seed = the_seed
 
     #------------------------------------
     # random_list_percentage 
