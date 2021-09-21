@@ -1395,16 +1395,23 @@ if __name__ == '__main__':
     if type(args.device) != list:
         args.device = [args.device]
     
-    # Expand Unix wildcards, tilde, and env 
-    # vars in the experiment_path
-    
-    exp_path = os.path.expanduser(os.path.expandvars(args.train_exp_path))
-    
     if type(args.train_exp_path) != list:
-        model_names = [args.train_exp_path]
+        train_exp_path = [args.train_exp_path]
     else:
-        model_names = args.train_exp_path
+        train_exp_path = args.train_exp_path
         
+    # Expand Unix wildcards, tilde, and env 
+    # vars in the experiment_paths
+    
+    exp_paths_vars_resolved = [os.path.expandvars(path)
+                               for path
+                               in train_exp_path
+                               ]
+    exp_paths = [os.path.expanduser(path)
+                 for path 
+                 in exp_paths_vars_resolved
+                 ]
+    
     # Ensure samples path is OK:
     samples_path = os.path.expanduser(os.path.expandvars(args.samples_path))
     
@@ -1445,7 +1452,7 @@ if __name__ == '__main__':
         # No need to walk deeper:
         break
 
-    inferencer = Inferencer(exp_path,
+    inferencer = Inferencer(exp_paths,
                             samples_path,
                             gpu_ids=args.device if type(args.device) == list else [args.device],
                             sampling=args.sampling
