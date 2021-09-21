@@ -1,4 +1,4 @@
-#run_!/usr/bin/env python3
+#!/usr/bin/env python3
 '''
 Created on Mar 12, 2021
 
