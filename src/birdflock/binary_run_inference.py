@@ -9,6 +9,7 @@ TODO:
 '''
 from _collections import OrderedDict
 import argparse
+import glob
 from multiprocessing import Pool
 import os
 from pathlib import Path
@@ -292,8 +293,8 @@ class Inferencer:
         if torch.cuda.is_available():
             # Evenly distrib models across GPUs:
             num_models_to_inference = len(self.train_exps)
-            repeats = min(num_models_to_inference, 
-                          np.ceil(len(self.gpu_ids) / num_models_to_inference))
+            repeats = int(min(num_models_to_inference, 
+                          np.ceil(len(self.gpu_ids) / num_models_to_inference)))
             # Number of models to assign to each CPU with an available GPU:
             gpu_exp_pairings = list(zip(self.gpu_ids*repeats, 
                                         list(self.train_exps.values())))
@@ -301,8 +302,8 @@ class Inferencer:
             available_cpus = os.cpu_count()
             num_models_to_inference = len(self.train_exps)
             # Number of models to assign to each CPU
-            repeats = min(num_models_to_inference, 
-                          np.ceil(available_cpus / num_models_to_inference))
+            repeats = int(min(num_models_to_inference, 
+                          np.ceil(available_cpus / num_models_to_inference)))
             gpu_exp_pairings = list(zip(['cpu']*repeats, list(self.train_exps.values())))
                           
         
@@ -1407,9 +1408,18 @@ if __name__ == '__main__':
                                for path
                                in train_exp_path
                                ]
+    exp_paths_vars_wildcards_resolved = [glob.glob(path)
+                               for path
+                               in train_exp_path
+                               ][0]
+    
+    # Expand chars like '~', and exclude
+    # experiment roots that are inference experiments
+    # created in earlier runs:
     exp_paths = [os.path.expanduser(path)
                  for path 
-                 in exp_paths_vars_resolved
+                 in exp_paths_vars_wildcards_resolved
+                 if not path.endswith('_inference') 
                  ]
     
     # Ensure samples path is OK:
