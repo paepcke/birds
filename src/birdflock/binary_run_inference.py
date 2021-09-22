@@ -294,19 +294,19 @@ class Inferencer:
             # Evenly distrib models across GPUs:
             num_models_to_inference = len(self.train_exps)
             repeats = int(min(num_models_to_inference, 
-                          np.ceil(len(self.gpu_ids) / num_models_to_inference)))
+                          np.ceil(num_models_to_inference / len(self.gpu_ids))))
             # Number of models to assign to each CPU with an available GPU:
             gpu_exp_pairings = list(zip(self.gpu_ids*repeats, 
                                         list(self.train_exps.values())))
+            self.log.info(f"Splitting into {len(gpu_exp_pairings)} tasks.")
         else:
             available_cpus = os.cpu_count()
             num_models_to_inference = len(self.train_exps)
-            # Number of models to assign to each CPU
-            repeats = int(min(num_models_to_inference, 
-                          np.ceil(available_cpus / num_models_to_inference)))
-            gpu_exp_pairings = list(zip(['cpu']*repeats, list(self.train_exps.values())))
+            # Spread model evals across CPUs
+            cpu_list = ['cpu']*available_cpus
+            gpu_exp_pairings = list(zip(cpu_list*available_cpus, 
+                                        list(self.train_exps.values())))
                           
-        
         #************* No parallelism for debugging
         result_collections = {}
         for gpu_exp_pairing in gpu_exp_pairings:
@@ -414,8 +414,8 @@ class Inferencer:
                 display_counter += 1
 
             #************
-            if batch_num >= 2:
-                break
+            #if batch_num >= 2:
+            #    break
             #************
         try:
             self.report_results(res_coll)
