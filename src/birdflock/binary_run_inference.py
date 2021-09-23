@@ -167,6 +167,10 @@ class Inferencer:
             # Use same batch size as during training
             self.batch_size = self.config.getint('Training', 'batch_size')
         
+        # Make a list of species for which we
+        # have samples to test:
+        self.sample_species_list = os.listdir(samples_path) 
+
         self.IMG_EXTENSIONS = FileUtils.IMG_EXTENSIONS
         self.log      = LoggingService()
         self.curr_dir = os.path.dirname(__file__)
@@ -293,9 +297,8 @@ class Inferencer:
         if torch.cuda.is_available():
             # Evenly distrib models across GPUs:
             num_models_to_inference = len(self.train_exps)
-            repeats = int(min(num_models_to_inference, 
-                          np.ceil(num_models_to_inference / len(self.gpu_ids))))
-            # Number of models to assign to each CPU with an available GPU:
+            repeats = int(np.ceil(num_models_to_inference / len(self.gpu_ids)))
+            # Models assigned to each CPU with its associated GPU:
             gpu_exp_pairings = list(zip(self.gpu_ids*repeats, 
                                         list(self.train_exps.values())))
             self.log.info(f"Splitting into {len(gpu_exp_pairings)} tasks.")
@@ -311,7 +314,12 @@ class Inferencer:
         result_collections = {}
         for gpu_exp_pairing in gpu_exp_pairings:
         
-            _gpu, _train_exp = gpu_exp_pairing 
+            # Only start inference if we actually have
+            # test snippets for this train_exp's focal species:
+            _gpu, train_exp = gpu_exp_pairing
+            
+            if not  train_exp['focal_species'] in self.sample_species_list:
+                continue
         
             # Here is where the inference is run: the
             # 'call' to self runs __call__(), which triggers
