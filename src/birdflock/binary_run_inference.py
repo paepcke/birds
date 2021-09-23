@@ -273,6 +273,10 @@ class Inferencer:
         test_exp = self.test_exps[train_exp['focal_species']]
         self.prep_model_inference(train_exp, test_exp)
         model_path = train_exp.abspath(self.focal_species, Datatype.model)
+        # If no model found:
+        if model_path is None:
+            self.log.warn(f"Did not find a model for {train_exp['focal_species']}; no inference done")
+            return
         self.log.info(f"Beginning inference with model {FileUtils.ellipsed_file_path(model_path)} on gpu_id {gpu_id}")
         #****************
         return self.run_inference(gpu_id_exp_pair)
