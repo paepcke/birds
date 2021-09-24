@@ -39,7 +39,7 @@ if __name__ == '__main__':
                                      description="Run the binary classifier training for all species"
                                      )
     
-    parser.add_argument('t', '--timestamp',
+    parser.add_argument('-t', '--timestamp',
                         help='timestamp string to use in experiment directory names)'
                         )
 
