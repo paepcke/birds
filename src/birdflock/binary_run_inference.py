@@ -365,6 +365,9 @@ class Inferencer:
         gpu_to_use, train_exp = gpu_id_exp_pair
         #test_exp = self.test_exps[train_exp['focal_species']]
         
+        # Get the corresponding inference experiment:
+        test_exp = self.test_exps[train_exp['focal_species']]
+        
         sko_net = NeuralNet(
             module=self.model,
             criterion=torch.nn.NLLLoss,
@@ -430,7 +433,7 @@ class Inferencer:
             #    break
             #************
         try:
-            self.report_results(res_coll)
+            self.report_results(res_coll, test_exp)
         except Exception as e:
             raise e
             self.log.err(f"Error while trying to report results: {repr(e)}")
@@ -567,7 +570,7 @@ class Inferencer:
     # report_results 
     #-------------------
     
-    def report_results(self, result_coll):
+    def report_results(self, result_coll, test_exp):
         '''
         Report confusion matrix, mAP, pr-curves, and
         typical IR values by computing them, and saving
@@ -577,6 +580,9 @@ class Inferencer:
         :param result_coll: collection of TallyResult instances
             from the inference loop
         :type result_coll: ResultCollection
+        :param test_exp: the ExperimentManager to which results
+            are to be reported
+        :type test_exp: ExperimentManager
         '''
 
         predicted_classes = result_coll.flattened_predictions(phase=LearningPhase.TESTING)
@@ -585,17 +591,18 @@ class Inferencer:
         # Confusion matrix to tensorboard and local figure, if possible:
         conf_matrix_fig = self._report_conf_matrix(truths, 
                                                    predicted_classes,
+                                                   test_exp,
                                                    show=False, # Don't try to show pyplot fig on server
                                                    show_in_tensorboard=True)
-        self.test_exp.save('conf_matrix', conf_matrix_fig)
-        self.log.info(f"Saved confusion matrix fig in {self.test_exp.abspath('conf_matrix', Datatype.figure)}")
+        test_exp.save('conf_matrix', conf_matrix_fig)
+        self.log.info(f"Saved confusion matrix fig in {test_exp.abspath('conf_matrix', Datatype.figure)}")
 
         pred_probs_df = result_coll.flattened_probabilities(phase=LearningPhase.TESTING)
         # Get mean average precision and the number
         # of classes from which the value was computed.
         # I.e. the classes for which AP was not NaN:
         (mAP, num_classes), pr_curve_fig = self._report_charted_results(truths, 
-                                                                        pred_probs_df, 
+                                                                        pred_probs_df,
                                                                         show_in_tensorboard=True
                                                                         )
         
@@ -603,17 +610,21 @@ class Inferencer:
         pred_probs_df.columns = self.class_names
         # Add the truth label col on the right:
         pred_probs_df['label'] = [int(tns) for tns in truths]
-        self.test_exp.save('probabilities', pred_probs_df)
-        self.log.info(f"Saved probabilities in {self.test_exp.abspath('probabilities', Datatype.tabular)}")
+        test_exp.save('probabilities', pred_probs_df)
+        self.log.info(f"Saved probabilities in {test_exp.abspath('probabilities', Datatype.tabular)}")
         
         # Save pr_curve figure:
-        self.test_exp.save('pr_curve', pr_curve_fig)
-        self.log.info(f"Saved pr-curve at {self.test_exp.abspath('pr_curve', Datatype.figure)}")
+        if pr_curve_fig is not None:
+            test_exp.save('pr_curve', pr_curve_fig)
+            self.log.info(f"Saved pr-curve at {test_exp.abspath('pr_curve', Datatype.figure)}")
+        else:
+            self.log.warn(f"No PR-curve could be computed for {test_exp['focal_species']}")
 
         # Text tables results to tensorboard:
         self._report_textual_results(predicted_classes, 
                                      truths, 
-                                     (mAP,num_classes) 
+                                     (mAP,num_classes),
+                                     test_exp 
                                      )
 
     #------------------------------------
@@ -675,7 +686,8 @@ class Inferencer:
     
     def _report_conf_matrix(self, 
                             truth_series, 
-                            predicted_classes, 
+                            predicted_classes,
+                            test_exp, 
                             show=True, 
                             show_in_tensorboard=None):
         '''
@@ -694,6 +706,9 @@ class Inferencer:
         :param predicted_classes: the classes predicted by the 
             classifier
         :type predicted_classes: pd.Series
+        :param test_exp: the ExperimentManager to which results
+            are to be reported
+        :type test_exp: ExperimentManager
         :param show: whether or not to call show() on the
             confusion matrix figure, or only return the Figure instance
         :type show: bool
@@ -709,16 +724,16 @@ class Inferencer:
         conf_matrix = self.compute_confusion_matrix(truth_series,
                                                     predicted_classes) 
 
-        self.test_exp.save('conf_matrix', 
+        test_exp.save('conf_matrix', 
                               index_col='True Class',
                               header=list(conf_matrix.columns))
-        self.test_exp.save('conf_matrix', 
+        test_exp.save('conf_matrix', 
                               conf_matrix, 
                               index_col='True Class'
                               )
 
         
-        self.log.info(f"Wrote conf_matrix.csv to {self.test_exp.abspath('conf_matrix', Datatype.tabular)}")
+        self.log.info(f"Wrote conf_matrix.csv to {test_exp.abspath('conf_matrix', Datatype.tabular)}")
 
         # Only have 4 cells, so don't take measures
         # to leave out near-zero values, etc. (sparse=False):
@@ -742,7 +757,7 @@ class Inferencer:
     
     def _report_charted_results(self, 
                                 truth_series, 
-                                pred_probs_df, 
+                                pred_probs_df,
                                 show_in_tensorboard=True):
         '''
         Computes a set of precision-recall curves in one plot. 
@@ -805,7 +820,8 @@ class Inferencer:
     def _report_textual_results(self, 
                                 all_preds, 
                                 all_labels, 
-                                mAP_info):
+                                mAP_info,
+                                test_exp):
         '''
         Given sequences of predicted class IDs and 
         corresponding truth labels, computes information 
@@ -842,6 +858,9 @@ class Inferencer:
             precision, and the number of classes from which the
             quantity was calculated
         :type mAP: (float, int)
+        :param test_exp: the ExperimentManager to which results
+            are to be reported
+        :type test_exp: ExperimentManager
         '''
 
         res = self._compute_ir_values(all_preds, all_labels)
@@ -856,8 +875,8 @@ class Inferencer:
                                    columns=['prediction', 'truth']
                                    )
             
-        self.test_exp.save('predictions', pred_df)
-        self.log.info(f"Saved predictions in {self.test_exp.abspath('predictions', Datatype.tabular)}")
+        test_exp.save('predictions', pred_df)
+        self.log.info(f"Saved predictions in {test_exp.abspath('predictions', Datatype.tabular)}")
         
         # Get a Series looks like:
         #    prec_macro,0.04713735383721669
@@ -879,8 +898,8 @@ class Inferencer:
         res_df['num_classes_total'] = len(self.class_names)
         
         # Write to csv file:
-        self.test_exp.save('ir_results', res_df)
-        self.log.info(f"Saved IR results in {self.test_exp.abspath('ir_results', Datatype.tabular)}")
+        test_exp.save('ir_results', res_df)
+        self.log.info(f"Saved IR results in {test_exp.abspath('ir_results', Datatype.tabular)}")
 
         # Get the per-class prec/rec/f1/support:
 
@@ -928,8 +947,8 @@ class Inferencer:
         ir_per_cl_df = ir_per_cl_df.T
         
         # Write perfomance per class to file:
-        self.test_exp.save('performance_per_class', ir_per_cl_df, index_col='species')
-        self.log.info(f"Saved performance per class in {self.test_exp.abspath('performance_per_class', Datatype.tabular)}")
+        test_exp.save('performance_per_class', ir_per_cl_df, index_col='species')
+        self.log.info(f"Saved performance per class in {test_exp.abspath('performance_per_class', Datatype.tabular)}")
         
         # Write results to tensorboard as well:
         
@@ -964,7 +983,7 @@ class Inferencer:
             'num_classes'    : len(self.class_names)
             }]) 
 
-        self.test_exp.save('accuracy_mAP', acc_mAP_df)
+        test_exp.save('accuracy_mAP', acc_mAP_df)
 
         # Write the same info to tensorboard:
         accuracy_skel = {'col_header' : ['accuracy', 
@@ -983,7 +1002,7 @@ class Inferencer:
         accuracy_tbl     = GithubTableMaker.make_table(accuracy_skel, sep_lines=False)
         
         self.log.info("Writing IR measures to tensorflow Text tab")
-        self.log_info(f"    To view: tensorboard --logdir={self.test_exp.tensorboard_path}")
+        self.log.info(f"    To view: tensorboard --logdir={test_exp.tensorboard_path}")
         
         # Write the markup tables to Tensorboard:
         self.writer.add_text('Information retrieval measures', ir_measures_tbl, global_step=0)
@@ -1088,11 +1107,13 @@ class Inferencer:
         except Exception as e:
             self.log.err(f"Could not close tensorboard writer: {repr(e)}")
         try:
-            self.train_exp.close()
+            for train_exp in self.train_exps.values():
+                train_exp.close()
         except Exception as e:
             self.log.err(f"Could not close tabular training data reading during close(): {repr(e)}")
         try:
-            self.test_exp.close()
+            for test_exp in self.test_exps.values():
+                test_exp.close()
         except Exception as e:
             self.log.err(f"Could not close tabular testing data writing during close(): {repr(e)}")
             

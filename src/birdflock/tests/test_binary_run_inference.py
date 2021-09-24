@@ -3,8 +3,10 @@ Created on Sep 20, 2021
 
 @author: paepcke
 '''
+import json
 import os
 from pathlib import Path
+import shutil
 import unittest
 
 from experiment_manager.experiment_manager import ExperimentManager, Datatype
@@ -12,8 +14,8 @@ from experiment_manager.experiment_manager import ExperimentManager, Datatype
 from birdflock.binary_run_inference import Inferencer
 
 
-#*****8TEST_ALL = True
-TEST_ALL = False
+TEST_ALL = True
+#TEST_ALL = False
 
 
 class Test(unittest.TestCase):
@@ -24,13 +26,17 @@ class Test(unittest.TestCase):
         cls.experiments_root = os.path.join(cls.cur_dir, 'data/experiments_root/')
         cls.experiment_BTSAC = os.path.join(cls.cur_dir, 'data/experiments_root/Classifier_BTSAC_2021-09-20T10_16_59')
         cls.experiment_GRHOG = os.path.join(cls.cur_dir, 'data/experiments_root/Classifier_GRHOG_2021-09-20T10_16_59')
+        cls.experiment_BTSAC_inf = cls.experiment_BTSAC + '_inference'
+        cls.experiment_GRHOG_inf = cls.experiment_GRHOG + '_inference'
         cls.samples_root     = os.path.join(cls.cur_dir, 'data/binary_dataset_img_samples')
 
     def setUp(self):
-        pass
-
+        shutil.rmtree(self.experiment_BTSAC_inf, ignore_errors=True)
+        shutil.rmtree(self.experiment_GRHOG_inf, ignore_errors=True)
+        
     def tearDown(self):
-        pass
+        shutil.rmtree(self.experiment_BTSAC_inf, ignore_errors=True)
+        shutil.rmtree(self.experiment_GRHOG_inf, ignore_errors=True)
 
 # -------------------------- Tests -------------
 
@@ -95,7 +101,7 @@ class Test(unittest.TestCase):
     # test_parallelism
     #-------------------
     
-    #**********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_parallelism(self):
         
         inferencer = Inferencer(
@@ -103,10 +109,44 @@ class Test(unittest.TestCase):
             self.samples_root,
             batch_size=1
             )
-        res_coll = inferencer.go()
+        _res_coll = inferencer.go()
         
-        print(res_coll)
+        self.check_inference_files('BTSAC')
+        self.check_inference_files('GRHOG')
 
+# ------------------ Utilities --------------
+
+    def check_inference_files(self, species):
+        
+        if species == 'BTSAC':
+            exp_root = self.experiment_BTSAC_inf
+        elif species == 'GRHOG':
+            exp_root = self.experiment_GRHOG_inf
+        
+        expected_csv_files = ['accuracy_mAP.csv',
+                              'conf_matrix.csv',
+                              'ir_results.csv',
+                              'performance_per_class.csv',
+                              'predictions.csv',
+                              'probabilities.csv'
+                              ]
+        csv_files_path = os.path.join(exp_root, 'csv_files')
+        csv_files_created = os.listdir(csv_files_path)
+        self.assertEqual(len(csv_files_created),
+                         len(expected_csv_files))
+        
+        for csv_file in csv_files_created:
+            self.assertTrue(csv_file in expected_csv_files)
+            
+        
+        figs_files_path = os.path.join(exp_root, 'figs')
+        fig_files_created = os.listdir(figs_files_path)
+        fig_files_expected = ['conf_matrix.pdf']
+        self.assertListEqual(fig_files_created, fig_files_expected)
+        
+        # Hparams:
+        hparams_path = os.path.join(exp_root, 'hparams/hparams.json')
+        self.assertTrue(os.path.exists(hparams_path))
 
 # ----------------- Main ---------------------
 if __name__ == "__main__":
