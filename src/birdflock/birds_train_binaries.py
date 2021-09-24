@@ -4,12 +4,10 @@ Created on Sep 9, 2021
 
 @author: paepcke
 '''
-import argparse
 import datetime
 import os
 from pathlib import Path
 import random
-import sys
 
 from experiment_manager.experiment_manager import ExperimentManager
 from logging_service import LoggingService
@@ -58,6 +56,7 @@ class BinaryBirdsTrainer(object):
                  config_info, 
                  focals_list=None,
                  experiment_path=None,
+                 timestamp=None
                  ):
         '''
         Train a flock of binary bird call classifiers in parallel,
@@ -68,20 +67,29 @@ class BinaryBirdsTrainer(object):
         training a binary focalSpecies-against-all is controlled as
         follows:
         
-           o snippets_root is the required root of subdirectories, each
-             of which contains spectrogram samples of one species
-           o focals_list is another optional subset that limits for which 
-             species a classifier is trained. The 'others' may still 
-             include all of species_list or the subdirectories of snippets_root.
+           o The config file entry 'root_train_test_data' in section
+             'Paths' is taken as the root of the training snippets.
+             The snippets must be in subdirectories below that path,
+             one subdir per species
+           o focals_list optionally limits for which species a 
+             classifier is trained. The 'others' may still 
+             include all of species_list or the subdirectories of 
+             snippets_root.
     
         :param config_info: a path to the files with all path 
             and training parameters, or a config instance if
             client has already loaded from a config file
         :type config_info: {str | NeuralNetConfig}
-        :param focals_list:
-        :type focals_list:
-        :param experiment_path:
-        :type experiment_path:
+        :param focals_list: optional list of species to train for;
+            if None, classifiers for all species are created
+        :type focals_list: {None | [str]}
+        :param experiment_path: if provided the directory in which
+            ExperimentManager experiments are created. Default
+            is <this-script's-directory>/Experiments
+        :type experiment_path: {None | str}
+        :param timestamp: optionally a datetime string to use
+            when creating ExperimentManager experiment file names
+        :type timestamp {None | str}
         '''
 
         self.log = LoggingService()
@@ -93,15 +101,15 @@ class BinaryBirdsTrainer(object):
             self.log.err(msg)
             raise RuntimeError(msg) from e
 
+        # Check timestamp for proper format:
+        if timestamp is not None:
+            test_ts = Utils.timestamp_from_exp_path(timestamp)
+            if test_ts != timestamp:
+                raise ValueError(f"Timestamp must be of the form 2021-09-20T10_16_59, not {timestamp}")
+
         self.snippets_root = self.config['Paths']['root_train_test_data']
         self.set_seed(self.config.Training.getint('seed', 42))
 
-        self.focals_list = focals_list
-        
-        if experiment_path is None:
-            experiment_path = os.path.join(os.path.dirname(__file__), 'Experiments')
-        self.experiment_path = experiment_path
-        
         # If no species_list is specified, use
         # all species subdirectories:
         if focals_list is None:
@@ -113,6 +121,12 @@ class BinaryBirdsTrainer(object):
                             if os.path.isdir(species_dir)
                             ]
 
+        self.focals_list = focals_list
+        
+        if experiment_path is None:
+            experiment_path = os.path.join(os.path.dirname(__file__), 'Experiments')
+        self.experiment_path = experiment_path
+        
         # GPUs not used by others as we start:
         self.gpu_pool    = []
         num_gpus    = cuda.device_count()
@@ -131,7 +145,7 @@ class BinaryBirdsTrainer(object):
                 if not self._gpu_in_use(i):
                     self.gpu_pool.append(i)
 
-        self.tasks_to_run = self._create_task_list(focals_list)
+        self.tasks_to_run = self._create_task_list(focals_list, timestamp)
 
     #------------------------------------
     # train
@@ -283,13 +297,42 @@ class BinaryBirdsTrainer(object):
     # _create_task_list
     #-------------------
     
-    def _create_task_list(self, focals_list):
+    def _create_task_list(self, focals_list, timestamp=None):
+        '''
+        Create a list of experiment_manager.Task instances
+        to run trainings in parallel. If timestamp is provided,
+        it must be precisely of the ISO form:
+
+            2021-09-24T10_42_55
+        
+        This datetime string will be used when generating
+        result files such as:
+
+             Classifier_GRASG_2021-09-24T10_42_55
+             
+        and later corresponding inference experiments;
+        
+             Classifier_GRASG_2021-09-24T10_42_55_inference
+             
+        If None, a current timestamp is created.
+        
+        :param focals_list: list of species for which to 
+            train binary classifiers.
+        :type focals_list: [str]
+        :param timestamp: datetime to use for all experiment
+            file names
+        :type timestamp: {None | str}
+        '''
     
         task_list = []
         # Timestamp to use in all the experiment directory
         # names: 
         #    .../Experiment/Classifier_<species>_<common_time_stamp>
-        common_time_stamp = FileUtils.file_timestamp()
+        if timestamp is None:
+            common_time_stamp = FileUtils.file_timestamp()
+        else:
+            common_time_stamp = timestamp
+            
         for species in focals_list:
             task = Task(species,                  # Name of task
                         self._create_classifier,  # function to execute

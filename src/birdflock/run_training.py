@@ -20,7 +20,7 @@ the call that instantiates BinaryBirdsTrainer.
 
 import argparse
 import os
-import socket
+#import socket
 import sys
 
 import torch.multiprocessing as mp
@@ -39,6 +39,10 @@ if __name__ == '__main__':
                                      description="Run the binary classifier training for all species"
                                      )
     
+    parser.add_argument('t', '--timestamp',
+                        help='timestamp string to use in experiment directory names)'
+                        )
+
     parser.add_argument('-s', '--species',
                         type=str,
                         nargs='+',
@@ -49,8 +53,7 @@ if __name__ == '__main__':
     parser.add_argument('config_file',
                         help='path to the training config file (often called config.cfg)'
                         )
-    
-    
+
 
     args = parser.parse_args()
     
