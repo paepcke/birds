@@ -5,6 +5,7 @@ Created on Sep 11, 2021
 '''
 import os
 from pathlib import Path
+import tempfile
 import unittest
 
 from birdflock.birds_train_binaries import BinaryBirdsTrainer
@@ -12,8 +13,6 @@ from data_augmentation.multiprocess_runner import Task
 from data_augmentation.utils import Utils
 import multiprocessing as mp
 
-
-#from sched import scheduler
 TEST_ALL = True
 #TEST_ALL = False
 
@@ -38,11 +37,10 @@ class BirdsBinaryTrainerTester(unittest.TestCase):
         cls.config['Paths']['root_train_test_data'] = cls.snippet_root
 
     def setUp(self):
-        pass
-
+        self.tmpdir_obj = tempfile.TemporaryDirectory(dir='/tmp', prefix='binTrainTst')
 
     def tearDown(self):
-        pass
+        self.tmpdir_obj.cleanup()
 
 # -------------------- Tests ---------------
 
@@ -53,7 +51,9 @@ class BirdsBinaryTrainerTester(unittest.TestCase):
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_constructor(self):
         
-        trainer = BinaryBirdsTrainer(self.config)
+        trainer = BinaryBirdsTrainer(self.config,
+                                     experiment_path=self.tmpdir_obj.name
+                                     )
         
         self.assertEqual(len(trainer.tasks_to_run), 3)
         
@@ -80,7 +80,8 @@ class BirdsBinaryTrainerTester(unittest.TestCase):
     def test_supplying_species_list(self):
         species_to_train = ['VASEG', 'YOFLG']
         trainer = BinaryBirdsTrainer(self.config,
-                                     focals_list=species_to_train
+                                     focals_list=species_to_train,
+                                     experiment_path=self.tmpdir_obj.name
                                      )
         self.assertEqual(trainer.tasks, species_to_train)
         
@@ -89,7 +90,55 @@ class BirdsBinaryTrainerTester(unittest.TestCase):
         for task in trainer.tasks_to_run:
             self.assertIsNone(task.error)
 
+    #------------------------------------
+    # test_supplying_timestamp
+    #-------------------
+
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_supplying_timestamp(self):
+        species_to_train = ['VASEG', 'YOFLG']
+        tst_timestamp = '2019-09-30T12_23_57'
+        
+        # Test the timestamp format sanity check
+        try:
+            trainer = BinaryBirdsTrainer(self.config,
+                                         focals_list=species_to_train,
+                                         timestamp='foo-bar',
+                                         experiment_path=self.tmpdir_obj.name
+                                         )
+            raise AssertionError("BinaryBirdsTrainer failed to recognize bad timestamp")
+        except ValueError:
+            # Good:
+            pass
+        
+        trainer = BinaryBirdsTrainer(self.config,
+                                     focals_list=species_to_train,
+                                     timestamp=tst_timestamp,
+                                     experiment_path=self.tmpdir_obj.name
+                                     )
+        
         trainer.train()
+        
+        # There should be two experiments with
+        # a 2019 time stamp
+        
+        exp_root = trainer.experiment_path
+        found_dirs = set([])
+        for file_or_dir in Utils.listdir_abs(exp_root):
+            if not os.path.isdir(file_or_dir):
+                continue
+            timestamp = Utils.timestamp_from_exp_path(file_or_dir)
+            if timestamp != tst_timestamp:
+                continue
+            else:
+                found_dirs.add(Path(file_or_dir).stem)
+                
+        expected = set(['Classifier_YOFLG_2019-09-30T12_23_57',
+                        'Classifier_VASEG_2019-09-30T12_23_57'
+                        ])
+        
+        self.assertSetEqual(found_dirs, expected)
+        print(trainer)
 
 # ---------------------- Utilities ----------------
 

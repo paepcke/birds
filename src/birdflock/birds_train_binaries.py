@@ -9,9 +9,9 @@ import os
 from pathlib import Path
 import random
 
-from experiment_manager.experiment_manager import ExperimentManager
-from logging_service import LoggingService
+from experiment_manager.experiment_manager import ExperimentManager, Datatype
 from experiment_manager.neural_net_config import NeuralNetConfig, ConfigError
+from logging_service import LoggingService
 from torch import cuda
 import torch
 
@@ -467,6 +467,7 @@ class BinaryBirdsTrainer(object):
         
         net = clf.net
         experiment.save(target_species, net)
+        self._save_classifier_history(net.history, experiment)
         
         # Find the task instance we just finished,
         # and signal its completion:
@@ -482,9 +483,67 @@ class BinaryBirdsTrainer(object):
 # ------------------- Utilities -----------------
 
     #------------------------------------
-    # 
+    # _save_classifier_history
     #-------------------
+    
+    def _save_classifier_history(self, history, experiment):
+        '''
+        Given the history of a skorch classifier, remove some
+        items, then save as csv in the given experiment under
+        the name <species>_res_by_epoch.csv
+        
+        The history has the following form:
 
+            [{'batches':
+                 [{'train_loss': 0.7793650031089783,
+                   'train_batch_size': 6},
+                  {'valid_loss': 74.49720001220703,
+                   'valid_batch_size': 1}
+                   ],
+              'epoch': 1,
+              'train_batch_count': 1,
+              'valid_batch_count': 1,
+              'dur': 1.7713217735290527,
+              'train_loss': 0.7793650031089783,
+              'train_loss_best': True,
+              'valid_loss': 74.49720001220703,
+              'valid_loss_best': True,
+              'valid_acc': 0.0,
+              'valid_acc_best': True,
+              'balanced_accuracy': 0.0,
+              'balanced_accuracy_best': True,
+              'f1': 0.0,
+              'f1_best': True,
+              'accuracy': 0.0,
+              'accuracy_best': True,
+              'species': 'YOFLG'
+              },
+            
+              {'batches': [{'train_loss': 0.5075358748435974, 'train_batch_size': 6},
+                           {'valid_loss': 0.0, 'valid_batch_size': 1}],
+               'epoch': 2,
+               'train_batch_count': 1, 'valid_batch_count': ...
+            ]
+
+        We remove the batches information, and move the species
+        to the front, creating a new dict for saving.
+        
+        :param history: history of skorch results during training
+        :type history: [{str : Any}]
+        :param experiment: experiment manager to which to save
+        :type experiment: ExperimentManager
+        '''
+        
+        # Create the new array of result dicts:
+        for epoch_res in reversed(history):
+            culled_results = epoch_res.copy()
+            del culled_results['batches']
+            species = culled_results['species']
+            del culled_results['species']    
+            final_results = {'species' : species}
+            final_results.update({k : v for k,v in culled_results.items()})
+        
+        experiment.save(f"{species}_res_by_epoch", final_results)
 
     #------------------------------------
     # _gpu_in_use
