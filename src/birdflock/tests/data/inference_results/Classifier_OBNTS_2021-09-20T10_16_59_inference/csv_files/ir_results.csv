@@ -1,0 +1,2 @@
+prec_macro,prec_micro,prec_weighted,recall_macro,recall_micro,recall_weighted,f1_macro,f1_micro,f1_weighted,accuracy,balanced_accuracy,mAP,well_defined_APs,num_classes_total
+0.11000000000000001,0.98,0.98443603515625,0.5,0.9921875,0.9921875,0.4980392156862745,0.9921875,0.988296568627451,0.9921875,0.5,nan,0,1

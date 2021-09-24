@@ -37,7 +37,7 @@ class TestBinaryInfEvaluator(unittest.TestCase):
 
     def test_bal_acc_fig(self):
         
-        evaluator = BinaryInferenceEvaluator('2021-09-18T15_00_16', 
+        evaluator = BinaryInferenceEvaluator('2021-09-20T10_16_59',
                                              experiments_root=self.inf_exp_root)
         
         print('FOO')
