@@ -1321,10 +1321,11 @@ class Utils:
     def timestamp_from_exp_path(cls, exp_path_name):
         '''
         Given an experiment name such as 
-          <some-first-part-without-underscore>_2021-09-20T10_16_59_<some-other-part>
+          <some-first-part-without-underscore>2021-09-20T10_16_59<some-other-part>
           
-        return the datetime string. It may be anywhere
-        in the experiment path name
+        return the datetime string. The string may appear anywhere
+        in the experiment path name.
+        
         
         :param exp_path_name: name of an experiment directory
             that uses a timestamp as part of the name
@@ -1333,11 +1334,25 @@ class Utils:
             the timestamp
         :rtype {None | str}
         '''
-        tm_pattern = re.compile(r"[^_]*_([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}_[0-9]{2}_[0-9]{2}).*")
+        # The (^|[^_]*_) matches either everything
+        # up to the timestamp, or handles the timestamp
+        # starting at the beginning of the string.
+        # Everything before the timestamp is captured in 
+        # a group of its own. 
+        
+        # The rest of the regex matches timestamps.
+        # Example:
+        #    tm_pattern.search('2021-09-20T10_16_59foo').groups()
+        #        ==> ('', '2021-09-20T10_16_59')
+        #    tm_pattern.search('bluebell_2021-09-20T10_16_59foo').groups()
+        #        ==> ('bluebell_', '2021-09-20T10_16_59')
+        
+  
+        tm_pattern = re.compile(r"(^|[^_]*_)([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}_[0-9]{2}_[0-9]{2}).*")
         match = tm_pattern.search(exp_path_name)
         if match is None:
             return None
-        return match.groups()[0]
+        return match.groups()[1]
 
 # -------------------- Class ProcessWithoutWarnings ----------
 
