@@ -509,41 +509,44 @@ class BinaryBirdsTrainer(object):
 
 
 # ------------------------ Main ------------
-if __name__ == '__main__':
-    
-    parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
-                                     formatter_class=argparse.RawTextHelpFormatter,
-                                     description="Train multiple binary species classifiers."
-                                     )
+# Use run_training.py for training, rather than
+# this commented code.
 
-    parser.add_argument('-s', '--species',
-                        type=str,
-                        nargs='+',
-                        help='Repeatable: species for which to train classifiers; default: all',
-                        default=None
-                        )
-
-    parser.add_argument('species_root',
-                        help='root of spectrogram snippet subdirectories'
-                        )
-
-
-    args = parser.parse_args()
-
-
-    if not os.path.exists(args.species_root):
-        print(f"Cannot find {args.species_root}")
-        sys.exit(1)
-        
-    if args.species is not None:
-        # Ensure a subdir for each species:
-        for species in args.species:
-            dir_name = os.path.join(args.species_root, species)
-            if not os.path.exists(dir_name):
-                print(f"Cannot find {dir_name}, yet classifier for species '{species}' was requested")
-                sys.exit(1)
-                
-    BinaryBirdsTrainer(args.species_root,
-                       species_list=args.species
-                       )
+# if __name__ == '__main__':
+#
+#     parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
+#                                      formatter_class=argparse.RawTextHelpFormatter,
+#                                      description="Train multiple binary species classifiers."
+#                                      )
+#
+#     parser.add_argument('-s', '--species',
+#                         type=str,
+#                         nargs='+',
+#                         help='Repeatable: species for which to train classifiers; default: all',
+#                         default=None
+#                         )
+#
+#     parser.add_argument('species_root',
+#                         help='root of spectrogram snippet subdirectories'
+#                         )
+#
+#
+#     args = parser.parse_args()
+#
+#
+#     if not os.path.exists(args.species_root):
+#         print(f"Cannot find {args.species_root}")
+#         sys.exit(1)
+#
+#     if args.species is not None:
+#         # Ensure a subdir for each species:
+#         for species in args.species:
+#             dir_name = os.path.join(args.species_root, species)
+#             if not os.path.exists(dir_name):
+#                 print(f"Cannot find {dir_name}, yet classifier for species '{species}' was requested")
+#                 sys.exit(1)
+#
+#     BinaryBirdsTrainer(args.species_root,
+#                        focals_list=args.species
+#                        )
         

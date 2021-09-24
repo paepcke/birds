@@ -38,6 +38,14 @@ if __name__ == '__main__':
                                      formatter_class=argparse.RawTextHelpFormatter,
                                      description="Run the binary classifier training for all species"
                                      )
+    
+    parser.add_argument('-s', '--species',
+                        type=str,
+                        nargs='+',
+                        help='Repeatable: species for which to train classifiers; default: all',
+                        default=None
+                        )
+    
     parser.add_argument('config_file',
                         help='path to the training config file (often called config.cfg)'
                         )
@@ -67,7 +75,7 @@ if __name__ == '__main__':
     # From config file, get the focal species
     # to train on this machine:
     
-    this_machine = socket.gethostname()
+    #this_machine = socket.gethostname()
     # Uncomment to train some on quatro, and others on quintus:
     # if this_machine == 'quatro':
     #     focal_species = config.getarray('Training', 'focal_species_quatro')
@@ -81,11 +89,9 @@ if __name__ == '__main__':
     #     # as given in the config file:
     #     focal_species = None
     
-    focal_species = None
-                        
     # Only create classifiers for the 40 focal species:
     trainer = BinaryBirdsTrainer(config,
-                                 focals_list=focal_species
+                                 focals_list=args.species
                                  )
     trainer.train()
 
