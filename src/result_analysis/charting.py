@@ -1010,7 +1010,7 @@ class Charter:
                  data, 
                  rotation=0,
                  ylabel=None, 
-                 color_groups=None,
+                 color_groups=None
                  ):
         '''
         Returns a matplotlib axes with a bar chart
@@ -1059,7 +1059,6 @@ class Charter:
         '''
         
         ax = data.plot.bar()
-        plt.tight_layout()
         if rotation != 0:
             ax.set_xticklabels(data.index, rotation=rotation)
             
@@ -1082,7 +1081,7 @@ class Charter:
                         bars[bar_idx].set_color(color)
                     except ValueError:
                         raise ValueError(f"Could not find {like_colored_meas} in barplot X labels")
-
+        ax.figure.tight_layout()
         return ax
 
 
