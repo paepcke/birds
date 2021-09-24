@@ -179,7 +179,11 @@ class BinaryBirdsTrainer(object):
                     task.func_kwargs = {'gpu' : gpu}
                 
                 task_batch.append(task)
-                if len(self.gpu_pool) > 0:
+                tasks_left -= set([task])
+                
+
+                if len(self.gpu_pool) > 0 and \
+                   len(tasks_left) > 0:
                     # Add another task to the task batch:
                     continue
                 
@@ -203,8 +207,6 @@ class BinaryBirdsTrainer(object):
                                                      synchronous=False)
                 )
     
-                tasks_left -= set(task_batch)
-                
                 # Wait for any of the classifiers to finish
                 # training and free up a GPU, then run more: 
                 # done_task_objs will be a set on a task when
