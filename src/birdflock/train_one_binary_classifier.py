@@ -135,7 +135,10 @@ class BinaryClassificationTrainer:
                      species_info_cb
                      ]
         if early_stop:
-            early_stop_cb = EarlyStopping(monitor='balanced_accuracy', patience=3, threshold=0.01)
+            early_stop_cb = EarlyStopping(monitor='balanced_accuracy', 
+                                          patience=3, 
+                                          threshold=0.01,
+                                          lower_is_better=False)
             callbacks.append(early_stop_cb)
 
         classifier_kwargs = {
