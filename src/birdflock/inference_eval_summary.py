@@ -11,6 +11,7 @@ import sys
 
 from experiment_manager.experiment_manager import ExperimentManager, Datatype
 
+from data_augmentation.utils import Utils
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -182,7 +183,7 @@ if __name__ == '__main__':
     inf_subdirs = []
     for subdir in all_subdirs:
         if subdir.endswith('_inference') \
-           and ExperimentManager.timestamp_from_exp_path(subdir) is not None:
+           and Utils.timestamp_from_exp_path(subdir) is not None:
             inf_subdirs.append(subdir)
         
     num_inf_exps = len(inf_subdirs)
@@ -198,7 +199,7 @@ if __name__ == '__main__':
     # inference subdir:
     
     inf_subdir = inf_subdirs[0]
-    timestamp = ExperimentManager.timestamp_from_exp_path(inf_subdir)
+    timestamp = Utils.timestamp_from_exp_path(inf_subdir)
     
     BinaryInferenceEvaluator(timestamp, dir_root)
 

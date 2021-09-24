@@ -5,6 +5,7 @@ from fnmatch import fnmatch
 import os
 from pathlib import Path
 import random
+import re
 import shutil
 import warnings
 
@@ -1312,6 +1313,31 @@ class Utils:
         
         return
 
+    #------------------------------------
+    # timestamp_from_exp_path 
+    #-------------------
+    
+    @classmethod
+    def timestamp_from_exp_path(cls, exp_path_name):
+        '''
+        Given an experiment name such as 
+          <some-first-part-without-underscore>_2021-09-20T10_16_59_<some-other-part>
+          
+        return the datetime string. It may be anywhere
+        in the experiment path name
+        
+        :param exp_path_name: name of an experiment directory
+            that uses a timestamp as part of the name
+        :type exp_path_name: str
+        :return None if timestamp could not be found, or
+            the timestamp
+        :rtype {None | str}
+        '''
+        tm_pattern = re.compile(r"[^_]*_([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}_[0-9]{2}_[0-9]{2}).*")
+        match = tm_pattern.search(exp_path_name)
+        if match is None:
+            return None
+        return match.groups()[0]
 
 # -------------------- Class ProcessWithoutWarnings ----------
 
