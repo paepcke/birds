@@ -9,6 +9,8 @@ import os
 from pathlib import Path
 import random
 
+import pandas as pd
+
 from experiment_manager.experiment_manager import ExperimentManager, Datatype
 from experiment_manager.neural_net_config import NeuralNetConfig, ConfigError
 from logging_service import LoggingService
@@ -193,7 +195,8 @@ class BinaryBirdsTrainer(object):
                 # them to finish, because if some finish
                 # early, we want to train the next:
                 self.log.info((f"Start training classifier(s) "
-                               f"{[task.name for task in task_batch]}")
+                               f"{[task.name for task in task_batch]}" 
+                               f"on GPUs {[task.gpu for task in task_batch]}")
                                )
                 
                 # Copy the task_batch to be sure not 
@@ -530,22 +533,75 @@ class BinaryBirdsTrainer(object):
         We remove the batches information, and move the species
         to the front, creating a new dict for saving.
         
+        The result is a df like:
+        
+		      species  train_loss train_loss_best  ...  f1_best accuracy  ...
+		Epoch
+		1       VASEG    0.752131            True  ...     True      0.0  
+		2       VASEG    0.058150            True  ...    False      0.0  
+		3       VASEG    0.220424           False  ...    False      1.0  
+		4       VASEG    0.933877           False  ...    False      1.0  
+		5       VASEG    0.679428           False  ...    False      1.0  
+		6       VASEG    0.375119           False  ...    False      1.0  
+				
+        For this example, the info is stored in the given experiments
+        tabular info under key VASEG_res_by_epoch, and can be
+        retrieved as a df as:
+        
+            experiment.read('VASEB_res_by_epoch', Datatype.tabular)
+
         :param history: history of skorch results during training
         :type history: [{str : Any}]
         :param experiment: experiment manager to which to save
         :type experiment: ExperimentManager
         '''
+
+        # Get the col names of the history,
+        # such as 'train_loss', 'train_loss_best', ...
+        # Use the keys of the first history entry
+        # (all entries will have the same keys
+        # and species:
+        first_hist_entry = history[0]
+        species = first_hist_entry['species']
+
+        hist_keys = list(first_hist_entry.keys())
         
-        # Create the new array of result dicts:
-        for epoch_res in reversed(history):
-            culled_results = epoch_res.copy()
-            del culled_results['batches']
-            species = culled_results['species']
-            del culled_results['species']    
-            final_results = {'species' : species}
-            final_results.update({k : v for k,v in culled_results.items()})
+        # Remove columns we don't care about: 
+        hist_keys.remove('batches')
+        hist_keys.remove('dur')
+        hist_keys.remove('train_batch_count')
+        hist_keys.remove('valid_batch_count')
         
-        experiment.save(f"{species}_res_by_epoch", final_results)
+        # History has the species at the end;
+        # we'll move it to be the first col in 
+        # the results:
+        hist_keys.remove('species')
+        # Epoch will be the auto-generated index
+        # of 0,1,2,...
+        hist_keys.remove('epoch')
+        
+        # Columns in the result df, and 
+        # also the keys with which we will pick
+        # the results from the history:
+        cols = ['species'] + hist_keys
+        
+        res_df = pd.DataFrame([], columns=cols)
+        
+        for epoch_res in history:
+            epoch_res_row_dict = {}
+            # Pull values in the order of the
+            # columns we want:
+            for key in cols:
+                epoch_res_row_dict[key] = epoch_res[key]
+            # Turn into a pandas Series, and append to the
+            # result dataframe
+            row_ser = pd.Series(epoch_res_row_dict, name=epoch_res['epoch'])
+            res_df  = res_df.append(row_ser)
+        
+        # Write to the experiment:
+        res_df.index.name = 'Epoch'
+        experiment.save(f"{species}_res_by_epoch", res_df)
+        return res_df
 
     #------------------------------------
     # _gpu_in_use

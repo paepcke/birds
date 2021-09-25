@@ -8,13 +8,18 @@ from pathlib import Path
 import tempfile
 import unittest
 
+import pandas as pd
+
+from experiment_manager.experiment_manager import ExperimentManager, Datatype
+
 from birdflock.birds_train_binaries import BinaryBirdsTrainer
 from data_augmentation.multiprocess_runner import Task
 from data_augmentation.utils import Utils
 import multiprocessing as mp
 
-TEST_ALL = True
-#TEST_ALL = False
+
+#*******TEST_ALL = True
+TEST_ALL = False
 
 
 class BirdsBinaryTrainerTester(unittest.TestCase):
@@ -139,6 +144,43 @@ class BirdsBinaryTrainerTester(unittest.TestCase):
         
         self.assertSetEqual(found_dirs, expected)
         print(trainer)
+
+    #------------------------------------
+    # test_save_classifier_history
+    #-------------------
+
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_save_classifier_history(self):
+        species_to_train = ['VASEG', 'YOFLG']
+        tst_timestamp = '2019-09-30T12_23_57'
+        root_dir_nm   = self.tmpdir_obj.name
+        trainer = BinaryBirdsTrainer(self.config,
+                                     focals_list=species_to_train,
+                                     timestamp=tst_timestamp,
+                                     experiment_path=root_dir_nm
+                                     )
+        
+        trainer.train()
+        yoflg_exp = ExperimentManager(os.path.join(root_dir_nm, 
+                                                   'Classifier_YOFLG_2019-09-30T12_23_57'))
+        vaseg_exp = ExperimentManager(os.path.join(root_dir_nm, 
+                                                   'Classifier_VASEG_2019-09-30T12_23_57'))
+
+        yoflg_df = yoflg_exp.read('YOFLG_res_by_epoch', Datatype.tabular)
+        vaseg_df = vaseg_exp.read('VASEG_res_by_epoch', Datatype.tabular)
+        
+        expected_cols = pd.Index(
+            ['species', 'train_loss', 'train_loss_best', 'valid_loss',
+             'valid_loss_best', 'valid_acc', 'valid_acc_best', 'balanced_accuracy',
+             'balanced_accuracy_best', 'f1', 'f1_best', 'accuracy', 'accuracy_best']
+            )
+        
+        # Outcomes are a bit different dur 
+        # to random data selection. So just
+        # check that the result data frames are
+        # retrievable and have the expected columns
+        self.assertTrue((yoflg_df.columns == expected_cols).all())
+        self.assertTrue((vaseg_df.columns == expected_cols).all())
 
 # ---------------------- Utilities ----------------
 
