@@ -182,6 +182,23 @@ class BirdsBinaryTrainerTester(unittest.TestCase):
         self.assertTrue((yoflg_df.columns == expected_cols).all())
         self.assertTrue((vaseg_df.columns == expected_cols).all())
 
+    #------------------------------------
+    # test_early_stopping
+    #-------------------
+    
+    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_early_stopping(self):
+        species_to_train = ['VASEG', 'YOFLG']
+        tst_timestamp = '2019-09-30T12_23_57'
+        root_dir_nm   = self.tmpdir_obj.name
+        trainer = BinaryBirdsTrainer(self.config,
+                                     focals_list=species_to_train,
+                                     timestamp=tst_timestamp,
+                                     experiment_path=root_dir_nm
+                                     )
+        
+        trainer.train()
+
 # ---------------------- Utilities ----------------
 
     def make_task(self, name):

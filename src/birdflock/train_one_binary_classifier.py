@@ -135,10 +135,12 @@ class BinaryClassificationTrainer:
                      species_info_cb
                      ]
         if early_stop:
+            early_stop_notification = lambda txt: print(f"{focal_species}: {txt}")
             early_stop_cb = EarlyStopping(monitor='balanced_accuracy', 
                                           patience=3, 
                                           threshold=0.01,
-                                          lower_is_better=False)
+                                          lower_is_better=False,
+                                          sink=early_stop_notification)
             callbacks.append(early_stop_cb)
 
         classifier_kwargs = {
