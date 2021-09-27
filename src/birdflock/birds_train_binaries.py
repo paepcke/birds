@@ -350,7 +350,7 @@ class BinaryBirdsTrainer(object):
                         self.config,              # overall configuration (arg to task)
                         species,                  # name of species (arg to task)
                         common_time_stamp,        # part of experiment directory filename (arg to task)
-                        gpu_this_task             # GPU this task will use (arg to task)
+                        gpu=gpu_this_task         # GPU this task will use (arg to task)
                         )
             # Species at play to know by the task itself.
             # The species are in the Task() instantiation
