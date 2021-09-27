@@ -18,7 +18,7 @@ from data_augmentation.utils import Utils
 import multiprocessing as mp
 
 
-#*******TEST_ALL = True
+TEST_ALL = True
 TEST_ALL = False
 
 
@@ -186,7 +186,7 @@ class BirdsBinaryTrainerTester(unittest.TestCase):
     # test_early_stopping
     #-------------------
     
-    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_early_stopping(self):
         species_to_train = ['VASEG', 'YOFLG']
         tst_timestamp = '2019-09-30T12_23_57'

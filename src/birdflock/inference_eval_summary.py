@@ -46,6 +46,7 @@ class BinaryInferenceEvaluator:
                                                                   common_experiments_timestamp
                                                                   )
         ir_results = self._collect_ir_results(exp_dir_dict)
+        test_summary_exp.save('ir_results_by_species', ir_results)
 #******
         # Barchart of all balanced accuracies:
         fig_balanced_acc = self._make_balanced_accuracy_chart(ir_results)
