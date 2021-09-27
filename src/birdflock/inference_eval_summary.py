@@ -10,6 +10,7 @@ from pathlib import Path
 import sys
 
 from experiment_manager.experiment_manager import ExperimentManager, Datatype
+from logging_service.logging_service import LoggingService
 
 from data_augmentation.utils import Utils
 import matplotlib.pyplot as plt
@@ -28,6 +29,9 @@ class BinaryInferenceEvaluator:
         '''
         Constructor
         '''
+        
+        self.log = LoggingService()
+        
         self.cur_dir = os.path.dirname(__file__)
         if experiments_root is None:
             self.experiments_root = os.path.join(self.cur_dir, 'Experiments')
@@ -149,7 +153,11 @@ class BinaryInferenceEvaluator:
             
             # Get all information retrieval related results
             # from the exp manager as a one-line pd.DataFrame
-            ir_results = exp.read('ir_results', Datatype.tabular) 
+            try:
+                ir_results = exp.read('ir_results', Datatype.tabular)
+            except FileNotFoundError:
+                self.log.err(f"Could not find IR results for {species} at {dir_path}")
+                continue 
             row = ir_results.iloc[0, :]
             # Create a (future) row labels from the species name:
             row.name = species
