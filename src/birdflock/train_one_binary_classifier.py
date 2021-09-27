@@ -100,8 +100,13 @@ class BinaryClassificationTrainer:
                 num_gpus = cuda.device_count()
                 if device >= num_gpus:
                     raise ValueError(f"Machine only has {num_gpus} GPUs, yet {device} were requested")
-                device = f"cuda:{device}" if cuda.is_available else 'cpu'
-        
+                if cuda.is_available:
+                    device_num = device
+                    device = f"cuda:{device_num}" if cuda.is_available else 'cpu'
+                    cuda.set_device(device_num)
+                else:
+                    device = 'cpu'
+
         self.model    = NetUtils.get_net(net_name,
                                  num_classes=num_classes,
                                  pretrained=pretrained,
