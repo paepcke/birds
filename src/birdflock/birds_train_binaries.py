@@ -140,12 +140,8 @@ class BinaryBirdsTrainer(object):
             # Leave 2 CPUs unused:
             self.gpu_pool = ['cpu']*min(len(focals_list), (num_cpus - 2))
         else:
-            # Grab all unused GPUs:
-            for i in range(num_gpus):
-                # Check whether any process is using
-                # this GPU now, before we start:
-                if not self._gpu_in_use(i):
-                    self.gpu_pool.append(i)
+            # Grab all GPUs:
+            self.gpu_pool = list(range(num_gpus))
 
         self.tasks_to_run = self._create_task_list(focals_list, timestamp)
 
@@ -337,13 +333,24 @@ class BinaryBirdsTrainer(object):
             common_time_stamp = FileUtils.file_timestamp()
         else:
             common_time_stamp = timestamp
-            
+
+        gpu_list = self.gpu_pool.copy()
+        
         for species in focals_list:
+            
+            try:
+                # Use GPUs round-robin:
+                gpu_this_task = gpu_list.pop()
+            except IndexError:
+                gpu_list = self.gpu_pool.copy()
+                gpu_this_task = gpu_list.pop()
+                
             task = Task(species,                  # Name of task
                         self._create_classifier,  # function to execute
-                        self.config,              # where the snippets are
-                        species,                  # name of species as arg to task
-                        common_time_stamp         # part of experiment directory filename
+                        self.config,              # overall configuration (arg to task)
+                        species,                  # name of species (arg to task)
+                        common_time_stamp,        # part of experiment directory filename (arg to task)
+                        gpu_this_task             # GPU this task will use (arg to task)
                         )
             # Species at play to know by the task itself.
             # The species are in the Task() instantiation
@@ -447,7 +454,7 @@ class BinaryBirdsTrainer(object):
     #-------------------
     
     def _create_classifier(self, 
-                          snippets_root, 
+                          config, 
                           target_species,
                           common_time_stamp,
                           gpu=None):
@@ -464,7 +471,7 @@ class BinaryBirdsTrainer(object):
         experiment['class_label_names'] = [target_species]
         experiment.save()
 
-        clf = BinaryClassificationTrainer(snippets_root,
+        clf = BinaryClassificationTrainer(config,
                                           target_species,
                                           device=gpu,
                                           experiment=experiment
