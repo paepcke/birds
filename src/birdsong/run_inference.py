@@ -1340,7 +1340,8 @@ if __name__ == '__main__':
                             model_names,
                             gpu_ids=args.device if type(args.device) == list else [args.device],
                             sampling=args.sampling,
-                            batch_size=args.batch_size
+                            batch_size=args.batch_size,
+                            save_logits=True
                             )
     result_collection = inferencer.go()
     #*************
