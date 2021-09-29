@@ -501,11 +501,11 @@ class ResultTally:
         :type phase: LearningPhase
         :param outputs: predictions that model produced.
             These are the raw logits from the model.
-        :type outputs: [float]
+        :type outputs: tensor
         :param labels: truth values
         :type labels: [int]
         :param loss: loss computed by the loss function
-        :type loss: float
+        :type loss: tensor
         :param class_names: target class names
         :type class_names: [str]
         '''
@@ -729,7 +729,7 @@ class ResultTally:
     # _set_initial_preds 
     #-------------------
     
-    def _set_initial_preds(self, outputs):
+    def _set_initial_preds(self, outputs, decision_threshold=0.5):
         '''
         Convert outputs logits first into probabilities
         via softmax, then into class IDs via argmax. 
@@ -738,29 +738,52 @@ class ResultTally:
        
         :param outputs: raw outputs from model
         :type outputs: torch.Tensor
+        :param decision_threshold: For binary classifcation only:
+            if probability is GE decision_threshold, then 
+            prediction is 1, else prediction is 0
+        :type decision_threshold: float
         '''
         
+        _num_rows, num_cols = outputs.shape
+        if num_cols > 1:
+            is_multiclass = True
+        else:
+            is_multiclass = False
+            
+            
+            
         # Ex.: For a batch_size of 2 we output logits like:
         #
         #     tensor([[0.0162, 0.0096, 0.0925, 0.0157],
         #             [0.0208, 0.0087, 0.0922, 0.0141]], grad_fn=<AddmmBackward>)
         #
-        # Turn into probabilities along each row:
-        
-        self.probs = torch.softmax(outputs, dim=1)
-        
-        # Now have:
+        #     For binary classification this is a one-col tensor
+        #     of length batch_size:
         #
-        #     tensor([[0.2456, 0.2439, 0.2650, 0.2454],
-        #             [0.2466, 0.2436, 0.2648, 0.2449]])
-        #
-        # Find index of largest probability for each
-        # of the batch_size prediction probs along each
-        # row to get:
-        #
-        #  first to tensor([2,2]) then to [2,2]
+        #     tensor([[0.0162],
+        #             [0.0208,]], grad_fn=<AddmmBackward>)
         
-        pred_tensor = torch.argmax(self.probs, dim=1)
+        # Turn into probabilities along each row. The softmax
+        # is used for multi-class, which forces the sum of
+        # probabilities to 1. For binaries, we just get a 
+        # single probability:
+        
+        if is_multiclass:
+            self.probs = torch.softmax(outputs, dim=1)
+            # Find index of largest probability for each
+            # of the batch_size prediction probs along each
+            # row to get, ensuring that probabilities add
+            # to 1:
+            
+            pred_tensor = torch.argmax(self.probs, dim=1)
+        else:
+            # Binary classification: get true probability
+            self.probs  = torch.sigmoid(outputs)
+            # Prediction depends on given prediction boundary;
+            # Create tensor of 1s and 0s:
+            pred_tensor = torch.greater_equal(self.probs, 
+                                              decision_threshold).int()
+        
         self.preds = pred_tensor.tolist()
 
 
