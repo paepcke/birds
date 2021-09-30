@@ -242,7 +242,7 @@ class Inferencer:
                                  )
 
         if self.save_logits:
-            header = self.focal_species
+            header = [self.focal_species]
             header.extend(['label'])
             test_exp.save('logits', header=header)
 
