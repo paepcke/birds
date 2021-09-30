@@ -39,7 +39,13 @@ import sklearn.metrics as sklm
 
 #*************
 # During debugging only
-#import traceback as tb
+import traceback as tb
+sys.path.append("/home/paepcke/eclipsePyDev/pysrc/")
+
+import pydevd
+global pydevd
+pydevd.settrace('localhost', port=4040) # 5678???
+
 #*************
 
 #import traceback as tb
