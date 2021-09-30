@@ -10,7 +10,7 @@ TODO:
 from _collections import OrderedDict
 import argparse
 import glob
-from multiprocessing import Pool
+#from multiprocessing import Pool
 import os
 from pathlib import Path
 import sys
@@ -39,12 +39,13 @@ import sklearn.metrics as sklm
 
 #*************
 # During debugging only
-import traceback as tb
-sys.path.append("/home/paepcke/eclipsePyDev/pysrc/")
-
-import pydevd
-global pydevd
-pydevd.settrace('localhost', port=4040) # 5678???
+# import traceback as tb
+# sys.path.append("/home/paepcke/eclipsePyDev/pysrc/")
+#
+# import pydevd
+# global pydevd
+# pydevd.settrace('localhost', port=5678, suspend=True) # 5678???
+#pydevd.settrace('localhost', port=4040, suspend=True) # 5678???
 
 #*************
 
@@ -210,7 +211,7 @@ class Inferencer:
         model_name = train_exp['focal_species'] 
         # Are we to save the raw logits so that
         # we can later do saliency analysis?
-        self.save_logits  = self.config.Training.getboolean('Training', 'save_logits', False)
+        self.save_logits  = self.config.Training.getboolean('Training', 'save_logits')
         # Add a separate tensorboard directory 
         # for testing this model:
         tb_name = f"tensorboardTesting_{model_name}"

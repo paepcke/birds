@@ -25,12 +25,12 @@ import torch.multiprocessing as mp
 
 
 # -------------------- Remote debugging ------------
-import sys
-sys.path.append("/home/paepcke/eclipsePyDev/pysrc/")
+#import sys
+#sys.path.append("/home/paepcke/eclipsePyDev/pysrc/")
 
-import pydevd
-global pydevd
-pydevd.settrace('localhost', port=4040) # 5678???
+#import pydevd
+#global pydevd
+#pydevd.settrace('localhost', port=4040) # 5678???
 #pydevd.settrace('localhost', port=5678) # 5678???
 
 # -------------------- Remote debugging ------------
