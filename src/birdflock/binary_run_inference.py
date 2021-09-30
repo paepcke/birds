@@ -406,7 +406,7 @@ class Inferencer:
                 logits_df = pd.DataFrame(outputs, columns=self.class_names)
                 # Add the truth labels as a column on the right:
                 logits_df['label'] = y
-                self.test_exp.save('logits', logits_df)
+                test_exp.save('logits', logits_df)
 
             if batch_num > 0 and batch_num % self.REPORT_EVERY == 0:
                 tmp_coll = ResultCollection(res_coll[start_idx:])
