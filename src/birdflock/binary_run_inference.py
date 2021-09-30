@@ -210,7 +210,7 @@ class Inferencer:
         model_name = train_exp['focal_species'] 
         # Are we to save the raw logits so that
         # we can later do saliency analysis?
-        self.save_logits  = self.config.Training.getboolean('save_logits', False)
+        self.save_logits  = self.config.Training.getboolean('Training', 'save_logits', False)
         # Add a separate tensorboard directory 
         # for testing this model:
         tb_name = f"tensorboardTesting_{model_name}"
@@ -285,6 +285,7 @@ class Inferencer:
             self.log.warn(f"Did not find a model for {train_exp['focal_species']}; no inference done")
             return
         self.log.info(f"Beginning inference with model {FileUtils.ellipsed_file_path(model_path)} on gpu_id {gpu_id}")
+        return self.run_inference(gpu_id_exp_pair)
 
     #------------------------------------
     # go 
@@ -371,7 +372,7 @@ class Inferencer:
             batch_size=self.batch_size,
             train_split=None,    # We won't train, just infer
             #callbacks=[EpochScoring('f1')]
-            device=f"cuda:{gpu_to_use}" if torch.cuda.is_available() else "cpu"
+            device=f"cuda:{gpu_to_use}" if torch.cuda.is_available() and gpu_to_use != 'cpu' else "cpu"
             )
 
         sko_net.initialize()  # This is important!
