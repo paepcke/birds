@@ -28,10 +28,9 @@ from birdsong.nets import NetUtils
 from birdsong.result_tallying import ResultTally, ResultCollection
 from birdsong.utils.github_table_maker import GithubTableMaker
 from birdsong.utils.learning_phase import LearningPhase
-from birdsong.utils.tensorboard_plotter import SummaryWriterPlus, \
-    TensorBoardPlotter
+from birdsong.utils.tensorboard_plotter import SummaryWriterPlus
 from birdsong.utils.utilities import FileUtils
-from data_augmentation.multiprocess_runner import Task, MultiProcessRunner
+#from data_augmentation.multiprocess_runner import Task, MultiProcessRunner
 from data_augmentation.utils import Utils
 import numpy as np
 import pandas as pd
@@ -40,7 +39,7 @@ import sklearn.metrics as sklm
 
 #*************
 # During debugging only
-import traceback as tb
+#import traceback as tb
 #*************
 
 #import traceback as tb
@@ -100,9 +99,10 @@ class Inferencer:
             each prediction saved to ExpermentManager's results
             under key 'logits'.
         :type save_logits: bool
-        :param gpu_ids: Device number of GPU, in case 
-            one is available
-        :type gpu_ids: {int | [int]}
+        :param gpu_ids: Device number(s) of GPU, in case 
+            one is available, or singleton list ['cpu'] if
+            not to use GPUs. 
+        :type gpu_ids: {['cpu'] | [int]}
         :param sampling: only use given percent of the samples in
             each class.
         :type sampling: {int | None}
@@ -279,16 +279,6 @@ class Inferencer:
             self.log.warn(f"Did not find a model for {train_exp['focal_species']}; no inference done")
             return
         self.log.info(f"Beginning inference with model {FileUtils.ellipsed_file_path(model_path)} on gpu_id {gpu_id}")
-        #****************
-        return self.run_inference(gpu_id_exp_pair)
-        # Parallelism:
-        # dicts_from_runs = []
-        # for _i in range(3):
-        #     self.curr_dict = {}
-        #     dicts_from_runs.append(self.curr_dict)
-        #     self.run_inference(gpu_to_use=gpu_id)
-        # print(dicts_from_runs)
-        #****************
 
     #------------------------------------
     # go 
@@ -299,7 +289,7 @@ class Inferencer:
         # self.gpu_ids == [0,4], and three models:
         #    [(gpu0, model0) (gpu4, model1), (gpu0, model3)]
         
-        if torch.cuda.is_available():
+        if torch.cuda.is_available() and not 'cpu' in self.gpu_ids:
             # Evenly distrib models across GPUs:
             num_models_to_inference = len(self.train_exps)
             repeats = int(np.ceil(num_models_to_inference / len(self.gpu_ids)))
@@ -1404,10 +1394,9 @@ if __name__ == '__main__':
                         default=1
                         )
     parser.add_argument('-d', '--device',
-                        type=int,
                         nargs='+',
                         help='device number of GPU(s) (zero-origin); repeatable; only used if GPU available; defaults to ID 0',
-                        default=0
+                        default=['0']
                         )
     parser.add_argument('-s', '--sampling',
                         type=int,
@@ -1427,9 +1416,11 @@ if __name__ == '__main__':
 
     args = parser.parse_args();
 
-    if type(args.device) != list:
-        args.device = [args.device]
-    
+    devices = [device.lower() for device in args.device]
+    if 'cpu' in devices and len(devices) > 1:
+        print("If specifying device 'cpu', no additional devices are allowed")
+        sys.exit(1)
+
     if type(args.train_exp_path) != list:
         train_exp_path = [args.train_exp_path]
     else:
@@ -1498,7 +1489,7 @@ if __name__ == '__main__':
 
     inferencer = Inferencer(exp_paths,
                             samples_path,
-                            gpu_ids=args.device if type(args.device) == list else [args.device],
+                            gpu_ids=devices,
                             sampling=args.sampling
                             )
     result_collection = inferencer.go()

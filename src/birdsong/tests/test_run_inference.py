@@ -17,8 +17,8 @@ import pandas as pd
 from result_analysis.charting import CurveSpecification
 
 
-TEST_ALL = True
-#TEST_ALL = False
+#********TEST_ALL = True
+TEST_ALL = False
 
 
 class InferenceTester(unittest.TestCase):
@@ -111,6 +111,33 @@ class InferenceTester(unittest.TestCase):
                              )
         finally:
             inferencer.close()
+
+    #------------------------------------
+    # test_parallelism
+    #-------------------
+    
+    #***********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_parallelism(self):
+        # We have 60 test images. So, 
+        # with drop_last True, a batch size
+        # of 64 returns nothing. Use 16
+        # to get several batches:
+        
+        batch_size = 2
+        
+        inferencer = Inferencer(
+            self.exp.root,
+            self.tmp_dir_nm,
+            self.samples_path,
+            ['model_0', 'model_0', 'model_0', 'model_0'],
+            batch_size=batch_size,
+            save_logits=True
+            )
+        try:
+            inferencer.go()
+        finally:
+            inferencer.close()
+
 
     #------------------------------------
     # test_report_results

@@ -14,8 +14,8 @@ from experiment_manager.experiment_manager import ExperimentManager, Datatype
 from birdflock.binary_run_inference import Inferencer
 
 
-TEST_ALL = True
-#TEST_ALL = False
+#*******TEST_ALL = True
+TEST_ALL = False
 
 
 class Test(unittest.TestCase):
@@ -88,20 +88,20 @@ class Test(unittest.TestCase):
         for batch_key, tally in res_coll['BTSAC'].items():
             if batch_key[0] == 0:
                 self.assertListEqual(tally.labels, [0])
-                self.assertListEqual(tally.preds, [0])
-                self.assertEqual(tally.probs[0,0].item(), 1.0)
+                self.assertListEqual(tally.preds, [[0]])
+                self.assertEqual(round(tally.probs.item(),3), 0.139)
                 self.assertEqual(tally.accuracy, 1.0)
             elif batch_key[0] == 1:
                 self.assertListEqual(tally.labels, [0])
-                self.assertListEqual(tally.preds, [0])
-                self.assertEqual(tally.probs[0,0].item(), 1.0)
+                self.assertListEqual(tally.preds, [[0]])
+                self.assertEqual(round(tally.probs.item(),3), 0.133)
                 self.assertEqual(tally.accuracy, 1.0)
                 
     #------------------------------------
     # test_parallelism
     #-------------------
     
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_parallelism(self):
         
         inferencer = Inferencer(
