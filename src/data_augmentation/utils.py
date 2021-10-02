@@ -677,6 +677,42 @@ class Utils:
         return Path(fpath).suffix in ('.wav', '.mp3', '.ogg')
     
     #------------------------------------
+    # audio_path_from_sel_tbl_path
+    #-------------------
+
+    def audio_path_from_sel_tbl_path(self, sel_tbl_path):
+        '''
+        Given the path of a selection tbl, like
+        /home/data/birds/Soundfiles/.../RavenLabels/DS_AM01_20190711_170000.Table.1.selections.txt,
+        find the corresponding audio file from the 
+        portion that starts with AM to the first dot.
+        The search assumes that the audio file has a
+        .wav or mp3 extension, and is somewhere below
+        the selection table's parent directory.
+        
+        :param sel_tbl_path: path to selection table
+        :type sel_tbl_path: src
+        :return full path to corresponding .wav or .mp3
+            file if found. Else None
+        :rtype: {None | str}
+        '''
+        fname_pat = re.compile(r'.*(AM[0-9]{2}_[0-9]{8}_[0-9]{6}).*')
+        match = fname_pat.match(sel_tbl_path)
+        if match is None:
+            raise FileNotFoundError(f"Audio file for tbl {sel_tbl_path} not found")
+        wav_aud_fname = f"DS_{match.groups()[0]}.wav"
+        mp3_aud_fname = f"DS_{match.groups()[0]}.mp3"
+        
+        # Find the file below the parent dir:
+        aud_full_path = None
+        for root, _dirs, files in os.walk(Path(wav_aud_fname).parent):
+            if wav_aud_fname in files:
+                aud_full_path = str(Path(root).joinpath(wav_aud_fname))
+            elif mp3_aud_fname in files:
+                aud_full_path = str(Path(root).joinpath(mp3_aud_fname))
+        return aud_full_path
+
+    #------------------------------------
     # user_confirm
     #-------------------
     

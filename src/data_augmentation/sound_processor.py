@@ -513,6 +513,7 @@ class SoundProcessor:
         cls.log.info({f"Analyzing metadata for audio files of {num_species} species..."})
 
         inventory_tasks = []
+        species_list    = []
         for species_dir in Utils.listdir_abs(species_root):
             # Skip file names that are at top level;
             # i.e. only consider files under the species
@@ -520,6 +521,7 @@ class SoundProcessor:
             if not os.path.isdir(species_dir):
                 continue
             species = Path(species_dir).stem
+            species_list.append(species)
             inventory_task = Task(f"rec_inventory_{species}",
                                   cls.inventory_one_species,
                                   species_dir,
@@ -554,9 +556,9 @@ class SoundProcessor:
         #                 total_recording_length
         #    species_name : recording-duration-float
         for res_dict in mp_runner.results:
-            result_species = list(res_dict.keys())[0]
-            result_seconds = list(res_dict.values())[0]
-            num_samples_in[result_species] = {"total_recording_length (secs)": result_seconds}
+            for maybe_species, maybe_duration in res_dict.items():
+                if maybe_species in species_list:
+                    num_samples_in[maybe_species] = {"total_recording_length (secs)": maybe_duration}
 
         if len(num_samples_in) == 0:
             return None 
@@ -570,6 +572,44 @@ class SoundProcessor:
             
         
         return df.sort_index()
+
+    #------------------------------------
+    # extract_clip
+    #-------------------
+    
+    @classmethod
+    def extract_clip(cls, audio, sr, start, stop):
+        '''
+        Given audio as an np array, return a slice
+        from the audio array, which starts at time
+        start, and ends at time stop.
+        
+        :param audio: audio array as returned by
+            load_audio()
+        :type audio: np.array[float]
+        :param sr: sample rate
+        :type sr: int
+        :param start: start in seconds
+        :type start: float
+        :param stop: stop points in seconds
+        :type stop: float
+        :returned audio clip
+        :rtype np.array[float]
+        :raise ValueError if time segment exceeds
+            length of given audio, or is negative
+        '''
+        
+        if start < 0 or stop < start:
+            raise ValueError(f"Start and stop must lie within audio clip, not {start}, {stop}")
+        
+        num_samples = len(audio)
+        full_time_len = num_samples / sr
+        if stop > full_time_len:
+            raise ValueError(f"Stop time is gt audio length ({full_time_len}, {stop})")
+        start_sample = sr * start
+        end_sample   = sr * stop
+        clip = audio[start_sample:end_sample]
+        return clip 
 
     #------------------------------------
     # inventory_one_species

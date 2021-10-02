@@ -13,14 +13,18 @@ import shutil
 import tempfile
 import unittest
 
+import soundfile
+
+import IPython.display as apl
 from birdsong.utils.utilities import FileUtils
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import Interval
 import pandas as pd
 
 
-TEST_ALL = True
-#TEST_ALL = False
+# For listening to np arrays:
+#*******TEST_ALL = True
+TEST_ALL = False
 
 # NOTE: SoundProcessor is also exercised in 
 #       other unittests, such as create_spectrogram()
@@ -34,7 +38,11 @@ class TestSoundProcessor(unittest.TestCase):
         
         # Recordings for testing recording_lengths_by_species():
         cls.more_recordings_dir = os.path.join(cls.cur_dir, "sound_data")
-        
+        cls.time_calibration_wav = os.path.join(cls.cur_dir, 
+                                                'signal_processing_sounds/secondsCount.wav')
+        cls.time_calibration_mp3 = os.path.join(cls.cur_dir, 
+                                                'signal_processing_sounds/secondsCount.mp3')
+
     def setUp(self):
         inventory_dir = FileUtils.make_manifest_dir_name(self.more_recordings_dir)
         shutil.rmtree(inventory_dir, ignore_errors=True)
@@ -357,6 +365,24 @@ class TestSoundProcessor(unittest.TestCase):
             self.assertEqual(os.listdir(dir_nm),
                              [Path(gz_content_fname).name]
                              )
+
+    #------------------------------------
+    # test_audio_excerpt
+    #-------------------
+    
+    #*******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_audio_excerpt(self):
+        
+        # Load audio count-out of seconds 1 to twenty:
+        audio, sr = SoundProcessor.load_audio(self.time_calibration_wav)
+        clip = SoundProcessor.extract_clip(audio, sr, 1, 3)
+        
+        self.assertEqual(len(clip), 44100)
+        # To be sure:
+        duration = 44100/sr
+        self.assert_equal(duration, 2.0)
+        
+
 
 # ------------- Main ------------
 
