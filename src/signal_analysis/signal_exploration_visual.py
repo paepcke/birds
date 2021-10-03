@@ -26,6 +26,9 @@ class SignalViz:
     @classmethod
     def __init_class__(cls):
         
+        cls.color_explanation = {}
+        cls.ax = None
+
         cls.cur_dir = os.path.dirname(__file__)
         cls.sound_data = os.path.join(cls.cur_dir, 'tests/signal_processing_sounds')
         cls.xc_sound_data = os.path.join(cls.cur_dir, 'tests/signal_processing_sounds/XenoCanto')
@@ -47,26 +50,14 @@ class SignalViz:
         
         cls.sel_tbl_ctfl_xc2 = os.path.join(cls.cur_dir, 'tests/selection_tables/XenoCanto/ctfl2.selections.txt')
         cls.sel_rec_ctfl_xc2 = os.path.join(cls.xc_sound_data, 'CTFLG/SONG_XC649369-ENPA108.mp3')
-
-    #------------------------------------
-    # Constructor
-    #-------------------
-    
-    def __init__(self):
-
-        type(self).__init_class__()
-        # Reusable dict mapping a line color
-        # to an explanatory string in the legend
-        # of any given chart. Methods are free to
-        # modify. The dict is read by _place_legend()
         
-        self.color_explanation = {}
 
     #------------------------------------
     # center_frequencies
     #-------------------
-    
-    def center_frequencies(self,
+
+    @classmethod
+    def center_frequencies(cls,
                            sel_tbl_path,
                            recording_path,
                            species=None,
@@ -75,16 +66,16 @@ class SignalViz:
                            origin=None,
                            ax=None
                            ):
-        ax = SignalAnalyzer.plot_center_freqs(sel_tbl_path,
-                                              recording_path,
-                                              species,
-                                              color=color,
-                                              ax=ax)
-        self.color_explanation[color] = f"{species}; {legend_explanation}"
-        self._place_legend(ax, origin, self.color_explanation)
+        cls.ax = SignalAnalyzer.plot_center_freqs(sel_tbl_path,
+                                                  recording_path,
+                                                  species,
+                                                  color=color,
+                                                  ax=ax)
+        cls.color_explanation[color] = f"{species}; {legend_explanation}"
+        cls._place_legend(cls.ax, origin, cls.color_explanation)
         
-        ax.figure.show()
-        return ax
+        cls.ax.figure.show()
+        return cls.ax
 
     #------------------------------------
     # new_figure
@@ -92,93 +83,8 @@ class SignalViz:
     
     @classmethod
     def new_figure(cls):
-
-
-    # #------------------------------------
-    # # center_frequencies_XC_CMTOG
-    # #-------------------
-    #
-    # def center_frequencies_XC_CMTOG(self, ax=None):
-    #
-    #     ax = SignalAnalyzer.plot_center_freqs(self.sel_tbl_cmto_xc1, 
-    #                                           self.sel_rec_cmto_xc1, 
-    #                                           'CMTOG',
-    #                                           color='mediumblue',
-    #                                           ax=ax)
-    #
-    #     ax = SignalAnalyzer.plot_center_freqs(self.sel_tbl_cmto_xc2, 
-    #                                           self.sel_rec_cmto_xc2,
-    #                                           'CMTOG',
-    #                                           color='black',
-    #                                           ax=ax)
-    #
-    #     origin = 'Xeno Canto'
-    #     self.color_explanation['mediumblue'] = 'CMTOG; recording1'
-    #     self.color_explanation['black']      = 'CMTOG; recording2'
-    #     self._place_legend(ax, origin, self.color_explanation)
-    #
-    #     return ax
-    #
-    # #------------------------------------
-    # # center_frequencies_XC_CTFLG
-    # #-------------------
-    #
-    # def center_frequencies_XC_CTFLG(self, ax=None):
-    #
-    #     ax = SignalAnalyzer.plot_center_freqs(self.sel_tbl_ctfl_xc1, 
-    #                                           self.sel_rec_ctfl_xc1, 
-    #                                           'CTFLG',
-    #                                           color='mediumblue',
-    #                                           ax=ax)
-    #
-    #     ax = SignalAnalyzer.plot_center_freqs(self.sel_tbl_ctfl_xc2, 
-    #                                           self.sel_rec_ctfl_xc2,
-    #                                           'CTFLG',
-    #                                           color='black',
-    #                                           ax=ax)
-    #
-    #     origin = 'Xeno Canto'
-    #     self.color_explanation['mediumblue'] = 'CTFLG; recording1'
-    #     self.color_explanation['black']      = 'CTFLG; recording2'
-    #     self._place_legend(ax, origin, self.color_explanation)
-    #
-    #     return ax
-    #
-    # #------------------------------------
-    # # center_frequencies_Field_CMTOG
-    # #-------------------
-    #
-    # def center_frequencies_Field_CMTOG(self, ax=None):
-    #
-    #     ax = SignalAnalyzer.plot_center_freqs(self.sel_tbl_fld,
-    #                                           self.sel_recording_fld,
-    #                                           'CMTOG',
-    #                                           color='green',
-    #                                           ax=ax                     
-    #                                           )
-    #     origin = 'Field'
-    #     self.color_explanation['green'] = 'CMTOG; recording1'
-    #     self._place_legend(ax, origin, self.color_explanation)
-    #
-    #     return ax
-    #
-    # #------------------------------------
-    # # center_frequencies_Field_CTFLG
-    # #-------------------
-    #
-    # def center_frequencies_Field_CTFLG(self, ax=None):
-    #
-    #     ax = SignalAnalyzer.plot_center_freqs(self.sel_tbl_fld,
-    #                                           self.sel_recording_fld,
-    #                                           'CTFLG',
-    #                                           color='green',
-    #                                           ax=ax
-    #                                           )
-    #     origin = 'Field'
-    #     self.color_explanation['green'] = 'CTFLG; recording1'
-    #     self._place_legend(ax, origin, self.color_explanation)
-    #
-    #     return ax
+        if cls.ax is not None:
+            cls.ax.clear()
 
 # ------------------ Utilities ------------
 
@@ -186,7 +92,8 @@ class SignalViz:
     # _place_legend
     #-------------------
     
-    def _place_legend(self, ax, origin, color_explanation):
+    @classmethod
+    def _place_legend(cls, ax, origin, color_explanation):
         '''
         Adds a legend to the given Axes. Origin denotes
         the recording's provenance: Xeno Canto, or Field.
@@ -224,11 +131,10 @@ class SignalViz:
 # ------------------------ Main ------------
 if __name__ == '__main__':
     
-    sigviz = SignalViz()
-    
+    SignalViz.__init_class__()
     # Show call examples of CMTOG calls
     # in one XC recording:
-    ax = sigviz.center_frequencies(
+    ax = SignalViz.center_frequencies(
              SignalViz.sel_tbl_cmto_xc1,
              SignalViz.sel_rec_cmto_xc1,
              species='CMTOG',
@@ -236,8 +142,10 @@ if __name__ == '__main__':
              legend_explanation='recording1',
              origin='Xeno Canto')
     
+    input("Hit ENTER to add another CMTOG XC recording: ")
+    
     # Add calls from another XC recording:
-    ax = sigviz.center_frequencies(
+    ax = SignalViz.center_frequencies(
              SignalViz.sel_tbl_cmto_xc2,
              SignalViz.sel_rec_cmto_xc2,
              species='CMTOG',
@@ -246,8 +154,10 @@ if __name__ == '__main__':
              origin='Xeno Canto',
              ax=ax)
 
+    input("Hit ENTER to add a CMTOG field recording: ")
+    
     # Add calls from one Field selection table:
-    ax = sigviz.center_frequencies(
+    ax = SignalViz.center_frequencies(
             SignalViz.sel_tbl_fld,
             SignalViz.sel_recording_fld,
             species='CMTOG',
@@ -257,31 +167,35 @@ if __name__ == '__main__':
             ax=ax)
 
     input("Hit ENTER for CTFLG: ")
-    ax.clear()
+    SignalViz.new_figure()
     
+    # Same, but with different species:
     
-    # Two Xeno Canto recordings, each with multiple
-    # calls by CMTOG. See time shift, but similar contour
-    # of center frequencies over time
-    ax1 = None
-    #****************
-    ax1 = sigviz.center_frequencies_XC_CMTOG()
-    ax1.figure.show()
-    #
-    input("Hit ENTER for adding field CMTOGs: ")
+    ax = SignalViz.center_frequencies(
+             SignalViz.sel_tbl_ctfl_xc1,
+             SignalViz.sel_rec_ctfl_xc1,
+             species='CTFLG',
+             color='mediumblue',
+             legend_explanation='recording1',
+             origin='Xeno Canto')
     
-    ax1 = sigviz.center_frequencies_Field_CMTOG(ax1)
-    ax1.figure.show()
-    
-    input("Hit ENTER for CTFLG: ")
+    ax = SignalViz.center_frequencies(
+             SignalViz.sel_tbl_ctfl_xc2,
+             SignalViz.sel_rec_ctfl_xc2,
+             species='CTFLG',
+             color='black',
+             legend_explanation='recording1',
+             origin='Xeno Canto')
 
-    # New figure:
-    ax2 = sigviz.center_frequencies_XC_CTFLG(ax=None)
-    ax2.figure.show()
-    input("Hit ENTER for adding field CTFLGs: ")
+    # Add the field recordings for CTFLG:
+    ax = SignalViz.center_frequencies(
+             SignalViz.sel_tbl_fld,
+             SignalViz.sel_recording_fld,
+             species='CTFLG',
+             color='green',
+             legend_explanation='AM03_20190713_055956',
+             origin='Field')
     
-    ax2 = sigviz.center_frequencies_Field_CTFLG(ax=ax2)
-    ax2.figure.show()
-    input("Hit ENTER for closing: ")
-
-    #****************
+    input("Hit ENTER to quit")
+    
+    print('Done')
