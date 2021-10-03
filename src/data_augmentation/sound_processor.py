@@ -385,6 +385,25 @@ class SoundProcessor:
         return res_df
 
     #------------------------------------
+    # recording_len
+    #-------------------
+    
+    @classmethod
+    def recording_len(cls, audio, sr):
+        '''
+        Given an audio clip as an np array and
+        its sampling rate, return length in seconds
+        
+        :param audio: audio data 
+        :type audio: np.array[float]
+        :param sr: sampling rate
+        :type sr: int
+        :return recording time
+        :rtype float
+        '''
+        return len(audio) / sr
+
+    #------------------------------------
     # find_total_recording_length
     #-------------------
 
@@ -606,8 +625,8 @@ class SoundProcessor:
         full_time_len = num_samples / sr
         if stop > full_time_len:
             raise ValueError(f"Stop time is gt audio length ({full_time_len}, {stop})")
-        start_sample = sr * start
-        end_sample   = sr * stop
+        start_sample = int(sr * start)
+        end_sample   = int(sr * stop)
         clip = audio[start_sample:end_sample]
         return clip 
 

@@ -178,7 +178,7 @@ class Test(unittest.TestCase):
     # test_read_raven_selection_table 
     #-------------------
 
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #*********unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_read_raven_selection_table(self):
         
         dict_list = Utils.read_raven_selection_table(self.raven_sel_tbl_path)
@@ -195,8 +195,8 @@ class Test(unittest.TestCase):
                 'type': 'song',
                 'number': '1',
                 'mix': ['RBPSG','BGTAG','WTROS'],
-                'time_interval': {'low_val': 0.0,'high_val': 6.23740263},
-                'freq_interval': {'low_val': 2088.175,'high_val': 8538.314}
+                'time_interval': {'low_val': 0.0,'high_val': 6.23740263, 'step' : 1},
+                'freq_interval': {'low_val': 2088.175,'high_val': 8538.314, 'step' : 1}
                 },
             
                 {'Selection': '18',
@@ -210,8 +210,8 @@ class Test(unittest.TestCase):
                 'type': 'call-1',
                 'number': '1',
                 'mix': ['RBPSG','VASEG'],
-                'time_interval': {'low_val': 1.024500915,'high_val': 3.294473531},
-                'freq_interval': {'low_val': 2161.467,'high_val': 4492.937}
+                'time_interval': {'low_val': 1.024500915,'high_val': 3.294473531, 'step' : 1},
+                'freq_interval': {'low_val': 2161.467,'high_val': 4492.937, 'step' : 1}
                 },
             
                 {'Selection': '2',
@@ -225,8 +225,8 @@ class Test(unittest.TestCase):
                 'type': '',
                 'number': '1',
                 'mix': [],
-                'time_interval': {'low_val': 2.390074726,'high_val': 3.231216904},
-                'freq_interval': {'low_val': 1564.1,'high_val': 3519.1}
+                'time_interval': {'low_val': 2.390074726,'high_val': 3.231216904, 'step' : 1},
+                'freq_interval': {'low_val': 1564.1,'high_val': 3519.1, 'step' : 1}
                 },
             
                 {'Selection': '19',
@@ -240,8 +240,8 @@ class Test(unittest.TestCase):
                 'type': 'call',
                 'number': '1',
                 'mix': ['HOWPG'],
-                'time_interval': {'low_val': 5.926034705, 'high_val': 7.964992409},
-                'freq_interval': {'low_val': 3944.33,'high_val': 9791.219}
+                'time_interval': {'low_val': 5.926034705, 'high_val': 7.964992409, 'step' : 1},
+                'freq_interval': {'low_val': 3944.33,'high_val': 9791.219, 'step' : 1}
                 }]
         self.assertEqual(dict_list, desired)
         
@@ -266,8 +266,8 @@ class Test(unittest.TestCase):
             'type': 'CALL',
             'number': '2',
             'mix': ['SHWCG'],
-            'time_interval': {'low_val': 1.234,'high_val': 5.64},
-            'freq_interval': {'low_val': 1564.1,'high_val': 3519.1}
+            'time_interval': {'low_val': 1.234,'high_val': 5.64, 'step' : 1},
+            'freq_interval': {'low_val': 1564.1,'high_val': 3519.1, 'step' : 1}
             },
             {'Selection': '2',
             'View': 'Spectrogram 1',
@@ -280,8 +280,8 @@ class Test(unittest.TestCase):
             'type': 'CALL',
             'number': '2',
             'mix': ['GAGAG'],
-            'time_interval': {'low_val': 2.390074726,'high_val': 3.231216904},
-            'freq_interval': {'low_val': 1564.1,'high_val': 3519.1}
+            'time_interval': {'low_val': 2.390074726,'high_val': 3.231216904, 'step' : 1},
+            'freq_interval': {'low_val': 1564.1,'high_val': 3519.1, 'step' : 1}
             }
             ]
                 
@@ -372,6 +372,34 @@ class Test(unittest.TestCase):
         # Back to equal:
         df1.index = [0,1]
         Utils.assertDataframesEqual(df1,df2)
+
+    #------------------------------------
+    # test_intervals
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_intervals(self):
+        iv = Interval(0,5)
+        self.assertEqual(iv['low_val'], 0)
+        self.assertEqual(iv['high_val'], 5)
+        self.assertEqual(iv['step'], 1)
+        
+        # Iteration:
+        self.assertListEqual(list(iv.values()), [0,1,2,3,4])
+        
+        # Indexing as into list:
+        self.assertEqual(iv[0], 0)
+        self.assertEqual(iv[-1], 4)
+        
+        # Floats
+        iv = Interval(0,2,0.1)
+        self.assertEqual(iv[1], 0.1)
+        self.assertAlmostEqual(iv[10], 1, delta=0.01)
+        self.assertAlmostEqual(iv[19], 1.90, delta=0.01)
+        with self.assertRaises(IndexError):
+            self.assertEqual(iv[20])
+        
+        
 
 # ---------------- Main --------------
 if __name__ == "__main__":

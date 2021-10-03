@@ -25,6 +25,7 @@ import torch
 import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
+from pandas.core.series import Series
 import seaborn as sns
 
 
@@ -46,6 +47,9 @@ class CELL_LABELING(Enum):
 # ----------------------- Class Charter --------------
 
 class Charter:
+
+    # Some Matplotlib colors
+    COLORS= ['mediumblue', 'black', 'red', 'springgreen', 'magenta', 'chocolate']
 
     # The minimum threshold that is 
     # included in PR curves:
@@ -1081,6 +1085,112 @@ class Charter:
                         bars[bar_idx].set_color(color)
                     except ValueError:
                         raise ValueError(f"Could not find {like_colored_meas} in barplot X labels")
+        ax.figure.tight_layout()
+        return ax
+
+    #------------------------------------
+    # linechart
+    #-------------------
+    
+    @classmethod
+    def linechart(cls, 
+                   data, 
+                   rotation=0,
+                   ylabel=None,
+                   xlabel=None,
+                   color_groups=None,
+                   ax=None,
+                   title=None
+                   ):
+        '''
+        Returns a matplotlib axes with one or more
+        line charts that can be added to a figure. 
+        The data are a pandas Series or DataFrame.
+        If a Series, a single line is drawn. If the
+        Series has a name, it can be used to control
+        the line color via the color_groups (which will
+        be a single-entry dict in this case)
+        
+        For a DataFrame, the column values can be used
+        in the color_groups. 
+                    
+        The axes used is the present matplotlib axes.
+        This may be the default axes that is implicitly
+        created by a simple:
+           
+           fig = plt.figure()
+
+        The color_groups allows coloring related lines
+        the same. Example: if a multi-line chart has some
+        lines from one species and some others from another
+        species, the lines of each species could have their
+        own color. 
+        
+          color_groups: {'green' : ['micro_prec', macro_prec'],
+                         'brown' : ['micro_recall', macro_recall'],
+                         'blue'  : ['accuracy']
+                         }
+        
+        Method may be called multiple times, passing the same 
+        Axes instance each time. Additional lines will be added
+        to the chart.
+        
+        :param data: values to plot
+        :type data: ordinal values
+        :param rotation: rotation of x labels in degrees; ex: 45
+        :type rotation: int
+        :param ylabel: y axis label; None is OK
+        :type ylabel: str
+        :param color_groups: groupings of colors for the bars
+        :type color_groups: {str : [str]}
+        :param ax: optional axes already existing, and returned 
+            from earlier calls
+        :type ax: matplotlib.axes
+        :param title: title for the figure as a whole
+        :type title: {None | str}
+        :return axes with chart
+        :rtype matplotlib.axes
+        '''
+        
+        # For compatibility with bargraphs 
+        # the color_groups are as documented. 
+        # In this context it is more convenient 
+        # to key by row-label (index), with values 
+        # being color:
+        if color_groups is not None:
+            new_col_grps = {}
+            for color, row_label_list in color_groups.items():
+                for row_lbl in row_label_list:
+                    new_col_grps[row_lbl] = color
+            colors = new_col_grps
+        else:
+            colors = None
+            
+        if type(data) == Series:
+            data = pd.Dataframe([data])
+        if ax is None:
+            _fig, ax = plt.subplots()
+        # Plot row-wise (pyplot default is column-wise):
+        line_objs = ax.plot(data.transpose())
+        if colors is not None:
+            for row_num, row_label in enumerate(data.index):
+                try:
+                    color = colors[row_label]
+                except KeyError:
+                    # No color specified for this row
+                    pass
+                else:
+                    line_objs[row_num].set_color(color)
+                
+        ax.set_xticklabels(data.columns, rotation=rotation)
+
+        if xlabel is not None:
+            ax.set_xlabel(xlabel)
+        if ylabel is not None:
+            ax.set_ylabel(ylabel)
+        
+        if title is not None:
+            ax.figure.suptitle(title)
         ax.figure.tight_layout()
         return ax
 

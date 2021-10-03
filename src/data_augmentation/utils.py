@@ -83,13 +83,49 @@ class Interval(dict):
     the inclusive low bound, and the exclusive
     high bound.
     '''
-    def __init__(self, low_val, high_val):
+    def __init__(self, low_val, high_val, step=1):
         super().__init__()
         self['low_val']  = low_val
         self['high_val'] = high_val
+        self['step'] = step
+        # Lazy evaluation of values at each step:
+        self.the_series  = None
         
     def contains(self, num):
         return num >= self['low_val'] and num < self['high_val']
+    
+    def values(self):
+        if self.the_series is not None:
+            return iter(self.the_series)
+        # Materialize the series:
+        self._materialize_series()
+        return iter(self.the_series)
+    
+    def __getitem__(self, key):
+        if key in ['low_val', 'high_val', 'step']:
+            return super().__getitem__(key)
+        # Must be integer index into the 
+        # interval values:
+        if type(key) != int:
+            raise TypeError(f"Key must be 'low_val', 'high_val', 'step', or an int, not {key}")
+
+        if self.the_series is None:
+            self._materialize_series()
+        return self.the_series[key]
+
+    def __len__(self):
+        if self.the_series is None:
+            self._materialize_series()
+        return len(self.the_series)
+
+    def _materialize_series(self):
+        self.the_series = [self['low_val']]
+        while True:
+            val = self.the_series[-1] + self['step']
+            if val < self['high_val']:
+                self.the_series.append(val)
+            else:
+                break
 
 #------------------------------ Utility  -------------
 
@@ -680,7 +716,8 @@ class Utils:
     # audio_path_from_sel_tbl_path
     #-------------------
 
-    def audio_path_from_sel_tbl_path(self, sel_tbl_path):
+    @classmethod
+    def audio_path_from_sel_tbl_path(cls, sel_tbl_path):
         '''
         Given the path of a selection tbl, like
         /home/data/birds/Soundfiles/.../RavenLabels/DS_AM01_20190711_170000.Table.1.selections.txt,
@@ -1169,13 +1206,14 @@ class Utils:
         '''
         
         if conf_file is None:
-            return self.init_defaults()
+            raise ValueError("Config file path is None")
         
         config = NeuralNetConfig(conf_file)
         
         if len(config.sections()) == 0:
             # Config file exists, but empty:
-            return(self.init_defaults(config))
+            raise ValueError(f"Config file {conf_file} is empty")
+            
     
         # Do type conversion also in other entries that 
         # are standard:
