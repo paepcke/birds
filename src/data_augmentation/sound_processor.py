@@ -1025,10 +1025,10 @@ class SoundProcessor:
         spectro_complex = librosa.stft(audio_sample)
         spectro = np.abs(spectro_complex)
         
-        center_frequencies = librosa.fft_frequencies(sr)
+        energy_centroids_by_frame = librosa.fft_frequencies(sr)
         
         #num_freq_bands, num_time_slices = spectro.shape
-        freqbands_width = center_frequencies[1] - center_frequencies[0] 
+        freqbands_width = energy_centroids_by_frame[1] - energy_centroids_by_frame[0] 
         
         # Get mean intensity across each freq band:
         intensity_means = np.mean(spectro, axis=1)
@@ -1052,7 +1052,7 @@ class SoundProcessor:
         #               ...
 
         high_intensity_bands = np.compress(high_intensity_bands_mask, 
-                                           center_frequencies)
+                                           energy_centroids_by_frame)
         
         # Form frequency intervals of high intensity
         # by combining adjacent high-intensity bands.

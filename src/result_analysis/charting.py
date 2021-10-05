@@ -1094,14 +1094,14 @@ class Charter:
     
     @classmethod
     def linechart(cls, 
-                   data, 
-                   rotation=0,
-                   ylabel=None,
-                   xlabel=None,
-                   color_groups=None,
-                   ax=None,
-                   title=None
-                   ):
+                  data, 
+                  rotation=0,
+                  ylabel=None,
+                  xlabel=None,
+                  color_groups=None,
+                  ax=None,
+                  title=None
+                  ):
         '''
         Returns a matplotlib axes with one or more
         line charts that can be added to a figure. 
@@ -1167,7 +1167,7 @@ class Charter:
             colors = None
             
         if type(data) == Series:
-            data = pd.Dataframe([data])
+            data = pd.DataFrame([data])
         if ax is None:
             _fig, ax = plt.subplots()
         # Plot row-wise (pyplot default is column-wise):

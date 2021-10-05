@@ -1,0 +1,4 @@
+Selection	View	Channel	Begin Time (s)	End Time (s)	Low Freq (Hz)	High Freq (Hz)	species
+1	Spectrogram 1	2	1.144083313	1.753270532	1981.7	16183.5	obntc
+2	Spectrogram 1	2	5.883857040	6.493044258	2422.0	16073.4	obntc
+3	Spectrogram 1	2	12.807789818	13.283253014	1431.2	16073.4	obntc
