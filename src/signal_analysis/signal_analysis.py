@@ -4,6 +4,7 @@ Created on Oct 1, 2021
 @author: paepcke
 '''
 from pathlib import Path
+from enum import Enum
 
 import librosa
 
@@ -13,6 +14,13 @@ import numpy as np
 import pandas as pd
 from result_analysis.charting import Charter
 
+
+class TemplateSelection(Enum):
+    '''How to select results from templates with multiple signatures'''
+    SIMILAR_LEN = 0
+    MAX_PROB    = 1
+    MIN_PROB    = 2
+    MED_PROB    = 3
 
 class SignalAnalyzer:
     '''
@@ -40,7 +48,6 @@ class SignalAnalyzer:
                           recordings, 
                           species_list,
                           color=None,
-                          average_calls=False,
                           ax=None):
         '''
         Chart the frequencies of maximum energy along the time
@@ -108,10 +115,10 @@ class SignalAnalyzer:
         for color_idx, species in enumerate(species_list):
             # ... with all calls taken from across the tables
             # and their recordings:
-            spectral_centroids = cls.compute_spectral_centroids(sel_tbls, 
+            spectral_centroids = cls.compute_species_templates(sel_tbls, 
                                                                 recordings, 
-                                                                species,
-                                                                average_calls=average_calls)
+                                                                species
+                                                                )
             if color is None:
                 color_group = {Charter.COLORS[color_idx] : spectral_centroids.index}
             else:
@@ -189,30 +196,27 @@ class SignalAnalyzer:
         return pd.DataFrame(res_df)
 
     #------------------------------------
-    # compute_spectral_centroids
+    # compute_species_templates
     #-------------------
     
     @classmethod
-    def compute_spectral_centroids(cls, sel_tbls, recordings, species, average_calls):
+    def compute_species_templates(cls, species, recordings, sel_tbls):
         '''
         Given a list of selection table paths, and a list
         of paths to the corresponding recordings, isolate
         the audio clips of calls by the given species. 
         
-        Compute for each time frame the frequency at which
-        energy is maximal. This computation results in one 
-        time Series for each call.
+        For each clip in each recording, compute for each time 
+        frame the frequency at which energy is maximal. This 
+        computation results in one pd.Series, a time series of
+        max-energy-holding frequencies over time for each call.
+        This time series is the call's "signature".
         
-        If average_calls is False, a dataframe is returned
-        whose rows are the maximal energy values along time, 
-        and whose columns are time since start of call. The
-        result df will thus contain as many rows as there are
-        calls by the specified species.
+        Package the signatures of one recording into SpectralTemplate
+        instance, and return a list of such instances, one for
+        each recording. Each instance contains the signatures of
+        all calls in one recording. 
         
-        If average_calls is True, then at each time point the
-        frequencies that hold the maximum energy are avaraged,
-        resulting in a single line.
-
         :param sel_tbls: list of selection table paths
         :type sel_tbls: [str]
         :param recordings: list of paths to corresponding recordings
@@ -220,15 +224,14 @@ class SignalAnalyzer:
         :param species: name of species whose calls are to be
             analyzed
         :type species: str
-        :param average_calls: whether or not to average the 
-            frequencies of each call over each time frame
-        :type average_calls: bool
-        :returns a dataframe with result values. If no content
+        :returns a list of SpectralTemplate instances, each holding
+            the signatures of the calls in one recording. If no content
             for given species is found, returns None
-        :rtype pd.DataFrame
+        :rtype [SpectralTemplate]
         '''
 
         spectral_centroids = None
+        res_templates = []
         if type(sel_tbls) != list:
             sel_tbls = [sel_tbls]
             
@@ -248,183 +251,246 @@ class SignalAnalyzer:
             if species not in list(species_clips_dict.keys()):
                 continue
             
-            spectral_centroids = pd.DataFrame([])
-            
-            for clip in species_clips_dict[species]:
+            spectral_centroids = []
+            rec_fname = Path(rec_path).name
+            for clip_num, clip in enumerate(species_clips_dict[species]):
+                
                 centroid = SignalAnalyzer.spectral_centroid_each_timeframe(clip, sr)
-                spectral_centroids = spectral_centroids.append(centroid, ignore_index=True)
-    
-            # Replace the nan from unequal clip lengths 
-            # with the mean of the respective row:
-            spectral_centroids = cls.df_from_clips(spectral_centroids)
-            
-            _num_rows, num_cols = spectral_centroids.shape
-            time_step = int(10**6 * 1/sr)
-            col_names = list(Interval(0,time_step*num_cols,time_step).values())
-            spectral_centroids.columns = col_names
+                
+                num_cols = len(centroid)
+                time_step = int(10**6 * 1/sr)
+                col_names = list(Interval(0,time_step*num_cols,time_step).values())
+                centroid.index = col_names
+                centroid.name = f"{rec_fname}_call{clip_num}" 
+                
+                spectral_centroids.append(centroid)
+                
+            res_templates.append(SpectralTemplate(spectral_centroids, 
+                                                  rec_fname=rec_fname,
+                                                  sr=sr))
 
-            if average_calls:
-                spectral_centroids = spectral_centroids.mean(axis=0)
-
-        return spectral_centroids
-
-    #------------------------------------
-    # compute_species_templates
-    #-------------------
-    
-    @classmethod
-    def compute_species_templates(cls, species, recordings, sel_tbls):
-        '''
-        From a set of labeled recordings, create one
-        Series of frequencies at which energy is maximal
-        for each successive time frame. Time frames are of
-        with 1/sampleRate. 
-        
-        Return a dataframe with one row per recording. The 
-        row contains the averaged spectral centroid (freq/time)
-        for the calls in one recording. The first column holds
-        the true (non-NaN-padded) length of the row.
-        
-        The recordings must correspond to the selection tables.
-        
-        The return might look like this:
-        
-                            TrueLen  t0       t1        ...
-            recording	 
-            foo_bird1.mp3     133    1000.4  1400.2    ...
-            foo_bird2.mp3      45    1100.1  14001.4   ...
-        
-        Recordings are typically from a clean source, such as
-        Xeno Canto.
-        
-        NOTE: the length of the spectral centroid lines are
-               different for different recordings. So each
-               row will contain filler NaNs. When using each
-               row (i.e. one spectral line), use dropna() to
-               remove the NaNs.
-        
-        :param species: species for which templates are to be
-            computed
-        :type species: str
-        :param recordings: one or more paths to recordings that contain
-            calls from the target species. Calls by other species 
-            are ignored
-        :type recordings: {str | [str]}
-        :param sel_tbls: one or more paths to selection tables
-            that identify where in the corresponding recording
-            calls from the target species occur
-        :type sel_tbls: {str | [str]}
-        :return dataframe with one row per recording; each row
-            holds at column 't' the frequency at which the calls
-            in that recording hold max energy on average across the
-            calls in that recording
-        :rtype pd.DataFrame[float]
-        :raise ValueError if number of selection tables does not match
-            the number of recordings.
-        '''
-
-        # Get a Series of frequencies with maximal energy over time.
-        # It's a single line, gained from computing spectral centroids
-        # for each call of each recording, and averaging the frequencies:
-        
-        # spectral_centroids = cls.compute_spectral_centroids(sel_tbls,   
-        #                                                     recordings, 
-        #                                                     species,
-        #                                                     average_calls=True)
-        
-        template_lines = pd.DataFrame([])
-        # Keep track of how long the centroid lines
-        # are for each recording:
-        template_lengths = []
-        
-        for sel_tbl, recording in zip(sel_tbls, recordings):
-            # Get average spectral line from the calls
-            # of one recording:
-            spectral_centroid = cls.compute_spectral_centroids(sel_tbl,
-                                                               recording, 
-                                                               species,
-                                                               average_calls=True)
-            spectral_centroid.name = Path(recording).name
-            # Remember length of the series
-            template_lengths.append(len(spectral_centroid))
-            # Append to result df, padding with NaNs
-            template_lines = template_lines.append(spectral_centroid)
-            
-        template_lines.index.name = 'recording'
-        _num_rows, num_cols = template_lines.shape
-        
-        template_lines.columns=[f"t{i}" for i in range(num_cols)]
-        
-        # Put the true (non-padded) length of each row
-        # as column 0:
-        template_lines.insert(0, 'TrueLen', template_lengths) 
-        
-        
-        # Remember: rows contain filler NaN that
-        # you want to drop when using a row.
-        return template_lines
+        return res_templates
 
     #------------------------------------
     # match_probability
     #-------------------
     
     @classmethod
-    def match_probability(cls, clip, spectroid_templates, sr):
+    def match_probability(cls, 
+                          clip, 
+                          spectroid_template, 
+                          sr,
+                          template_selection=TemplateSelection.SIMILAR_LEN
+                          ):
         '''
         Given an audio clip, match it to each
-        of the given spectral centroid timelines. Determine
+        of the given spectral centroid timelines in the
+        given SpectralTemplate instance. Determine
         the match with lowest matching cost. On the basis
         of that lowest cost, return the probability that one
-        of the templates came from the species that produced
+        of the template's signatures came from the species that produced
         the clip.
         
-        Best results if the length of the audio clip is close
-        to the length of the template(s).
+        When a template contains multiple signatures, 
+        the template_selection arg controls how a final probability
+        is chosen TemplateSelection may be:
         
-        For the format for submitting multiple spectroid_templates
-        to match agains, see header comment of compute_species_templates().
-        
+           o SIMILAR_LEN  the signature closest in length to the 
+                          signature of the given clip is used
+           o MAX_PROB     all template signatures are computed,
+                          and the maximum probability is returned.
+           o MIN_PROB     all template signatures are computed,
+                          and the minimum probability is returned.
+           o MED_PROB     all template signatures are computed,
+                          and the median probability is returned.
+                          
+
         :param clip: audio of a single call
         :type clip: {np.array | pd.Series}
-        :param spectroid_template: one or more spectral centroid
-            lines computed (via compute_species_templates()) from
-            a known species to which the clip is to be compared
-        :type spectroid_template: {pd.Series | pd.DataFrame}
+        :param spectroid_template: one or more SpectralTemplate
+            instance(s) against which to compare the clip
+        :type spectroid_template: {SpectralTemplate | [SpectralTemplate]}
         :param sr: sampling rate
         :type sr: int
+        :param template_selection: how to select probability results
+            from templates with multiple signatures
+        :type template_selection: TemplateSelection 
         :return probability of clip having been created
             by the species from whose calls the templates were
             made
         :rtype float
         '''
 
-        if type(spectroid_templates) == pd.Series:
-            templates = pd.DataFrame(np.hstack([np.array(len(spectroid_templates)),
-                                                spectroid_templates.values]))
+        if type(spectroid_template) != list:
+            spectroid_template = [spectroid_template]
+
+        # For convenience:
+        if template_selection == TemplateSelection.MIN_PROB:
+            sel_by_min = True
+            sel_by_max = sel_by_med = False
+        elif template_selection == TemplateSelection.MAX_PROB:
+            sel_by_max = True
+            sel_by_min = sel_by_med = False
+        elif template_selection == TemplateSelection.MED_PROB:
+            sel_by_max = sel_by_min = False
+            sel_by_med = True
         else:
-            templates = spectroid_templates
+            sel_by_max = sel_by_min = sel_by_med = False
 
         # Get centroid of the clip:
-        clip_centroid = cls.spectral_centroid_each_timeframe(clip, sr)
-        matching_probs = []
-        for _row_num, template_centroid_ser in templates.iterrows():
-            # Centroid is a Series whose first element is
-            # its length without NaN fillers. Get a numpy
-            # array without that first col, and without any
-            # NaNs:
+        clip_signature = cls.spectral_centroid_each_timeframe(clip, sr)
+        clip_sig_len   = len(clip_signature)
 
-            template_centroid_np = template_centroid_ser.dropna().values[1:]
-            clip_centroid_np     = clip_centroid.to_numpy()
-            cost_matrix, _warp_pairs = librosa.sequence.dtw(clip_centroid_np, 
-                                                            template_centroid_np)
+        # Map signature Series instances to tuples containing
+        # a match-probability with clip, and the length of the
+        # signature that yielded that probability:
+        matching_probs = {}
+        
+        # Match clip sig against the sigs within
+        # each template, collecting the probs from
+        # each template match into matching_probs:
+        for template in spectroid_template:
 
-            cost_normalized = (cost_matrix-cost_matrix.min())/(cost_matrix.max()-cost_matrix.min())
-            total_cost = cost_normalized[-1,-1]
-            prob = 1 - total_cost
-            matching_probs.append(prob)
+            # Pick signature closest in length to the given clip's
+            # signature?
+            if template_selection == TemplateSelection.SIMILAR_LEN:
+                # Find the template signature closest in
+                # length to clip_sig_len:
+                sig_diffs = []
+                for sig in template:
+                    sig_diffs.append(abs(clip_sig_len - len(sig)))
+                sig_idx = sig_diffs.index(min(sig_diffs))
+                template_sig = template[sig_idx]
+                prob = cls._compute_prob(clip_signature, template_sig)
+                matching_probs[template] = (prob, len(template_sig))
+                
+            elif sel_by_min or sel_by_max or sel_by_med:
+                # Match against all of the template's sigs,
+                # and pick the max or min of the resulting probs.
+                
+                # The following list will hold tuples:
+                #    [(probability, signatureLen),
+                #               ...
+                #    ]
+                # The lengths are needed further down:
+                probs = []
+                for template_sig in template.signatures:
+                    probs.append(
+                        (cls._compute_prob(clip_signature, template_sig),
+                        len(template_sig)
+                        )
+                    )
 
-        return max(matching_probs)
+                if sel_by_max:
+                    # Find the max prob and the len of the sig
+                    # that yielded that max probability:
+                    best_prob, sig_len = max(probs, key=lambda res_tuple: res_tuple[0])
+                elif sel_by_min:
+                    best_prob, sig_len = min(probs, key=lambda res_tuple: res_tuple[0])
+                else:
+                    # Pick the median of the probs:
+                    # Sort the prob/len tuples by the probability;
+                    # sort() uses the first of each tuple for sorting
+                    # automatically:
+                    probs.sort()
+                    median_idx = int(len(probs) / 2)
+                    best_prob, sig_len = probs[median_idx]
+                matching_probs[template] = (best_prob, sig_len) 
 
+            else:
+                raise ValueError(f"Bad template_selection value: {template_selection}")
+        
+        # Now matching_prob keys each template to one
+        # tuple: (probality, template-sig-len)
+        # Aain apply the requested aggregation given in template_selection
+        if sel_by_max:
+            best_prob, sig_len = max(matching_probs.values(), key=lambda prob_sig_len: prob_sig_len[0]) 
+        elif sel_by_min:
+            best_prob, sig_len = min(matching_probs.values(), key=lambda prob_sig_len: prob_sig_len[0])
+        elif sel_by_med:
+            probs_and_lengths = list(matching_probs.values())
+            probs_and_lengths.sort()
+            median_idx = int(len(probs_and_lengths) / 2)
+            best_prob, sig_len = probs_and_lengths[median_idx]
+        else:
+            # Select using probability of sig with 
+            # the length closest to the clip's len:
+            len_diffs = []
+            probs     = []
+            for prob, sig_len in matching_probs.values():
+                len_diffs.append(abs(clip_sig_len - sig_len))
+                probs.append(prob)
+            min_dist_idx = len_diffs.index(min(len_diffs))
+            best_prob = probs[min_dist_idx]
+            
+        return best_prob
+
+    #------------------------------------
+    # _compute_prob
+    #-------------------
+    
+    @classmethod
+    def _compute_prob(cls, clip_sig, template_sig):
+        '''
+        Given a clip's spectral centroid signature, and
+        a template signature, find the lowest cost sequence
+        of steps to align the two wave forms.
+        
+        Normalize the resulting cost matrix to 0-1, and
+        derive a probability from the total cost of the
+        alignment.
+        
+        Both args may be pd.Series or np.array. If the
+        template_sig is a Series, it may be taken from 
+        a template dataframe, in which case its first
+        element will be a column 'TrueLen' indicating the
+        length of the signature without NaN padding. Thi
+        col is not needed here, and will be detected and
+        discarded.
+        
+        The following is thus a legal idiom:
+        
+            for row_idx, template_sig in template.iterrows():
+                prob = cls._compute_prob(clip_sig, template_sig)
+                
+        or equivalently:
+            pro
+        
+        :param clip_sig: spectral controid sig of clip
+        :type clip_sig: {pd.Series | np.array}
+        :param template_sig: one spectral controid sig
+            from a signature template
+        :type template_sig: {pd.Series | np.array}
+        '''
+        
+        if type(clip_sig) == pd.Series:
+            clip_sig_np = clip_sig.to_numpy()
+        else:
+            clip_sig_np = clip_sig
+            
+        # Turn template_sig into np, and cut away
+        # the leading TrueLen, if it is there:
+        
+        if type(template_sig) == pd.Series:
+            if template_sig.index[0] == 'TrueLen':
+                template_sig_np = template_sig.to_numpy()[1:]
+            else:
+                template_sig_np = template_sig.to_numpy()
+
+        # Use dynamic time warping to find the cheapest
+        # way of making the clip sig similar to the template sig:
+        cost_matrix, _warp_pairs = librosa.sequence.dtw(clip_sig_np, 
+                                                        template_sig_np)
+
+        # Normalize values in the cost matrix to 0-1:
+        cost_normalized = (cost_matrix-cost_matrix.min())/(cost_matrix.max()-cost_matrix.min())
+        # The value on the lower right of the cost 
+        # matrix is the sum of all steps' costs:
+        total_cost = cost_normalized[-1,-1]
+        prob = 1 - total_cost
+        return prob
+    
+    
     #------------------------------------
     # df_from_clips
     #-------------------
@@ -555,3 +621,163 @@ class SignalAnalyzer:
                 # First one:
                 audio_result_dict[species] = [clip]
         return audio_result_dict, sr
+
+# -------------------- Class SpectralTemplate -----------
+
+class SpectralTemplate:
+    '''
+    Hold the spectral centroid timelines (signatures)
+    of all calls in one recording.
+    
+    Usage:
+        o <inst>.signatures   : list of pd.Series with the 
+                                frequency-of-max-energy timeline
+        o iter(<inst>)        : return iterator over signature Series
+        o <inst>[n]           : return the nth signature
+        o len(<inst>)         : number of signatures
+        o <inst>.sig_lengths  : list of lengths of the signatures
+        o <inst>.mean_sig     : signature that is the mean of all
+                                signatures' frequencies at each
+                                time.
+    '''
+    
+    #------------------------------------
+    # Constructor
+    #-------------------
+    
+    def __init__(self, 
+                 signatures, 
+                 rec_fname=None,
+                 sr=None):
+        
+        # Turn all ways of passing signatures
+        # into a list of signatures:
+        if type(signatures) == pd.Series:
+            self.signatures = [signatures]
+        elif type(signatures) == pd.DataFrame:
+            self.signatures = []
+            for row_label, sig in signatures.iterrows():
+                clean_sig = sig.dropna()
+                clean_sig.index = [f"t{i}" for i in range(len(sig))]
+                clean_sig.name  = row_label
+                self.signatures.append(clean_sig)
+        # Hopefully it's a list of pandas Series:
+        elif type(signatures) == list and all([type(el) == pd.Series for el in signatures]):
+            self.signatures = signatures
+        else:
+            raise TypeError(f"Signatures must be a pd.Series, a list of pd.Series, or a pd.DataFrame, not {type(signatures)}")
+        
+        self.rec_fname = rec_fname
+        self.sr = sr
+
+        # Computed lazily:
+        self.cached_mean_sig = None
+
+    #------------------------------------
+    # mean_sig
+    #-------------------
+
+    @property
+    def mean_sig(self):
+        if self.cached_mean_sig is not None:
+            return self.cached_mean_sig
+        
+        max_sig_len = max(self.sig_lengths)
+        longest_seq = [sig 
+                       for sig 
+                       in self.signatures 
+                       if len(sig) == max_sig_len
+                       ][0]
+        df = pd.DataFrame()
+        for sig in self.signatures:
+            # Number of needed pads
+            sig_len = len(sig)
+            pad_len = max_sig_len - sig_len
+            # Get pad value for this signature:
+            mean_freq = sig.mean()
+            
+            # Col names for the padding columns
+            # will match the corresponding col names
+            # in the longes sig: 
+            col_names = longest_seq.index[sig_len :]
+            
+            # Pads are the mean of the sig:
+            pad_series = pd.Series([mean_freq]*pad_len, 
+                                   index=col_names)
+            
+            padded_sig      = sig.append(pad_series)
+            padded_sig.name = sig.name
+            # Now sig is as long as the longest seq,
+            # so can append to df without generating
+            # NaNs:
+            df = df.append(padded_sig)
+        
+        # Finally: take the column-wise mean,
+        # i.e. the mean of frequencies at each
+        # time frame, generating a single pd.Series:
+        mean_sig = df.mean(axis=0)
+        mean_sig.name = 'mean_sig'
+        self.cached_mean_sig = mean_sig
+        return mean_sig
+
+    #------------------------------------
+    # sig_lengths
+    #-------------------
+    
+    @property
+    def sig_lengths(self):
+        
+        return [len(sig) for sig in self.signatures]
+
+    #------------------------------------
+    # recording_fname
+    #-------------------
+    
+    @property
+    def recording_fname(self):
+        return self.rec_fname
+
+    #------------------------------------
+    # sample_rate
+    #-------------------
+    
+    @property
+    def sample_rate(self):
+        return self.sr
+
+    #------------------------------------
+    # __getitem_
+    #-------------------
+
+    def __getitem__(self, idx):
+        return self.signatures[idx]
+
+    #------------------------------------
+    # __len__
+    #-------------------
+    
+    def __len__(self):
+        return len(self.signatures)
+    
+    #------------------------------------
+    # __iter__
+    #-------------------
+    
+    def __iter__(self):
+        
+        return iter(self.signatures)
+
+    #------------------------------------
+    # __repr__
+    #-------------------
+    
+    def __repr__(self):
+        return f"<SpectralTemplate ({len(self.signatures)} sigs) {hex(id(self))}>"
+
+    #------------------------------------
+    # __str__
+    #-------------------
+    
+    def __str__(self):
+        return self.__repr__()
+    

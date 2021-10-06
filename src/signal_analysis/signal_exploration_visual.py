@@ -202,7 +202,7 @@ class SignalViz:
         #   0     f1    f2     f1
         #   1     f2    f2     f5
         
-        curves_all_calls = SignalAnalyzer.compute_spectral_centroids(
+        curves_all_calls = SignalAnalyzer.compute_species_templates(
             [sel_tbl_path],
             [recording_path],
             species,
