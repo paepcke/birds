@@ -136,7 +136,7 @@ class SignalAnalysisTester(unittest.TestCase):
     # test_plot_center_freqs
     #-------------------
     
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #*********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_plot_center_freqs(self):
         
         # One selection table/recording pair:
@@ -221,7 +221,7 @@ class SignalAnalysisTester(unittest.TestCase):
     # test_match_probabilty
     #-------------------
     
-    #**********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_match_probabilty(self):
         # NOTE: truth values for final and intermediate
         #       steps for all three templates are in the

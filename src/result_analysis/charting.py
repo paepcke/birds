@@ -1105,6 +1105,7 @@ class Charter:
         '''
         Returns a matplotlib axes with one or more
         line charts that can be added to a figure. 
+        
         The data are a pandas Series or DataFrame.
         If a Series, a single line is drawn. If the
         Series has a name, it can be used to control
@@ -1131,12 +1132,15 @@ class Charter:
                          'blue'  : ['accuracy']
                          }
         
+        The color_groups values can be the index of the given
+        Series or DataFrame. 
+
         Method may be called multiple times, passing the same 
         Axes instance each time. Additional lines will be added
         to the chart.
         
         :param data: values to plot
-        :type data: ordinal values
+        :type data: {pd.Series | pd.DataFrame}
         :param rotation: rotation of x labels in degrees; ex: 45
         :type rotation: int
         :param ylabel: y axis label; None is OK
@@ -1160,8 +1164,8 @@ class Charter:
         if color_groups is not None:
             new_col_grps = {}
             for color, row_label_list in color_groups.items():
-                for row_lbl in row_label_list:
-                    new_col_grps[row_lbl] = color
+                for row_idx, _row_val in enumerate(row_label_list):
+                    new_col_grps[row_idx] = color
             colors = new_col_grps
         else:
             colors = None
@@ -1171,11 +1175,12 @@ class Charter:
         if ax is None:
             _fig, ax = plt.subplots()
         # Plot row-wise (pyplot default is column-wise):
+        #****line_objs = ax.plot(data.transpose())
         line_objs = ax.plot(data.transpose())
         if colors is not None:
-            for row_num, row_label in enumerate(data.index):
+            for row_num, _row_label in enumerate(data.index):
                 try:
-                    color = colors[row_label]
+                    color = new_col_grps[row_num]
                 except KeyError:
                     # No color specified for this row
                     pass

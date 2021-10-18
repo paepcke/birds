@@ -54,7 +54,7 @@ class SignalAnalyzer:
         of one or more bird call(s).
 
         Given one or more select table paths and corresponding
-        paths to audio recording file, extract calls for each 
+        paths to audio recording files, extract calls for each 
         of the specified species as audio clips. Chart the center
         frequencies. Lines for calls by one species will be of the
         same color.
@@ -115,15 +115,25 @@ class SignalAnalyzer:
         for color_idx, species in enumerate(species_list):
             # ... with all calls taken from across the tables
             # and their recordings:
-            spectral_centroids = cls.compute_species_templates(sel_tbls, 
-                                                                recordings, 
-                                                                species
-                                                                )
+            spectral_centroids = cls.compute_species_templates(species,
+                                                               recordings, 
+                                                               sel_tbls, 
+                                                               )
+            # Get df like:
+            #                t0         t1        t2 ...
+            #    'sparrow0'  1000.0    1100.9     ...
+            #    'sparrow1'  1050.3    1030.9     ...
+            
+            centroids_df = pd.DataFrame(spectral_centroids[0].signatures)
+            row_labels = centroids_df.index.values
+            
             if color is None:
-                color_group = {Charter.COLORS[color_idx] : spectral_centroids.index}
+                color_group = {Charter.COLORS[color_idx] : row_labels}
             else:
-                color_group = {color : spectral_centroids.index}
-            ax = Charter.linechart(spectral_centroids, 
+                color_group = {color : row_labels}
+                #******!!!!!{color : spectral_centroids[0].index}
+                            
+            ax = Charter.linechart(centroids_df, 
                                    ylabel='center frequency (Hz)', 
                                    xlabel=u'time (\u03bcs)',
                                    rotation=45,
