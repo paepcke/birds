@@ -152,13 +152,20 @@ class SignalAnalyzer:
         Return a 1D array with the centroid of energy
         across all frequencies for each time slice.
         
-        :param audio:
-        :type audio:
+        :param audio: audio in time domain
+        :type audio: {np.array | pd.Series}
         :return a 1D Series of frequency centroids, one
             for each time slot
         :rtype pd.Series
         '''
-        return pd.Series(librosa.feature.spectral_centroid(y=audio, sr=sr)[0])
+        aud_len = len(audio)
+        next_pwr_of_2 = min(int(2**(np.ceil(np.log(aud_len)/np.log(2)))), 2048)
+        window  = min(aud_len, next_pwr_of_2)
+        return pd.Series(librosa.feature.spectral_centroid(y=audio, 
+                                                           sr=sr,
+                                                           win_length=window,
+                                                           n_fft=next_pwr_of_2
+                                                           )[0])
 
     #------------------------------------
     # zero_crossings

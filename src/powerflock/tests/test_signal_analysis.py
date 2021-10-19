@@ -7,15 +7,18 @@ import os
 from pathlib import Path
 import unittest
 
+import matplotlib.ticker as plticker
+
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import Utils, Interval
 import numpy as np
 import pandas as pd
+from powerflock.power_member import PowerMember
+from powerflock.signal_analysis import SignalAnalyzer, TemplateSelection
 from result_analysis.charting import Charter
-from signal_analysis.signal_analysis import SignalAnalyzer, TemplateSelection
 
 
-#***********TEST_ALL = True
+#*******TEST_ALL = True
 TEST_ALL = False
 
 class SignalAnalysisTester(unittest.TestCase):
@@ -136,7 +139,7 @@ class SignalAnalysisTester(unittest.TestCase):
     # test_plot_center_freqs
     #-------------------
     
-    #*********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_plot_center_freqs(self):
         
         # One selection table/recording pair:
@@ -196,19 +199,19 @@ class SignalAnalysisTester(unittest.TestCase):
             [46, 46, 41, 41, 46, 68, 48, 46], 
             [58, 54, 53, 62, 58, 54, 54, 56, 58, 56, 51]
             ]
-        observed_sig_lengths = [template.sig_lengths() for template in self.templates]
+        observed_sig_lengths = [template.sig_lengths for template in self.templates]
         self.assertListEqual(observed_sig_lengths, expected_sig_lengths)
         
         # While we are in here, test signature averaging in
         # templates:
         
         template = self.templates[0]
-        mean_sig = template.mean_sig()
+        mean_sig = template.mean_sig
 
         # The mean sig should be as long as the
         # longest among the sigs:
         longest = pd.DataFrame(expected_sig_lengths).max().max()
-        self.assertEqual(len(template.mean_sig()), longest)
+        self.assertEqual(len(template.mean_sig), longest)
         
         # Compute what the first element of the 
         # mean sig should be: the mean of the first
@@ -393,7 +396,34 @@ class SignalAnalysisTester(unittest.TestCase):
             all_probs.append(prob)
         
         print(f"Templates CTMOG; {len(all_probs)} clips FIELD DCFLCs: {all_probs}")
+
+
+    #------------------------------------
+    # test_powermember_compute_probabilities
+    #-------------------
+    
+    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_powermember_compute_probabilities(self):
         
+        rec1, rec2, rec3 = self.recordings
+        template = self.templates[0]
+        power_member = PowerMember('CMTO', template)
+        rec1_arr, rec1_sr = SoundProcessor.load_audio(rec1)
+        probs_rec1 = power_member.compute_probabilities(rec1_arr, rec1_sr)
+        probs_rec1_series = pd.Series(probs_rec1)
+        subsampled_probs = probs_rec1_series[0:len(probs_rec1_series):100]
+
+        ax = Charter.barchart_over_timepoints(
+            subsampled_probs,
+            xlabel='Time (s)',
+            ylabel='Probability of CMTO',
+            title='Probability of CMTO Over Time',
+            round_times=1
+            )
+
+        print("Place breakpoint in test_powermember_compute_probabilities to see chart.")
+        
+
 # -------------- Utilities -------------
 
 # ---------------- Truths About templates 1,2, and 3:

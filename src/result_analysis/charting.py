@@ -15,6 +15,8 @@ import warnings
 from logging_service.logging_service import LoggingService
 from matplotlib import cm as col_map
 from matplotlib import pyplot as plt
+import matplotlib.ticker as plticker
+
 import sklearn
 from sklearn.metrics import confusion_matrix, precision_recall_curve
 #from sklearn.metrics._classification import precision_score, recall_score
@@ -811,6 +813,60 @@ class Charter:
             
         return fig
 
+    #------------------------------------
+    # barchart_over_timepoints
+    #-------------------
+    
+    @classmethod
+    def barchart_over_timepoints(cls, 
+                                 time_quantity_series,
+                                 xlabel='Time',
+                                 ylabel=None, 
+                                 title=None, 
+                                 num_labels_wanted=10,
+                                 round_times=None):
+        '''
+        Given a pd.Series whose index are time points, and whose
+        values are some quantity such as probability, create a
+        barchart. The method ensures that the x axis labels show 
+        the times in the proper places, rather than what the various 
+        matplotlib locators decide.
+        
+        Furthermore, caller may specify how many of the time points
+        are shown on the x axis. Again: the shown labels will be in the
+        correct locations
+        
+        :param time_quantity_dict: map from time points (e.g. in fractional seconds)
+            against numeric quantities
+        :type time_prob_dict: {float : float}
+        :param xlabel: label for x-axis
+        :type xlabel: {None | str}
+        :param ylabel: label for y-axis
+        :type ylabel: {None | str}
+        :param title: optional title for entire chart; 
+            default: no title
+        :type title: {None | str|
+        :param num_labels_wanted: 
+        :type num_labels_wanted:
+        :param round_times: if an int, round the time values
+            to the given number of decimal points
+        :type round_times: {None | int}
+        :return the chart axes
+        :rtype matplotlib.axes
+        '''
+
+        # Round the seconds time stampls to 1 digit
+        if round_times is not None:
+            time_quantity_series.index = [round(ts,1) for ts in time_quantity_series.index.values]
+
+        ax = Charter.barchart(time_quantity_series,
+                              xlabel=xlabel if xlabel is not None else '',
+                              ylabel=ylabel if ylabel is not None else '',
+                              title=title if title is not None else ''
+                              )
+        ax = Charter.set_xticklabel_excerpts(ax, time_quantity_series.index.values, num_labels_wanted, rotation=45)
+        return ax
+
 # -------------------- Utilities for Charter Class --------------
 
     #------------------------------------
@@ -1013,7 +1069,9 @@ class Charter:
     def barchart(cls, 
                  data, 
                  rotation=0,
-                 ylabel=None, 
+                 title=None,
+                 xlabel=None,
+                 ylabel=None,
                  color_groups=None
                  ):
         '''
@@ -1054,8 +1112,12 @@ class Charter:
         :type data: ordinal values
         :param rotation: rotation of x labels in degrees; ex: 45
         :type rotation: int
+        :param title: title of entire chart
+        :type title: {None | str}
+        :param xlabel: x axis label; None is OK
+        :type xlabel: {None | str}
         :param ylabel: y axis label; None is OK
-        :type ylabel: str
+        :type ylabel: {None | str}
         :param color_groups: groupings of colors for the bars
         :type color_groups: {str : [str]}
         :return axes with chart
@@ -1065,7 +1127,9 @@ class Charter:
         ax = data.plot.bar()
         if rotation != 0:
             ax.set_xticklabels(data.index, rotation=rotation)
-            
+        
+        if xlabel is not None:
+            ax.set_xlabel(xlabel)
         if ylabel is not None:
             ax.set_ylabel(ylabel)
             
@@ -1085,6 +1149,8 @@ class Charter:
                         bars[bar_idx].set_color(color)
                     except ValueError:
                         raise ValueError(f"Could not find {like_colored_meas} in barplot X labels")
+        if title is not None:
+            ax.figure.suptitle(title)
         ax.figure.tight_layout()
         return ax
 
@@ -1197,6 +1263,69 @@ class Charter:
         if title is not None:
             ax.figure.suptitle(title)
         ax.figure.tight_layout()
+        return ax
+
+
+    #------------------------------------
+    # set_xticklabel_excerpts
+    #-------------------
+    
+    @classmethod
+    def set_xticklabel_excerpts(cls, ax, labels, num_labels_wanted, rotation=0):
+        '''
+        Given an axes and a full set of x-labels, adjust
+        the xaxis labels of the chart to use only num_labels_wanted
+        of the given labels. The position of those labels will still
+        be where they would be if all labels were shown.
+        
+        Returns the modified axes  
+        
+        :param ax: axes with a chart whose xaxis labels are 
+            to be adjusted
+        :type ax: py
+        :param labels: list of xaxis labels
+        :type labels: [str]
+        :param num_labels_wanted: number of xaxis labels to
+            show
+        :type num_labels_wanted: int
+        :param rotation: angle of xaxis label rotation
+        :type rotation: int
+        '''
+        
+        # Use fixed-location ticker placement with
+        # a position for each of the labels (even ones we
+        # will replace with empty strings):
+        ax.xaxis.set_major_locator(plticker.FixedLocator(np.arange(len(labels))))
+        ax.set_xticklabels(labels)
+        
+        # Get the xticklabels back as a list of matplotlib.text.Text
+        # instances:
+        xtick_lbl_txt_objs = ax.get_xticklabels()
+        
+        # Replace label not to be shown with empty strings,
+        # but keep the text objects in place to get the 
+        # placement correct:
+        
+        new_xlabel_obj_list = []
+        idx_spacing = int(len(xtick_lbl_txt_objs) / num_labels_wanted)
+        nxt_idx_to_keep = idx_spacing
+        for idx, txt_obj in enumerate(xtick_lbl_txt_objs):
+            # Keep this x label?
+            if idx < nxt_idx_to_keep:
+                # Nope...
+                txt_obj.set_text('')
+            else:
+                # Yep, keep it, and set index of next one to keep:
+                nxt_idx_to_keep += idx_spacing
+            new_xlabel_obj_list.append(txt_obj)
+
+        # Set the labels to what we just did:
+        ax.set_xticklabels(new_xlabel_obj_list, rotation=rotation)
+
+        # Remove the extraneous tick marks:
+        xticks = np.arange(0,len(labels),idx_spacing)
+        ax.set_xticks(xticks)
+        
         return ax
 
 

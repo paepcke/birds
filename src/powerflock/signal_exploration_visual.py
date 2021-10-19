@@ -14,14 +14,12 @@ import os
 
 import librosa
 
-import numpy as np
-import torch
 import pandas as pd
 from result_analysis.charting import Charter
-from signal_analysis import SignalAnalyzer
+from powerflock.signal_analysis import SignalAnalyzer
 
 
-#from signal_analysis.signal_analysis import SignalAnalyzer
+#from powerflock.powerflock import SignalAnalyzer
 class SignalViz:
     '''
     classdocs
@@ -243,8 +241,6 @@ class SignalViz:
             #**********
             print(warp)
             #**********
-        
-
 
     #------------------------------------
     # zero_crossings
