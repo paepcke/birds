@@ -277,8 +277,6 @@ class Charter:
               [for sample1]  0.4              0
                   ...                        ...
 
-        
-
         :param truth_series: 1 or 0 indicating whether or not sample
             at index i is of class class_id
         :type truth_series: pd.Series[int]
@@ -1178,7 +1176,8 @@ class Charter:
         the line color via the color_groups (which will
         be a single-entry dict in this case)
         
-        For a DataFrame, the column values can be used
+        For a DataFrame, each column holds the y-data
+        for one line, and the column names can be used
         in the color_groups. 
                     
         The axes used is the present matplotlib axes.
@@ -1241,8 +1240,7 @@ class Charter:
         if ax is None:
             _fig, ax = plt.subplots()
         # Plot row-wise (pyplot default is column-wise):
-        #****line_objs = ax.plot(data.transpose())
-        line_objs = ax.plot(data.transpose())
+        line_objs = ax.plot(data)
         if colors is not None:
             for row_num, _row_label in enumerate(data.index):
                 try:
@@ -1253,7 +1251,7 @@ class Charter:
                 else:
                     line_objs[row_num].set_color(color)
                 
-        ax.set_xticklabels(data.columns, rotation=rotation)
+        ax.set_xticklabels(data.index, rotation=rotation)
 
         if xlabel is not None:
             ax.set_xlabel(xlabel)

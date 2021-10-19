@@ -7,13 +7,12 @@ import os
 from pathlib import Path
 import unittest
 
-import matplotlib.ticker as plticker
+import numpy as np
+import pandas as pd
 
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import Utils, Interval
-import numpy as np
-import pandas as pd
-from powerflock.power_member import PowerMember
+from powerflock.power_member import PowerMember, PowerResult
 from powerflock.signal_analysis import SignalAnalyzer, TemplateSelection
 from result_analysis.charting import Charter
 
@@ -66,6 +65,32 @@ class SignalAnalysisTester(unittest.TestCase):
         cls.templates = SignalAnalyzer.compute_species_templates('CMTOG', 
                                                                  cls.recordings, 
                                                                  cls.sel_tbls)
+        
+        # Computing the probability of CMTOG on
+        # recording 1 takes a few minutes. So those
+        # probs for each timepoint are seved on csv.
+        # Get a version as a df:
+        #   
+        #                Probability
+        #     Time                  
+        #     0.000408      0.251428
+        #     0.001224      0.261540
+        #     0.002041      0.255386
+        #     0.002857      0.255179
+        
+        cls.probs_rec1_df = pd.read_csv(
+            os.path.join(cls.cur_dir, 
+                         'cached_results/rec1_cmto_probabilities.csv'), 
+            index_col='Time')
+        
+        # Get as a series as well, where index is time:
+        #
+        #     Time
+        #     0.000408     0.251428
+        #     0.001224     0.261540
+        #     0.002041     0.255386
+        
+        cls.probs_rec1_series = cls.probs_rec1_df['Probability']
 
     def setUp(self):
         pass
@@ -108,6 +133,9 @@ class SignalAnalysisTester(unittest.TestCase):
     def test_spectral_centroid_each_timeframe(self):
 
         # For test recording, sr is 22050
+        # There will be 11 calls in this recording,
+        # each one about 2.5s long. The clip of 11 calls
+        # is ~36.5sec.
         cmtog_clips_xc1, sr = SignalAnalyzer.audio_from_selection_table(self.sel_tbl_cmto_xc1,
                                                                         self.sel_rec_cmto_xc1,
                                                                         'cmto')
@@ -123,15 +151,25 @@ class SignalAnalysisTester(unittest.TestCase):
         
         _num_rows, num_cols = spectral_centroids.shape
         time_step = int(10**6 * 1/sr)
-        col_names = list(Interval(0,time_step*num_cols,time_step).values())
-        spectral_centroids.columns = col_names
-        color_group = {'black' : spectral_centroids.index} 
-        _ax = Charter.linechart(spectral_centroids, 
-                               ylabel='center frequency (Hz)', 
-                               xlabel=u'time (\u03bcs)',
-                               rotation=45,
-                               color_groups=color_group)
 
+        # For plotting lines, need each freq
+        # series over time to be columns.
+        spectral_centroids_T = spectral_centroids.transpose()
+        # Index of xposed df is time, which will
+        # end up on the x-axis labels: 
+        spectral_centroids_T.index = np.arange(0,time_step*num_cols,time_step)
+        spectral_centroids_T.columns = [f"Call{i}" for i in spectral_centroids.index]
+        
+        
+        color_group = {'black' : spectral_centroids_T.columns} 
+        ax = Charter.linechart(spectral_centroids_T, 
+                               ylabel='center frequency (Hz)', 
+                               xlabel=u'time (ms??? or \u03bcs)',
+                               rotation=45,
+                               color_groups=color_group,
+                               title="Each line is one call"
+                               )
+        ax.figure.show()
         print("Put breakpoint here to view")
 
 
@@ -402,26 +440,67 @@ class SignalAnalysisTester(unittest.TestCase):
     # test_powermember_compute_probabilities
     #-------------------
     
-    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_powermember_compute_probabilities(self):
+
+        pwr_member = PowerMember('CMTOG', self.templates[0])
+        rec1_arr, rec1_sr = SoundProcessor.load_audio(self.sel_rec_cmto_xc1)
+        power_result = pwr_member.compute_probabilities(rec1_arr, rec1_sr)
+        probs = power_result.truth_df['Probability'] 
+        subsampled_probs = probs[0:len(probs):100]
+
+        expected = pd.Series([0.2514, 0.4600, 0.2234, 0.2161],
+                             index=[0.000,
+                                    0.082,
+                                    0.164,
+                                    0.245,
+                                    ],
+                             name='Probability')
+        observed = subsampled_probs.iloc[:4].round(4)
+        observed.index = [round(idx,3) for idx in observed.index]
+        self.assertTrue((observed == expected).all())
         
-        rec1, rec2, rec3 = self.recordings
-        template = self.templates[0]
-        power_member = PowerMember('CMTO', template)
-        rec1_arr, rec1_sr = SoundProcessor.load_audio(rec1)
-        probs_rec1 = power_member.compute_probabilities(rec1_arr, rec1_sr)
-        probs_rec1_series = pd.Series(probs_rec1)
-        subsampled_probs = probs_rec1_series[0:len(probs_rec1_series):100]
-
         ax = Charter.barchart_over_timepoints(
-            subsampled_probs,
-            xlabel='Time (s)',
-            ylabel='Probability of CMTO',
-            title='Probability of CMTO Over Time',
-            round_times=1
-            )
+               subsampled_probs,
+               xlabel='Time (s)',
+               ylabel='Probability of CMTO',
+               title='Probability of CMTO Over Time',
+               round_times=1
+               )
 
+        ax.figure.show()
         print("Place breakpoint in test_powermember_compute_probabilities to see chart.")
+
+    #------------------------------------
+    # test_add_truth_to_power_result
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_add_truth_to_power_result(self):
+
+        pwr_res = PowerResult(self.probs_rec1_series, 'CMTOG')
+        rec1_sel_tbl = self.sel_tbls[0]
+        pwr_res.add_truth(rec1_sel_tbl)
+        
+        # First line of df should be: 0.00040816326530612246,0.2514283069254051
+        self.assertEqual(round(pwr_res.truth_df.index[0], 4), 0.0004)
+        self.assertEqual(round(pwr_res.truth_df['Probability'].iloc[0], 2), 0.25)
+        self.assertFalse(pwr_res.truth_df['Truth'].iloc[0])
+
+    #------------------------------------
+    # test_plot_pr_curve_power_result
+    #-------------------
+
+    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_plot_pr_curve_power_result(self):
+
+        pwr_member = PowerMember('CMTOG', self.templates[0])
+        pwr_res    = PowerResult(self.probs_rec1_series, 'CMTOG')
+        pwr_res.add_truth(self.sel_tbls[0])
+        
+        pwr_member.plot_pr_curve(pwr_res)
+        
+        print('foo')
         
 
 # -------------- Utilities -------------
