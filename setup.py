@@ -16,7 +16,7 @@ setup(
     # Couldn't get numpy install to work without
     # an out-of-band: sudo apt-get install python-dev
     setup_requires   = ['pytest-runner'],
-    install_requires = ['scikit-learn>=0.23.1',
+    install_requires = ['scikit-learn>=1.0',
                         'pandas>=1.1.3',
                         'numpy>=1.19.1',           
                         'torch>=1.7.1',       
