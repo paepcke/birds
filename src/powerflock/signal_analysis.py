@@ -49,6 +49,36 @@ class SignalAnalyzer:
     n_fft = 2048
     
     sr = 22050
+    
+    # Meaning of the following:
+    # When an audio clip is tested for degree of match
+    # against a species signature, multiple measures of
+    # overlap quality are taken, snipping a signature-length 
+    # snippet from the clip each time. The window that defines
+    # the snippet is slid over by a fraction of the signature
+    # width for each measurement. The following quantitiy is
+    # that fraction.
+    # Ex for 12 samples in a signature, and 18
+    #    samples in the audio clip to test:
+    #
+    #     Audio: abcdefghejklmnopqrs
+    # Signature: xxxxxxxxxxxx
+    #
+    # First measure:
+    #          abcdefghejkl
+    #          xxxxxxxxxxxx
+    #
+    # Second measure (slide by 12/4 = 3 samples
+    #          defghejklmno          
+    #          xxxxxxxxxxxx
+    #
+    # Third measure:
+    #
+    #          jklmnopqrsMM   <--- MM is mean of j-s
+    #          xxxxxxxxxxxx          
+    
+    SIGNATURE_MATCH_SLIDE_FRACTION = 0.25
+    '''Fraction of signature length to slide test clips before each match check'''
 
     #------------------------------------
     # Constructor 
@@ -499,23 +529,33 @@ class SignalAnalyzer:
             # Match against all of the template's sigs:
             for sig in template.signatures:
                 sig_id += 1
-                num_frames = len(sig)
-                # Turn signature frames into samples:
-                audio_clip_width = librosa.frames_to_samples(num_frames, 
-                                                             hop_length=template.hop_length)
+                # How many samples underly the signature?
+                sig_width_samples = sig.end_idx - sig.start_idx
+                num_sample_slides = int(
+                    np.floor(sig_width_samples * cls.SIGNATURE_MATCH_SLIDE_FRACTION)
+                    )
                 # Create subclips to match the present signature:
-                for start_idx in np.arange(0, len(audio), audio_clip_width):
-                    end_idx = start_idx + audio_clip_width
+                for start_idx in np.arange(0, len(audio), num_sample_slides):
+                    # Take snippet of same width each time:
+                    end_idx = start_idx + sig_width_samples
                     try:
                         aud_snip = audio[start_idx:end_idx]
+                        # Do we have a full signature width of audio
+                        # in this snippet?
+                        if len(aud_snip) < sig_width_samples:
+                            # Pad aud with its mean:
+                            missing_width = sig_width_samples - len(aud_snip)
+                            aud_snip = np.append(aud_snip, 
+                                                 [aud_snip.mean()]*missing_width)
+                        
+                        # Get the snippet's signature:
                         clip_sig = SignalAnalyzer.spectral_centroid_each_timeframe(aud_snip)
                         # Probability for one subclip on one signature:
-                        #**********NEXT: GETS INDEX ERROR; Slide by less?
                         matching_prob = cls._compute_prob(clip_sig, sig)
                         res_df = res_df.append({
                             'start' : start_idx,
                             'stop'  : end_idx,
-                            'n_samples' : audio_clip_width,
+                            'n_samples' : sig_width_samples,
                             'probability' : matching_prob,
                             'sig_id': sig_id
                             }, 

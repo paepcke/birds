@@ -422,11 +422,11 @@ class SignalAnalysisTester(unittest.TestCase):
 
 
     #------------------------------------
-    # test_detailed_matching
+    # test_matching_one_sig
     #-------------------
     
-    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    def test_detailed_matching(self):
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_matching_one_sig(self):
 
         onecall_tmplt = copy.deepcopy(self.templates[0])
         onecall_tmplt.signatures = [onecall_tmplt[0]]
@@ -443,6 +443,62 @@ class SignalAnalysisTester(unittest.TestCase):
                                            sig_times_walltime[-1])
         
         details_df, summary = SignalAnalyzer.match_probability(clip, onecall_tmplt)
+        
+        expected_res_df = pd.DataFrame([
+           {
+            'n_samples'   : 43136.0,
+            'probability' : 1.000000,
+            'sig_id'      : 1.0,
+            'start'       : 0.0,
+            'stop'        : 43136.0
+            },
+           {
+            'n_samples'   : 43136.0,
+            'probability' : 0.179206,
+            'sig_id'      : 1.0,
+            'start'       : 10784.0,
+            'stop'        : 53920.0
+            },
+           {
+            'n_samples'   : 43136.0,
+            'probability' : 0.115142,
+            'sig_id'      : 1.0,
+            'start'       : 21568.0,
+            'stop'        : 64704.0
+            },
+           {
+            'n_samples'   : 43136.0,
+            'probability' : 0.112187,
+            'sig_id'      : 1.0,
+            'start'       : 32352.0,
+            'stop'        : 75488.0
+            }])
+
+
+        details_df['probability'] = details_df['probability'].round(6)
+        self.assertTrue((details_df == expected_res_df).all().all())
+        
+        expected_summary = pd.Series({
+                         'min_prob'      :  0.112187,
+                         'max_prob'      :  1.000000,
+                         'med_prob'      :  0.147174,
+                         'best_fit_prob' :  1.000000
+                         })
+
+        summary = summary.round(6)
+        
+        self.assertTrue((summary == expected_summary).all())
+
+    #------------------------------------
+    # test_matching_multiple_sigs
+    #-------------------
+    
+    #*********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_matching_multiple_sigs(self):
+
+        template11 = copy.deepcopy(self.templates[0])
+        rec1, _sr = SoundProcessor.load_audio(self.sel_rec_cmto_xc1)
+        details_df, summary = SignalAnalyzer.match_probability(rec1, template11)
         print('foo')
 
     #------------------------------------
