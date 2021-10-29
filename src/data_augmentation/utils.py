@@ -94,6 +94,9 @@ class Interval(dict):
     def contains(self, num):
         return num >= self['low_val'] and num < self['high_val']
     
+    def overlaps(self, other):
+        return self.contains(other['low_val']) or self.contains(other['high_val']-1)
+    
     def values(self):
         if self.the_series is not None:
             return iter(self.the_series)
@@ -936,7 +939,7 @@ class Utils:
         Values are converted to appropriate types as above.
         Output is suitable for SnippetSelectionTableMapper.match_snippets()
         
-        The list will be sorted by ascending the 'Begin Time (s)'
+        The list will be sorted by ascending 'Begin Time (s)'
         value.
         
         In the incoming selection tables, the header 'species' is sometimes called

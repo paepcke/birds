@@ -3,19 +3,20 @@ Created on Oct 1, 2021
 
 @author: paepcke
 '''
+import copy
 import os
 from pathlib import Path
 import unittest
 
-import numpy as np
-import pandas as pd
+import librosa
 
 from data_augmentation.sound_processor import SoundProcessor
-from data_augmentation.utils import Utils, Interval
+from data_augmentation.utils import Utils
+import numpy as np
+import pandas as pd
 from powerflock.power_member import PowerMember, PowerResult
 from powerflock.signal_analysis import SignalAnalyzer, TemplateSelection
 from result_analysis.charting import Charter
-
 
 #*******TEST_ALL = True
 TEST_ALL = False
@@ -274,54 +275,38 @@ class SignalAnalysisTester(unittest.TestCase):
         self.assertEqual(xc1_template.recording_fname,
                          Path(self.sel_rec_cmto_xc1).name
                          ) 
-        prob = SignalAnalyzer.match_probability(clip,
-                                                xc1_template,
-                                                xc1_template.sample_rate,
-                                                template_selection=TemplateSelection.MAX_PROB
-                                                )
-        self.assertEqual(round(prob, 2), 0.84)
-       
-        # Now same with MIN_PROB
-        prob = SignalAnalyzer.match_probability(clip,
-                                                xc1_template,
-                                                xc1_template.sample_rate,
-                                                template_selection=TemplateSelection.MIN_PROB
-                                                )
-       
-        self.assertEqual(round(prob, 2), 0.17)
-       
-        # Now best length-fit:
-        prob = SignalAnalyzer.match_probability(clip,
-                                                xc1_template,
-                                                xc1_template.sample_rate,
-                                                template_selection=TemplateSelection.SIMILAR_LEN
-                                                )
-        self.assertEqual(round(prob, 2), 0.60)
+        df, summary = SignalAnalyzer.match_probability(clip, xc1_template)
+        self.assertTupleEqual(df.shape, (293,5))
+        
+        expected_1st_row = pd.Series({
+            'n_samples'   :   43264.000000,
+            'probability' :      0.602503,
+            'sig_id'      :       1.000000,
+            'start'       :      0.000000,
+            'stop'        :   43264.000000,
+            })
+        
+        # Check the first row:
+        first_row = df.iloc[0]
+        first_row.probability = round(first_row.probability, 6)
+        self.assertTrue((first_row == expected_1st_row).all())
 
+        expected_summary = pd.Series ({
+            'min_prob'      :   0.000000,
+            'max_prob'      :   0.927716,
+            'med_prob'      :   0.319931,
+            'best_fit_prob' :   0.747894
+            })
+        
+        self.assertTrue((summary.round(6) == expected_summary.round(6)).all())
+       
         # MULTIPLE TEMPLATES:
         
-        prob = SignalAnalyzer.match_probability(clip,
-                                                self.templates,
-                                                xc1_template.sample_rate,
-                                                template_selection=TemplateSelection.MAX_PROB
-                                                )
-       
-        self.assertEqual(round(prob, 2), 0.84)
-       
-        prob = SignalAnalyzer.match_probability(clip,
-                                               self.templates,
-                                               xc1_template.sample_rate,
-                                               template_selection=TemplateSelection.MIN_PROB
-                                               )
-       
-        self.assertEqual(round(prob, 2), 0.08)
+        df, summary = SignalAnalyzer.match_probability(clip, self.templates)
         
-        prob = SignalAnalyzer.match_probability(clip,
-                                               self.templates,
-                                               xc1_template.sample_rate,
-                                               template_selection=TemplateSelection.MED_PROB
-                                               )
-        self.assertEqual(round(prob, 2), 0.52)
+        self.assertTupleEqual(df.shape, (891, 5))
+        num_sigs = sum([len(template.signatures) for template in self.templates])
+        self.assertEqual(df.sig_id.max(), num_sigs)
 
     #------------------------------------
     # test_xc_templates_xc_in_template_clips
@@ -437,6 +422,133 @@ class SignalAnalysisTester(unittest.TestCase):
 
 
     #------------------------------------
+    # test_detailed_matching
+    #-------------------
+    
+    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_detailed_matching(self):
+
+        onecall_tmplt = copy.deepcopy(self.templates[0])
+        onecall_tmplt.signatures = [onecall_tmplt[0]]
+        # Force re-calc of mean sig:
+        onecall_tmplt.cached_mean_sig = None
+        sig1 = onecall_tmplt[0]
+        
+        # Take the clip that underlies this
+        # one sig, and get its clip signature:
+        sig_times_walltime = sig1.as_walltime().index
+        rec1_audio, _sr = SoundProcessor.load_audio(self.sel_rec_cmto_xc1)
+        clip = SoundProcessor.extract_clip(rec1_audio,
+                                           sig_times_walltime[0], 
+                                           sig_times_walltime[-1])
+        
+        details_df, summary = SignalAnalyzer.match_probability(clip, onecall_tmplt)
+        print('foo')
+
+    #------------------------------------
+    # test_powermember_compute_probabilities_single_call
+    #-------------------
+    
+    #******** REVISIT THIS
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_powermember_compute_probabilities_single_call(self):
+
+        # Get the 11-call template and surgically
+        # remove all but the first call from it.
+        # (Not something to do for regular use):
+        onecall_tmplt = copy.deepcopy(self.templates[0])
+        onecall_tmplt.signatures = [onecall_tmplt.signatures[0]]
+        # Force re-calc of mean sig:
+        onecall_tmplt.cached_mean_sig = None
+
+        pwr_member = PowerMember('CMTOG', onecall_tmplt)
+
+        rec1_arr, rec1_sr = SoundProcessor.load_audio(self.sel_rec_cmto_xc1)
+        #**********
+        # sig = onecall_tmplt.signatures[0].copy()
+        # sig.index = [round(time_tick, 2) 
+        #              for time_tick 
+        #              in onecall_tmplt.as_time(sig)
+        #              ]
+        # self._co_chart(onecall_tmplt, rec1_arr)
+        #**********
+
+        power_res = pwr_member.compute_probabilities(rec1_arr, rec1_sr)
+        df = power_res.prob_df
+        
+        self.assertTupleEqual(df.shape, (19, 8))
+        first_row = df.iloc[0]
+        first_row_expected = pd.Series({
+            'n_samples'    :  43264.0000,
+            'probability'  :      0.6025,
+            'sig_id'       :      1.0000,
+            'start'        :      0.0000,
+            'stop'         :  43264.0000,
+            'start_time'   :      0.0000,
+            'stop_time'    :      1.9621,
+            'center_time'  :      0.9810
+        })
+        
+        self.assertTrue((first_row.round(4) == first_row_expected).all())
+        power_res.add_truth(self.sel_tbl_cmto_xc1)
+        
+        print('foo')
+
+    #------------------------------------
+    # _co_chart
+    #-------------------
+    
+    def _co_chart(self, template, audio):
+        
+        # audio_clip_width = librosa.frames_to_samples(
+        #     max(template.sig_lengths), 
+        #         template.hop_length, 
+        #         template.n_fft)
+        sig = template.signatures[0].copy()
+        sig.index = [round(time_tick, 2) 
+                     for time_tick 
+                     in template.as_time(sig)
+                     ]
+        ax = None
+        #sr = 22050
+        num_frames = len(sig)
+        audio_clip_width = librosa.frames_to_samples(num_frames, 
+                                                     hop_length=template.hop_length)
+        for start_idx in np.arange(0, len(audio), audio_clip_width):
+            end_idx = start_idx + audio_clip_width
+
+            try:
+                aud_snip = audio[start_idx:end_idx]
+                clip_sig = SignalAnalyzer.spectral_centroid_each_timeframe(aud_snip)
+                # Make clip sig same length
+                clip_sig.index = [round(time_tick, 2) 
+                                  for time_tick 
+                                  in template.as_time(clip_sig)
+                                  ]
+                df = pd.DataFrame()
+                if ax is None:
+                    # Show the template sig once:
+                    df['Template'] = sig
+                    color_groups = {'Template' : 'blue', 'Clip' : 'green'}
+                else:
+                    color_groups = {'Clip' : 'green'}
+                df['Clip'] = clip_sig
+                
+                ax = Charter.linechart(df, color_groups=color_groups, ax=ax) 
+                # prob = SignalAnalyzer.match_probability(
+                #     aud_snip, 
+                #     self.spectral_template, sr)
+                # center_time = np.floor(start_idx + self.slide_width / 2.) / sr
+                # probs[center_time] = prob
+                 
+            except IndexError:
+                # Slid past end of given audio:
+                break
+
+        
+
+
+    #------------------------------------
     # test_powermember_compute_probabilities
     #-------------------
     
@@ -445,7 +557,9 @@ class SignalAnalysisTester(unittest.TestCase):
 
         pwr_member = PowerMember('CMTOG', self.templates[0])
         rec1_arr, rec1_sr = SoundProcessor.load_audio(self.sel_rec_cmto_xc1)
+        
         power_result = pwr_member.compute_probabilities(rec1_arr, rec1_sr)
+        
         probs = power_result.truth_df['Probability'] 
         subsampled_probs = probs[0:len(probs):100]
 
@@ -491,16 +605,33 @@ class SignalAnalysisTester(unittest.TestCase):
     # test_plot_pr_curve_power_result
     #-------------------
 
-    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_plot_pr_curve_power_result(self):
 
-        pwr_member = PowerMember('CMTOG', self.templates[0])
+        # SIMILAR_LENGTH: AP: 0.42
+        # pwr_member = PowerMember('CMTOG', self.templates[0])
+        
+        # MED_PROB: 0.42
+        # pwr_member = PowerMember('CMTOG', 
+        #                          self.templates[0],
+        #                          TemplateSelection.MED_PROB)
+
+        # MAX_PROB: 0.42
+        # pwr_member = PowerMember('CMTOG', 
+        #                          self.templates[0],
+        #                          TemplateSelection.MAX_PROB)
+
+        # MIN_PROB: 0.42
+        pwr_member = PowerMember('CMTOG', 
+                                 self.templates[0],
+                                 TemplateSelection.MIN_PROB)
+        
         pwr_res    = PowerResult(self.probs_rec1_series, 'CMTOG')
         pwr_res.add_truth(self.sel_tbls[0])
         
         pwr_member.plot_pr_curve(pwr_res)
         
-        print('foo')
+        print("Place breakpoint in test_plot_pr_curve_power_result to see chart.")
         
 
 # -------------- Utilities -------------

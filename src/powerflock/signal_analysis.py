@@ -3,10 +3,12 @@ Created on Oct 1, 2021
 
 @author: paepcke
 '''
-from pathlib import Path
+from collections import namedtuple
 from enum import Enum
+from pathlib import Path
 
 import librosa
+import sklearn
 
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import Utils, Interval
@@ -22,10 +24,31 @@ class TemplateSelection(Enum):
     MIN_PROB    = 2
     MED_PROB    = 3
 
+ClipInfo = namedtuple("ClipInfo", "clip start_idx end_idx fname sr")
+
 class SignalAnalyzer:
     '''
     classdocs
     '''
+    # Decide on STFT parameters, ensuring that 
+    # even short audio clips get a good amount of signature
+    # points across a good number of frequencies:
+    # Formulas:
+    #
+    #    num_time_frames = audio_clip_duration * sr / hop_length
+    #                    = num_audio_samples / hop_length
+    #    
+    #    num_time_frames per sec = sr/hop_length
+    #
+    #    num_frequency_rows = 1 + n_fft/2
+    #           n_fft       = 2 * (num_frequency_rows - 1)
+
+    # ~88 time frames per second:
+    hop_length = 256
+    # 1025 frequency bins:
+    n_fft = 2048
+    
+    sr = 22050
 
     #------------------------------------
     # Constructor 
@@ -147,26 +170,69 @@ class SignalAnalyzer:
     #-------------------
     
     @classmethod
-    def spectral_centroid_each_timeframe(cls, audio, sr):
+    def spectral_centroid_each_timeframe(cls, 
+                                         audio, 
+                                         sr=22050, 
+                                         hop_length=None, 
+                                         n_fft=None,
+                                         normalize=False
+                                         ):
         '''
         Return a 1D array with the centroid of energy
         across all frequencies for each time slice.
         
+        There will be ~88 signature entries (time frames)
+        per second, and the mean energy at each time frame
+        will be taken across 1025 frequencies.
+        
+        To change these numbers, modify the class variables
+        hop_length and n_fft
+        
         :param audio: audio in time domain
         :type audio: {np.array | pd.Series}
+        :param sr: sample rate of the audio 
+        :type sr: int
+        :param hop_length: number of frames each
+            time frame
+        :type hop_length: int
+        :param n_fft: control over number of frequencies
+            n_fft = 2 * (num_freq_rows -1)
+        :type n_fft: int
+        :param normalize: if True, audio is first normalized
+             to (-1,1)
+        :type normalize: bool
         :return a 1D Series of frequency centroids, one
             for each time slot
         :rtype pd.Series
         '''
-        aud_len = len(audio)
-        next_pwr_of_2 = min(int(2**(np.ceil(np.log(aud_len)/np.log(2)))), 2048)
-        window  = min(aud_len, next_pwr_of_2)
-        return pd.Series(librosa.feature.spectral_centroid(y=audio, 
-                                                           sr=sr,
-                                                           win_length=window,
-                                                           n_fft=next_pwr_of_2
-                                                           )[0])
-
+        if hop_length is None:
+            hop_length = cls.hop_length
+        if n_fft is None:
+            n_fft = cls.n_fft
+        if normalize:
+            audio = sklearn.preprocessing.minmax_scale(audio,feature_range=(-1,1))
+        
+        sig_ser = pd.Series(librosa.feature.spectral_centroid(y=audio, 
+                                                              sr=sr,
+                                                              hop_length=hop_length,
+                                                              n_fft=n_fft
+                                                              )[0])
+        duration = len(audio) / sr
+        time_step_1frame = duration/len(sig_ser)
+        # Add one timestep at the end to capture
+        # last sample:
+        index = np.arange(0, duration + time_step_1frame, time_step_1frame)
+        if len(index) > len(sig_ser):
+            # Depending on the above calculation,
+            # the index may be longer by 1 (or 2?) frames
+            # than the sig series. In that case, repeat the
+            # last sig value:
+            length_diff = len(index)-len(sig_ser)
+            # Append as many copies of the last element as needed:
+            sig_ser = sig_ser.append(pd.Series([sig_ser.iloc[-1]]*length_diff))
+        sig_ser.index = index
+        return sig_ser
+    
     #------------------------------------
     # zero_crossings
     #-------------------
@@ -224,15 +290,28 @@ class SignalAnalyzer:
         the audio clips of calls by the given species. 
         
         For each clip in each recording, compute for each time 
-        frame the frequency at which energy is maximal. This 
-        computation results in one pd.Series, a time series of
-        max-energy-holding frequencies over time for each call.
-        This time series is the call's "signature".
+        frame the frequency at which energy is the mean of energies
+        at this frame. This computation results in one pd.Series, 
+        a time series of mean-energy-holding frequencies over time 
+        for each call. This time series is the call's "signature".
         
         Package the signatures of one recording into SpectralTemplate
         instance, and return a list of such instances, one for
         each recording. Each instance contains the signatures of
         all calls in one recording. 
+        
+        In order to match audio snippets to calls in the template,
+        the snippet centroids will also be computed. That computation
+        must use the same FFT parameters used when computing the
+        signatures in this template. The SpectralTemplate instance
+        will therefore contain:
+        
+            n_fft          number of frequencies (rows in spectrogram)
+                           num_rows = 1 - n_fft/2
+            sr
+            hop_length
+            win_length
+            window
         
         :param sel_tbls: list of selection table paths
         :type sel_tbls: [str]
@@ -270,21 +349,29 @@ class SignalAnalyzer:
             
             spectral_centroids = []
             rec_fname = Path(rec_path).name
-            for clip_num, clip in enumerate(species_clips_dict[species]):
+            for clip_num, clip_info in enumerate(species_clips_dict[species]):
                 
-                centroid = SignalAnalyzer.spectral_centroid_each_timeframe(clip, sr)
-                
-                num_cols = len(centroid)
-                time_step = int(10**6 * 1/sr)
-                col_names = list(Interval(0,time_step*num_cols,time_step).values())
-                centroid.index = col_names
-                centroid.name = f"{rec_fname}_call{clip_num}" 
-                
-                spectral_centroids.append(centroid)
+                clip = clip_info['clip']
+                centroid = SignalAnalyzer.spectral_centroid_each_timeframe(clip,
+                                                                           sr,
+                                                                           normalize=False)
+                sig = Signature(centroid,
+                                sr=sr,
+                                start_idx=clip_info['start_idx'],
+                                end_idx=clip_info['end_idx'],
+                                species=species,
+                                fname=rec_path,
+                                sig_id=clip_num,
+                                audio=clip
+                                )
+                spectral_centroids.append(sig)
                 
             res_templates.append(SpectralTemplate(spectral_centroids, 
                                                   rec_fname=rec_fname,
-                                                  sr=sr))
+                                                  sr=sr,
+                                                  hop_length=cls.hop_length,
+                                                  n_fft=cls.n_fft
+                                                  ))
 
         return res_templates
 
@@ -294,160 +381,176 @@ class SignalAnalyzer:
     
     @classmethod
     def match_probability(cls, 
-                          clip, 
-                          spectroid_template, 
-                          sr,
-                          template_selection=TemplateSelection.SIMILAR_LEN
+                          audio,
+                          spectroid_template 
                           ):
         '''
-        Given an audio clip, match it to each
-        of the given spectral centroid timelines in the
-        given SpectralTemplate instance. Determine
-        the match with lowest matching cost. On the basis
-        of that lowest cost, return the probability that one
-        of the template's signatures came from the species that produced
-        the clip.
+        Given an audio clip, match it to each signatures
+        in each of the given spectral centroid timelines.
+        For each signature of duration D, partition the audio
+        into equal sized subclips of duration D.
         
-        When a template contains multiple signatures, 
-        the template_selection arg controls how a final probability
-        is chosen TemplateSelection may be:
+        Compute the power centroid timeline for each subclip, and
+        determine the probability that the subclip's content is
+        the same as the audio that underlies the signature.
         
-           o SIMILAR_LEN  the signature closest in length to the 
-                          signature of the given clip is used
-           o MAX_PROB     all template signatures are computed,
-                          and the maximum probability is returned.
-           o MIN_PROB     all template signatures are computed,
-                          and the minimum probability is returned.
-           o MED_PROB     all template signatures are computed,
-                          and the median probability is returned.
-                          
+        Return a pd.DataFrame with all results, and a pd.Series with
+        a summary.
+        
+        The full-information returned dataframe: 
 
-        :param clip: audio of a single call
-        :type clip: {np.array | pd.Series}
+        Columns of the returned dataframe looks like this:
+        
+               num_samples  probability  sig_id  start   stop                
+                
+        where each row is the result of matching one subclip of the 
+        given audio to one signature from one template. The size
+        of the subclip will be the size of the signature being matched
+        at the moment.
+        
+            o start is the index to the first audio sample used of the audio
+            o end is one index beyond the last audio sample used
+            o n_samples is the length in samples of the subclip being matched
+                (i.e.: end - start)
+            o probability is the probability that the row's subclip
+                matches the row's signature
+            o sig_id is a numeric identifier of the signature. The sig_id
+                is unique across the list of templates, and is useful
+                as a groupby variable for aggreation over subclip results
+                per signature.
+
+        Example return df:
+        
+               n_samples    probability  sig_id  start   stop
+            0         10.0         0.85     0.0   10.0   20.0
+            1         10.0         0.85     0.0   20.0   30.0
+            2         10.0         0.75     0.0   31.0   40.0
+            3         10.0         0.65     0.0   41.0   50.0
+            4          4.0         0.65     2.0    0.0    4.0
+            5          4.0         0.55     2.0    5.0    9.0
+            6        100.0         0.65     3.0    0.0  100.0
+            7        100.0         0.55     3.0  101.0  200.0
+
+                
+        Example uses of the dataframe
+        
+           highest_probs = df.groupby(by='sig_id').max().probability
+                sig_id
+                0.0    0.85
+                2.0    0.65
+                3.0    0.65
+                Name: probability, dtype: float64
+            
+           highest_prob_sig_id2 = df.groupby(by='sig_id').max().probability.iloc[1]
+                0.65
+        
+        Using the groupby instance for clarity, and to avoid retyping 
+        "df.groupby(by='sig_id')": 
+        
+           gb = df.groupby(by='sig_id')
+           gb.max().probability
+           
+        Example 'median of all probabilities':
+        
+           df.probability.median()
+                0.65
+                
+        Example: highest probability among the longest
+            signature:
+            
+          longest_sig = df['num_samples'].max()
+          df[df['num_samples'] == longest_sig].probability.max()
+                0.65
+
+        The summary:
+        
+        The second returned value is a pd.Series with probabilities
+        aggregated across all the matches:
+        
+            min_prob        lowest probability among all matches
+            max_prob        highest probability among all matches
+            med_prob        the median of the probabilities among all matches
+            best_fit_prob   max probability among matches with the 
+                            longest signature
+                            
+        :param audio: audio of a single call
+        :type audio: {np.array | pd.Series}
         :param spectroid_template: one or more SpectralTemplate
             instance(s) against which to compare the clip
         :type spectroid_template: {SpectralTemplate | [SpectralTemplate]}
-        :param sr: sampling rate
-        :type sr: int
-        :param template_selection: how to select probability results
-            from templates with multiple signatures
-        :type template_selection: TemplateSelection 
-        :return probability of clip having been created
-            by the species from whose calls the templates were
-            made
-        :rtype float
+        :return all probabilities, and a summary of results
+        :rtype (pd.DataFrame, pd.Series)
         '''
 
         if type(spectroid_template) != list:
             spectroid_template = [spectroid_template]
 
-        # For convenience:
-        if template_selection == TemplateSelection.MIN_PROB:
-            sel_by_min = True
-            sel_by_max = sel_by_med = False
-        elif template_selection == TemplateSelection.MAX_PROB:
-            sel_by_max = True
-            sel_by_min = sel_by_med = False
-        elif template_selection == TemplateSelection.MED_PROB:
-            sel_by_max = sel_by_min = False
-            sel_by_med = True
-        else:
-            sel_by_max = sel_by_min = sel_by_med = False
+        # An ID number for each signature unique across
+        # the templates; simply a running number. Used
+        # only for aggregation (group-by):
+        sig_id = 0 
+        res_df = pd.DataFrame()
 
-        # Get centroid of the clip:
-        clip_signature = cls.spectral_centroid_each_timeframe(clip, sr)
-        clip_sig_len   = len(clip_signature)
-
-        # Map signature Series instances to tuples containing
-        # a match-probability with clip, and the length of the
-        # signature that yielded that probability:
-        matching_probs = {}
-        
         # Match clip sig against the sigs within
         # each template, collecting the probs from
         # each template match into matching_probs:
         for template in spectroid_template:
 
-            # Pick signature closest in length to the given clip's
-            # signature?
-            if template_selection == TemplateSelection.SIMILAR_LEN:
-                # Find the template signature closest in
-                # length to clip_sig_len:
-                sig_diffs = []
-                for sig in template:
-                    sig_diffs.append(abs(clip_sig_len - len(sig)))
-                sig_idx = sig_diffs.index(min(sig_diffs))
-                template_sig = template[sig_idx]
-                prob = cls._compute_prob(clip_signature, template_sig)
-                matching_probs[template] = (prob, len(template_sig))
-                
-            elif sel_by_min or sel_by_max or sel_by_med:
-                # Match against all of the template's sigs,
-                # and pick the max or min of the resulting probs.
-                
-                # The following list will hold tuples:
-                #    [(probability, signatureLen),
-                #               ...
-                #    ]
-                # The lengths are needed further down:
-                probs = []
-                for template_sig in template.signatures:
-                    probs.append(
-                        (cls._compute_prob(clip_signature, template_sig),
-                        len(template_sig)
-                        )
-                    )
+            # Match against all of the template's sigs:
+            for sig in template.signatures:
+                sig_id += 1
+                num_frames = len(sig)
+                # Turn signature frames into samples:
+                audio_clip_width = librosa.frames_to_samples(num_frames, 
+                                                             hop_length=template.hop_length)
+                # Create subclips to match the present signature:
+                for start_idx in np.arange(0, len(audio), audio_clip_width):
+                    end_idx = start_idx + audio_clip_width
+                    try:
+                        aud_snip = audio[start_idx:end_idx]
+                        clip_sig = SignalAnalyzer.spectral_centroid_each_timeframe(aud_snip)
+                        # Probability for one subclip on one signature:
+                        #**********NEXT: GETS INDEX ERROR; Slide by less?
+                        matching_prob = cls._compute_prob(clip_sig, sig)
+                        res_df = res_df.append({
+                            'start' : start_idx,
+                            'stop'  : end_idx,
+                            'n_samples' : audio_clip_width,
+                            'probability' : matching_prob,
+                            'sig_id': sig_id
+                            }, 
+                            ignore_index=True)
+                    except IndexError:
+                        # No more subclips to match against current sig.
+                        # Process next signature, and then
+                        # next template:
+                        break
 
-                if sel_by_max:
-                    # Find the max prob and the len of the sig
-                    # that yielded that max probability:
-                    best_prob, sig_len = max(probs, key=lambda res_tuple: res_tuple[0])
-                elif sel_by_min:
-                    best_prob, sig_len = min(probs, key=lambda res_tuple: res_tuple[0])
-                else:
-                    # Pick the median of the probs:
-                    # Sort the prob/len tuples by the probability;
-                    # sort() uses the first of each tuple for sorting
-                    # automatically:
-                    probs.sort()
-                    median_idx = int(len(probs) / 2)
-                    best_prob, sig_len = probs[median_idx]
-                matching_probs[template] = (best_prob, sig_len) 
+            # Matched against all sigs of one template.
+        # Matched against all templates
 
-            else:
-                raise ValueError(f"Bad template_selection value: {template_selection}")
+        # Create the summary:
+        min_prob = res_df['probability'].min()
+        max_prob = res_df['probability'].max()
+        med_prob = res_df['probability'].median()
+        # Best probability for the longest signature
+        longest_sig = res_df['n_samples'].max()
+        best_fit_prob = res_df[res_df['n_samples'] == longest_sig].probability.max()
         
-        # Now matching_prob keys each template to one
-        # tuple: (probality, template-sig-len)
-        # Aain apply the requested aggregation given in template_selection
-        if sel_by_max:
-            best_prob, sig_len = max(matching_probs.values(), key=lambda prob_sig_len: prob_sig_len[0]) 
-        elif sel_by_min:
-            best_prob, sig_len = min(matching_probs.values(), key=lambda prob_sig_len: prob_sig_len[0])
-        elif sel_by_med:
-            probs_and_lengths = list(matching_probs.values())
-            probs_and_lengths.sort()
-            median_idx = int(len(probs_and_lengths) / 2)
-            best_prob, sig_len = probs_and_lengths[median_idx]
-        else:
-            # Select using probability of sig with 
-            # the length closest to the clip's len:
-            len_diffs = []
-            probs     = []
-            for prob, sig_len in matching_probs.values():
-                len_diffs.append(abs(clip_sig_len - sig_len))
-                probs.append(prob)
-            min_dist_idx = len_diffs.index(min(len_diffs))
-            best_prob = probs[min_dist_idx]
-            
-        return best_prob
+        res_summary = pd.Series({'min_prob' : min_prob,
+                                 'max_prob' : max_prob,
+                                 'med_prob' : med_prob,
+                                 'best_fit_prob' : best_fit_prob
+                                 })
+        return (res_df, res_summary)
 
     #------------------------------------
     # _compute_prob
     #-------------------
     
+    #********** Turn plot_sigs to False:
     @classmethod
-    def _compute_prob(cls, clip_sig, template_sig):
+    def _compute_prob(cls, clip_sig, template_sig, plot_sigs=False):
         '''
         Given a clip's spectral centroid signature, and
         a template signature, find the lowest cost sequence
@@ -482,17 +585,33 @@ class SignalAnalyzer:
         
         if type(clip_sig) == pd.Series:
             clip_sig_np = clip_sig.to_numpy()
+        elif type(clip_sig) == Signature:
+            clip_sig_np = clip_sig.sig.to_numpy()
         else:
             clip_sig_np = clip_sig
             
         # Turn template_sig into np, and cut away
         # the leading TrueLen, if it is there:
         
-        if type(template_sig) == pd.Series:
+        if type(template_sig) == Signature:
+            template_sig_np = template_sig.sig.to_numpy()
+        elif type(template_sig) == pd.Series:
             if template_sig.index[0] == 'TrueLen':
                 template_sig_np = template_sig.to_numpy()[1:]
             else:
                 template_sig_np = template_sig.to_numpy()
+        elif type(template_sig) == np.ndarray:
+            template_sig_np = template_sig
+        else: 
+            raise TypeError(f"template_sig must be a pd.Series, or np.ndarray, not {type(template_sig)}")
+            
+        # Shorten the clip signature to match the
+        # length of the template signature with which
+        # to compare. It is the caller's responsibility
+        # to ensure that the clip is at least as long
+        # as the signature:
+        
+        clip_sig_np = clip_sig_np[:len(template_sig_np)]
 
         # Use dynamic time warping to find the cheapest
         # way of making the clip sig similar to the template sig:
@@ -505,6 +624,18 @@ class SignalAnalyzer:
         # matrix is the sum of all steps' costs:
         total_cost = cost_normalized[-1,-1]
         prob = 1 - total_cost
+        
+        if plot_sigs:
+            templ_sig_series = pd.Series(template_sig_np,
+                                         index=np.arange(len(clip_sig_np)),
+                                         name='TemplateSig')
+            clip_series = pd.Series(clip_sig_np,
+                                    index=np.arange(len(clip_sig_np)),
+                                    name='ClipSig')
+            
+            df = pd.DataFrame({'TemplateSig' : templ_sig_series, 'ClipSig' : clip_series})
+            Charter.linechart(df, title="Template and Clip sigs")
+
         return prob
     
     
@@ -567,10 +698,17 @@ class SignalAnalyzer:
         Comb through the given selection table, and
         extract audio snippets by requested_species.
         Return a dict mapping each species name to
-        a list of audio clips extracted from the full
-        recording that corresponds to the selection
-        table.  
-        
+        a named tuple that includes:
+
+            o clip: np array of audio samples,
+            o start_idx: index into the recording sample array
+                where the call starts
+            o end_idx: index into the recording sample array
+                where the call ends
+            o fname: path to the recording
+            o sr: clip sample rate
+            o species: species that vocalized the call
+                
         :param sel_tbl_path: path to selection table
         :type sel_tbl_path: src
         :param recording_path: path to recording associated
@@ -579,9 +717,9 @@ class SignalAnalyzer:
         :param requested_species: individual or list of species to
             extract. If None, extract all species
         :type requested_species: {None | [str]}
-        :return dict mapping species name to list of
-            audio clips, and sampling rate
-        :rtype ({str : [np.array[float]}, int)
+        :return dict mapping species name to named tuples
+            of clip related information
+        :rtype [{str : namedTuple}]
         '''
         
         # Get a list of dicts, one dict per select
@@ -627,16 +765,24 @@ class SignalAnalyzer:
         for sel_dict in relevant_dicts:
             # Process one row of the selection table:
             species = sel_dict['species']
+            begin_time_secs = sel_dict['Begin Time (s)']
+            end_time_secs = sel_dict['End Time (s)']
             clip = SoundProcessor.extract_clip(audio, 
-                                               sr, 
-                                               sel_dict['Begin Time (s)'], 
-                                               sel_dict['End Time (s)']
+                                               begin_time_secs,
+                                               end_time_secs
                                                )
+            clip_info = {'clip'      : clip,
+                         'start_idx' : librosa.time_to_samples(begin_time_secs, sr),
+                         'end_idx'   : librosa.time_to_samples(end_time_secs, sr),
+                         'sr'        : sr,
+                         'fname'     : recording_path,
+                         'species'   : species
+                         } 
             try:
-                audio_result_dict[species].append(clip)
+                audio_result_dict[species].append(clip_info)
             except KeyError:
                 # First one:
-                audio_result_dict[species] = [clip]
+                audio_result_dict[species] = [clip_info]
         return audio_result_dict, sr
 
 # -------------------- Class SpectralTemplate -----------
@@ -647,15 +793,24 @@ class SpectralTemplate:
     of all calls in one recording.
     
     Usage:
-        o <inst>.signatures   : list of pd.Series with the 
-                                frequency-of-max-energy timeline
-        o iter(<inst>)        : return iterator over signature Series
-        o <inst>[n]           : return the nth signature
-        o len(<inst>)         : number of signatures
-        o <inst>.sig_lengths  : list of lengths of the signatures
-        o <inst>.mean_sig     : signature that is the mean of all
-                                signatures' frequencies at each
-                                time.
+        o <inst>.signatures    : list of Signature instances with the 
+                                 frequency-of-max-energy timeline
+        o iter(<inst>)         : return iterator over signatures
+        o <inst>[n]            : return the nth signature
+        o len(<inst>)          : number of signatures
+        o <inst>.sig_lengths   : list of lengths of the signatures
+        o <inst>.mean_sig      : signature that is the mean of all
+                                 signatures' frequencies at each
+                                 time.
+        o <inst>.as_time(<signature>): sigs are pd.Series whose index are times
+                                 as fractional secs. This method returns an array of 
+                                 those times.
+                                
+    Also available as (read-only) properties:
+        o sample_rate          : sample rate
+        o hop_length           : samples between frames
+        o n_fft                : related to number of frequency bands 
+                                
     '''
     
     #------------------------------------
@@ -665,25 +820,20 @@ class SpectralTemplate:
     def __init__(self, 
                  signatures, 
                  rec_fname=None,
-                 sr=None):
+                 sr=SignalAnalyzer.sr,
+                 hop_length=SignalAnalyzer.hop_length,
+                 n_fft=SignalAnalyzer.n_fft
+                 ):
+
+        # Save the hop length and frequency bin-count-relevant
+        # parameters so that clients wanting to create signatures
+        # for audio clips to match against this template will
+        # create proper sigs:
         
-        # Turn all ways of passing signatures
-        # into a list of signatures:
-        if type(signatures) == pd.Series:
-            self.signatures = [signatures]
-        elif type(signatures) == pd.DataFrame:
-            self.signatures = []
-            for row_label, sig in signatures.iterrows():
-                clean_sig = sig.dropna()
-                clean_sig.index = [f"t{i}" for i in range(len(sig))]
-                clean_sig.name  = row_label
-                self.signatures.append(clean_sig)
-        # Hopefully it's a list of pandas Series:
-        elif type(signatures) == list and all([type(el) == pd.Series for el in signatures]):
-            self.signatures = signatures
-        else:
-            raise TypeError(f"Signatures must be a pd.Series, a list of pd.Series, or a pd.DataFrame, not {type(signatures)}")
+        self._hop_length = hop_length
+        self._n_fft      = n_fft
         
+        self.signatures = signatures
         self.rec_fname = rec_fname
         self.sr = sr
 
@@ -738,6 +888,48 @@ class SpectralTemplate:
         return mean_sig
 
     #------------------------------------
+    # as_time
+    #-------------------
+    
+    def as_time(self, signature):
+        '''
+        For each element of the signature, return
+        the wallclock time. The last entry corresponds
+        to the duration of the clip from which the signature
+        was extracted. 
+        
+        :param signature: signature for which to 
+            return times
+        :type signature: pd.Series
+        :return array of fractional seconds
+        :rtype [float]
+        '''
+        
+        return librosa.frames_to_time(np.arange(len(signature)),
+                                      hop_length=self.hop_length)
+
+
+    #------------------------------------
+    # duration
+    #-------------------
+    
+    def duration(self, signature):
+        '''
+        Return the duration of the signature in
+        fractional seconds.
+        
+        :param signature: signature to analyze
+        :type signature: pd.Series
+        :return time duration
+        :rtype float
+        '''
+        
+        duration = librosa.frames_to_samples(
+            len(signature), hop_length=self.hop_length) / self.sample_rate
+        return duration
+
+
+    #------------------------------------
     # sig_lengths
     #-------------------
     
@@ -761,6 +953,22 @@ class SpectralTemplate:
     @property
     def sample_rate(self):
         return self.sr
+    
+    #------------------------------------
+    # hop_length
+    #-------------------
+    
+    @property
+    def hop_length(self):
+        return self._hop_length
+
+    #------------------------------------
+    # n_fft
+    #-------------------
+    
+    @property
+    def n_fft(self):
+        return self._n_fft
 
     #------------------------------------
     # __getitem_
@@ -798,3 +1006,188 @@ class SpectralTemplate:
     def __str__(self):
         return self.__repr__()
     
+
+class Signature:
+    '''
+    Instances hold the spectral signature of a
+    single bird call. Information includes the
+    following properties:
+    
+          o sig: a pd.Series.
+            Its values are the successive frequencies over
+            time. The index are the fractional seconds
+            into the call for each value.
+            
+                        Frequency
+                 Time
+                0.01456   2402
+                0.02912   3725
+                      ...
+          o fname: path to the recording that contains the
+            bird call from which the signature was determined.
+          o start_idx: index into the recording at which the
+            call started
+          o end_idx: index into the recording at which the
+            call ended
+          o sr: sample rate of the recording extract from which
+            the call was taken. By default this is 22050, the librosa
+            default to which the librosa.load() function resamples
+            
+    '''
+
+    #------------------------------------
+    # Constructor
+    #-------------------
+    
+    def __init__(self, 
+                 spectral_centroid, 
+                 sr=22050, 
+                 start_idx=0, 
+                 end_idx=None, 
+                 species=None, 
+                 fname=None,
+                 sig_id='na',
+                 audio=None
+                 ):
+        '''
+        The spectral_centroid is the actual signature: the
+        frequencies at which energy was the median of all 
+        energies at one frame in time. Maybe a pd.Series,
+        or an np.ndarray. If a Series, each index value is 
+        expected to be a time into the call relative to the
+        beginning of the call (i.e. not relative to the start
+        of the recording from which the call was lifted.   
+        
+        The start_idx/end_idx are the indices to the clip samples
+        in the full recording from which the clip is lifted.
+        The fname is the path to a file; format up to the caller;
+        may or may not include hostname.
+        
+        :param spectral_centroid: frequencies for which 
+            energy was median in their time frame
+        :type spectral_centroid: {np.ndarray | pd.Series}
+        :param sr: sample rate
+        :type sr: int
+        :param start_idx: index into the full recording's samples
+            array where the call begins
+        :type start_idx: int
+        :param end_idx: index into the full recording's samples
+            array where the call ends
+        :type end_idx: int
+        :param species: species that voiced the call
+        :type species: str
+        :param fname: path to full recording
+        :type fname: str
+        :param sig_id: optionally some identifier of this
+            signature that is meaningful to the caller
+        :type sig_id: Any
+        :param audio: optionally, the audio from which the 
+            signature was computed
+        :type np.ndarray
+        '''
+
+        if type(spectral_centroid) == pd.Series:
+            self.sig = spectral_centroid
+        else:
+            raise TypeError(f"The spectral_centroid must be a pd.Series, not {type(spectral_centroid)}")
+        rec_fname = Path(fname).name
+        self.sig.name = f"{rec_fname}_call_{sig_id}"
+        self.sr = sr
+        self.fname = fname
+        self.start_idx = start_idx
+        self.end_idx = end_idx
+        self.species = species
+        self.sig_id  = sig_id
+        self.audio = audio
+
+    #------------------------------------
+    # as_walltime
+    #-------------------
+    
+    def as_walltime(self):
+        '''
+        Returns a copy of the sig series with
+        the index relative to the start of the 
+        entire recording from which the call clip
+        was taken.
+        
+        :return: copy of signature Series with new index
+        :rtype: pd.Series
+        '''
+        
+        sig_times = self.sig.index
+        new_index = sig_times + librosa.samples_to_time(self.start_idx, self.sr)
+        sig_copy  = self.sig.copy()
+        sig_copy.index = new_index
+        return sig_copy
+    
+    #------------------------------------
+    # as_frames
+    #-------------------
+    
+    def as_frames(self):
+        '''
+        Returns a copy of the sig series with
+        the index replaced with the enumeration
+        of spectral frames for each value (i.e. 1..len(sig)).
+        
+        :return: copy of signature Series with new index
+        :rtype: pd.Series
+        '''
+        
+        sig_copy  = self.sig.copy()
+        sig_copy.index = np.arange(len(self.sig))
+        return sig_copy
+
+
+    #------------------------------------
+    # __len__
+    #-------------------
+    
+    def __len__(self):
+        return len(self.sig)
+    
+    #------------------------------------
+    # __iter__
+    #-------------------
+    
+    def __iter__(self):
+        return iter(self.sig)
+    
+    #------------------------------------
+    # __getitem__
+    #-------------------
+    
+    def __getitem__(self, key):
+        
+        if type(key) == float:
+            # Key is assumed to be a time in fractional seconds:
+            return self.sig.loc[key] 
+        elif type(key) == int:
+            return self.sig[key]
+        else:
+            raise TypeError(f"Only floats and ints can index into sigs, not {key}")
+
+    #------------------------------------
+    # index
+    #-------------------
+    
+    @property
+    def index(self):
+        '''
+        Allow Signature instance to be used like
+        a pd.Series by adding this index property.
+        '''
+        return self.sig.index
+
+    #------------------------------------
+    # name
+    #-------------------
+    
+    @property
+    def name(self):
+        '''
+        Allow Signature instance to be used like
+        a pd.Series by adding this name property.
+        '''
+        return self.sig.name

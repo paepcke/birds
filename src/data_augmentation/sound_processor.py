@@ -597,7 +597,7 @@ class SoundProcessor:
     #-------------------
     
     @classmethod
-    def extract_clip(cls, audio, sr, start, stop):
+    def extract_clip(cls, audio, start, stop, sr=22050):
         '''
         Given audio as an np array, return a slice
         from the audio array, which starts at time
@@ -606,12 +606,13 @@ class SoundProcessor:
         :param audio: audio array as returned by
             load_audio()
         :type audio: np.array[float]
-        :param sr: sample rate
-        :type sr: int
         :param start: start in seconds
         :type start: float
         :param stop: stop points in seconds
         :type stop: float
+        :param sr: sample rate. If None, and loading
+            from file, use file's native sr.
+        :type sr: int
         :returned audio clip
         :rtype np.array[float]
         :raise ValueError if time segment exceeds
@@ -620,7 +621,7 @@ class SoundProcessor:
         
         if start < 0 or stop < start:
             raise ValueError(f"Start and stop must lie within audio clip, not {start}, {stop}")
-        
+
         num_samples = len(audio)
         full_time_len = num_samples / sr
         if stop > full_time_len:
@@ -680,7 +681,7 @@ class SoundProcessor:
     def create_spectrogram(cls,
                            audio_sample, 
                            sr, 
-                           outfile, 
+                           outfile=None, 
                            n_mels=None, # Default: SoundProcessor.SPECTRO_WIN_HEIGHT
                            info=None):
         '''
@@ -688,10 +689,16 @@ class SoundProcessor:
         sample. Bandpass filter is applied, Mel scale is used,
         and power is converted to decibels.
         
+        If outfile is None, the spectrogram is returned
+        as a an np.ndarray. Else the spectrogram is converted
+        to an image and saved.
+        
+        If outfile is a filename:
+        
         The sampling rate (sr) and time duration in fractional
-        seconds is added as metadata under keys "sr" and "duration".
-        Additional info may be included in the .png if info is 
-        a dict of key/value pairs.
+        seconds is added as metadata in the .png file under keys 
+        "sr" and "duration". Additional info may be included in 
+        the .png if info is a dict of key/value pairs.
         
         The outfile's parent directories are created, if necessary.
         
@@ -727,7 +734,10 @@ class SoundProcessor:
         mel = librosa.feature.melspectrogram(audio, sr=sr, n_mels=n_mels)
         # create a logarithmic mel spectrogram
         log_mel = librosa.power_to_db(mel, ref=np.max)
-        
+
+        if outfile is None:
+            return log_mel
+
         # Create an image of the spectrogram and save it as file
         img = cls.scale_minmax(log_mel, 0, 255).astype(np.uint8)
         img = np.flip(img, axis=0) # put low frequencies at the bottom in image

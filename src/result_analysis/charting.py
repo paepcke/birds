@@ -60,7 +60,9 @@ class Charter:
     # Value to assign to precision,
     # recall, or f1 when divide by 0
     DIV_BY_ZERO = 0
-    
+
+    DEFAULT_NUM_XAXIS_LABELS = 20
+
     log = LoggingService()
 
     #------------------------------------
@@ -1158,7 +1160,7 @@ class Charter:
     
     @classmethod
     def linechart(cls, 
-                  data, 
+                  data_input, 
                   rotation=0,
                   ylabel=None,
                   xlabel=None,
@@ -1170,15 +1172,17 @@ class Charter:
         Returns a matplotlib axes with one or more
         line charts that can be added to a figure. 
         
-        The data are a pandas Series or DataFrame.
+        The data_input are a pandas Series or DataFrame.
         If a Series, a single line is drawn. If the
         Series has a name, it can be used to control
         the line color via the color_groups (which will
-        be a single-entry dict in this case)
+        be a single-entry dict in this case). The index of
+        the Series will be the x-axis values.
         
         For a DataFrame, each column holds the y-data
         for one line, and the column names can be used
-        in the color_groups. 
+        in the color_groups. The index will be the x-axis
+        ticks. 
                     
         The axes used is the present matplotlib axes.
         This may be the default axes that is implicitly
@@ -1204,8 +1208,8 @@ class Charter:
         Axes instance each time. Additional lines will be added
         to the chart.
         
-        :param data: values to plot
-        :type data: {pd.Series | pd.DataFrame}
+        :param data_input: values to plot
+        :type data_input: {pd.Series | pd.DataFrame}
         :param rotation: rotation of x labels in degrees; ex: 45
         :type rotation: int
         :param ylabel: y axis label; None is OK
@@ -1226,32 +1230,50 @@ class Charter:
         # In this context it is more convenient 
         # to key by row-label (index), with values 
         # being color:
-        if color_groups is not None:
-            new_col_grps = {}
-            for color, row_label_list in color_groups.items():
-                for row_idx, _row_val in enumerate(row_label_list):
-                    new_col_grps[row_idx] = color
-            colors = new_col_grps
-        else:
-            colors = None
+        #************************
+        # if color_groups is not None:
+        #     new_col_grps = {}
+        #     for color, row_label_list in color_groups.items():
+        #         for row_idx, _row_val in enumerate(row_label_list):
+        #             new_col_grps[row_idx] = color
+        #     colors = new_col_grps
+        # else:
+        #     colors = None
+        colors = color_groups
+        #************************            
             
-        if type(data) == Series:
-            data = pd.DataFrame([data])
+        if type(data_input) == pd.Series:
+            data = pd.DataFrame()
+            # The series will be a column of a
+            # df, with column name being the name
+            # of the Series:
+            data[data_input.name] = data_input
+        elif type(data_input) == pd.DataFrame:
+            data = data_input
+        else:
+            raise TypeError(f"Arg data_input must be a Pandas Series or DataFrame")
         if ax is None:
             _fig, ax = plt.subplots()
-        # Plot row-wise (pyplot default is column-wise):
-        line_objs = ax.plot(data)
-        if colors is not None:
-            for row_num, _row_label in enumerate(data.index):
-                try:
-                    color = new_col_grps[row_num]
-                except KeyError:
-                    # No color specified for this row
-                    pass
-                else:
-                    line_objs[row_num].set_color(color)
-                
-        ax.set_xticklabels(data.index, rotation=rotation)
+        
+        # Number of x-axis labels:
+        num_xtick_labels  = min(cls.DEFAULT_NUM_XAXIS_LABELS, len(data))
+        # Meaning every nth data point gets an x label,
+        label_every = int(len(data) / num_xtick_labels)
+        # Make the indexes into the data series explicit:
+        idxs_into_data = np.arange(0, len(data), label_every)
+        xtick_labels = data.index[idxs_into_data]
+        ax.xaxis.set_major_locator(plticker.FixedLocator(xtick_labels))
+        
+        line_objs = []
+        for col_name, col_data in data.iteritems():
+            try:
+                color = colors[col_name]
+                line_objs.append(ax.plot(col_data.index, col_data.values, color=color))
+            except Exception:
+                # No color specified for this line
+                line_objs.append(ax.plot(col_data.index, col_data.values))
+
+        #*******ax.set_xticklabels(xtick_labels, rotation=rotation)
 
         if xlabel is not None:
             ax.set_xlabel(xlabel)

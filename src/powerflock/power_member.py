@@ -80,9 +80,25 @@ class PowerMember:
         # match probabilities:
         
         self.slide_width = int(self.min_call_len * self.WIN_SLIDE_WIDTH_FRACTION)
-        self.win_width   = max(max(self.spectral_template.sig_lengths),
-                               2048
-                               )
+
+        # Width of each audio clip to match against
+        # the signatures of a template must be the 
+        # length of the longest call for which the signature was
+        # created. The signature lengths are spectrogram
+        # frames. So clip width must be:
+        #      samplesPerFrame * Frames,
+        # which depends on hop_length and n_fft. The computation
+        # is available from librosa.frames_to_samples()
+        #
+        # Note that in signal_analysis.SignalAnalyzer.cls._compute_prob()
+        # just before comparing the clip to one of the template's
+        # signatures, the clip is shortened to that signature's
+        # length:
+        
+        self.audio_clip_width = librosa.frames_to_samples(
+            max(self.spectral_template.sig_lengths), 
+            self.spectral_template.hop_length, 
+            self.spectral_template.n_fft)
 
     #--------------------------- Computations --------------
 
@@ -109,7 +125,7 @@ class PowerMember:
         :type full_audio: np.array
         :param sr: sample rate of the audio
         :type sr: float
-        :returned a PowerResult instance that holds in property probs_series
+        :returned a PowerResult instance that holds in the property probs_series
             a pd.Series whose index is time into recording, and whose
             values are probabilities of a call occurring at that moment.
         :rtype PowerResult
@@ -118,25 +134,10 @@ class PowerMember:
         if len(full_audio) < self.min_call_len:
             raise ValueError(f"Audio snippet length must be at at least {self.min_call_len}")
         audio = self._right_size_sr(full_audio, sr)
-        
-        probs = {}
-        for start_idx in range(0, len(full_audio), self.slide_width):
-            end_idx = start_idx + self.win_width
-
-            try:
-                aud_snip = audio[start_idx:end_idx]
-                prob = SignalAnalyzer.match_probability(
-                    aud_snip, 
-                    self.spectral_template, sr)
-                center_time = np.floor(start_idx + self.slide_width / 2.) / sr
-                probs[center_time] = prob
-                 
-            except IndexError:
-                # Slid past end of given audio:
-                break
-
-        prob_series = pd.Series(probs.values(), index=probs.keys())
-        self.power_result = PowerResult(prob_series, self.species_name)
+        probs_df, summary_ser = SignalAnalyzer.match_probability(audio, 
+                                                                 self.spectral_template
+                                                                 )
+        self.power_result = PowerResult(probs_df, summary_ser, self.species_name)
         
         return self.power_result
 
@@ -150,9 +151,11 @@ class PowerMember:
 
         y_true = power_result.truth_df['Truth']
         y_pred = power_result.truth_df['Probability']
-        sklearn.metrics.PrecisionRecallDisplay.from_predictions(y_true, 
-                                                                y_pred, 
-                                                                name='CMTOG PowerFlock Member')
+        pred_display = sklearn.metrics.PrecisionRecallDisplay.from_predictions(
+            y_true, 
+            y_pred, 
+            name='CMTOG PowerFlock Member')
+        return pred_display
 
 
     # ------------------------- Utilities ------------
@@ -196,26 +199,56 @@ class PowerResult:
     # Constructor
     #-------------------
     
-    def __init__(self, prob_series, species):
+    def __init__(self, prob_df, summary_ser, species, sr=22050):
         '''
         Life begins with the result of a PowerMember's
-        compute_probabilities() computation. The prob_series
-        pd.Series index are time points into a recording.
-        The values are the probability that the PowerMember's
-        input at that time was part of a call. 
+        compute_probabilities() computation. To its result
+        df we add columns for the walltime start/end/middle.
         
-        :param prob_series:
-        :type prob_series:
+        Clients can call the add_truth() method with a source
+        of the true call match/no-match values. Those will
+        be added to the prob_df in yet another column. 
+        
+        Example prob_df:
+        
+               n_samples    probability  sig_id  start   stop
+            0         10.0         0.85     0.0   10.0   20.0
+            1         10.0         0.85     0.0   20.0   30.0
+            2         10.0         0.75     0.0   31.0   40.0
+            3         10.0         0.65     0.0   41.0   50.0
+            4          4.0         0.65     2.0    0.0    4.0
+            5          4.0         0.55     2.0    5.0    9.0
+            6        100.0         0.65     3.0    0.0  100.0
+            7        100.0         0.55     3.0  101.0  200.0
+             
+
+        Example summary_ser:
+        
+            min_prob        lowest probability among all matches
+            max_prob        highest probability among all matches
+            med_prob        the median of the probabilities among all matches
+            best_fit_prob   max probability among matches with the 
+                            longest signature
+
+        :param prob_df: all match probabilities
+        :type prob_df: pd.DataFrame
+        :param summary_ser: aggregates of probabilities
+        :type summary_ser: pd.Series
         :param species: the species for which the PowerMember
             is specialized
         :type species: str
         '''
         
-        self.truth_df = pd.DataFrame([], 
-                                     columns=['Probability', 'Truth'], 
-                                     index=prob_series.index)
-        self.truth_df['Probability'] = prob_series
-        self.species = species
+        self.sr = sr
+        
+        # Add start, end, and middle wallclock times to the df:
+        prob_df['start_time']  = prob_df.start / sr
+        prob_df['stop_time']   = prob_df.stop / sr
+        prob_df['center_time'] = prob_df.start_time + (prob_df.stop_time - prob_df.start_time)/2. 
+
+        self.prob_df = prob_df
+        self.summary_ser = summary_ser
+        self.species  = species
         
     #------------------------------------
     # add_truth
@@ -253,12 +286,13 @@ class PowerResult:
         
         # Assume no call at each time point until
         # proven otherwise:
-        truth_each_timepoint = pd.Series([0]*len(self.truth_df),
-                                         index=self.truth_df.index)
-        for timepoint in self.truth_df.index:
-            for interval in call_intervals:
-                if interval.contains(timepoint):
-                    truth_each_timepoint[timepoint] = 1
+        truth_each_timepoint = pd.Series([0]*len(self.prob_df),
+                                         index=self.prob_df.index)
+        for row_num, prob_ser in self.prob_df.iterrows():
+            prob_interval = Interval(prob_ser.start_time, prob_ser.stop_time)
+            for truth_interval in call_intervals:
+                if truth_interval.overlaps(prob_interval):
+                    truth_each_timepoint[row_num] = 1
                     break
 
-        self.truth_df['Truth'] = truth_each_timepoint
+        self.prob_df['Truth'] = truth_each_timepoint
