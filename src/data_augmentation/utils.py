@@ -88,6 +88,7 @@ class Interval(dict):
         self['low_val']  = low_val
         self['high_val'] = high_val
         self['step'] = step
+        self.width = high_val - low_val
         # Lazy evaluation of values at each step:
         self.the_series  = None
         
@@ -95,7 +96,48 @@ class Interval(dict):
         return num >= self['low_val'] and num < self['high_val']
     
     def overlaps(self, other):
-        return self.contains(other['low_val']) or self.contains(other['high_val']-1)
+        if self['step'] != other['step']:
+            raise ValueError(f"Intervals must have same step size, not {self['step']}; {other['step']}")
+        # Could be partial overlap
+        is_partial = self.contains(other['low_val']) or \
+               self.contains(other['high_val'] - other['step'])
+        if is_partial:
+            return True
+        # Could be one subsuming the other:
+        subsumes = ((other['low_val'] <= self['low_val']) and \
+                    (other['high_val'] >= self['high_val'])) or \
+                   ((self['low_val'] <= other['low_val']) and \
+                    (self['high_val'] >= other['high_val']))
+    
+        return subsumes
+    
+    def percent_overlap(self, other):
+        
+        # No overlap at all?
+        if not self.overlaps(other):
+            return 0
+        
+        # Other fully contained in self?
+        if self.contains(other['low_val']) and self.contains(other['high_val']):
+            return 100
+        
+        # Does other fully contain self?
+        if other['high_val'] >= self['high_val'] and other['low_val'] <= self['low_val']:
+            # overlap is percentage of self.width of
+            # other.width:
+            perc = 100 * self.width / other.width
+            return perc
+        
+        # Partial overlap:
+        # Does other lie to the left of self?
+        if other['high_val'] < self['high_val']:
+            overlap = other['high_val'] - self['low_val']
+        else:
+            # other starts inside self and ends beyond:
+            overlap =  self['high_val'] - other['low_val']
+            
+        return 100 * overlap / self.width
+        
     
     def values(self):
         if self.the_series is not None:
@@ -139,6 +181,8 @@ class Utils:
     # be nice:
     
     MAX_PERC_OF_CORES_TO_USE = 50
+    
+    DEFAULT_SAMPLE_RATE = 22050
     
     random_seed = None
     '''Currently installed random seed; applies to all modules. Set by set_seed()'''
@@ -1100,9 +1144,11 @@ class Utils:
                 sel_dict['species'] = 'NOISG'
 
             sel_dict['time_interval'] = Interval(sel_dict['Begin Time (s)'],
-                                                 sel_dict['End Time (s)'])
+                                                 sel_dict['End Time (s)'],
+                                                 step=1/cls.DEFAULT_SAMPLE_RATE)
             sel_dict['freq_interval'] = Interval(sel_dict['Low Freq (Hz)'],
-                                                 sel_dict['High Freq (Hz)'])
+                                                 sel_dict['High Freq (Hz)'],
+                                                 step=1/cls.DEFAULT_SAMPLE_RATE)
 
             
         # Make sure the list is sorted by 

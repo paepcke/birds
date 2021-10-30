@@ -499,10 +499,12 @@ class SignalAnalysisTester(unittest.TestCase):
         template11 = copy.deepcopy(self.templates[0])
         rec1, _sr = SoundProcessor.load_audio(self.sel_rec_cmto_xc1)
         details_df, summary = SignalAnalyzer.match_probability(rec1, template11)
+        pow_res = PowerResult(details_df, summary, 'CMTOG')
+        pow_res.add_overlap_and_truth(self.sel_tbl_cmto_xc1)
         print('foo')
 
     #------------------------------------
-    # test_powermember_compute_probabilities_single_call
+    # test_powermember_compute_probabilities_single_ccall
     #-------------------
     
     #******** REVISIT THIS
@@ -546,7 +548,7 @@ class SignalAnalysisTester(unittest.TestCase):
         })
         
         self.assertTrue((first_row.round(4) == first_row_expected).all())
-        power_res.add_truth(self.sel_tbl_cmto_xc1)
+        power_res.add_overlap_and_truth(self.sel_tbl_cmto_xc1)
         
         print('foo')
 

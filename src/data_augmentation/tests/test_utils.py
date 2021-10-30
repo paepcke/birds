@@ -13,8 +13,8 @@ from data_augmentation.utils import Utils, Interval
 import pandas as pd
 
 
-TEST_ALL = True
-#TEST_ALL = False
+#******TEST_ALL = True
+TEST_ALL = False
 
 class Test(unittest.TestCase):
 
@@ -55,29 +55,29 @@ class Test(unittest.TestCase):
         # Identity:
         aug_nm = "foo.wav"
         orig = Utils.orig_file_name(aug_nm)
-        self.assertEquals(orig, aug_nm)
+        self.assertEqual(orig, aug_nm)
         
         aug_nm = "Amaziliadecora1061880-volume-10.wav"
         orig   = Utils.orig_file_name(aug_nm)
-        self.assertEquals(orig, 'Amaziliadecora1061880.wav')
+        self.assertEqual(orig, 'Amaziliadecora1061880.wav')
         
         aug_nm = 'Amaziliadecora1061883-rain_bgd0ms.wav'
         orig   = Utils.orig_file_name(aug_nm)
-        self.assertEquals(orig, 'Amaziliadecora1061883.wav')
+        self.assertEqual(orig, 'Amaziliadecora1061883.wav')
         
         aug_nm = 'Amaziliadecora1061886-shift4600ms.wav'
         orig   = Utils.orig_file_name(aug_nm)
-        self.assertEquals(orig, 'Amaziliadecora1061886.wav')
+        self.assertEqual(orig, 'Amaziliadecora1061886.wav')
         
         # With directory relative:
         aug_nm = 'foo/bar/Amaziliadecora1061886-shift4600ms.wav'
         orig   = Utils.orig_file_name(aug_nm)
-        self.assertEquals(orig, 'foo/bar/Amaziliadecora1061886.wav')
+        self.assertEqual(orig, 'foo/bar/Amaziliadecora1061886.wav')
         
         # With directory absolute:
         aug_nm = '/foo/bar/Amaziliadecora1061886-shift4600ms.wav'
         orig   = Utils.orig_file_name(aug_nm)
-        self.assertEquals(orig, '/foo/bar/Amaziliadecora1061886.wav')
+        self.assertEqual(orig, '/foo/bar/Amaziliadecora1061886.wav')
 
 
     #------------------------------------
@@ -92,7 +92,7 @@ class Test(unittest.TestCase):
         nearly_truth = os.listdir(self.cur_dir)
         
         abs_paths = Utils.listdir_abs(self.cur_dir)
-        self.assertEquals(len(nearly_truth), len(abs_paths))
+        self.assertEqual(len(nearly_truth), len(abs_paths))
         
         # Check existence of first file or dir:
         self.assertTrue(os.path.exists(abs_paths[0]))
@@ -178,7 +178,7 @@ class Test(unittest.TestCase):
     # test_read_raven_selection_table 
     #-------------------
 
-    #*********unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_read_raven_selection_table(self):
         
         dict_list = Utils.read_raven_selection_table(self.raven_sel_tbl_path)
@@ -377,7 +377,7 @@ class Test(unittest.TestCase):
     # test_intervals
     #-------------------
     
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #*******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_intervals(self):
         iv = Interval(0,5)
         self.assertEqual(iv['low_val'], 0)
@@ -399,8 +399,52 @@ class Test(unittest.TestCase):
         with self.assertRaises(IndexError):
             self.assertEqual(iv[20])
         
+        # Overlaps:
         
-
+        iv1 = Interval(0, 10, 1)
+        iv2 = Interval(-5, -4, 1)
+        self.assertFalse(iv1.overlaps(iv2))
+        iv2 = Interval(-5, 10, 1)
+        self.assertTrue(iv1.overlaps(iv2))
+        iv2 = Interval(10, 15, 1)
+        self.assertFalse(iv1.overlaps(iv2))
+        iv2 = Interval(4, 5, 1)
+        self.assertTrue(iv1.overlaps(iv2))
+        iv2 = Interval(-4, 15, 1)
+        self.assertTrue(iv1.overlaps(iv2))
+        
+        # Contains (a given number)
+        iv1 = Interval(0,10,1)
+        self.assertTrue(iv1.contains(0))
+        self.assertTrue(iv1.contains(9))
+        self.assertFalse(iv1.contains(10))
+        self.assertFalse(iv1.contains(-1))
+        
+        # Overlap percentage
+        
+        # other is same as self:
+        iv2 = Interval(0,10,1)
+        self.assertEqual(iv1.percent_overlap(iv2), 100)
+        # other abuts to the right
+        iv2 = Interval(10,20,1)
+        self.assertEqual(iv1.percent_overlap(iv2), 0)
+        # other abuts to the left:
+        iv2 = Interval(-5,0,1)
+        self.assertEqual(iv1.percent_overlap(iv2), 0)
+        # other starts within by 1, and reaches behond:
+        iv2 = Interval(9,20,1)
+        self.assertEqual(iv1.percent_overlap(iv2), 10)
+        # other starts below self, and reaches to middle
+        # of self
+        iv2 = Interval(-1,5,1)
+        self.assertEqual(iv1.percent_overlap(iv2), 50)
+        # other fully containse self:
+        iv2 = Interval(-10, 10, 1)
+        self.assertEqual(iv1.percent_overlap(iv2), 50)
+    
+        
+        
+         
 # ---------------- Main --------------
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

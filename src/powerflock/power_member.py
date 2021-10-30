@@ -251,10 +251,25 @@ class PowerResult:
         self.species  = species
         
     #------------------------------------
-    # add_truth
+    # add_and_truth
     #-------------------
     
-    def add_truth(self, truth_source):
+    def add_overlap_and_truth(self, truth_source):
+        '''
+        Add two new columns: 'Overlap' and 'Truth' to the matching results
+        df. For each row the Truth column is 1 or 0, depending
+        on whether in the interval of that row a call did
+        occur. The Overlap column will contain the percentage
+        of overlap between the probability result interval and a
+        true call.
+        
+        The prob_df will permanently contain the columns.
+        
+        :param truth_source: either a selection table file, 
+            or a list of Interval instances with time intervals
+            of calls
+        :type truth_source: {str | [Interval]}
+        '''
         
         if type(truth_source) == str:
             # File name to a selection table that covers
@@ -279,20 +294,31 @@ class PowerResult:
                 raise TypeError(f"List in truth_source does not contain Interval instances")
             call_intervals = truth_source
             
-        # Build a df whose index are the times from the 
-        # probability series. The first column is the probability
-        # of a call at that time, and the second column is 
-        # 1 or 0 depending on whether a call did occur at that time:
+        # Build a Series whose index are the times from the 
+        # probability series. Fill the series with the percentage
+        # of overlap of the interval in each probability row:
         
-        # Assume no call at each time point until
-        # proven otherwise:
-        truth_each_timepoint = pd.Series([0]*len(self.prob_df),
-                                         index=self.prob_df.index)
-        for row_num, prob_ser in self.prob_df.iterrows():
-            prob_interval = Interval(prob_ser.start_time, prob_ser.stop_time)
-            for truth_interval in call_intervals:
-                if truth_interval.overlaps(prob_interval):
-                    truth_each_timepoint[row_num] = 1
-                    break
+        overlap_percentages = pd.Series([0.]*len(self.prob_df.index),
+                                        name='sig_overlap_perc')
 
-        self.prob_df['Truth'] = truth_each_timepoint
+        cur_sig_id = self.prob_df.loc[0,'sig_id']
+        truth_intervals = iter(call_intervals)
+        cur_truth_interval = next(truth_intervals)
+        for row_num, prob_ser in self.prob_df.iterrows():
+            if prob_ser.sig_id != cur_sig_id:
+                cur_truth_interval = next(truth_intervals)
+                cur_sig_id = prob_ser.sig_id 
+            prob_interval = Interval(prob_ser.start_time, 
+                                     prob_ser.stop_time,
+                                     step=1/SignalAnalyzer.sr)
+            ovlp = cur_truth_interval.percent_overlap(prob_interval)
+            overlap_percentages[row_num] = ovlp
+
+        # Attach the overlap percentages to the right
+        # of self.prob_df:
+        self.prob_df['overlap'] = overlap_percentages
+
+        # For convenience, add a boolean col Truth, with
+        # 1 if any overlap between prbability row and any
+        # true call intervals:
+        self.prob_df['Truth'] = self.prob_df.overlap > 0
