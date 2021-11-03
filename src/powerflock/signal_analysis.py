@@ -11,7 +11,7 @@ import librosa
 import sklearn
 
 from data_augmentation.sound_processor import SoundProcessor
-from data_augmentation.utils import Utils, Interval
+from data_augmentation.utils import Utils
 import numpy as np
 import pandas as pd
 from result_analysis.charting import Charter
@@ -53,31 +53,32 @@ class SignalAnalyzer:
     # Meaning of the following:
     # When an audio clip is tested for degree of match
     # against a species signature, multiple measures of
-    # overlap quality are taken, snipping a signature-length 
+    # overlap quality are taken, lifting a signature-length 
     # snippet from the clip each time. The window that defines
-    # the snippet is slid over by a fraction of the signature
-    # width for each measurement. The following quantitiy is
-    # that fraction.
+    # the snippet is slid over by some time duration. 
+    # The following quantitiy is that time duration:
+    #
     # Ex for 12 samples in a signature, and 18
-    #    samples in the audio clip to test:
+    #    samples in the audio clip to test. 
+    #    SIGNATURE_MATCH_SLIDE_TIME == 0.1 sec
     #
     #     Audio: abcdefghejklmnopqrs
     # Signature: xxxxxxxxxxxx
     #
-    # First measure:
+    # First measurement:
     #          abcdefghejkl
     #          xxxxxxxxxxxx
     #
-    # Second measure (slide by 12/4 = 3 samples
+    # Second measurement (slide to right by 0.1 sec * sr s/sec 
     #          defghejklmno          
     #          xxxxxxxxxxxx
     #
-    # Third measure:
+    # Third measurement:
     #
     #          jklmnopqrsMM   <--- MM is mean of j-s
     #          xxxxxxxxxxxx          
     
-    SIGNATURE_MATCH_SLIDE_FRACTION = 0.25
+    SIGNATURE_MATCH_SLIDE_TIME = 0.1 # seconds
     '''Fraction of signature length to slide test clips before each match check'''
 
     #------------------------------------
@@ -412,7 +413,8 @@ class SignalAnalyzer:
     @classmethod
     def match_probability(cls, 
                           audio,
-                          spectroid_template 
+                          spectroid_template,
+                          slide_width_time=None
                           ):
         '''
         Given an audio clip, match it to each signatures
@@ -508,9 +510,15 @@ class SignalAnalyzer:
         :param spectroid_template: one or more SpectralTemplate
             instance(s) against which to compare the clip
         :type spectroid_template: {SpectralTemplate | [SpectralTemplate]}
+        :param slide_width_time: time in (usually fractional) seconds by
+            which to slide a signature across the audio
+        :type slide_width_time: float
         :return all probabilities, and a summary of results
         :rtype (pd.DataFrame, pd.Series)
         '''
+        
+        if slide_width_time is None:
+            slide_width_time = SignalAnalyzer.SIGNATURE_MATCH_SLIDE_TIME 
 
         if type(spectroid_template) != list:
             spectroid_template = [spectroid_template]
@@ -531,9 +539,9 @@ class SignalAnalyzer:
                 sig_id += 1
                 # How many samples underly the signature?
                 sig_width_samples = sig.end_idx - sig.start_idx
-                num_sample_slides = int(
-                    np.floor(sig_width_samples * cls.SIGNATURE_MATCH_SLIDE_FRACTION)
-                    )
+                # Number of samples (as opposed to time) to slide
+                # sig to the right between each measurement:
+                num_sample_slides = int(slide_width_time * cls.sr)
                 # Create subclips to match the present signature:
                 for start_idx in np.arange(0, len(audio), num_sample_slides):
                     # Take snippet of same width each time:

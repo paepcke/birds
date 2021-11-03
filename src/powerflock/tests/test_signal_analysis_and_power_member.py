@@ -14,9 +14,10 @@ from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import Utils
 import numpy as np
 import pandas as pd
-from powerflock.power_member import PowerMember, PowerResult
+from powerflock.power_member import PowerMember, PowerResult, PowerQuantileClassifier
 from powerflock.signal_analysis import SignalAnalyzer, TemplateSelection
 from result_analysis.charting import Charter
+
 
 #*******TEST_ALL = True
 TEST_ALL = False
@@ -493,7 +494,8 @@ class SignalAnalysisTester(unittest.TestCase):
     # test_matching_multiple_sigs
     #-------------------
     
-    #*********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #*********** REVISIT THIS
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_matching_multiple_sigs(self):
 
         template11 = copy.deepcopy(self.templates[0])
@@ -504,53 +506,70 @@ class SignalAnalysisTester(unittest.TestCase):
         print('foo')
 
     #------------------------------------
+    # test_power_grid_search 
+    #-------------------
+    
+    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_power_grid_search(self):
+        
+        pwr_member = PowerMember('CMTOG', self.templates[0])
+        
+        # pr_disp = sklearn.metrics.PrecisionRecallDisplay.from_estimator(
+        #     clf,
+        #     pwr_res.prob_df.probability,
+        #     pwr_res.prob_df.Truth
+        #     )
+        # pr_disp.plot()
+        from timeit import default_timer as timer
+
+        start = timer()
+        # 1hr:20min
+        grid_res = PowerQuantileClassifier.grid_search(
+            pwr_member,
+            audio_file=self.sel_rec_cmto_xc1,
+            selection_tbl_file=self.sel_tbl_cmto_xc1,
+            sig_ids=np.arange(1.0, len(self.templates[0].signatures)), 
+            quantile_thresholds=[0.80, 0.85, 0.90, 0.99]
+            )
+        end = timer()
+        print(end - start)
+        print(grid_res)
+
+    #------------------------------------
     # test_powermember_compute_probabilities_single_ccall
     #-------------------
     
-    #******** REVISIT THIS
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    def test_powermember_compute_probabilities_single_call(self):
+    def test_PowerQuantileClassifier(self):
 
-        # Get the 11-call template and surgically
-        # remove all but the first call from it.
-        # (Not something to do for regular use):
-        onecall_tmplt = copy.deepcopy(self.templates[0])
-        onecall_tmplt.signatures = [onecall_tmplt.signatures[0]]
-        # Force re-calc of mean sig:
-        onecall_tmplt.cached_mean_sig = None
-
-        pwr_member = PowerMember('CMTOG', onecall_tmplt)
-
-        rec1_arr, rec1_sr = SoundProcessor.load_audio(self.sel_rec_cmto_xc1)
-        #**********
-        # sig = onecall_tmplt.signatures[0].copy()
-        # sig.index = [round(time_tick, 2) 
-        #              for time_tick 
-        #              in onecall_tmplt.as_time(sig)
-        #              ]
-        # self._co_chart(onecall_tmplt, rec1_arr)
-        #**********
-
-        power_res = pwr_member.compute_probabilities(rec1_arr, rec1_sr)
+        power_res = self.prep_one_sig_result()
         df = power_res.prob_df
         
-        self.assertTupleEqual(df.shape, (19, 8))
+        self.assertTupleEqual(df.shape, (76, 8))
         first_row = df.iloc[0]
         first_row_expected = pd.Series({
-            'n_samples'    :  43264.0000,
-            'probability'  :      0.6025,
+            'n_samples'    :      43136.0,
+            'probability'  :      0.7119,
             'sig_id'       :      1.0000,
             'start'        :      0.0000,
-            'stop'         :  43264.0000,
+            'stop'         :      43136.0000,
             'start_time'   :      0.0000,
-            'stop_time'    :      1.9621,
-            'center_time'  :      0.9810
+            'stop_time'    :      1.9563,
+            'center_time'  :      0.9781
         })
         
         self.assertTrue((first_row.round(4) == first_row_expected).all())
         power_res.add_overlap_and_truth(self.sel_tbl_cmto_xc1)
         
-        print('foo')
+        clf = PowerQuantileClassifier(1.0,        # sig_id, 
+                                      0.75        # threshold_quantile)
+                                      )
+        clf.fit(power_res)
+        self.assertFalse(clf.decision_function(0.543))
+        self.assertFalse(clf.decision_function(-4))
+        self.assertTrue(clf.decision_function(0.61))
+        expected = [True, False, False, True]
+        self.assertTrue((clf.decision_function([0.61, 0.4, 0.0, 0.98]) == expected).all())
 
     #------------------------------------
     # _co_chart
@@ -694,6 +713,35 @@ class SignalAnalysisTester(unittest.TestCase):
 
 # -------------- Utilities -------------
 
+    #------------------------------------
+    # prep_one_sig_result
+    #-------------------
+    
+    def prep_one_sig_result(self):
+        '''
+        Return the PowerResult that matches the CMTOG
+        recording to the first of its 11 signatures
+        
+        :return PowerResult of sig_id 1.0
+        :trype PowerResult
+        '''
+
+        # Get the 11-call template and surgically
+        # remove all but the first call from it.
+        # (Not something to do for regular use):
+        onecall_tmplt = copy.deepcopy(self.templates[0])
+        onecall_tmplt.signatures = [onecall_tmplt.signatures[0]]
+        # Force re-calc of mean sig:
+        onecall_tmplt.cached_mean_sig = None
+
+        pwr_member = PowerMember('CMTOG', onecall_tmplt)
+
+        rec1_arr, rec1_sr = SoundProcessor.load_audio(self.sel_rec_cmto_xc1)
+
+        power_res = pwr_member.compute_probabilities(rec1_arr, rec1_sr)
+        return power_res
+    
+    
 # ---------------- Truths About templates 1,2, and 3:
 
 '''

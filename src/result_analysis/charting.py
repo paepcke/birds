@@ -1262,7 +1262,9 @@ class Charter:
         # Make the indexes into the data series explicit:
         idxs_into_data = np.arange(0, len(data), label_every)
         xtick_labels = data.index[idxs_into_data]
-        ax.xaxis.set_major_locator(plticker.FixedLocator(xtick_labels))
+        ax.set_xticks(idxs_into_data)
+        ax.set_xticklabels(xtick_labels, rotation=rotation)
+        #ax.xaxis.set_major_locator(plticker.FixedLocator(xtick_labels))
         
         line_objs = []
         for col_name, col_data in data.iteritems():
