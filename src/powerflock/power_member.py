@@ -19,10 +19,11 @@ from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import Utils, Interval
 import numpy as np
 import pandas as pd
-from powerflock.signal_analysis import SignalAnalyzer, TemplateSelection
+from powerflock.signal_analysis import SignalAnalyzer, TemplateSelection, \
+    SpectralTemplate
+
+
 #from result_analysis.charting import Charter
-
-
 #from seaborn.matrix import heatmap
 class PowerMember:
     '''
@@ -64,18 +65,102 @@ class PowerMember:
 
     def __init__(self, 
                  species_name, 
-                 spectral_template, 
+                 spectral_template_info=None,
+                 the_slide_width_time=None,
+                 experiment=None,
                  template_selection=TemplateSelection.SIMILAR_LEN,
-                 the_slide_width_time=None
                  ):
         '''
-        Constructor
+        Initialize a member of a species recognition
+        ensemble. SpectralTemplate instance(s) are either created
+        from the file names passed in spectral_template_info, or may 
+        be passed in as an individual, or list of templates.
+        
+        NOTE: even though multiple templates may be passed in, the
+              current implementation only uses the first. Passing
+              in more will currently raise a NotImplementedError
+        
+        If spectral_template_info is not an individual, or list of SpectralTemplate
+        it is expected to be a zip object that pairs a Raven selection table
+        file with the recording file that the table annotates:
+        
+          Zip:
+                recording1-file   selection-table1-file
+                recording2-file   selection-table2-file
+                      ...
+
+        The slide width is the number of fractional seconds by
+        which a signature is passed across audio files. 
+        
+        If an ExperimentManager is passed in, results are stored there.
+        
+        The template_selection names a policy for selecting among
+        the tmplates. See the TemplateSelection enumeration.
+        
+        NOTE: after initialization the PowerMember is ready to accept
+              an audio recording, and to generate probabilities from
+              it. Until compute_probabilities() is called with a 
+              recording to process, no output is available. Clients
+              can test for available output via property:
+                 
+                <inst>.output_ready
+        
+        :param species_name: name of species to which this ensemble
+            member is specialized
+        :type species_name: str
+        :param spectral_template_info: 
+        :type spectral_template_info:
+        :param the_slide_width_time:
+        :type the_slide_width_time:
+        :param experiment:
+        :type experiment:
+        :param template_selection:
+        :type template_selection:
         '''
+
+        self.experiment = experiment
+        
+        # --------- Argument Checks -----------
+        # Init slide width:
         if the_slide_width_time is None:
             the_slide_width_time = SignalAnalyzer.SIGNATURE_MATCH_SLIDE_TIME
+
+        # Figure out what client passed for spectral template(s):
+        if type(spectral_template_info) == SpectralTemplate:
+            # A ready-made single template:
+            self.spectral_templates = [spectral_template_info]
+        elif type(spectral_template_info) == list:
+            for maybe_tmplt in spectral_template_info:
+                if type(maybe_tmplt) != SpectralTemplate:
+                    raise TypeError(f"Template info {maybe_tmplt} is not a SpectralTemplate")
+            # A list of ready-made templates
+            self.spectral_templates = spectral_template_info
+        else:
+            # Must be a zip of recording/RavenTable pairs:
+            if not isinstance(spectral_template_info, zip):
+                raise TypeError(f"Template info {spectral_template_info} is not of any acceptable type")
+
+            call_files, sel_tbl_files = list(zip(*spectral_template_info))
+            
+            for file in call_files + sel_tbl_files:
+                if not os.path.exists(file):
+                    raise FileNotFoundError(f"Could not find {file}")
+
+            self.spectral_templates = []
+            for call_file, sel_tbl_file in zip(call_files, sel_tbl_files):
+                self.spectral_templates.extend(self.compute_spectral_templates(species_name, 
+                                                                               call_file, 
+                                                                               sel_tbl_file)
+                                                                               )
+
         self.species_name = species_name
-        self.spectral_template = spectral_template
         self.template_selection = template_selection
+        
+        # NOTE: From here on out we only consider first spectral template:
+        if len(self.spectral_templates) != 1:
+            raise NotImplementedError(f"Current implementation only supports a single SpectralTemplate instance")
+
+        self.spectral_template = self.spectral_templates[0]
         
         self.min_call_len = min(self.spectral_template.sig_lengths)
         
@@ -84,6 +169,9 @@ class PowerMember:
         # match probabilities.
 
         self.slide_width_time = the_slide_width_time
+        # The slide_width_samples is a setter, so the
+        # width in time will be converted to samples
+        # during this assignment:
         self.slide_width_samples = the_slide_width_time
 
         # Width of each audio clip to match against
@@ -104,6 +192,12 @@ class PowerMember:
             max(self.spectral_template.sig_lengths), 
             self.spectral_template.hop_length, 
             self.spectral_template.n_fft)
+        
+        # Power member is initialized, and ready to 
+        # compute probabilities on an input. But no 
+        # input has been passed through yet. That happens
+        # when clients call compute_probabilities()
+        self.output_ready = False
 
     #------------------------------------
     # slide_width_time Getters/Setters
@@ -131,17 +225,21 @@ class PowerMember:
     # compute_probabilities
     #-------------------
     
-    def compute_probabilities(self, full_audio, sr):
+    def compute_probabilities(self, full_audio, sr=SignalAnalyzer.sr):
         '''
-        Given an audio clip array longer than the shortest call
-        of this PowerMember's species. Slide the signal template
-        past the full_audio in increments of self._slide_width_samples array
-        elements. Each time, find the probability of the audio
-        snippet being a call of this member's species.
+        Given an audio clip array or file longer than the shortest call
+        of this PowerMember's species, or a file path to a recording. 
+        Slide the signal template past the full_audio in increments 
+        of self._slide_width_samples array elements. Each time, find 
+        the probability of the audiosnippet being a call of this member's 
+        species.
         
-        Results are returned, and stored in self.probs_by_time. The
-        data structure is a dict keyed with the center time of
-        each template window overlay.
+        If full_audio is an audio file, the sample rated does not need
+        to be supplied in this call. 
+        
+        Results are returned, and stored in self.power_result, and 
+        returned. That holds probability information for every _slide_width
+        multiple of time.
         
         Sample rate of full_audio is matched to this PowerMember's 
         template.
@@ -156,20 +254,31 @@ class PowerMember:
         :rtype PowerResult
         '''
 
+        if type(full_audio) == str:
+            if not os.path.exists(full_audio):
+                raise FileNotFoundError(f"Could not find audio file {full_audio}")
+            full_audio, sr = SoundProcessor.load_audio(full_audio)
+
         if len(full_audio) < self.min_call_len:
             raise ValueError(f"Audio snippet length must be at at least {self.min_call_len}")
+        # Adjust audio's sample rate if necessary:
         audio = self._right_size_sr(full_audio, sr)
+        # Get results of matching audio against each
+        # signature of the current SpectralTemplate:
         probs_df, summary_ser = SignalAnalyzer.match_probability(
             audio, 
             self.spectral_template,
             slide_width_time=self.slide_width_time
             )
         self.power_result = PowerResult(probs_df, summary_ser, self.species_name)
-        
+
+        # Indicate that probabilities were computed
+        # on an input:
+        self.output_ready = True
         return self.power_result
 
     # ----------------------- Visualizations --------------------
-    
+
     #------------------------------------
     # plot_pr_curve
     #-------------------
@@ -187,6 +296,28 @@ class PowerMember:
 
     # ------------------------- Utilities ------------
     
+    #------------------------------------
+    # compute_spectral_templates
+    #-------------------
+    
+    def compute_spectral_templates(self, species, call_files, sel_tbl_files):
+        '''
+        Compute templates of call signatures from 
+        the call files and associated selection table files.
+        
+        :param species: birds species that produced the calls
+        :type species: str
+        :param call_files: path(s) to recordings of bird calls
+        :type call_files: {str | [str]}
+        :param sel_tbl_files: Raven selection table files that
+            one-to-one correspond to the recording files
+        :type sel_tbl_files: {str | [str]}
+        :return a list of SpectralTemplate instances
+        :rtype [SpectralTemplate]
+        '''
+        templates = SignalAnalyzer.compute_species_templates(species, call_files, sel_tbl_files)
+        return templates
+
     #------------------------------------
     # _right_size_sr
     #-------------------
@@ -385,8 +516,20 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
     # score
     #-------------------
     
-    def score(self, X, y):
-        return sklearn.metrics.accuracy_score(X, y)
+    def score(self, X, y, name=None):
+
+        probs  = self.probabilities
+        preds  = self.decision_function(probs)
+        truth = self.truth
+        score = pd.Series({
+            'bal_acc'    : sklearn.metrics.balanced_accuracy_score(truth, preds),
+            'acc'        : sklearn.metrics.accuracy_score(truth, preds),
+            'recall'     : sklearn.metrics.recall_score(truth, preds),
+            'precision'  : sklearn.metrics.precision_score(truth, preds),
+            'f1'         : sklearn.metrics.f1_score(truth, preds)
+            }, name=name
+            )
+        return score
 
     #------------------------------------
     # grid_search
@@ -399,7 +542,8 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
                     selection_tbl_file, 
                     sig_ids=[1.0],
                     quantile_thresholds=[0.75, 0.80, 0.90, 0.95],
-                    slide_widths=[0.05, 0.1, 0.2] # seconds
+                    slide_widths=[0.05, 0.1, 0.2], # seconds
+                    experiment=None
                     ):
 
         cls.best_f1        = 0.0
@@ -512,8 +656,15 @@ class PowerResult:
         self.summary_ser = summary_ser
         self.species  = species
         
-        
-        
+        # The truths column has not been added yet.
+        # The column is added by a client calling add_overlap_and_truth().
+        # The following property can be tested via 
+
+    #------------------------------------
+    # truths
+    #-------------------
+
+
     #------------------------------------
     # add_and_truth
     #-------------------
@@ -582,6 +733,11 @@ class PowerResult:
         # of self.prob_df:
         self.prob_df['overlap'] = overlap_percentages
 
+        # For convenience, add a boolean col Truth, with
+        # 1 if any overlap between prbability row and any
+        # true call intervals:
+        self.prob_df['Truth'] = self.prob_df.overlap > 0
+
         #**********
         # if plot:
         #     import matplotlib.pyplot as plt
@@ -608,7 +764,40 @@ class PowerResult:
 
         #**********
 
-        # For convenience, add a boolean col Truth, with
-        # 1 if any overlap between prbability row and any
-        # true call intervals:
-        self.prob_df['Truth'] = self.prob_df.overlap > 0
+    #------------------------------------
+    # probabilities
+    #-------------------
+    
+    def probabilities(self, sig_id):
+        '''
+        Return a series with all the probabilities
+        :param sig_id: identifyer of signature whose
+            probability results are to be returned
+        :type sig_id: {int | float}
+        :return: pd.Series of probabilities yielded using 
+            that signature; the index are the recording times
+        :rtype pd.Series(float)
+        '''
+        probs = self.prob_df[self.prob_df.sig_id == sig_id].probability
+        probs.index = self.prob_df[self.prob_df.sig_id == sig_id].center_time
+        return probs 
+
+    #------------------------------------
+    # truths
+    #-------------------
+    
+    def truths(self, sig_id):
+        '''
+        Return a series with all the truth values
+        :param sig_id: identifyer of signature whose
+            probability results are to be returned
+        :type sig_id: {int | float}
+        :return: pd.Series of truth: TRUE/FALSE at each time;
+            index will be the center times
+        :rtype pd.Series(bool)
+        '''
+        if 'Truth' not in self.prob_df.columns:
+            raise IndexError(f"Power result missing Truth column; call add_overlap_and_truth() first")
+        truths = self.prob_df[self.prob_df.sig_id == sig_id].Truth
+        truths.index = self.prob_df[self.prob_df.sig_id == sig_id].center_time 
+        return truths

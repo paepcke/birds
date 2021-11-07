@@ -689,6 +689,10 @@ class SoundProcessor:
         sample. Bandpass filter is applied, Mel scale is used,
         and power is converted to decibels.
         
+        For spectrograms as the Raven labeling program produces
+        with its default settings, see SignalAnalyzer.raven_spectrogram()
+        in file signal_analysis.py.
+        
         If outfile is None, the spectrogram is returned
         as a an np.ndarray. Else the spectrogram is converted
         to an image and saved.
