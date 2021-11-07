@@ -43,6 +43,7 @@ setup(
                         'scikit-image>=0.18.1',
                         'skorch>=0.10.0',
                         'ml-experiment-manager>=0.1.10',
+                        'mplcursors>=0.5',
                         ],
 
     tests_require    =[
