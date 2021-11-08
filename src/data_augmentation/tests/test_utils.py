@@ -442,6 +442,31 @@ class Test(unittest.TestCase):
         iv2 = Interval(-10, 10, 1)
         self.assertEqual(iv1.percent_overlap(iv2), 50)
     
+        # Classmethod binary_search:
+        intervals = [Interval(10, 20),Interval(21, 30), Interval(31, 40)]
+        # Test values below or above all intervals:
+        int_idx = Interval.binary_search(intervals, 9)
+        self.assertEqual(int_idx, -1)
+        int_idx = Interval.binary_search(intervals, 40)
+        self.assertEqual(int_idx, -1)
+        
+        # Value is in first interval
+        int_idx = Interval.binary_search(intervals, 10)
+        self.assertEqual(int_idx, 0)
+        int_idx = Interval.binary_search(intervals, 19)
+        self.assertEqual(int_idx, 0)
+        
+        # Value is in last interval
+        int_idx = Interval.binary_search(intervals, 31)
+        self.assertEqual(int_idx, 2)
+        int_idx = Interval.binary_search(intervals, 39)
+        self.assertEqual(int_idx, 2)
+        
+        # Value is in middle interval
+        int_idx = Interval.binary_search(intervals, 21)
+        self.assertEqual(int_idx, 1)
+        int_idx = Interval.binary_search(intervals, 29)
+        self.assertEqual(int_idx, 1)
         
         
          

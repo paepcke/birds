@@ -8,17 +8,20 @@ from enum import Enum
 import os
 import sys
 
+from bisect import bisect_left
+
 from experiment_manager.experiment_manager import ExperimentManager
 
 import numpy as np
-import matplotlib
+#import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
-from matplotlib.collections import PatchCollection
+
+from powerflock.matplotlib_crosshair_cursor import CrosshairCursor
 
 from powerflock.power_member import PowerMember, PowerQuantileClassifier
 from powerflock.signal_analysis import SignalAnalyzer
-from data_augmentation.utils import Utils
+from data_augmentation.utils import Utils, Interval
 
 class Action(Enum):
     GRID_SEARCH = 0
@@ -218,7 +221,8 @@ class PowerEvaluator:
                          in call_intervals]
         heights       = [self.TRUTH_RECT_HEIGHTS]*len(call_intervals)
 
-        ax.figure.show()        
+        fig = ax.figure
+        fig.show()
         
         for x,y,width,height in zip(truth_rects_x, truth_rects_y, widths, heights):
             ax.add_patch(Rectangle((x,y),
@@ -228,10 +232,9 @@ class PowerEvaluator:
                                    edgecolor='black',
                                    hatch='*')
                                    )
-
-        print('foo')
-
-
+        cursor = PowerInfoCursor(ax, pwr_res, truths, call_intervals)
+        fig.canvas.mpl_connect('motion_notify_event', cursor.on_mouse_move)
+        input("Press ENTER to finish: ")
 
 # --------------  Utilities -----------------
 
@@ -281,6 +284,59 @@ class PowerEvaluator:
         self.templates = SignalAnalyzer.compute_species_templates('CMTOG', 
                                                                  self.recordings, 
                                                                  self.sel_tbls)
+# ---------------- Class PowerInfoCursor --------
+
+class PowerInfoCursor(CrosshairCursor):
+    
+    
+    #------------------------------------
+    # Constructor
+    #-------------------
+    
+    def __init__(self, ax, pwr_res, truths, call_intervals):
+        CrosshairCursor.__init__(self, ax)
+        
+        ax.texts[0].set_position((0.08, 0.8))
+        self.pwr_res = pwr_res
+        self.truths = truths
+        self.call_intervals = call_intervals
+        
+        # Get number of signatures:
+        self.num_sigs = len(pwr_res.prob_df.groupby(by='sig_id'))
+
+    #------------------------------------
+    # on_mouse_move
+    #-------------------
+    
+    def on_mouse_move(self, event):
+        x, y = event.xdata, event.ydata
+        super().on_mouse_move(event)
+
+        # Entering and exiting the image 
+        # delivers y as None; avoid error for that:
+        if x is None or y is None:
+            return
+        
+        is_call = Interval.binary_search(self.call_intervals, x) > -1
+        # For each signature, the current probability:
+        probs_by_sig = []
+        for sig_idx in range(self.num_sigs):
+            probs_ser = self.pwr_res.probabilities(sig_idx+1)
+            prob_times = probs_ser.index.values
+            prob_idx = bisect_left(prob_times, x)
+            probs_by_sig.append(probs_ser.iloc[prob_idx].round(2))
+        
+        txt = (f"time={x.round(2)}, freq={int(y)}\n"
+               f"is call: {is_call}\n"
+               f"probs by sig: {probs_by_sig}"
+               )
+        
+        self.text.set_text(txt)
+        self.ax.figure.canvas.restore_region(self.background)
+        self.ax.draw_artist(self.horizontal_line)
+        self.ax.draw_artist(self.vertical_line)
+        self.ax.draw_artist(self.text)
+        self.ax.figure.canvas.blit(self.ax.bbox)
 
 # ------------------------ Main ------------
 if __name__ == '__main__':

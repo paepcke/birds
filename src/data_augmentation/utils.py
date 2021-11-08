@@ -172,6 +172,50 @@ class Interval(dict):
             else:
                 break
 
+    @classmethod
+    def binary_search(cls, interval_list, value, lo=0, hi=None):
+        '''
+        Return the index of the interval that includes value if any.
+        If no interval includes value, return -1.
+        Interval list is assumed to be sorted.
+        
+        Optional args lo (default 0) and hi (default len(a)) bound the
+        slice of a to be searched.
+        
+        :param interval_list: list of Interval instances
+        :type interval_list: [Interval]
+        :param value: value to be found in the interval list
+        :type value: {int | float}
+        :param lo: lower index slice bound if only subset of list 
+            is to be searched. Default: entire list
+        :type lo: int
+        :param hi: uppoer index slice bound if only subset
+            of list is to be searched. Default: entire list
+        :type hi: int
+        :returns index of interval that contains value, 
+            or -1 if value is out of bounds for all intervals
+        :rtype int
+        '''
+        
+        if lo < 0:
+            raise ValueError('lo must be non-negative')
+        if hi is None:
+            hi = len(interval_list)
+        # If value is to left or right of the left/right intervals,
+        # we know the answer:
+        if value < interval_list[0]['low_val'] or \
+           value >= interval_list[hi-1]['high_val']:
+            return -1
+        # Note, the comparison uses "<" to match the
+        # __lt__() logic in list.sort() and in heapq.
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if interval_list[mid]['high_val'] < value:
+                lo = mid + 1
+            else:
+                hi = mid
+        return lo if interval_list[lo].contains(value) else -1
+
 #------------------------------ Utility  -------------
 
 class Utils:
