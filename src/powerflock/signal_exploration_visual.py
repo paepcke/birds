@@ -44,7 +44,7 @@ class SignalViz:
         cls.sel_recording_fld = os.path.join(cls.sound_data, 'DS_AM03_20190713_055956.wav')
         
         # Xeno Canto CMTOG
-        cls.sel_tbl_cmto_xc1 = os.path.join(cls.cur_dir, 'tests/selection_tables/XenoCanto/cmto1.selections.txt')
+        cls.sel_tbl_cmto_xc1 = os.path.join(cls.cur_dir, 'tests/selection_tables/XenoCanto/sel_tbl_Kelley_SONG_XC274155-429_CMTO_KEL.txt')
         cls.sel_rec_cmto_xc1 = os.path.join(cls.xc_sound_data, 'CMTOG/SONG_XC274155-429_Chestnut-mandibled_Toucan_2_song.mp3')
         
         cls.sel_tbl_cmto_xc2 = os.path.join(cls.cur_dir, 'tests/selection_tables/XenoCanto/cmto2.selections.txt')

@@ -4,29 +4,27 @@ Created on Nov 5, 2021
 @author: paepcke
 '''
 import argparse
+from bisect import bisect_left
 from enum import Enum
 import os
 import sys
 
-from bisect import bisect_left
-
 from experiment_manager.experiment_manager import ExperimentManager
-
-import numpy as np
-#import matplotlib
-import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
-from powerflock.matplotlib_crosshair_cursor import CrosshairCursor
-
-from powerflock.power_member import PowerMember, PowerQuantileClassifier
-from powerflock.signal_analysis import SignalAnalyzer
 from data_augmentation.utils import Utils, Interval
+import matplotlib.pyplot as plt
+import numpy as np
+from powerflock.matplotlib_crosshair_cursor import CrosshairCursor
+from powerflock.power_member import PowerMember, PowerQuantileClassifier
+from powerflock.signal_analysis import SignalAnalyzer, TemplateSelection
+
 
 class Action(Enum):
-    GRID_SEARCH = 0
-    TEST = 1
-    VIZ_PROBS = 2 
+    UNITTEST = 0
+    GRID_SEARCH = 1
+    TEST = 2
+    VIZ_PROBS = 3 
 
 class PowerEvaluator:
     '''
@@ -51,20 +49,21 @@ class PowerEvaluator:
                  sig_source_recording=None,
                  sig_source_sel_tbl=None,
                  test_recording=None,
-                 test_sel_tbl=None
+                 test_sel_tbl=None,
+                 apply_bandpass=False
                  ):
         '''
         Constructor
         '''
 
         self.species = species
-        self.actions = actions
+        self.actions = actions if type(actions) == list else [actions]
         self.sig_source_recording = sig_source_recording
         self.sig_source_sel_tbl = sig_source_sel_tbl
         self.test_recording = test_recording
         self.test_sel_tbl = test_sel_tbl
         
-        self._init_data_paths()
+        self._init_data_paths(apply_bandpass)
 
         if sig_source_recording is None:
             self.sig_source_recording = self.sel_rec_cmto_xc1
@@ -82,29 +81,34 @@ class PowerEvaluator:
         experiments.append(
             ExperimentManager(os.path.join(self.experiment_dir, 
                                            experiment_name)))
-        power_member = PowerMember(
+        self.power_member = PowerMember(
             species_name=species, 
             spectral_template_info=zip([sig_source_recording], [sig_source_sel_tbl]),
             the_slide_width_time=self.SLIDE_WIDTH,
-            experiment=experiments[0]
+            experiment=experiments[0],
+            apply_bandpass=apply_bandpass
             )
 
-        for action in actions:
-            if action == Action.GRID_SEARCH:
+        for action in self.actions:
+            if action == Action.UNITTEST:
+                return
+            elif action == Action.GRID_SEARCH:
                 grid_res = self.grid_search()
             elif action == Action.TEST:
-                pwr_res = self.run_test(power_member,
+                pwr_res = self.run_test(self.power_member,
                                         self.test_recording,
                                         self.test_sel_tbl,
                                         self.SIG_ID,
                                         self.THRESHOLD
                                         )
             elif action == Action.VIZ_PROBS:
-                ax = self.viz_probs(power_member,
+                ax = self.viz_probs(self.power_member,
                                     self.test_recording,
                                     self.test_sel_tbl,
                                     self.SIG_ID
                                     )
+            else:
+                raise ValueError(f"Unknown action: {action}")
 
         print("Done")
 
@@ -126,6 +130,8 @@ class PowerEvaluator:
         # Add a Truth column to the result:
         pwr_res.add_overlap_and_truth(sel_tbl_path)
 
+        call_intervals = Utils.get_call_intervals(sel_tbl_path)
+        
         clf = PowerQuantileClassifier(sig_id, thres)
         clf.fit(pwr_res)
         score = clf.score(pwr_res.probabilities(sig_id), 
@@ -140,7 +146,11 @@ class PowerEvaluator:
     
     def grid_search(self):
         
-        pwr_member = PowerMember(self.species, self.template)
+        exp_path = os.path.join(os.path.dirname(__file__), 
+                                '../../experiments/PowerSignatures/grid_search')
+        experiment = ExperimentManager(root_path=exp_path)
+        template_info = zip([self.sig_source_recording], [self.sig_source_sel_tbl])
+        pwr_member = PowerMember(self.species, template_info)
         
         # pr_disp = sklearn.metrics.PrecisionRecallDisplay.from_estimator(
         #     clf,
@@ -156,9 +166,18 @@ class PowerEvaluator:
             pwr_member,
             audio_file=self.sel_rec_cmto_xc1,
             selection_tbl_file=self.sel_tbl_cmto_xc1,
-            sig_ids=np.arange(1.0, len(self.templates[0].signatures)), 
-            quantile_thresholds=[0.80, 0.85, 0.90, 0.99],
-            slide_widths=[0.05, 0.1, 0.2]
+            
+            # Signatures over which to range:
+            sig_ids=np.arange(1.0, len(self.templates[0].signatures)),
+            #******quantile_thresholds=[0.80, 0.85, 0.90, 0.99],
+            quantile_thresholds=[0.18, 0.19, 0.20, 0.80],
+            slide_widths=[0.05, 0.1, 0.2],
+            sig_combination=[TemplateSelection.MIN_PROB,
+                             TemplateSelection.MAX_PROB,
+                             TemplateSelection.MED_PROB,
+                             TemplateSelection.MEAN_PROB
+                             ],
+            experiment=experiment
             )
         end = timer()
         print(end - start)
@@ -202,16 +221,11 @@ class PowerEvaluator:
                               list(spectro.index), 
                               spectro, 
                               cmap='jet', 
-                              shading='flat')
+                              shading='auto')
         
         ax = mesh.axes
 
-        row_dicts = Utils.read_raven_selection_table(test_sel_tbl)
-        call_intervals = [row_dict['time_interval']
-                          for row_dict
-                          in row_dicts
-                          ]
-
+        call_intervals = Utils.get_call_intervals(test_sel_tbl)
         truth_rects_x = [interval['low_val']
                          for interval
                          in call_intervals]
@@ -222,6 +236,7 @@ class PowerEvaluator:
         heights       = [self.TRUTH_RECT_HEIGHTS]*len(call_intervals)
 
         fig = ax.figure
+        fig.suptitle(f"{os.path.basename(test_recording)} ({power_member.species_name})")
         fig.show()
         
         for x,y,width,height in zip(truth_rects_x, truth_rects_y, widths, heights):
@@ -232,13 +247,20 @@ class PowerEvaluator:
                                    edgecolor='black',
                                    hatch='*')
                                    )
-        cursor = PowerInfoCursor(ax, pwr_res, truths, call_intervals)
-        fig.canvas.mpl_connect('motion_notify_event', cursor.on_mouse_move)
+        cursor = PowerInfoCursor(ax, pwr_res, truths, call_intervals, spectro)
+        _motion_conn_id = fig.canvas.mpl_connect('motion_notify_event', cursor.on_mouse_move)
+        _click_conn_id  = fig.canvas.mpl_connect('button_press_event', cursor.onclick)
+        if Action.UNITTEST in self.actions:
+            return fig, ax, cursor
         input("Press ENTER to finish: ")
 
 # --------------  Utilities -----------------
 
-    def _init_data_paths(self):
+    #------------------------------------
+    # _init_data_paths
+    #-------------------
+
+    def _init_data_paths(self, apply_bandpass=False):
         
         self.cur_dir = os.path.dirname(__file__)
         proj_root = os.path.join(self.cur_dir, '../..')
@@ -269,7 +291,7 @@ class PowerEvaluator:
         self.sel_recording_fld = os.path.join(self.sound_data, 'DS_AM03_20190713_055956.wav')
 
         # Xeno Canto 
-        self.sel_tbl_cmto_xc1 = os.path.join(self.cur_dir, 'tests/selection_tables/XenoCanto/cmto1.selections.txt')
+        self.sel_tbl_cmto_xc1 = os.path.join(self.cur_dir, 'tests/selection_tables/XenoCanto/sel_tbl_Kelley_SONG_XC274155-429_CMTO_KEL.txt')
         self.sel_rec_cmto_xc1 = os.path.join(self.xc_sound_data, 'CMTOG/SONG_XC274155-429_Chestnut-mandibled_Toucan_2_song.mp3')
         
         self.sel_tbl_cmto_xc2 = os.path.join(self.cur_dir, 'tests/selection_tables/XenoCanto/cmto2.selections.txt')
@@ -283,7 +305,8 @@ class PowerEvaluator:
         self.sel_tbls   = [self.sel_tbl_cmto_xc1, self.sel_tbl_cmto_xc2, self.sel_tbl_cmto_xc3]
         self.templates = SignalAnalyzer.compute_species_templates('CMTOG', 
                                                                  self.recordings, 
-                                                                 self.sel_tbls)
+                                                                 self.sel_tbls,
+                                                                 apply_bandpass=apply_bandpass)
 # ---------------- Class PowerInfoCursor --------
 
 class PowerInfoCursor(CrosshairCursor):
@@ -293,13 +316,14 @@ class PowerInfoCursor(CrosshairCursor):
     # Constructor
     #-------------------
     
-    def __init__(self, ax, pwr_res, truths, call_intervals):
+    def __init__(self, ax, pwr_res, truths, call_intervals, spectro):
         CrosshairCursor.__init__(self, ax)
         
-        ax.texts[0].set_position((0.08, 0.8))
+        ax.texts[0].set_position((0.08, 0.4))
         self.pwr_res = pwr_res
         self.truths = truths
         self.call_intervals = call_intervals
+        self.spectro = spectro
         
         # Get number of signatures:
         self.num_sigs = len(pwr_res.prob_df.groupby(by='sig_id'))
@@ -317,26 +341,151 @@ class PowerInfoCursor(CrosshairCursor):
         if x is None or y is None:
             return
         
-        is_call = Interval.binary_search(self.call_intervals, x) > -1
+        is_call = Interval.binary_search_contains(self.call_intervals, x) > -1
         # For each signature, the current probability:
         probs_by_sig = []
         for sig_idx in range(self.num_sigs):
             probs_ser = self.pwr_res.probabilities(sig_idx+1)
             prob_times = probs_ser.index.values
             prob_idx = bisect_left(prob_times, x)
-            probs_by_sig.append(probs_ser.iloc[prob_idx].round(2))
+            try:
+                probs_by_sig.append(probs_ser.iloc[prob_idx].round(2))
+            except IndexError:
+                # ignore
+                continue
         
-        txt = (f"time={x.round(2)}, freq={int(y)}\n"
-               f"is call: {is_call}\n"
-               f"probs by sig: {probs_by_sig}"
-               )
+        # Find closest freq and time values in axes space
+        # from the cursor, and get the spectrogram value there:
+        freq_idx = bisect_left(list(reversed(self.spectro.index)), y)
+        time_idx = bisect_left(list(self.spectro.columns), x)
+
+        try:
+            dbfs = round(self.spectro.iloc[freq_idx, time_idx], 1)
+        except IndexError:
+            #print(f"*********** Index error: freq_idx: {freq_idx}, time_idx: {time_idx}")
+            dbfs = 0.0
         
-        self.text.set_text(txt)
+        if len(probs_by_sig) > 0:
+            best_sig_idx = np.argmax(probs_by_sig) if is_call else np.argmin(probs_by_sig)
+            best_sig_id = best_sig_idx + 1 # sig IDs are 1-based
+        
+            txt = (f"time={x.round(2)}, freq={int(y)}\n"
+                   f"is call: {is_call}\n"
+                   f"power: {dbfs} dB FS \n"
+                   f"probs by sig: {probs_by_sig}\n"
+                   f"best sig: {best_sig_id} ({probs_by_sig[best_sig_idx]})\n"
+                   f"mean_prob: {np.mean(probs_by_sig)}\n"
+                   f"median_prob: {np.median(probs_by_sig)}\n"
+                   f"min_prob: {np.min(probs_by_sig)}\n"
+                   f"max_prob: {np.max(probs_by_sig)}"
+                   )
+    
+            self.text.set_text(txt)
+            self._update_display()
+
+    #------------------------------------
+    # _update_display
+    #-------------------
+    
+    def _update_display(self):
         self.ax.figure.canvas.restore_region(self.background)
         self.ax.draw_artist(self.horizontal_line)
         self.ax.draw_artist(self.vertical_line)
         self.ax.draw_artist(self.text)
         self.ax.figure.canvas.blit(self.ax.bbox)
+
+    #------------------------------------
+    # onclick
+    #-------------------
+    
+    def onclick(self, event):
+        '''
+        Left/right clicks: increase/decrease font size
+        Middle click: switch between black and white
+        
+        :param event:
+        :type event:
+        '''
+        if event.button == 2:
+            cur_color = self.text.get_color()
+            if cur_color == 'black':
+                self.text.set_color('white')
+            else:
+                self.text.set_color('black')
+        elif event.button == 1:
+            cur_fontsize = self.text.get_fontsize()
+            self.text.set_fontsize(cur_fontsize + 2)
+            # Position of lower left of text block in
+            # axes coordinates (0,0 is lower left, 1,1 is upper right):
+            #******cur_txt_x, cur_txt_y = self.text.get_position()
+            # Move txt down a bit to accommodate the larger font:
+            print(f"MB1: x: {event.x}; y: {event.y}, xdata: {event.xdata}, ydata: {event.ydata}")
+            #*****self.text.set_position((cur_txt_x, cur_txt_y + 0.4))
+            #*****self.text.set_position((event.x, event.y))
+            self.text.set_position((event.x, event.y))
+            self.text.set_transform(self.ax.transAxes)
+            
+        elif event.button == 3:
+            cur_fontsize = self.text.get_fontsize()
+            self.text.set_fontsize(cur_fontsize - 2)
+            #****cur_txt_x, cur_txt_y = self.text.get_position()
+            # Move txt up a bit b/c txt now smaller:
+            print(f"MB3: x: {event.x}; y: {event.y}, xdata: {event.xdata}, ydata: {event.ydata}")
+            #*****self.text.set_position((cur_txt_x, cur_txt_y - 0.4))
+            self.text.set_position((event.xdata, event.ydata))
+            self.text.set_transform(self.ax.transAxes)
+
+        if event.button in [1,2,3]:
+            self._update_display()
+
+    #------------------------------------
+    # _choose_text_color
+    #-------------------
+
+    # Not working; replaced with middle-click to switch
+    # between left and right:
+        
+    # def _choose_text_color(self, spectro, txt_area, color_map_name='jet'):
+    #     '''
+    #     Given a spectrogram and a dict: {'y', 'x', 'width', 'height')
+    #     that define a rectangle, compute the average color 
+    #     in the rectangle, and retun 'black' or 'white' 
+    #     for the color to use for text on top of the rectangle
+    #     when the spectrogram is rendered.
+    #
+    #     Units are indices into the spectrogram index and
+    #     columns(, which will correspond to labels on the
+    #     axis scale ticks of a pcolormesh). Thus: width is time,
+    #     and height is frequencies.
+    #
+    #     :param spectro: dataframe of values that will
+    #         be shown in pcolormesh
+    #     :type spectro: pd.DataFrame
+    #     :param txt_area: a rectangle over the mesh as
+    #         a dict with keys ['x','y','width','height']
+    #     :type txt_area: (int, int,int, int)
+    #     :returns {'black' | 'white'}
+    #     :rtype str
+    #     '''
+    #
+    #     yx = (txt_area['y'], txt_area['x'])
+    #     rect_df = Utils.df_extract_rect(spectro,
+    #                                     yx=yx, 
+    #                                     height=txt_area['height'], 
+    #                                     width=txt_area['width']) 
+    #     rect_df_abs = rect_df.abs()
+    #     rect_df_normed = rect_df_abs / rect_df_abs.max().max()
+    #     mean_rect_normed = rect_df_normed.mean().mean() 
+    #     cmap = matplotlib.cm.get_cmap(color_map_name)
+    #     rgb_fractions = pd.Series(cmap(mean_rect_normed), index=['R', 'G', 'B', 'A'])
+    #     rgb_255 = rgb_fractions * 255
+    #     txt_color = 'white' if 1 - (rgb_255['R'] * 0.299 + \
+    #                                 rgb_255['G'] * 0.587 + \
+    #                                 rgb_255['B'] * 0.114) / 255 < 0.5 \
+    #                         else 'black'
+    #
+
+    #    return txt_color
 
 # ------------------------ Main ------------
 if __name__ == '__main__':
@@ -364,6 +513,10 @@ if __name__ == '__main__':
     parser.add_argument('-e', '--experiment_name',
                         help='name for root dir of experiment where to save results; default: Species name',
                         default=None)
+    parser.add_argument('-b', '--bandpass',
+                        action='store_true',
+                        help='apply bandpass filters to sigs and inferenced audio with the freq range of signatures default: False',
+                        default=False)
     parser.add_argument('actions',
                         choices=['test', 'gridSearch', 'viz_probs'],
                         nargs='+',
@@ -404,6 +557,7 @@ if __name__ == '__main__':
                    sig_source_recording=args.sig_rec,
                    sig_source_sel_tbl=args.sig_sel,
                    test_recording=args.test_rec,
-                   test_sel_tbl=args.test_sel
+                   test_sel_tbl=args.test_sel,
+                   apply_bandpass=args.bandpass
                    )
     print('foo')

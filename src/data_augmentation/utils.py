@@ -1,3 +1,4 @@
+from bisect import bisect_left, bisect_right
 from csv import DictReader
 import datetime
 from enum import Enum
@@ -10,8 +11,10 @@ import shutil
 import warnings
 
 from experiment_manager.neural_net_config import NeuralNetConfig
+import librosa
 from matplotlib import MatplotlibDeprecationWarning
 from natsort import natsorted
+from seaborn.matrix import heatmap
 from torch import cuda
 import torch
 
@@ -159,9 +162,7 @@ class Interval(dict):
         return self.the_series[key]
 
     def __len__(self):
-        if self.the_series is None:
-            self._materialize_series()
-        return len(self.the_series)
+        return (self['high_val'] - self['low_val']) / self['step']
 
     def _materialize_series(self):
         self.the_series = [self['low_val']]
@@ -1250,6 +1251,77 @@ class Utils:
         return sel_dict_list_sorted
 
     #------------------------------------
+    # get_call_intervals 
+    #-------------------
+
+    @classmethod
+    def get_call_intervals(cls, test_sel_tbl):
+        '''
+        Given the path to a selection table, read
+        the table, and return a list of Interval instances
+        with times when a call of any species is present.
+        
+        :param test_sel_tbl: path to Raven selection table
+        :type test_sel_tbl: str
+        :return list of Interval instances where calls
+            are labeled.
+        '''
+        row_dicts = Utils.read_raven_selection_table(test_sel_tbl)
+        call_intervals = [row_dict['time_interval']
+                          for row_dict
+                          in row_dicts
+                          ]
+        
+        return call_intervals
+
+    #------------------------------------
+    # align_sequences
+    #-------------------
+    
+    @classmethod
+    def align_sequences(cls, anchor, alignee):
+        '''
+        NOT THOROUGHLY TESTED!
+        
+        Given two array-likes, use dynamic time warping
+        to match elements of alignee to the elements of anchor.
+        Returned is an array of index pairs, and a matching
+        cost. See librosa.sequence.dtw.
+        
+        Example:
+        
+           anchor  = [4000, 3000, 2000, 1000],
+           alignee = [3001,30002, 3003, 3004]
+                     [3001, 2997, 2000, 1980]
+           
+           idx_pairs, matching_cost = align_sequences([4000, 3000, 2000, 1000],  
+                                                      [3001,30002,3003, 3004])
+              idx_pairs        assignee
+            [array([0, 0]),      4000
+             array([0, 1]),      4000
+             array([1, 2]),      3000
+             array([2, 2]),      2000
+             array([3, 3])]      1000
+
+           
+        :param anchor:
+        :type anchor:
+        :param alignee:
+        :type alignee:
+        '''
+        cost_matrix, warp_pairs_backtracked = librosa.sequence.dtw(anchor, alignee)
+        idx_pairs = list(reversed(warp_pairs_backtracked))
+        print(idx_pairs)
+        print(cost_matrix)
+        last_cost_row = cost_matrix[-1:]
+        num_matches   = len(idx_pairs)
+        matching_cost = (last_cost_row / num_matches).sum()
+        #array([[1600.  ,  775.75,  375.25,   78.  ]])
+        return idx_pairs, matching_cost
+
+
+
+    #------------------------------------
     # _four_to_five_from_sel_row_dict
     #-------------------
     
@@ -1527,6 +1599,78 @@ class Utils:
             raise AssertionError(f"Values of df1 differ from values of df2")
         
         return
+
+    #------------------------------------
+    # df_extract_rect
+    #-------------------
+    
+    @classmethod
+    def df_extract_rect(cls, df, yx, height, width):
+        '''
+        Given a dataframe whose index and columns are 
+        both rising numbers as in a coordinate system, 
+        extract a rectangular df given (y,x) of a 
+        lower left, width, and height. Units for y are 
+        those of the index; units of x are those of the columns.
+        
+        The y or x do not need to exist in the index/columns.
+        The closest existing values will be found such that
+        the given values are included. Example df:
+        
+                  9.0   10.1  12.5  20.5
+            4000     1     2     3     4
+            3000     5     6     7     8
+            2000     9    10    11    12
+            1000    13    14    15    16
+            
+        df_extract_rect(df, (3000, 10), 1000, 3)
+           
+                  10.1  12.5 
+            4000     2     3 
+            3000     6     7 
+
+        Note on values that do not exist verbatim
+             in the index/columns:
+             
+            1. For rows, the row with the first value
+               below the given y is included
+            2. For cols, the first column above the 
+               given is included 
+               
+            Utils.df_extract_rect(spectro, 
+                                  (2500,10), 
+                                  height=1000, 
+                                  width=3)
+
+        :param df: input dataframe
+        :type df: pd.DataFrame
+        :param yx: tuple of rectangle's lower left
+            index and column values
+        :type yx: (number, number)
+        :param height: rectangle's height in index units 
+        :type height: {int | float}
+        :param width: rectangle's width in column units
+        :type width: {int | float}
+        :return a dataframe that is a rectangular cutout
+            of the given df
+        :rtype: pd.DataFrame
+        '''
+
+        y, x = yx
+        # Get [1000,2000,3000,4000]:
+        rows = list(reversed(df.index))
+        cols = list(df.columns)
+        
+        low_row_idx = len(rows) - bisect_left(rows, y)
+        low_col_idx = bisect_left(cols, x)
+        
+        high_row_idx = len(rows) - bisect_right(rows, y+height)
+        high_col_idx = bisect_right(cols, x+width)
+        
+        res = df.iloc[np.arange(high_row_idx, low_row_idx),
+                      np.arange(low_col_idx, high_col_idx)
+                      ]
+        return res
 
     #------------------------------------
     # timestamp_from_exp_path 

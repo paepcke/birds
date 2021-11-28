@@ -377,7 +377,7 @@ class Test(unittest.TestCase):
     # test_intervals
     #-------------------
     
-    #*******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_intervals(self):
         iv = Interval(0,5)
         self.assertEqual(iv['low_val'], 0)
@@ -442,34 +442,107 @@ class Test(unittest.TestCase):
         iv2 = Interval(-10, 10, 1)
         self.assertEqual(iv1.percent_overlap(iv2), 50)
     
-        # Classmethod binary_search:
+        # Classmethod binary_search_contains:
         intervals = [Interval(10, 20),Interval(21, 30), Interval(31, 40)]
         # Test values below or above all intervals:
-        int_idx = Interval.binary_search(intervals, 9)
+        int_idx = Interval.binary_search_contains(intervals, 9)
         self.assertEqual(int_idx, -1)
-        int_idx = Interval.binary_search(intervals, 40)
+        int_idx = Interval.binary_search_contains(intervals, 40)
         self.assertEqual(int_idx, -1)
         
         # Value is in first interval
-        int_idx = Interval.binary_search(intervals, 10)
+        int_idx = Interval.binary_search_contains(intervals, 10)
         self.assertEqual(int_idx, 0)
-        int_idx = Interval.binary_search(intervals, 19)
+        int_idx = Interval.binary_search_contains(intervals, 19)
         self.assertEqual(int_idx, 0)
         
         # Value is in last interval
-        int_idx = Interval.binary_search(intervals, 31)
+        int_idx = Interval.binary_search_contains(intervals, 31)
         self.assertEqual(int_idx, 2)
-        int_idx = Interval.binary_search(intervals, 39)
+        int_idx = Interval.binary_search_contains(intervals, 39)
         self.assertEqual(int_idx, 2)
         
         # Value is in middle interval
-        int_idx = Interval.binary_search(intervals, 21)
+        int_idx = Interval.binary_search_contains(intervals, 21)
         self.assertEqual(int_idx, 1)
-        int_idx = Interval.binary_search(intervals, 29)
+        int_idx = Interval.binary_search_contains(intervals, 29)
         self.assertEqual(int_idx, 1)
         
+        # Classmethod binary_search_overlaps
         
+        tst_interval = Interval(0,9)
+        self.assertEqual(Interval.binary_search_overlap(intervals, tst_interval), -1)
+        tst_interval = Interval(40,50)
+        self.assertEqual(Interval.binary_search_overlap(intervals, tst_interval), -1)
+        
+        # Overlap with first interval in list:
+        tst_interval = Interval(0,11)
+        self.assertEqual(Interval.binary_search_overlap(intervals, tst_interval), 0)
+        
+        # Overlap with middle interval in list:
+        tst_interval = Interval(29,60)
+        self.assertEqual(Interval.binary_search_overlap(intervals, tst_interval), 1)
          
+        # Overlap with last interval in list:
+        tst_interval = Interval(30,39)
+        self.assertEqual(Interval.binary_search_overlap(intervals, tst_interval), 2)
+
+    #------------------------------------
+    # test_df_extract_rect
+    #-------------------
+
+    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_df_extract_rect(self):
+        
+        # Make a df:
+        # 
+        #           9.0   10.1  12.5  20.5
+        #     4000     1     2     3     4
+        #     3000     5     6     7     8
+        #     2000     9    10    11    12
+        #     1000    13    14    15    16
+
+        spectro = pd.DataFrame([[1,2,3,4],[5,6,7,8],[9,10,11,12], [13,14,15,16]], 
+                               index=[4000,3000,2000,1000], 
+                               columns=[9.0,10.1,12.5,20.5])
+        
+        # Given values exist in index and cols:
+        rect = Utils.df_extract_rect(spectro, 
+                                     yx=(3000,10.1), 
+                                     height=1000, 
+                                     width=3)
+        expected = pd.DataFrame([[2,3], [6,7]],
+                                index=[4000,3000],
+                                columns=[10.1, 12.5]
+                                )
+        Utils.assertDataframesEqual(rect, expected)
+
+        # Given values doe not exist in index/cols:
+        rect = Utils.df_extract_rect(spectro, 
+                                     yx=(2500,10), 
+                                     height=1000, 
+                                     width=3)
+        expected = pd.DataFrame([[6, 7]], index=[3000], columns=[10.1, 12.5])
+        Utils.assertDataframesEqual(rect, expected)
+        
+        # Beyond range of index/cols:
+        rect = Utils.df_extract_rect(spectro, 
+                                     yx=(4500,40), 
+                                     height=1000, 
+                                     width=3)
+        
+        expected = pd.DataFrame([])
+        Utils.assertDataframesEqual(rect, expected)
+        
+        # Right on the border:
+        rect = Utils.df_extract_rect(spectro, 
+                                     yx=(1000,20.5), 
+                                     height=1000, 
+                                     width=3)
+        
+        expected = pd.DataFrame([[12], [16]], index=[2000,1000], columns=[20.5])
+        Utils.assertDataframesEqual(rect, expected)
+
 # ---------------- Main --------------
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

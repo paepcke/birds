@@ -8,15 +8,18 @@ TODO:
     o Identify hyper parameters
 
 '''
+import datetime
 import os
 
 import librosa
 import sklearn
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.exceptions import NotFittedError
+from sklearn.metrics import PrecisionRecallDisplay
 
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import Utils, Interval
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from powerflock.signal_analysis import SignalAnalyzer, TemplateSelection, \
@@ -68,6 +71,7 @@ class PowerMember:
                  spectral_template_info=None,
                  the_slide_width_time=None,
                  experiment=None,
+                 apply_bandpass=False,
                  template_selection=TemplateSelection.SIMILAR_LEN,
                  ):
         '''
@@ -114,6 +118,12 @@ class PowerMember:
         :type the_slide_width_time:
         :param experiment:
         :type experiment:
+        :param apply_bandpass: whether or not to create signatures
+            with a bandpass filter derived from the selection table,
+            or not. Only relevant if spectral_template_info is a
+            zip for creating signatures, rather than the already-made
+            templates.
+        :type apply_bandpass: bool 
         :param template_selection:
         :type template_selection:
         '''
@@ -150,13 +160,15 @@ class PowerMember:
             for call_file, sel_tbl_file in zip(call_files, sel_tbl_files):
                 self.spectral_templates.extend(self.compute_spectral_templates(species_name, 
                                                                                call_file, 
-                                                                               sel_tbl_file)
+                                                                               sel_tbl_file,
+                                                                               apply_bandpass)
                                                                                )
 
         self.species_name = species_name
         self.template_selection = template_selection
         
         # NOTE: From here on out we only consider first spectral template:
+        
         if len(self.spectral_templates) != 1:
             raise NotImplementedError(f"Current implementation only supports a single SpectralTemplate instance")
 
@@ -225,8 +237,13 @@ class PowerMember:
     # compute_probabilities
     #-------------------
     
-    def compute_probabilities(self, full_audio, sr=SignalAnalyzer.sr):
+    def compute_probabilities(self, 
+                              full_audio, 
+                              sr=SignalAnalyzer.sr
+                              ):
         '''
+        Workhorse for generating probabilities from audio input
+        
         Given an audio clip array or file longer than the shortest call
         of this PowerMember's species, or a file path to a recording. 
         Slide the signal template past the full_audio in increments 
@@ -234,11 +251,15 @@ class PowerMember:
         the probability of the audiosnippet being a call of this member's 
         species.
         
-        If full_audio is an audio file, the sample rated does not need
+        If full_audio is an audio file, the sample rate does not need
         to be supplied in this call. 
         
-        Results are returned, and stored in self.power_result, and 
-        returned. That holds probability information for every _slide_width
+        If self.template was computed with a bandpass filter, then
+        that same filter is applied to the given audio before taking
+        power samples and comparing to the template.
+        
+        Results are stored in self.power_result, which is returned. The 
+        power_result holds probability information for every _slide_width
         multiple of time.
         
         Sample rate of full_audio is matched to this PowerMember's 
@@ -276,6 +297,100 @@ class PowerMember:
         # on an input:
         self.output_ready = True
         return self.power_result
+    
+    #------------------------------------
+    # calibrate_probabilities
+    #-------------------
+    
+    def calibrate_probabilities(self,
+                                reference_recording_info,
+                                reference_sel_tbl_info,
+                                plot_pr=False
+                                ):
+        '''
+        Compute weights to guide how much the probabilities
+        from this PowerMember template's signatures should be used when
+        providing a probability output for any given time in a recording.
+        
+        Passed in are a recording and matching selection table.
+        
+        The reference_sel_tbl_info can be the path to the selection table
+        that corresponds to the reference_recording_info. Or it may be 
+        a list of Interval instances that define times when a call was 
+        present in the reference recording.
+        
+        The intent is that this method is called once, and
+        that the weights are made persistent. 
+        
+        :param reference_recording_info: recording (path or np_array) that
+            matches the reference_sel_tbl_info
+        :type reference_recording_info: {str | np.ndarray} 
+        :param reference_sel_tbl_info: path to selection table, or
+            list of Interval instances with times of call occurrences
+        :type reference_sel_tbl_info: {str | [Interval]}
+        :param plot_pr: whether or not to plot a pr curve
+        :type plot_pr: bool
+        '''
+
+        if type(reference_recording_info) == str:
+            if not os.path.exists(reference_recording_info):
+                raise FileNotFoundError(f"Cannot find {reference_recording_info}")
+            rec, sr = SoundProcessor.load_audio(reference_recording_info)
+
+        if type(reference_sel_tbl_info) == str:
+            call_intervals = Utils.get_call_intervals(reference_sel_tbl_info)
+        else:
+            call_intervals = reference_sel_tbl_info
+            
+        # Compute probs for all sigs over the given recording:
+        pwr_res = self.compute_probabilities(rec, sr)
+        pwr_res.add_overlap_and_truth(call_intervals)
+        
+        # For convenience:
+        res_probs = pwr_res.prob_df
+        
+        # Partition the all-sigs prob_df into multiple
+        # dfs, one for each signature:
+        gb = res_probs.groupby(by='sig_id')
+        df_list = list(gb)
+        
+        # Build a new df like:
+        # 
+        #              prob_1    prob_2  ... Truth
+        # start_time
+        #    0.1        0.3       0.6         True
+        #    0.2        0.6       0.2         False
+        #                 ...
+        
+        # Get start_time and Truth of just the first sig_id;
+        # they are the same for all the sig_ids:
+        start_times = res_probs[res_probs['sig_id'] == 1]['start_time']
+        truth       = res_probs[res_probs['sig_id'] == 1]['Truth']
+        truth.index = start_times
+        sig_results = pd.DataFrame(truth, index=start_times, columns=['Truth'])
+        for sig_id, df in df_list:
+            # Go through each signature's probabities over time,
+            # and adjoin them to sig_results:
+            prob = df.probability
+            # Must set index so that indexes will match
+            # when adjoining:
+            prob.index = start_times
+            sig_results[f"prob_{sig_id}"] = df.probability
+
+        if plot_pr:
+            # Pull out cols that start with 'prob_':
+            sig_res_col_names = [nm for nm in sig_results.columns if nm.startswith('prob_')]
+            prob_cols = sig_results[sig_res_col_names]
+            for sig_num, col in enumerate(prob_cols):
+                probs = prob_cols[col]
+                PrecisionRecallDisplay.from_predictions(
+                    y_true=sig_results.Truth, 
+                    y_pred=probs,
+                    ax=plt.gca(),
+                    name=f"sig{sig_num}")
+
+        print('foo')
+
 
     # ----------------------- Visualizations --------------------
 
@@ -300,7 +415,12 @@ class PowerMember:
     # compute_spectral_templates
     #-------------------
     
-    def compute_spectral_templates(self, species, call_files, sel_tbl_files):
+    def compute_spectral_templates(self, 
+                                   species, 
+                                   call_files, 
+                                   sel_tbl_files,
+                                   apply_bandpass=False
+                                   ):
         '''
         Compute templates of call signatures from 
         the call files and associated selection table files.
@@ -312,10 +432,19 @@ class PowerMember:
         :param sel_tbl_files: Raven selection table files that
             one-to-one correspond to the recording files
         :type sel_tbl_files: {str | [str]}
+        :param apply_bandpass: whether or not to 
+            apply a  bandpass filter during signature creation
+            as per the low/high frequency spec in the Raven
+            selection table.
+        :type apply_bandpass: {bool | Interval}
+
         :return a list of SpectralTemplate instances
         :rtype [SpectralTemplate]
         '''
-        templates = SignalAnalyzer.compute_species_templates(species, call_files, sel_tbl_files)
+        templates = SignalAnalyzer.compute_species_templates(species, 
+                                                             call_files, 
+                                                             sel_tbl_files,
+                                                             apply_bandpass=apply_bandpass)
         return templates
 
     #------------------------------------
@@ -543,6 +672,7 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
                     sig_ids=[1.0],
                     quantile_thresholds=[0.75, 0.80, 0.90, 0.95],
                     slide_widths=[0.05, 0.1, 0.2], # seconds
+                    sig_combination=[TemplateSelection.MED_PROB],
                     experiment=None
                     ):
 
@@ -551,6 +681,11 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
         cls.best_f1_truths = None
         cls.best_f1_preds  = None
         rec_arr, rec_sr = SoundProcessor.load_audio(audio_file)
+        
+        # DF with schema:
+        #                                 prob0    prob1    ...
+        #  (sig_id, thres, slide_width)
+        all_probs = pd.DataFrame()
         
         res_df = pd.DataFrame([],
                               columns=['bal_acc', 'recall', 'precision', 'f1']
@@ -582,6 +717,8 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
                         )
     
                     res_df = res_df.append(score)
+                    
+                    all_probs = all_probs.append(pd.Series(probs, name=(sig_id, thres, slide_width)))
                     # Save the best f1's probabilities and truths
                     if score.f1 > cls.best_f1:
                         cls.best_f1 = score.f1
@@ -589,7 +726,9 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
                         cls.best_f1_truths = truths
                         cls.best_f1_preds  = preds
         end = timer()
-        print(f"Grid search duration: {end - start}")
+        experiment.save('all_probs', all_probs)
+        experiment.save('res_scores', res_df)
+        print(f"Grid search duration: {str(datetime.timedelta(seconds=(end-start)))}")
         return res_df
 
 # ------------------------ Class PowerResult --------
@@ -694,7 +833,7 @@ class PowerResult:
             
             # Get list of dicts, each holding one row of
             # the selection table, plus time_interval, which
-            # is an data_augmentation.utils.Interval instance
+            # is a data_augmentation.utils.Interval instance
             row_dicts = Utils.read_raven_selection_table(truth_source)
             call_intervals = [row_dict['time_interval']
                               for row_dict

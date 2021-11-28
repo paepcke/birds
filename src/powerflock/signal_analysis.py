@@ -10,13 +10,12 @@ from pathlib import Path
 import librosa
 
 from data_augmentation.sound_processor import SoundProcessor
-from data_augmentation.utils import Utils
+from data_augmentation.utils import Utils, Interval
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-
-import matplotlib.pyplot as plt
-
 from result_analysis.charting import Charter
+
 
 class TemplateSelection(Enum):
     '''How to select results from templates with multiple signatures'''
@@ -24,6 +23,7 @@ class TemplateSelection(Enum):
     MAX_PROB    = 1
     MIN_PROB    = 2
     MED_PROB    = 3
+    MEAN_PROB   = 4
 
 ClipInfo = namedtuple("ClipInfo", "clip start_idx end_idx fname sr")
 
@@ -216,7 +216,7 @@ class SignalAnalyzer:
     def spectral_centroid_each_timeframe(cls, 
                                          audio,
                                          bandpass=None,
-                                         aggregation=DEFAULT_SPECTRAL_AGGREGATION):
+                                         aggregation=None):
         '''
         Return a 1D array with the centroid of energy
         across all frequencies for each time slice.
@@ -227,15 +227,16 @@ class SignalAnalyzer:
         
         :param audio: audio in time domain
         :type audio: {np.array | pd.Series}
-        :param bandpass: tuple with low and high cutoff for
+        :param bandpass: Interval with low and high cutoff for
             masking frequencies below and above a frequency
             range of interest.
-        :type sr: ({int|float}, {int|float})
+        :type bandpass: {None | Interval}
         :param aggregation: method of summarizing the frequencies
             in one (vertical) time frame in the spectrogram
-        :type aggregation: SpectralAggregation
+        :type aggregation: {None | SpectralAggregation}
         :return a 1D Series of frequency centroids, one
-            for each time slot
+            for each time slot. Values are frequencies, index
+            entries are time
         :rtype pd.Series
         '''
         # if hop_length is None:
@@ -251,50 +252,74 @@ class SignalAnalyzer:
         #                                                       n_fft=n_fft
         #                                                       )[0])
         
+        if aggregation is None:
+            aggregation = DEFAULT_SPECTRAL_AGGREGATION
+        
         spec_df = cls.raven_spectrogram(audio)
-        if bandpass:
-            if type(bandpass) != tuple or \
-                type(bandpass[0]) not in [int, float] or \
-                type(bandpass[1]) not in [int, float]:
-                raise TypeError(f"Bandpass must be a 2-tuple of floats or ints, not {bandpass}")
+        if bandpass is not None:
+            if not isinstance(bandpass, Interval):
+                raise TypeError(f"Bandpass must be an Interval of floats or ints, not {bandpass}")
             # Remember that spectrograms are
             # arranged high frequency to low frequency
-            # to match what visual spectros show:
-            low_freq, high_freq = bandpass
-            spec_df.iloc[:high_freq] = 0.0
-            spec_df.iloc[low_freq:] = 0.0
+            # to match what visual spectros show. The
+            # "- 1" keeps the low bound included
+            low_freq, high_freq = (bandpass['low_val'] - 1, bandpass['high_val'])
+            # Reason for setting unwanted part of the freq spectrum
+            # to -np.inf: 
+            # Values are in dB FS (i.e. relative to the maximum signal).
+            # So the vals are all negative. When we will look
+            # for, say, max values, we don't want that to be zero:
+            spec_df[spec_df.index >= high_freq] = -np.inf
+            spec_df[spec_df.index < low_freq] = -np.inf
 
         if aggregation == SpectralAggregation.MAX:
-            sig_ser = spec_df.max(axis=0)
+            sig_ser = spec_df.max()
         elif aggregation == SpectralAggregation.MEAN:
-            sig_ser = spec_df.mean(axis=0)
+            # Need to exclude the -np.inf values that we
+            # introducted above from being considered for
+            # mean/median/min:
+            sig_ser = spec_df[~spec_df.isin([-np.inf])].mean()
         elif aggregation == SpectralAggregation.MEDIAN:
-            sig_ser = spec_df.median(axis=0)
+            sig_ser = spec_df[~spec_df.isin([-np.inf])].median()
         elif aggregation == SpectralAggregation.MIN:
-            sig_ser = spec_df.min(axis=0)
+            sig_ser = spec_df[~spec_df.isin([-np.inf])].min()
         else:
             raise ValueError(f"Aggregation method must be a member of SpectralAggregation, not {aggregation}")
 
         sig_ser.index = spec_df.columns
         sig_ser.name  = f"Sig{aggregation.value}"
-        return sig_ser
+        
+        # We now have a series:
+        #   t0   db_val0
+        #   t1   db_val1
+        #     ...
+        # But we need:
+        #   t0   frequency at which power is db_val0
+        #   t1   frequency at which power is db_val1
+        #     ...
+        #
+        # The needed frequencies are the values of spec_df's
+        # index at the rows where power is of desired value
+        # at the column's time.
+        #
+        # There is likely *some* way to bludgeon pandas
+        # in yielding these values... But bird calls are
+        # short, and therefore sig_ser is short, and we
+        # can affort to loop through the columns.
+        
+        sig_freqs = []
+        for sig_idx, desired_val in enumerate(sig_ser):
+            freqs_with_max_val = spec_df.index[spec_df.iloc[:,sig_idx] == desired_val].tolist()
+            # At a given time there could be multiple
+            # frequencies with the desired value. Just pick
+            # the first for now:
+            sig_freqs.append(freqs_with_max_val[0])
+            
+        # Final result:
+        sig_series = pd.Series(sig_freqs, index=sig_ser.index, name=sig_ser.name)
 
-        # OLD
-        # duration = len(audio) / 22050
-        # time_step_1frame = duration/len(sig_ser)
-        # # Add one timestep at the end to capture
-        # # last sample:
-        # index = np.arange(0, duration + time_step_1frame, time_step_1frame)
-        # if len(index) > len(sig_ser):
-        #     # Depending on the above calculation,
-        #     # the index may be longer by 1 (or 2?) frames
-        #     # than the sig series. In that case, repeat the
-        #     # last sig value:
-        #     length_diff = len(index)-len(sig_ser)
-        #     # Append as many copies of the last element as needed:
-        #     sig_ser = sig_ser.append(pd.Series([sig_ser.iloc[-1]]*length_diff))
-        # sig_ser.index = index
-        # return sig_ser
+        return sig_series
+
 
     #------------------------------------
     # raven_spectrogram
@@ -412,7 +437,7 @@ class SignalAnalyzer:
                                   species,
                                   recordings,
                                   sel_tbls,
-                                  bandpass=None,
+                                  apply_bandpass=False,
                                   aggregation_method=DEFAULT_SPECTRAL_AGGREGATION
                                   ):
         '''
@@ -451,14 +476,19 @@ class SignalAnalyzer:
         :param species: name of species whose calls are to be
             analyzed
         :type species: str
-        :param bandpass: optional tuple (low_frequency, high_frequency)
+        :param apply_bandpass: optional tuple (low_frequency, high_frequency)
             below and above which the spectrogram will be set to 0 before
             computing the signatures.
-        :type bandpass: {None, ({int | float}, {int | float})
+        :type apply_bandpass: {None, ({int | float}, {int | float})
         :param aggregation_method: method for computing the signature
             from frequencies of a single time frame. See SpectralAggregation
             enum. Default is set in DEFAULT_SPECTRAL_AGGREGATION.
         :type aggregation_method: SpectralAggregation
+        :param apply_bandpass: whether or not to apply a
+            bandpass filter based on the Raven selection table's high/low
+            frequencies for each selection before creating each respective
+            signature
+        :type apply_bandpass: bool
         :returns a list of SpectralTemplate instances, each holding
             the signatures of the calls in one recording. If no content
             for given species is found, returns None
@@ -491,9 +521,14 @@ class SignalAnalyzer:
             for clip_num, clip_info in enumerate(species_clips_dict[species]):
                 
                 clip = clip_info['clip']
+                if apply_bandpass:
+                    bandpass_spec = clip_info['freq_interval']
+                else:
+                    bandpass_spec = None
+                #****** RETURNS series of all zeroes:
                 centroid = SignalAnalyzer.spectral_centroid_each_timeframe(
                     clip,
-                    bandpass=bandpass,
+                    bandpass=bandpass_spec,
                     aggregation=aggregation_method
                     )
 
@@ -505,7 +540,8 @@ class SignalAnalyzer:
                                 fname=rec_path,
                                 sig_id=clip_num,
                                 audio=clip,
-                                freq_interval=clip_info['freq_interval']
+                                freq_interval=clip_info['freq_interval'],
+                                bandpass_filter=bandpass_spec
                                 )
                 spectral_centroids.append(sig)
                 
@@ -527,8 +563,7 @@ class SignalAnalyzer:
                           audio,
                           spectroid_template,
                           slide_width_time=None,
-                          bandpass=None,
-                          aggregation=DEFAULT_SPECTRAL_AGGREGATION
+                          aggregation=None
                           ):
         '''
         Given an audio clip, match it to each signatures
@@ -627,14 +662,16 @@ class SignalAnalyzer:
         :param slide_width_time: time in (usually fractional) seconds by
             which to slide a signature across the audio
         :type slide_width_time: float
-        :type bandpass: {None, ({int | float}, {int | float})
-        :param aggregation_method: method for computing the signature
+        :param aggregation: method for computing the signature
             from frequencies of a single time frame. See SpectralAggregation
             enum. Default is set in DEFAULT_SPECTRAL_AGGREGATION.
-        :type aggregation_method: SpectralAggregation
+        :type aggregation: SpectralAggregation
         :return all probabilities, and a summary of results
         :rtype (pd.DataFrame, pd.Series)
         '''
+
+        if aggregation is None:
+            aggregation = DEFAULT_SPECTRAL_AGGREGATION
         
         if slide_width_time is None:
             slide_width_time = SignalAnalyzer.SIGNATURE_MATCH_SLIDE_TIME 
@@ -678,8 +715,8 @@ class SignalAnalyzer:
                         # Get the snippet's signature:
                         clip_sig = SignalAnalyzer.spectral_centroid_each_timeframe(
                             aud_snip,
-                            bandpass=bandpass,
-                            aggregation=aggregation
+                            aggregation=aggregation,
+                            bandpass=sig.bandpass_filter
                             )
                         # Probability for one subclip on one signature:
                         matching_prob = cls._compute_prob(clip_sig, sig)
@@ -790,11 +827,19 @@ class SignalAnalyzer:
                                                         template_sig_np)
 
         # Normalize values in the cost matrix to 0-1:
-        cost_normalized = (cost_matrix-cost_matrix.min())/(cost_matrix.max()-cost_matrix.min())
-        # The value on the lower right of the cost 
-        # matrix is the sum of all steps' costs:
-        total_cost = cost_normalized[-1,-1]
-        prob = 1 - total_cost
+        # For the case that the clip signature is identical to 
+        # the template signature, the cost matrix will be zero.
+        # This will occur when using the same clip with which 
+        # signatures were created. In that case, probability
+        # should be 1:
+        if (cost_matrix == 0).all():
+            prob = 1.0
+        else:
+            cost_normalized = (cost_matrix-cost_matrix.min())/(cost_matrix.max()-cost_matrix.min())
+            # The value on the lower right of the cost 
+            # matrix is the sum of all steps' costs:
+            total_cost = cost_normalized[-1,-1]
+            prob = 1 - total_cost
         
         if plot_sigs:
             templ_sig_series = pd.Series(template_sig_np,
@@ -1028,6 +1073,19 @@ class SpectralTemplate:
                  hop_length=SignalAnalyzer.hop_length,
                  n_fft=SignalAnalyzer.n_fft
                  ):
+        '''
+        
+        :param signatures:
+        :type signatures:
+        :param rec_fname:
+        :type rec_fname:
+        :param sr:
+        :type sr:
+        :param hop_length:
+        :type hop_length:
+        :param n_fft:
+        :type n_fft:
+        '''
 
         # Save the hop length and frequency bin-count-relevant
         # parameters so that clients wanting to create signatures
@@ -1043,6 +1101,23 @@ class SpectralTemplate:
 
         # Computed lazily:
         self.cached_mean_sig = None
+        
+        # About application of bandpass filtering
+        # of test audio when matching its snippets to
+        # any of this template's sigs: if any of the
+        # sigs were created with a species-specific bandpass
+        # filter applied, then create an Interval that
+        # comprises the max bandwidth from among this template's
+        # constitutent sigs:
+        
+        sigs_with_bandpass = sum([1 if sig.bandpass_filter is not None else 0
+                                  for sig
+                                  in self.signatures
+                                  ])
+        if sigs_with_bandpass > 0:
+            self.bandpass_filter = self.frequency_band()
+        else:
+            self.bandpass_filter = None
 
     #------------------------------------
     # mean_sig
@@ -1090,6 +1165,34 @@ class SpectralTemplate:
         mean_sig.name = 'mean_sig'
         self.cached_mean_sig = mean_sig
         return mean_sig
+
+    #------------------------------------
+    # frequency_band
+    #-------------------
+    
+    def frequency_band(self):
+        '''
+        Finds the lower and higher frequency
+        bounds of each signature, and returns
+        an Interval such that 'low_val' is the lowest
+        frequency, and 'high_val' is the highest
+        frequency from among all signature's bandwidths  
+        
+        :returns the lowest frequency and the highest 
+            frequency from among all signatures in the template
+        :rtype Interval
+        '''
+        
+        lowest_freq = min([sig.freq_interval['low_val']
+                           for sig
+                           in self.signatures
+                           ])
+        high_freq   = max([sig.freq_interval['high_val']
+                           for sig
+                           in self.signatures
+                           ])
+        
+        return Interval(lowest_freq, high_freq + 1)
 
     #------------------------------------
     # as_time
@@ -1252,7 +1355,8 @@ class Signature:
                  fname=None,
                  sig_id='na',
                  audio=None,
-                 freq_interval=None
+                 freq_interval=None,
+                 bandpass_filter=None
                  ):
         '''
         The spectral_centroid is the actual signature: the
@@ -1292,7 +1396,11 @@ class Signature:
         :param freq_interval: dict providing lowest, and highest 
             frequency of the signature, and the frequency steps
             with which the signature's spectrogram was created.
-        :type freq_interval: {str : float} 
+        :type freq_interval: {str : float}
+        :param bandpass_filter: if not None: an interval that defines
+            the bandpass filter that was applied before computing
+            this signature.
+        type bandpass_filter: {None | Interval}
         '''
 
         if type(spectral_centroid) == pd.Series:
@@ -1312,6 +1420,7 @@ class Signature:
         if freq_interval is not None:
             self.freq_span = freq_interval['high_val'] - freq_interval['low_val']
 
+        self.bandpass_filter = bandpass_filter
     #------------------------------------
     # as_walltime
     #-------------------

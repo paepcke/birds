@@ -1287,6 +1287,42 @@ class Charter:
         ax.figure.tight_layout()
         return ax
 
+    #------------------------------------
+    # spectrogram_plot
+    #-------------------
+    
+    @classmethod
+    def spectrogram_plot(cls, spectro_df, fig_title=None):
+        '''
+        Given the DataFrame of an already computed spectrogram, 
+        show the df as a colored plot. The y axis labels
+        will be taken from spectro_df.index; the x axis 
+        labels will be spectro_df.columns.
+        
+        Example for a precomputed spectrogram: SignalAnalyzer.raven_spectrogram,
+        or any of the STFT spectrogram creating libraries.
+        However, ensure that index and colums of the df or
+        set to what you want. 
+        
+        :param spectro_df: spectrogram 
+        :type spectro_df: pd.DataFrame
+        :param fig_title: optional title for the plot
+        :type fig_title: {None | str}
+        :return the pyplot Axes instance
+        :rtype plt.Axes
+        '''
+        mesh = plt.pcolormesh(spectro_df.columns, 
+                              list(spectro_df.index), 
+                              spectro_df, 
+                              cmap='jet', 
+                              shading='auto')
+        
+        ax = mesh.axes
+        ax.set_xlabel('Time (sec)')
+        ax.set_ylabel('Frequency (Hz)')
+        if fig_title is not None:
+            ax.figure.suptitle(fig_title)
+        return ax
 
     #------------------------------------
     # set_xticklabel_excerpts
