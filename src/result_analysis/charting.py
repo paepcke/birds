@@ -248,6 +248,41 @@ class Charter:
 
 # ----------------- Computations ---------------
 
+    #------------------------------------
+    # min_max_scale
+    #-------------------
+    
+    @classmethod
+    def scale(cls, data, dest_min_max):
+        '''
+        Given either a DataFrame or a Series, and a
+        2-tuple, scale the values to fit 
+              [dest_min_max[0], dest_min_max[1]]. 
+        
+        :param data: the data to scale
+        :type data: {pd.DataFrame | pd.Series}
+        :param dest_min_max: optional interval into which to fit
+            the data
+        :type dest_min_max: [num, num]
+        :return copy of given data structure with values scaled
+        :rtype {pd.DataFrame | pd.Series} 
+        '''
+        
+        if type(data) not in (pd.DataFrame, pd.Series):
+            raise TypeError(f"Data must be a DataFrame or Series, not {type(data)}")
+        data_min = data.min() if type(data) == pd.Series else data.min().min()
+        data_max = data.max() if type(data) == pd.Series else data.max().max()
+        
+        dest_min, dest_max = dest_min_max
+
+        scaled = dest_min + (dest_max - dest_min) * (data - data_min)/(data_max - data_min)
+        
+        if type(data) == pd.DataFrame:
+            res = pd.DataFrame(scaled, index=data.index, columns=data.columns)
+        else:
+            res = pd.Series(scaled, index=data.index, name=data.name)
+        
+        return res
 
     #------------------------------------
     # compute_binary_pr_curve 
@@ -1060,6 +1095,122 @@ class Charter:
                                                  val_preds_df,
                                                  normalize))
         return results
+
+    #------------------------------------
+    # draw_contours 
+    #-------------------
+    
+    @classmethod
+    def draw_contours(cls,
+                      bool_df,
+                      ax=None,
+                      title=None,
+                      xlabel=None,
+                      ylabel=None,
+                      decimals_x=None,
+                      decimals_y=None,
+                      fewer_labels_x=None,
+                      fewer_labels_y=None
+                      ):
+        '''
+        Takes a dataframe with boolean values. Draws
+        a contour map with traces where the df has True
+        values.
+        
+        :param bool_df: the dataframe to contour
+        :type bool_df: pd.DataFrame
+        :param ax: optional existing axes on which to draw;
+            if None, create figure and axes
+        :type ax: pyplot.Axes
+        :param title: title of figure
+        :type title: str
+        :param xlabel: X-axis label
+        :type xlabel: str
+        :param ylabel: Y-axis label
+        :type ylabel: str
+        :param decimals_x: cut decimal places of X-axis
+            tick labels to given number. If None, the df's
+            columns list is used.
+        :type decimals_x: {None | int}
+        :param decimals_y: cut decimal places of Y-axis
+            tick labels to given number. If None, the df's
+            index list is used.
+        :type decimals_y: {None | int}
+        :param fewer_labels_x: if an int, only that many axis labels
+            will be included.
+        :type fewer_labels_x: {None | int}
+        :param fewer_labels_y: if an int, only that many axis labels
+            will be included.
+        :type fewer_labels_y: {None | int}
+        '''
+
+        # Make a gray rectangle the size of
+        # the boolean df:
+        if ax is None:
+            fig, ax = plt.subplots()
+        else:
+            fig = ax.figure
+        
+        # If we'll change the columns or index,
+        # Work with a copy so as not to mess with the
+        # original df:
+        if decimals_x is not None or decimals_y is not None:
+            working_bool_df = bool_df.copy()
+        else:
+            working_bool_df = bool_df
+            
+        # Round the row/col labels if requested:
+        if decimals_x is not None:
+            working_bool_df.columns = list(working_bool_df.columns.to_numpy().round(decimals_x))
+        if decimals_y is not None:
+            working_bool_df.index = list(working_bool_df.index.to_numpy().round(decimals_y))
+
+        if fewer_labels_x is not None:
+            if not type(fewer_labels_x) == int:
+                raise TypeError(f"The every-nth-axis-label must be None or int, not {type(fewer_labels_x)}")
+            xticklabels = int(round(len(working_bool_df.columns) / fewer_labels_x, 0))
+        else:
+            xticklabels = 'auto'
+            
+        if fewer_labels_y is not None:
+            if not type(fewer_labels_y) == int:
+                raise TypeError(f"The every-nth-axis-label must be None or int, not {type(fewer_labels_y)}")
+            yticklabels = int(round(len(working_bool_df.index) / fewer_labels_y, 0))
+        else:
+            yticklabels = 'auto'
+            
+        _heatmap = sns.heatmap(working_bool_df, 
+                               cmap='jet', 
+                               cbar=False, 
+                               ax=ax,
+                               xticklabels=xticklabels,
+                               yticklabels=yticklabels
+                               )
+
+        # The y labels will be vertial, set them horizontal:
+        # (could be done in one statement, but hopefully more clear 
+        #  this way)
+        yticklabels = ax.get_yticklabels()
+        # The 'list()' just runs through the map instance
+        # that is created by map(), and executes the commands.
+        # The return value is a list of None; we discard that:
+        list(map(lambda ylabel: ylabel.set_rotation(0.0), yticklabels))
+        ax.set_yticklabels(yticklabels)
+
+        # Similarly, rotate x labels by 45deg:
+        xticklabels = ax.get_xticklabels()
+        list(map(lambda xlabel: xlabel.set_rotation(45.0), xticklabels))
+        ax.set_xticklabels(xticklabels)
+
+        if title is not None:
+            ax.set_title(title)
+        if xlabel is not None:
+            ax.set_xlabel(xlabel)
+        if ylabel is not None:
+            ax.set_ylabel(ylabel)
+
+        fig.show()
+        return ax
 
     #------------------------------------
     # barchart 

@@ -9,13 +9,14 @@ import unittest
 
 import torch
 
+from data_augmentation.utils import Utils
 import numpy as np
 import pandas as pd
 from result_analysis.charting import Charter, CELL_LABELING
 
 
-TEST_ALL = True
-#TEST_ALL = False
+#*******TEST_ALL = True
+TEST_ALL = False
 
 class ChartingTester(unittest.TestCase):
 
@@ -58,6 +59,97 @@ class ChartingTester(unittest.TestCase):
         pass
 
 # -------------------- TESTS -----------
+
+    #------------------------------------
+    # test_scale
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_scale(self):
+        
+        ser = [1,2,3]
+        with self.assertRaises(TypeError):
+            Charter.scale(ser, (10,30))
+
+        data = pd.Series(ser, name='Test1', index=['foo', 'bar', 'fum'])
+        scaled = Charter.scale(data, (10,30))
+        expected = pd.Series([10,20,30], name=data.name, index=data.index)
+        Utils.assertSeriesEqual(scaled, expected)
+
+        scaled = Charter.scale(data, (0,1))
+        expected = pd.Series([0,0.5,1.0], name=data.name, index=data.index)
+        Utils.assertSeriesEqual(scaled, expected)
+        
+        scaled = Charter.scale(data, (-1,1))
+        expected = pd.Series([-1,0,1.0], name=data.name, index=data.index)
+        Utils.assertSeriesEqual(scaled, expected)
+
+    #------------------------------------
+    # test_draw_contours
+    #-------------------
+    
+    #************@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_draw_contours(self):
+        
+        df = pd.DataFrame([pd.Series([False]*10)]*5,
+                          index=[4000,3000,2000,1000,0],
+                          columns=np.arange(0,10,1)
+                          )
+        # Add some streaks of True:
+        df.loc[1000,1:4] = True
+        ax = Charter.draw_contours(df, 
+                                   title="Contour Chart",
+                                   xlabel='Time',
+                                   ylabel='Frequency'
+                                   )
+        xticklabels = ax.get_xticklabels()        
+        yticklabels = ax.get_yticklabels()
+        self.assertEqual(len(xticklabels), len(df.columns))
+        self.assertEqual(len(yticklabels), len(df.index))
+        
+        # Try rounding and limiting number of labels:
+        df.index = [4000.1234,3000.456,2000.356,1000,0] 
+        df.columns = np.arange(0,5,0.5)
+
+        ax = Charter.draw_contours(df, 
+                                   title="Contour Chart",
+                                   xlabel='Time',
+                                   ylabel='Frequency',
+                                   decimals_x=1,
+                                   decimals_y=1
+                                   )
+
+        xticklabels = ax.get_xticklabels()
+        xlabel_txts = [lbl.get_text() for lbl in xticklabels]
+        expected    = ['0.0', '0.5', '1.0', '1.5', '2.0', '2.5', '3.0', '3.5', '4.0', '4.5']
+        self.assertListEqual(xlabel_txts, expected)
+        
+        yticklabels = ax.get_yticklabels()
+        ylabel_txts = [lbl.get_text() for lbl in yticklabels]
+        expected    = ['4000.1', '3000.5', '2000.4', '1000.0', '0.0']
+        self.assertListEqual(ylabel_txts, expected)
+
+        # Try culling number of labels shown:
+        
+        ax = Charter.draw_contours(df, 
+                                   title="Contour Chart",
+                                   xlabel='Time',
+                                   ylabel='Frequency',
+                                   decimals_x=1,
+                                   decimals_y=1,
+                                   fewer_labels_x=5,
+                                   fewer_labels_y=3
+                                   )
+        xticklabels = ax.get_xticklabels()
+        xlabel_txts = [lbl.get_text() for lbl in xticklabels]
+        expected    = ['0.0', '1.0', '2.0', '3.0', '4.0']
+        self.assertListEqual(xlabel_txts, expected)
+        
+        yticklabels = ax.get_yticklabels()
+        ylabel_txts = [lbl.get_text() for lbl in yticklabels]
+        expected    = ['4000.1', '2000.4', '0.0']
+        self.assertListEqual(ylabel_txts, expected)
+        
 
     #------------------------------------
     # test_calc_conf_matrix_norm 
