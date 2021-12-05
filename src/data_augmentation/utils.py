@@ -14,7 +14,7 @@ from experiment_manager.neural_net_config import NeuralNetConfig
 import librosa
 from matplotlib import MatplotlibDeprecationWarning
 from natsort import natsorted
-from seaborn.matrix import heatmap
+#from seaborn.matrix import heatmap
 from torch import cuda
 import torch
 
@@ -1583,11 +1583,61 @@ class Utils:
         return new_series
 
     #------------------------------------
+    # assertSeriesEqual
+    #-------------------
+    
+    @classmethod
+    def assertSeriesEqual(cls, ser1, ser2):
+        '''
+        Raise exception if ser1 and ser2 differ in index,
+        name or content. Note that two Series may be equal
+        even if they are not the identical data structure.
+        It's the content/index/name that count. 
+        
+        The camel case naming convention makes this method fit
+        into the Python unittest self.assertXXX() convention.
+         
+        :param ser1: first series
+        :type ser1: pd.Series
+        :param ser2: second series
+        :type ser2: pd.Series
+        :raises AssertionError on discrepancies
+        '''
+        
+        if (ser1.index != ser2.index).any():
+            raise AssertionError(f"Index ser1 differ from index ser2")
+            
+        if (ser1.name != ser2.name):
+            raise AssertionError(f"Name of ser1 differs from name of ser2")
+        
+        if not (ser1 == ser2).all():
+            raise AssertionError(f"Values of ser1 differ from values of ser2")
+        
+        return
+        
+
+
+    #------------------------------------
     # assertDataframesEqual
     #-------------------
     
     @classmethod
     def assertDataframesEqual(cls, df1, df2):
+        '''
+        Raise exception if df1 and df2 differ in index,
+        columns or content. Note that two DataFrames may be equal
+        even if they are not the identical data structure.
+        It's the content/index/columns that count. 
+        
+        The camel case naming convention makes this method fit
+        into the Python unittest self.assertXXX() convention.
+         
+        :param df1: first series
+        :type df1: pd.DataFrame
+        :param df2: second series
+        :type df2: pd.DataFrame
+        :raises AssertionError on discrepancies
+        '''
         
         if (df1.index != df2.index).any():
             raise AssertionError(f"Index df1 differ from index df2")
