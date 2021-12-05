@@ -207,11 +207,196 @@ class SignalAnalyzer:
                                    ax=ax)
                 
         return ax
+
+    #------------------------------------
+    # spectral_flatness
+    #-------------------
     
+    @classmethod
+    def spectral_flatness(cls,
+                          spec_df=None,
+                          audio=None,
+                          bandpass=None,
+                          wiener_entropy=False
+                          ):
+        '''
+        Given audio or an already computed spectrogram,
+        go through each time frame, compute the 'spectral flatness'
+        a.k.a. Wiener entropy. Return a time series of flatness
+        values.
+        
+        Flatness values will be in [0,1] with 1 being very flat, corresponding
+        to mostly noise. Near zero means presence of a tone with harmonics.
+        A pure sine wave has no harmonics, and will have flatness of 1.
+        
+        Either spec_df or audio must be provided.btest
+        
+        :param spec_df: optionally the spectrogram computed as with
+           raven_spectrogram(). 
+        :type spec_df: pd.DataFrame
+        :param audio: optionally an audio array
+        :type audio: np.ndarray(1)
+        :param bandpass: if provided, the specification of a bandpass filter
+            to apply prior to computation
+        :type bandpass: {None | Interval}
+        :param wiener_entropy: if True, convert values from spectral
+            flatness to Wiener entropy. The flatness values [0,1] are thereby
+            converted to [-inf, 0], i.e. taking the log of the flatness values
+        :type wiener_entropy: bool
+        :return series of values [0,1] corresponding to the spectral flatness
+            at each time frame.
+        :rtype pd.Series
+        
+        '''
+        if spec_df is None and audio is None:
+            raise ValueError("Either spectrogram or audio must be provided.")
+        
+        if spec_df is None:
+            # Get spectrogram from audio:
+            if type(audio) == pd.Series:
+                audio_np = audio.as_numpy()
+            else:
+                audio_np = audio
+            # Spectral flatness computations need absolute energy
+            # values, not decibels relative to max energy:
+            spec_df = cls.raven_spectrogram(audio_np, to_db=False)
+        
+        if bandpass is not None:
+            cls.apply_bandpass(bandpass, spec_df, inplace=True)
+        
+        # The 'power=2' tells librosa that we want to work
+        # the the power spectrum, on which flatness is usually shown:
+        flatness_arr = librosa.feature.spectral_flatness(S=spec_df.to_numpy(), power=2)
+        # The result is an np arr of the form:
+        #   [[0.4,0.6,...]]
+        # with length equal to the number of time frames.
+        # The [-1] here pulls out the numbers we want:
+        flatness_ser = pd.Series(flatness_arr[-1], index=spec_df.columns, name="SigSpectralFlatness")
+        
+        if wiener_entropy:
+            # Take the log10 of each element, taking
+            # care of 0 values by setting those to -inf:  
+            flatness_ser = flatness_ser.apply(lambda el: -np.inf if el == 0 else np.log10(el))
+            
+        return flatness_ser
+
+    #------------------------------------
+    # spectral_continuity
+    #-------------------
+    
+    @classmethod
+    def spectral_continuity(cls, 
+                            spec_df=None,
+                            audio=None,
+                            bandpass=None,
+                            edge_mag_thres=1):
+        '''
+        Given a spectrogram DataFrame as might be created from
+        raven_spectrogram(), or an audio file. If necessary, create
+        the spectrogram. Compute a single number for each time frame,
+        ********CONTINUE HERE. 
+        
+        For each frequency band 
+        
+        :param cls:
+        :type cls:
+        :param spec_df:
+        :type spec_df:
+        :param audio:
+        :type audio:
+        :param bandpass:
+        :type bandpass:
+        :param edge_mag_thres:
+        :type edge_mag_thres:
+        '''
+        
+        if spec_df is None:
+            spec_df = cls.raven_spectrogram(audio, to_db=False)
+        if bandpass is not None:
+            cls.apply_bandpass(bandpass, spec_df, inplace=True)
+
+        num_rows, num_cols = spec_df.shape
+
+        # Get df same size as spec_df with a True in cells
+        # that are negative, and False in cells that are positive:
+        #******spec_is_negative = np.signbit(spec_df)
+        
+        # Another df of same size as spec_df where each cell
+        # has result of:
+        #  T(ti,fj) = T*(abs(Wiener_entropy(col))/(abs(row_freq - mean_freq(col))))
+        wiener_ser = cls.spectral_flatness(spec_df, wiener_entropy=True)
+        
+        # Make a df where each row is a copy of the wiener series
+        # with as many rows as spec_df has:
+        wiener_df = pd.DataFrame([wiener_ser.abs()] * num_rows,
+                                 index=spec_df.index,
+                                 columns=spec_df.columns
+                                 )
+        
+        # For each spectrum cell, get the difference of its magnitude
+        # from the mean magnitude in its column (i.e. during the time
+        # frame across all freqs):
+        energy_distance_from_mean = (spec_df - spec_df.mean(axis='rows')).abs()
+
+        edge_mag_thres = edge_mag_thres * wiener_df/energy_distance_from_mean
+        
+        thresholded_spec_df = spec_df >= edge_mag_thres
+        
+        Charter.draw_contours(thresholded_spec_df,
+                              title='CMTO Countours',
+                              xlabel='Time',
+                              ylabel='Frequency',
+                              decimals_x=2,
+                              decimals_y=2)
+        
+        print(edge_mag_thres)
+
+    #------------------------------------
+    # apply_bandpass
+    #-------------------
+    
+    @classmethod
+    def apply_bandpass(cls, bandpass, spec_df, inplace=False):
+        '''
+        Given a spectrogram and bandpass frequency interval, 
+        such as Interval(5000, 8000, 1), return a new spectrogram
+        with frequencies above and below the given interval set
+        to -inf.
+        
+        :param bandpass: specification of frequencies to retain 
+        :type bandpass: Interval
+        :param spec_df: the spectrogram: index is frequencies, 
+            columns are time frames.
+        :type spec_df: pd.DataFrame
+        :return filtered spectrogram of equal size as the original
+        :rtype pd.DataFrame
+        '''
+
+        if not isinstance(bandpass, Interval):
+            raise TypeError(f"Bandpass must be an Interval of floats or ints, not {bandpass}") 
+        # Remember that spectrograms are
+        # arranged high frequency to low frequency
+        # to match what visual spectros show. The
+        # "- 1" keeps the low bound included
+        low_freq, high_freq = bandpass['low_val'] - 1, bandpass['high_val'] 
+        # Reason for setting unwanted part of the freq spectrum
+        # to -np.inf:
+        # Values are in dB FS (i.e. relative to the maximum signal).
+        # So the vals are all negative. When we will look
+        # for, say, max values, we don't want that to be zero:
+        if inplace:
+            filtered_spec = spec_df
+        else:
+            filtered_spec = spec_df.copy()
+        filtered_spec[filtered_spec.index >= high_freq] = -np.inf
+        filtered_spec[filtered_spec.index < low_freq] = -np.inf
+        
+        return filtered_spec
+
     #------------------------------------
     # spectral_centroid_each_timeframe
     #-------------------
-    
+
     @classmethod
     def spectral_centroid_each_timeframe(cls, 
                                          audio,
@@ -257,20 +442,7 @@ class SignalAnalyzer:
         
         spec_df = cls.raven_spectrogram(audio)
         if bandpass is not None:
-            if not isinstance(bandpass, Interval):
-                raise TypeError(f"Bandpass must be an Interval of floats or ints, not {bandpass}")
-            # Remember that spectrograms are
-            # arranged high frequency to low frequency
-            # to match what visual spectros show. The
-            # "- 1" keeps the low bound included
-            low_freq, high_freq = (bandpass['low_val'] - 1, bandpass['high_val'])
-            # Reason for setting unwanted part of the freq spectrum
-            # to -np.inf: 
-            # Values are in dB FS (i.e. relative to the maximum signal).
-            # So the vals are all negative. When we will look
-            # for, say, max values, we don't want that to be zero:
-            spec_df[spec_df.index >= high_freq] = -np.inf
-            spec_df[spec_df.index < low_freq] = -np.inf
+            cls.apply_bandpass(bandpass, spec_df, inplace=True)
 
         if aggregation == SpectralAggregation.MAX:
             sig_ser = spec_df.max()
@@ -326,7 +498,7 @@ class SignalAnalyzer:
     #-------------------
     
     @classmethod
-    def raven_spectrogram(cls, audio):
+    def raven_spectrogram(cls, audio, to_db=True):
         '''
         Returns a spectrogram as the default settings in 
         the Raven program would generate. Same frequency
@@ -350,6 +522,11 @@ class SignalAnalyzer:
         :param audio: either the path to an audio file,
             or the already loaded audio array
         :type audio: {str | np.array(float)
+        :param to_db: whether to convert the energy values to db
+            relative to the max. Raven does this conversion, so
+            the default is True. But procedures such as spectral flatness
+            computations need the absolute values.
+        :type to_db: bool
         :return: dataframe with a spectrogram that reflects
             what a Raven labeling software user would see
             in its spectrogram display.
@@ -367,13 +544,16 @@ class SignalAnalyzer:
 
         spec = np.abs(librosa.stft(audio_arr, n_fft=512, hop_length=512, window='hann'))
         # Convert to dB readings
-        spec_db = librosa.amplitude_to_db(spec, ref=np.max)
-        num_rows, num_cols = spec_db.shape
+        if to_db:
+            spec_values = librosa.amplitude_to_db(spec, ref=np.max)
+        else:
+            spec_values = spec
+        num_rows, num_cols = spec_values.shape
         time_ticks = librosa.core.frames_to_time(np.arange(num_cols + 1), 
                                                  sr=sr, 
                                                  hop_length=hop_length)[:-1]
         freq_ticks = cls._freq_ticks(num_rows)[:-1]
-        spec_df = pd.DataFrame(spec_db, columns=time_ticks, index=freq_ticks)
+        spec_df = pd.DataFrame(spec_values, columns=time_ticks, index=freq_ticks)
         # This df is ordered freq at zero at the top; reverse the order
         # of the rows:
         spec_df = spec_df.iloc[::-1]

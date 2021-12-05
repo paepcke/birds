@@ -9,6 +9,7 @@ from pathlib import Path
 import unittest
 
 import librosa
+import matplotlib.pyplot as plt
 
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import Utils
@@ -52,7 +53,7 @@ class SignalAnalysisTester(unittest.TestCase):
         cls.sel_recording_fld = os.path.join(cls.sound_data, 'DS_AM03_20190713_055956.wav')
 
         # Xeno Canto 
-        cls.sel_tbl_cmto_xc1 = os.path.join(cls.cur_dir, 'selection_tables/XenoCanto/cmto1.selections.txt')
+        cls.sel_tbl_cmto_xc1 = os.path.join(cls.cur_dir, 'selection_tables/XenoCanto/sel_tbl_Kelley_SONG_XC274155-429_CMTO_KEL.txt')
         cls.sel_rec_cmto_xc1 = os.path.join(cls.xc_sound_data, 'CMTOG/SONG_XC274155-429_Chestnut-mandibled_Toucan_2_song.mp3')
         
         cls.sel_tbl_cmto_xc2 = os.path.join(cls.cur_dir, 'selection_tables/XenoCanto/cmto2.selections.txt')
@@ -125,7 +126,59 @@ class SignalAnalysisTester(unittest.TestCase):
             # Duration of the extracted clip
             clip_dur = SoundProcessor.recording_len(clip, sr)
             self.assertEqual(round(clip_dur,2), round(dur,2)) 
-            
+
+    #------------------------------------
+    # test_spectral_flatness
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_spectral_flatness(self):
+        
+        # For test recording, sr is 22050
+        # There will be 11 calls in this recording,
+        # each one about 2.5s long. The clip of 11 calls
+        # is ~36.5sec.
+        #cmtog_clips_xc1, _sr = SignalAnalyzer.audio_from_selection_table(self.sel_tbl_cmto_xc1,
+        #                                                                self.sel_rec_cmto_xc1,
+        #                                                                'cmto')
+        
+        
+        # for clip_dict in cmtog_clips_xc1['CMTOG']:
+        #     flatness = SignalAnalyzer.spectral_flatness(audio=clip_dict['clip'])
+        #     print(flatness)
+        flatness = SignalAnalyzer.spectral_flatness(audio=self.sel_rec_cmto_xc1)
+        
+        spectro = SignalAnalyzer.raven_spectrogram(self.sel_rec_cmto_xc1)
+        mesh = plt.pcolormesh(spectro.columns, list(spectro.index), spectro, cmap='jet', shading='flat')
+        ax = mesh.axes
+        
+        # Add the flatness curve to to the spectrogram.
+        # Since flatness values are in [0,1], we need to scale
+        # them to the y-axis of the spectro mesh. Else the curve
+        # would be near-flat against the x-axis:
+        
+        flatness_scaled = Charter.scale(flatness, (spectro.index.min(), spectro.index.max()))
+        flatness_scaled_no_outliers = flatness_scaled[flatness_scaled < 11000]
+        ax.figure.show()
+        Charter.linechart(flatness_scaled_no_outliers, 
+                          ax=ax, 
+                          color_groups={'SigSpectralFlatness' : 'red'},
+                          title="Test of Flatness"
+                          )
+
+        # To see chart: put breakpoint here.
+        # maybe have to:
+        #    ax.figure.show()
+
+    #------------------------------------
+    # test_spectral_continuity
+    #-------------------
+    
+    #*********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_spectral_continuity(self):
+
+        continuity = SignalAnalyzer.spectral_continuity(audio=self.sel_rec_cmto_xc1)
+        print(continuity)
 
     #------------------------------------
     # test_spectral_centroid_each_timeframe
@@ -135,7 +188,7 @@ class SignalAnalysisTester(unittest.TestCase):
     def test_spectral_centroid_each_timeframe(self):
 
         # For test recording, sr is 22050
-        # There will be 11 calls in this recording,
+        # There will be 17 calls in this recording,
         # each one about 2.5s long. The clip of 11 calls
         # is ~36.5sec.
         cmtog_clips_xc1, sr = SignalAnalyzer.audio_from_selection_table(self.sel_tbl_cmto_xc1,
@@ -509,7 +562,7 @@ class SignalAnalysisTester(unittest.TestCase):
     # test_power_grid_search 
     #-------------------
     
-    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_power_grid_search(self):
         
         pwr_member = PowerMember('CMTOG', self.templates[0])

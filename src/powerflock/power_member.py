@@ -815,7 +815,7 @@ class PowerResult:
         on whether in the interval of that row a call did
         occur. The Overlap column will contain the percentage
         of overlap between the probability result interval and a
-        true call.
+        true call by the species in self.species.
         
         The prob_df will permanently contain the columns.
         
@@ -835,9 +835,12 @@ class PowerResult:
             # the selection table, plus time_interval, which
             # is a data_augmentation.utils.Interval instance
             row_dicts = Utils.read_raven_selection_table(truth_source)
-            call_intervals = [row_dict['time_interval']
-                              for row_dict
-                              in row_dicts]
+            # Cannot use list comprehension here, b/c
+            # self won't be known:
+            call_intervals = []
+            for row_dict in row_dicts:
+                if row_dict['species'] == self.species:
+                    call_intervals.append(row_dict['time_interval'])
 
         elif type(truth_source) == list:
             # Assume source is a list of Interval instances,
@@ -854,28 +857,72 @@ class PowerResult:
         
         overlap_percentages = pd.Series([0.]*len(self.prob_df.index),
                                         name='sig_overlap_perc')
+        # Create a series same length of prob_df.
+        # Set all elements to True for which the
+        # prob_df's start_time lies in one of the call 
+        # intervals.
+        # First set all vals to False
+        truths = pd.Series([False]*len(self.prob_df), 
+                           name='Truth', 
+                           index=self.prob_df.start_time)
+        # The prob_df repeats the sequence of start_times for
+        # each signature. Set *all* start_time occurrences 
+        # with a call to True.
+        # Get the start_time series that gets repeated in prob_df.
+        # The length of this array will depend on the slide window.
+        # With a 0.2 slide window: recording_length / slide_window.
+        # With a 60 second recording that is 300 entries: 
+        df_unique_start_times = self.prob_df.start_time.unique()
+        # Check each of the unique start times against the
+        # call intervals:
+        for start_time in df_unique_start_times:
+            for call_interval in call_intervals:
+                if call_interval.contains(start_time):
+                    # Set *all* rows in the truth series with
+                    # start_time in its index to True. This
+                    # will set as many positions to True as there
+                    # are signatures:
+                    truths[truths.index == start_time] = True
+                elif start_time < call_interval['low_val']:
+                    # Since call intervals are sorted by time,
+                    # if start_time is less than the current call
+                    # interval, no need to check the following ones;
+                    # look at the next start_time:
+                    break
 
         cur_sig_id = self.prob_df.loc[0,'sig_id']
         truth_intervals = iter(call_intervals)
         cur_truth_interval = next(truth_intervals)
         for row_num, prob_ser in self.prob_df.iterrows():
             if prob_ser.sig_id != cur_sig_id:
-                cur_truth_interval = next(truth_intervals)
+                # Starting a section of the probs_df that was
+                # generated using a different signature:
+                try:
+                    cur_truth_interval = next(truth_intervals)
+                except StopIteration:
+                    # We tried all the truth intervals against
+                    # this probability df's entries for the
+                    # sig in the batch of the prob_df that was
+                    # produced with the current sig. Now time
+                    # starts again as we start with the results
+                    # from a new sig:
+                    truth_intervals = iter(call_intervals)
+                    cur_truth_interval = next(truth_intervals)
                 cur_sig_id = prob_ser.sig_id 
             prob_interval = Interval(prob_ser.start_time, 
                                      prob_ser.stop_time,
                                      step=1/SignalAnalyzer.sr)
             ovlp = cur_truth_interval.percent_overlap(prob_interval)
             overlap_percentages[row_num] = ovlp
+            if ovlp > 0:
+                truths[row_num] = True
 
         # Attach the overlap percentages to the right
         # of self.prob_df:
-        self.prob_df['overlap'] = overlap_percentages
+        self.prob_df = self.prob_df.assign(overlap=overlap_percentages.values)
 
-        # For convenience, add a boolean col Truth, with
-        # 1 if any overlap between prbability row and any
-        # true call intervals:
-        self.prob_df['Truth'] = self.prob_df.overlap > 0
+        # Same for the Truths column:
+        self.prob_df = self.prob_df.assign(Truth=truths.values)
 
         #**********
         # if plot:

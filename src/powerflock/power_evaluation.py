@@ -130,7 +130,12 @@ class PowerEvaluator:
         # Add a Truth column to the result:
         pwr_res.add_overlap_and_truth(sel_tbl_path)
 
-        call_intervals = Utils.get_call_intervals(sel_tbl_path)
+        #call_intervals = Utils.get_call_intervals(sel_tbl_path)
+        
+        #**********
+        pwr_res.prob_df.to_csv('/Users/paepcke/Project/Wildlife/Birds/CostaRica/ExperimentResults/PowerSigs/probs_dfCMTOGOverField.csv',
+                               index_label='row_id'
+                               )
         
         clf = PowerQuantileClassifier(sig_id, thres)
         clf.fit(pwr_res)
