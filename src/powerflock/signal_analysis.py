@@ -298,8 +298,6 @@ class SignalAnalyzer:
         
         For each frequency band 
         
-        :param cls:
-        :type cls:
         :param spec_df:
         :type spec_df:
         :param audio:
@@ -338,16 +336,19 @@ class SignalAnalyzer:
         # frame across all freqs):
         energy_distance_from_mean = (spec_df - spec_df.mean(axis='rows')).abs()
 
-        edge_mag_thres = edge_mag_thres * wiener_df/energy_distance_from_mean
+        edge_mag_thres_df = edge_mag_thres * wiener_df/energy_distance_from_mean
         
-        thresholded_spec_df = spec_df >= edge_mag_thres
+        thresholded_spec_df = spec_df >= edge_mag_thres_df
         
-        Charter.draw_contours(thresholded_spec_df,
-                              title='CMTO Countours',
-                              xlabel='Time',
-                              ylabel='Frequency',
-                              decimals_x=2,
-                              decimals_y=2)
+        ax = Charter.draw_contours(thresholded_spec_df,
+                                   title='CMTO Countours',
+                                   xlabel='Time',
+                                   ylabel='Frequency',
+                                   decimals_x=2,
+                                   decimals_y=2,
+                                   fewer_labels_x=10,
+                                   fewer_labels_y=12
+                                   )
         
         print(edge_mag_thres)
 

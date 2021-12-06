@@ -177,7 +177,19 @@ class SignalAnalysisTester(unittest.TestCase):
     #*********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_spectral_continuity(self):
 
-        continuity = SignalAnalyzer.spectral_continuity(audio=self.sel_rec_cmto_xc1)
+        #continuity = SignalAnalyzer.spectral_continuity(audio=self.sel_rec_cmto_xc1,
+        #                                                edge_mag_thres=1.0)
+        # continuity = SignalAnalyzer.spectral_continuity(audio=self.sel_rec_cmto_xc1,
+        #                                                 edge_mag_thres=0.5
+        #                                                 )
+        # continuity = SignalAnalyzer.spectral_continuity(audio=self.sel_rec_cmto_xc1,
+        #                                                 edge_mag_thres=0.1
+        #                                                 )
+        continuity = SignalAnalyzer.spectral_continuity(audio=self.sel_rec_cmto_xc1,
+                                                        edge_mag_thres=0.01
+                                                        )
+        
+        
         print(continuity)
 
     #------------------------------------
