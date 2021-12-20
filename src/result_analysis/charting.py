@@ -12,6 +12,8 @@ import os
 import sys
 import warnings
 
+from functools import partial
+
 from logging_service.logging_service import LoggingService
 from matplotlib import cm as col_map
 from matplotlib import pyplot as plt
@@ -1317,7 +1319,8 @@ class Charter:
                   xlabel=None,
                   color_groups=None,
                   ax=None,
-                  title=None
+                  title=None,
+                  round_labels=None
                   ):
         '''
         Returns a matplotlib axes with one or more
@@ -1353,7 +1356,12 @@ class Charter:
                          }
         
         The color_groups values can be the index of the given
-        Series or DataFrame. 
+        Series or DataFrame.
+        
+        If round_labels is an integer, numeric axis tick labels
+        will be rounded to the given number of decimals. If round_labels
+        is provided, it is the callers responsibility to ensure that 
+        the data Series index is numeric.
 
         Method may be called multiple times, passing the same 
         Axes instance each time. Additional lines will be added
@@ -1372,6 +1380,9 @@ class Charter:
         :type ax: matplotlib.axes
         :param title: title for the figure as a whole
         :type title: {None | str}
+        :param round_labels: optional number of decimal places to which
+            x axis tick labels are rounded
+        :type round_labels: {None | int}
         :return axes with chart
         :rtype matplotlib.axes
         '''
@@ -1404,29 +1415,57 @@ class Charter:
         else:
             raise TypeError(f"Arg data_input must be a Pandas Series or DataFrame")
         if ax is None:
-            _fig, ax = plt.subplots()
-        
-        # Number of x-axis labels:
-        num_xtick_labels  = min(cls.DEFAULT_NUM_XAXIS_LABELS, len(data))
-        # Meaning every nth data point gets an x label,
-        label_every = int(len(data) / num_xtick_labels)
-        # Make the indexes into the data series explicit:
-        idxs_into_data = np.arange(0, len(data), label_every)
-        xtick_labels = data.index[idxs_into_data]
-        ax.set_xticks(idxs_into_data)
-        ax.set_xticklabels(xtick_labels, rotation=rotation)
-        #ax.xaxis.set_major_locator(plticker.FixedLocator(xtick_labels))
-        
+            fig, ax = plt.subplots()
+
+        if round_labels is not None:
+            if type(round_labels) != int:
+                raise TypeError(f"Axis tick label rounding must be an int, not {type(round_labels)}")
+            # Are the index values of the data Series
+            # float-like?
+            if data.index.dtype not in (float, np.float64, np.float32):
+                raise TypeError(f"If round_labels is non-None, index of data must be floats, not {data.index.dtype}")
+
+            # Round the labels:
+            xtick_labels = []
+            for xlbl in data.index:
+                rounded_lbl = round(xlbl, round_labels)
+                if round_labels == 0:
+                    rounded_lbl = int(rounded_lbl)
+                xtick_labels.append(rounded_lbl)
+            xtick_labels = pd.Index(xtick_labels)
+        else:
+            xtick_labels = data.index
+
+        # If the index Series is descending, flip it
+        # to have the smallest first to match what will
+        # be plotted:
+        #**********
+        #if np.all(xtick_labels[1:] <= xtick_labels[:-1]):
+        #    xtick_labels = np.flip(xtick_labels)
+        #**********
+
+        # Make the lines:
         line_objs = []
         for col_name, col_data in data.iteritems():
             try:
                 color = colors[col_name]
-                line_objs.append(ax.plot(col_data.index, col_data.values, color=color))
-            except Exception:
+                line_objs.append(ax.plot(col_data, color=color))
+            except (KeyError, TypeError):
                 # No color specified for this line
-                line_objs.append(ax.plot(col_data.index, col_data.values))
+                line_objs.append(ax.plot(col_data))
+                #****** REMOVE: line_objs.append(ax.plot(col_data.index, col_data.values))
 
-        #*******ax.set_xticklabels(xtick_labels, rotation=rotation)
+        # Distribute at least some of the labels
+        # along the x axis:
+        cls._place_xticklabels(ax, rotation)
+        
+        # A handler that recomputes and re-places the
+        # xtick labels when the chart window is enlarged:
+        resize_handler = partial(cls._onresize, \
+                                 ax=ax, 
+                                 rotation=rotation)
+        fig = ax.figure
+        fig.canvas.mpl_connect('resize_event', resize_handler)
 
         if xlabel is not None:
             ax.set_xlabel(xlabel)
@@ -1435,8 +1474,43 @@ class Charter:
         
         if title is not None:
             ax.figure.suptitle(title)
-        ax.figure.tight_layout()
+        
+        fig.show()
+        
+        # Note: had ax.figure.tight_layout(), but that
+        #       bunched all x labels on top of each other
+        #       at x==0
         return ax
+
+    #------------------------------------
+    # _place_xticklabels
+    #-------------------
+    
+    @classmethod
+    def _place_xticklabels(cls, ax, rotation=0, num_labels=None):
+        
+        if num_labels is None:
+            num_labels = cls.DEFAULT_NUM_XAXIS_LABELS
+        
+        xticker = plticker.MaxNLocator(num_labels)
+        ax.xaxis.set_major_locator(xticker)
+        ax.tick_params(axis='x', labelrotation=rotation)
+
+    #------------------------------------
+    # _chart_resize_event 
+    #-------------------
+    
+    @classmethod
+    def _onresize(cls, event, **kwargs):
+        ax = kwargs['ax']
+        rotation = kwargs['rotation']
+        fig = ax.figure
+        bbox = fig.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+        width, _height = bbox.width * fig.dpi, bbox.height * fig.dpi
+        tick_step = 100
+        n = width / tick_step
+        cls._place_xticklabels(ax, rotation=rotation, num_labels=n)
+        # ax.xaxis.set_major_locator(plticker.MaxNLocator(n))
 
     #------------------------------------
     # spectrogram_plot

@@ -404,6 +404,24 @@ class SoundProcessor:
         return len(audio) / sr
 
     #------------------------------------
+    # time_resolution
+    #-------------------
+    
+    @classmethod
+    def time_resolution(cls, audio, sr):
+        '''
+        Return the time width between each audio sample. 
+
+        :param audio: sound
+        :type audio: np.ndarray
+        :param sr: sample rate
+        :type sr: float
+        :return time resolution (seconds)
+        :rtype float
+        '''
+        return sr/len(audio)
+
+    #------------------------------------
     # find_total_recording_length
     #-------------------
 
@@ -450,6 +468,8 @@ class SoundProcessor:
 
         total_duration = df_fname_secs['recording_length_secs'].sum()
         return total_duration
+
+
 
     #------------------------------------
     # recording_lengths_by_species

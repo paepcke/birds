@@ -9,10 +9,10 @@ from pathlib import Path
 import unittest
 
 import librosa
-import matplotlib.pyplot as plt
 
 from data_augmentation.sound_processor import SoundProcessor
-from data_augmentation.utils import Utils
+from data_augmentation.utils import Utils, Interval
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from powerflock.power_member import PowerMember, PowerResult, PowerQuantileClassifier
@@ -31,7 +31,9 @@ class SignalAnalysisTester(unittest.TestCase):
         cls.cur_dir = os.path.dirname(__file__)
         cls.sound_data = os.path.join(cls.cur_dir, 'signal_processing_sounds')
         cls.xc_sound_data = os.path.join(cls.cur_dir, 'signal_processing_sounds/XenoCanto')
-        
+
+        # Test recordings:
+        cls.triangle440 = os.path.join(cls.sound_data, 'artificial/triangle440.wav')
         
         # Field Recordings
         cls.BAFFG_data = os.path.join(cls.sound_data, 'BAFFG')
@@ -94,6 +96,13 @@ class SignalAnalysisTester(unittest.TestCase):
         #     0.002041     0.255386
         
         cls.probs_rec1_series = cls.probs_rec1_df['Probability']
+        
+        # Create a multitaper spectrogram of the CMTO
+        # for use in contour related tests:
+        #*********cls.mt_spec = SignalAnalyzer.multitaper_spectrogram(cls.sel_rec_cmto_xc1)
+        
+        # Same for the 440 triangle test tone:
+        #********cls.mt_triangle440 = SignalAnalyzer.multitaper_spectrogram(cls.triangle440)
 
     def setUp(self):
         pass
@@ -174,7 +183,7 @@ class SignalAnalysisTester(unittest.TestCase):
     # test_spectral_continuity
     #-------------------
     
-    #*********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_spectral_continuity(self):
 
         #continuity = SignalAnalyzer.spectral_continuity(audio=self.sel_rec_cmto_xc1,
@@ -185,12 +194,89 @@ class SignalAnalysisTester(unittest.TestCase):
         # continuity = SignalAnalyzer.spectral_continuity(audio=self.sel_rec_cmto_xc1,
         #                                                 edge_mag_thres=0.1
         #                                                 )
-        continuity = SignalAnalyzer.spectral_continuity(audio=self.sel_rec_cmto_xc1,
-                                                        edge_mag_thres=0.01
-                                                        )
+        long_contours, continuity = SignalAnalyzer.spectral_continuity(spec_df=self.mt_spec,
+                                                                       #bandpass=Interval(1000,6000),
+                                                                       plot_contours=True
+                                                                       )
+        # A few spot checks:
+        self.assertTupleEqual(continuity.shape, (1589,))
+        self.assertTupleEqual(long_contours.shape, (513, 1589))
+        self.assertEqual(round(continuity[36.86167800453515], 4), 87.3294)
+
+    #------------------------------------
+    # test_harmonic_pitch
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_harmonic_pitch(self):
         
+        # contours = pd.DataFrame([[True,  True,  False],
+        #                          [True,  True,   True],
+        #                          [False, True,   True],
+        #                          [True,  True,   True]],
+        #                          index=[10.0, 25.5, 30.0, 35.5],
+        #                          columns=[0.1, 0.2, 0.4])
         
-        print(continuity)
+        # For column 1, frequencies with contours are [10.0, 25.5, 35.5].
+        # For column 1, frequencies are [10.0, 25.5, 30.0, 35.5], and
+        # for column 3, frequencies with contours are [25.5, 30.0, 35.5].
+        #
+        # The return Series will be the medians of the diffs among adjacent
+        # frequency bands:
+        #
+        #    median([15.5, 10.0])     = 12.75 
+        #    median([15.5, 4.5, 5.5]) =  5.5
+        #    median([4.5, 5.5])       =  5.0
+
+        # pitches = SignalAnalyzer.harmonic_pitch(contours)
+        # expected = pd.Series([12.75, 5.5, 5.0],
+        #                      index=contours.columns,
+        #                      name='harmonic_pitch'
+        #                      )
+        # Utils.assertSeriesEqual(pitches, expected)
+        
+        harm_pitch = SignalAnalyzer.harmonic_pitch(self.triangle440)
+        
+        # Test with a known test tone: fundamental at 
+        # 440, overtones at x3: 1.320kHz, x5: 2.2kHz, x7: 3.080kHz, ...
+        contours, continuity = SignalAnalyzer.spectral_continuity(self.mt_triangle440,
+                                                                  plot_contours=True
+                                                                  )
+        print(contours)
+        
+        # Do it with a real sound file:
+        long_contours, _continuity = SignalAnalyzer.spectral_continuity(spec_df=self.mt_spec,
+                                                                        #bandpass=Interval(1000,6000),
+                                                                        plot_contours=True
+                                                                        )
+        pitches = SignalAnalyzer.harmonic_pitch(long_contours)
+        
+
+    #------------------------------------
+    # test_freq_modulations
+    #-------------------
+    
+    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')\
+    def test_freq_modulations(self):
+        
+        res = SignalAnalyzer.freq_modulations(self.triangle440)
+        print(res)
+
+
+    #------------------------------------
+    # test_multitaper_spectrogram 
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_multitaper_spectrogram(self):
+        
+        mt_spec = SignalAnalyzer.multitaper_spectrogram(self.sel_rec_cmto_xc1)
+        ax = Charter.spectrogram_plot(mt_spec, fig_title="Multitaper Spectrogram")
+        
+        self.assertTupleEqual(mt_spec.shape, (513, 1589))
+        # Put breakpoint on statement below if in Eclipse: 
+        ax.figure.show()
+        input("Hit Enter to continue: ")
 
     #------------------------------------
     # test_spectral_centroid_each_timeframe

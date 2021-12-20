@@ -5,13 +5,17 @@ Created on Oct 1, 2021
 '''
 from collections import namedtuple
 from enum import Enum
+import multiprocessing
+import os
 from pathlib import Path
 
 import librosa
+from scipy.signal import argrelextrema
 
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import Utils, Interval
 import matplotlib.pyplot as plt
+from multitaper.multitaper_spectrogram_python import MultitaperSpectrogrammer
 import numpy as np
 import pandas as pd
 from result_analysis.charting import Charter
@@ -217,7 +221,8 @@ class SignalAnalyzer:
                           spec_df=None,
                           audio=None,
                           bandpass=None,
-                          wiener_entropy=False
+                          wiener_entropy=False,
+                          is_power=True
                           ):
         '''
         Given audio or an already computed spectrogram,
@@ -231,6 +236,12 @@ class SignalAnalyzer:
         
         Either spec_df or audio must be provided.btest
         
+        Important: for a simple-magnitude spectro such as returned
+           by raven_spectrogram(), set is_power to False so that the
+           spectro is turned to power by squaring the values. If the
+           spectro is a multitaper spectro, leave the default, and the
+           values will be used as is.
+        
         :param spec_df: optionally the spectrogram computed as with
            raven_spectrogram(). 
         :type spec_df: pd.DataFrame
@@ -243,6 +254,9 @@ class SignalAnalyzer:
             flatness to Wiener entropy. The flatness values [0,1] are thereby
             converted to [-inf, 0], i.e. taking the log of the flatness values
         :type wiener_entropy: bool
+        :is_power: True if the passed-in spectrogram values are already squared
+            to represent power, rather than energy.
+        :is_power: bool
         :return series of values [0,1] corresponding to the spectral flatness
             at each time frame.
         :rtype pd.Series
@@ -259,14 +273,19 @@ class SignalAnalyzer:
                 audio_np = audio
             # Spectral flatness computations need absolute energy
             # values, not decibels relative to max energy:
-            spec_df = cls.raven_spectrogram(audio_np, to_db=False)
+            spec_df = cls.raven_spectrogram(audio_np, to_db=False) ** 2
+        else:
+            # Do have a passed-in spectro; square the values if needed:
+            if not is_power:
+                spec_df = spec_df ** 2
         
         if bandpass is not None:
             cls.apply_bandpass(bandpass, spec_df, inplace=True)
         
-        # The 'power=2' tells librosa that we want to work
-        # the the power spectrum, on which flatness is usually shown:
-        flatness_arr = librosa.feature.spectral_flatness(S=spec_df.to_numpy(), power=2)
+        # The 'power=1' tells librosa that we already giving it 
+        # a power spectrum, on which flatness is usually shown:
+        
+        flatness_arr = librosa.feature.spectral_flatness(S=spec_df.to_numpy(), power=1)
         # The result is an np arr of the form:
         #   [[0.4,0.6,...]]
         # with length equal to the number of time frames.
@@ -283,45 +302,89 @@ class SignalAnalyzer:
     #------------------------------------
     # spectral_continuity
     #-------------------
-    
+
     @classmethod
     def spectral_continuity(cls, 
                             spec_df=None,
                             audio=None,
                             bandpass=None,
-                            edge_mag_thres=1):
+                            continuity_time_thres=50,
+                            plot_contours=False
+                            ):
         '''
         Given a spectrogram DataFrame as might be created from
-        raven_spectrogram(), or an audio file. If necessary, create
-        the spectrogram. Compute a single number for each time frame,
-        ********CONTINUE HERE. 
+        raven_spectrogram(), or an audio file. If given audio, create
+        the spectrogram. Compute a single number for each time frame.
+        The number represents whether or not the timeframe is part of
+        an energy contour of time duration continuity_time_thres milliseconds
+        or more. 
         
-        For each frequency band 
+        Procedure:
+           - Apply a filter that isolates the 'significant' energies
+               in each time frame from noise above and below. The filter
+               uses edge_mag_thres to determine how high energy in a particular
+               cell of a time frame needs to be in order to be considered above
+               noise. In order to adjust the threshold to the context of the 
+               particular spectrogram, the given number is multiplied by:
+               
+                                abs(Wiener_entropy)
+                       ----------------------------------------
+                            abs(energy_t,f - mean(energy_t))
+                            
+               i.e. the ratio of overall flatness to how much the 
+               energy at a given cell rises above the mean energy in 
+               the time frame.
+          
+               The result is a boolean dataframe the same shape as spec_df with
+               True in each cell that is part of an energy contour at the cell's
+               time frame. This df can be plotted to yield a contour map.
+               
+            - Next, contours shorter than continuity_time_thres milliseconds 
+              are eliminated. 
+              
+            - Finally, a single 'spectral continuity' number is derived for each
+              time frame by computing the percentage of cells in the time frame
+              that are part of a remaining ridge.
+
+        Two values are returned: the intermediate boolean contour dataframe, and
+        a Series of spectral continuity values, one value for each timeframe.
         
+        Each element (i.e. information about one timeframe) in the returned Series 
+        is the percentage of frequencies at the time what participate in a ridge. 
+
         :param spec_df:
         :type spec_df:
         :param audio:
         :type audio:
         :param bandpass:
         :type bandpass:
-        :param edge_mag_thres:
-        :type edge_mag_thres:
+        :param continuity_time_thres:
+        :type continuity_time_thres:
+        :param plot_contours: whether or not to plot contour maps of
+            the spectrum along the way
+        :type plot_contours: bool
+        :returns: a boolean df with True in cells that participate in a contour,
+            and a Series with one element for each time frame
+        :rtype: (pd.DataFrame, pd.Series)
         '''
         
         if spec_df is None:
-            spec_df = cls.raven_spectrogram(audio, to_db=False)
+            #spec_df = cls.raven_spectrogram(audio, to_db=False)
+            spec_df = cls.multitaper_spectrogram(audio)
         if bandpass is not None:
-            cls.apply_bandpass(bandpass, spec_df, inplace=True)
+            spec_df = cls.apply_bandpass(bandpass, spec_df)
+            # Bandpass filtering sets out-of-band cells to -np.inf.
+            # But the flatness detection methods below to not
+            # tolerate negative values; so replace the -np.inf 
+            # with zeroes: 
+            spec_df.replace(-np.inf, 0, inplace=True)
 
-        num_rows, num_cols = spec_df.shape
+        num_rows, _num_cols = spec_df.shape
 
-        # Get df same size as spec_df with a True in cells
-        # that are negative, and False in cells that are positive:
-        #******spec_is_negative = np.signbit(spec_df)
-        
-        # Another df of same size as spec_df where each cell
-        # has result of:
-        #  T(ti,fj) = T*(abs(Wiener_entropy(col))/(abs(row_freq - mean_freq(col))))
+        # Get a series with an element for each timeframe.
+        # Each element is a measure of how flat the spectrum
+        # is in that timeframe (i.e. the opposite of spiky).
+        # See Wiener Entropy:
         wiener_ser = cls.spectral_flatness(spec_df, wiener_entropy=True)
         
         # Make a df where each row is a copy of the wiener series
@@ -336,45 +399,404 @@ class SignalAnalyzer:
         # frame across all freqs):
         energy_distance_from_mean = (spec_df - spec_df.mean(axis='rows')).abs()
 
+        # A threshold above which a contour is assumed.
+        # In the subsequent statement it is magnified by 
+        # the ratio of entropy in one timeframe,
+        # and the energy_distance_from_mean. The value
+        # being found is the smallest within each timeframe
+        # that is still greater than zero
+        edge_mag_thres = spec_df[spec_df > 0].min().min()
         edge_mag_thres_df = edge_mag_thres * wiener_df/energy_distance_from_mean
         
-        thresholded_spec_df = spec_df >= edge_mag_thres_df
+        contour_df = spec_df >= edge_mag_thres_df
+
+        if plot_contours:
+            fig = plt.figure()
+            axes_grid_spec = fig.add_gridspec(nrows=2, ncols=1)
+            contour_ax = fig.add_subplot(axes_grid_spec[0,0])
+            filtered_contour_ax = fig.add_subplot(axes_grid_spec[1, 0])
+            contour_ax = Charter.draw_contours(contour_df,
+                                               ax=contour_ax,
+                                               title='CMTO Contours',
+                                               xlabel='Time',
+                                               ylabel='Frequency',
+                                               decimals_x=2,
+                                               decimals_y=2,
+                                               fewer_labels_x=10,
+                                               fewer_labels_y=12
+                                               )
+            fig.show()
+            input(f"Contours for spectrogram; press ENTER to continue: ")
         
-        ax = Charter.draw_contours(thresholded_spec_df,
-                                   title='CMTO Countours',
-                                   xlabel='Time',
-                                   ylabel='Frequency',
-                                   decimals_x=2,
-                                   decimals_y=2,
-                                   fewer_labels_x=10,
-                                   fewer_labels_y=12
-                                   )
+        # Obtain new df with spurious contours removed:
+        # keep only the contours longer than continuity_time_thres
+        # milliseconds:
+        long_contours_df = cls.contour_length_filter(contour_df, continuity_time_thres)
         
-        print(edge_mag_thres)
+        if plot_contours:
+            ax = Charter.draw_contours(long_contours_df,
+                                       ax=filtered_contour_ax,
+                                       title='CMTO Contours',
+                                       xlabel='Time',
+                                       ylabel='Frequency',
+                                       decimals_x=2,
+                                       decimals_y=2,
+                                       fewer_labels_x=10,
+                                       fewer_labels_y=12
+                                       )
+            fig.tight_layout()
+            input(f"Contours filtered for minimum len; press ENTER to continue: ")
+            
+        # Finally, the compute for each timeframe the percentage
+        # of frequencies that participate in a contour:
+        continuity = 100 * long_contours_df.sum(axis=0) / num_rows
+        
+        return long_contours_df, continuity 
+
+    #------------------------------------
+    # contour_mask
+    #-------------------
+    
+    @classmethod
+    def contour_mask(cls, spectro_src):
+        '''
+        Given the path to an audio file, or a spectrogram,
+        create the spectrogram form the audio if needed. The
+        index of the spectro are frequencies, the columns are
+        (possibly fractional) times.
+        
+        Return a new boolean df with same shape/index/columns as
+        the spectro. In each column the True values mark the 
+        frequencies of overtones during the column's timeframe.
+        
+                              1.0     2.0 
+                       40     True    True
+                       30     False   True
+                       20     True    True
+                       10     False   True
+                       
+        At time 1.0sec the fundamental is 20Hz, with an overtone
+        at 40Hz. At time 2.0sec, the fundamental is 10Hz, with 
+        overtones every 10Hz above.
+                       
+        :param spectro_src: audio file path or spectrogram
+        :type spectro_src: {str | pd.DataFrame}
+        :return boolean df marking fundamental and overtones
+        :rtypr pd.DataFrame(bool)
+        '''
+        
+        if type(spectro_src) == str:
+            if not os.path.exists(spectro_src):
+                raise FileNotFoundError(f"Audio file {spectro_src} does not exist.")
+            spec_df = cls.raven_spectrogram(spectro_src, extra_granularity=True)
+        elif type(spectro_src) != pd.DataFrame:
+            raise TypeError(f"Arg must be file path or spectrogram, not {type(spectro_src)}")
+        else:
+            spec_df = spectro_src
+        
+        # Func that takes a pd.Series. It computes its discrete gradient
+        # at each element (i.e. the 1st derivative), then finds the zero
+        # crossings. Returns a pd.Series of sample length/index/name
+        # with True where a zero crossing occurs, and False elswhere.
+        # Used in apply() below:
+        def column_contour_mask(ser):
+            grad = np.gradient(ser.values)
+            zxing_idxs = np.where(np.diff(np.sign(grad)))[0]
+            # Initially: all False 
+            mask = pd.Series([False]*len(ser), index=ser.index, name=ser.name)
+            mask.iloc[zxing_idxs] = True
+            return mask
+        
+        # Apply the column_contour_mask func to 
+        # each column of the spectrogram. The frequencies 
+        # associated with True values are overtones (frequencies
+        # are the values of the index):
+        spec_contours = spec_df.apply(column_contour_mask, axis='rows')
+
+        return spec_contours
+    
+    #------------------------------------
+    # harmonic_pitch
+    #-------------------
+    
+    @classmethod
+    def harmonic_pitch(cls, spec_src):
+        '''
+        Given the path to an audio file, or a 
+        spectrogram, generates a spectrogram if needed.
+        The index are frequencies, the columns are times.
+        
+        Obtains a boolean mask with index/columns same as
+        the spectro. True values in each column mark
+        overtone frequencies.
+        
+        Returns the median difference between all overtones,
+        
+        Given a df of energy contours across time for
+        each of a spectral analysis' frequencies, return
+        a Series with pitch at each spectral timeframe. 
+        
+        :param spec_source: audio file or spectrogram.
+            Note: if spectrogram, must be fine grained in 
+            frequency, such as is returned by raven_spectrogram()
+            with extra_granularity set to True
+        :type spec_source: {str | pd.DataFrame}
+        :return the harmonic pitch of the overall sound
+        :rtype float
+        '''
+        
+        if type(spec_src) == str:
+            if not os.path.exists(spec_src):
+                raise FileNotFoundError(f"Audio file {spec_src} does not exist.")
+            spec_df = cls.raven_spectrogram(spec_src, extra_granularity=True)
+        elif type(spec_src) != pd.DataFrame:
+            raise TypeError(f"Arg must be file path or spectrogram, not {type(spec_src)}")
+        else:
+            spec_df = spec_src
+        
+        # Get a boolean df with True in each column for 
+        # the frequencies that are overtones at that column's
+        # timeframe:
+        contour_mask = cls.contour_mask(spec_src)
+        # Get Series in which each element is a series
+        # of overtone frequencies. The sub-series do not 
+        # generally have the same length; like:
+        #
+        #      time1:  [500, 1000, 2000, ...],
+        #      time2:  [430, 869]
+        
+        overtones = contour_mask.apply(lambda col: col[col==True].index, axis='rows')
+        
+        # However, each overtone has some smaller power lobes
+        # next to it. We are looking for the main peaks only.
+        # So, start with Series same length as overtones:
+        timeframe_maxima = pd.Series(index=overtones.index, dtype=overtones.dtype)
+        for time_frame, spike_freq_idxs in overtones.iteritems():
+            vertical_slice = spec_df.loc[spike_freq_idxs, time_frame]
+            maxima_idxs = argrelextrema(vertical_slice.values, np.greater, order=3)[0]
+            timeframe_maxima.loc[time_frame] = spike_freq_idxs[maxima_idxs]
+        
+        # For each list of overtone frequencies, find the
+        # median of the difference between them to arrive
+        # at a single pitch. The '2*' is b/c we get two gradient
+        # zero crossings at each overtone peak: 
+        harm_pitches = timeframe_maxima.apply(lambda freqs: np.abs(np.median(np.diff(freqs))) / 2)
+        
+        #************
+        # spectro_src = '/Users/paepcke/EclipseWorkspacesNew/birds/src/powerflock/tests/signal_processing_sounds/artificial/triangle440.wav'
+        # f10 = f10 = overtones.iloc[10]
+        # spec_df = cls.raven_spectrogram(spectro_src, extra_granularity=True)
+        # spec_edges = spec_df.loc[f10]
+        # spec_edge = spec_edges.iloc[:,20]
+        #
+        # # Round frequencies to integers
+        # ax = Charter.linechart(spec_edge, round_labels=0, rotation=45)
+        #************
+        
+        return harm_pitches 
+
+    #------------------------------------
+    # freq_modulations
+    #-------------------
+    
+    @classmethod
+    def freq_modulations(cls, spec_src):
+        '''
+        Given a spectrogram, take the directional
+        derivatives in the frequency and time directions
+        at each point. Use trigonometry to compute the 
+        direction angle of the derivative for each point.
+        Return an np array with same shape as given spectrogram
+
+        :param spec_src: audio file or spectrogram.
+            Note: if spectrogram, must be fine grained in 
+            frequency, such as is returned by raven_spectrogram()
+            with extra_granularity set to True
+        :type spec_src: {str | pd.DataFrame}
+        :return the harmonic pitch of the overall sound
+        :rtype float
+        '''
+        if type(spec_src) == str:
+            if not os.path.exists(spec_src):
+                raise FileNotFoundError(f"Audio file {spec_src} does not exist.")
+            spec_df = cls.raven_spectrogram(spec_src, extra_granularity=True)
+        elif type(spec_src) != pd.DataFrame:
+            raise TypeError(f"Arg must be file path or spectrogram, not {type(spec_src)}")
+        else:
+            spec_df = spec_src
+
+        # Compute gradients in both freq and time directions:
+        gradf, gradt = np.gradient(spec_df)
+        
+        # At each point in the spectro, create two 
+        # vectors:
+        #
+        #               /|
+        #               /
+        #              /  v1=(gradt, gradf)
+        #             /
+        #            /------>
+        #               v0=(gradt, 0)
+
+        zero_matrix = np.zeros(gradf.shape)
+        # For v0:
+        # Get pairs (gradt, 0) as np arrays, arriving
+        # at an array shaped (num_freqs, num_timeframes, 2).
+        # same for v1:
+        
+        v0 = np.stack([gradt, zero_matrix], axis=-1)
+        v1 = np.stack([gradt, gradf], axis=-1)
+
+        num_freqs, num_timeframes, _vvec_width = v0.shape
+        # For ease of broadcasting the following trigonometry
+        # for the direction angles, make two long arrays, one
+        # holding all v0 coords, one the v1 coords:
+        # 
+        v0_vecs = v0.reshape(num_freqs*num_timeframes, 2)
+        v1_vecs = v1.reshape(num_freqs*num_timeframes, 2)
+        
+        v0_v1_pairs = np.stack((v0_vecs, v1_vecs), axis=1)
+        # Pairwise compute the dot product of vectors v0, v1.
+        # The np.apply_along_axis() returns an additional
+        # column, which we chop off with the trailing
+        # "[:,0]". We end up with a long 1d array of the
+        # dot products:
+        dot_prods = np.apply_along_axis(lambda two_vecs: np.dot(two_vecs[0], two_vecs[1]), 
+                                        axis=1, 
+                                        arr=v0_v1_pairs)[:,0]
+        
+        # Similarly with the determinants of the vec pairs:
+        determinants = ##### CONTINUE HERE
+                                        
+                                        
+                                        
+
+        
+        np.dot(np.array(v0_vecs[:,0], v0_vecs[:,1]), np.array(v1_vecs[:,0], v1_vecs[:,1]))
+        
+        
+        
+        
+
+    #------------------------------------
+    # Contour_length_filter
+    #-------------------
+
+    @classmethod
+    def contour_length_filter(cls, contour_df, continuity_time_thres=50):
+        '''
+        Given a boolean df whose True cells indicate the presence of a 
+        a horizontal spectrum contour along one frequency row, set contour
+        cells to False if they form a contour shorter in time
+        than continuity_time_thres milliseconds. Return a copy of contour_df
+        with that modification.
+        
+        Used to eliminate spurious contours.
+        
+        Example:
+         
+        Start with contour_df being:
+        
+           True  False True True  False True
+           False False True False True  True
+              ...
+
+        Say the continuity_time_thres were to correspond
+        to two spectrum time frames (this number is computed
+        in this method): num_contour_frames == 2:
+        
+        For each vertical slice of width 2, add the values in 
+        each row of the slice to get from the first slice:
+           
+           1
+           0
+        
+        In each row, set both columns to:
+           col == num_contour_frames == 2
+        
+        Giving:
+           False False True True  False True
+           False False True False True  True
+              ...
+        
+        The second slice yields:
+        
+          2
+          1
+        ==>
+           False False True  True  False True
+           False False False False True  True
+        
+        Finally, after the last slice:
+           False False True  True  False False
+           False False False False True  Treu
+ 
+        :param contour_df: boolean array identifying contour ridges
+        :type contour_df: pd.DataFrame([bool])
+        :param continuity_time_thres: minimum number of milliseconds at
+            which a contour is considered to be significant.
+        :type continuity_time_thres: int
+        :return new boolean dataframe with only the 'significantly-long' 
+            contours retained
+        :rtype: pd.DataFrame([bool])
+        '''
+
+        # Compute the number of spectrum time frames required
+        # to consider an energy contour long enough (in milliseconds):
+        timeframe_width = (contour_df.columns[1] - contour_df.columns[0]) * 1000
+        num_rows, _num_cols = contour_df.shape
+        num_contour_frames = int(round((continuity_time_thres / timeframe_width), 0))
+        long_contours = contour_df.copy() 
+
+        num_slides = int(len(long_contours.columns) / num_contour_frames)
+        for i in np.arange(0, num_slides + 1, num_contour_frames): # The column vector of one slide:
+            is_contour = long_contours.iloc[:, i:i + num_contour_frames].sum(axis=1) == num_contour_frames # Turn the column vector result into a df of
+            # width num_contour_frames by replicating the col_vector
+            # to the width of the slide, then broadcasting the
+            # assignment down the slice:
+            long_contours.iloc[:, i:i + num_contour_frames] = is_contour.to_numpy().repeat(num_contour_frames).reshape((num_rows, num_contour_frames))
+
+        return long_contours
 
     #------------------------------------
     # apply_bandpass
     #-------------------
     
     @classmethod
-    def apply_bandpass(cls, bandpass, spec_df, inplace=False):
+    def apply_bandpass(cls, bandpass, spec_df, inplace=False, extract=False):
         '''
         Given a spectrogram and bandpass frequency interval, 
-        such as Interval(5000, 8000, 1), return a new spectrogram
-        with frequencies above and below the given interval set
-        to -inf.
+        such as Interval(5000, 8000, 1). If extract is False, 
+        return a new spectrogram with frequencies above and below 
+        the given interval set to -inf. In this case the shape
+        of the returned structure equals that of spec_df. 
+        
+        If extract is True, create a new df with all non-qualifying
+        rows removed.
+        
+        Inputs inplace and extract cannot both be True 
         
         :param bandpass: specification of frequencies to retain 
         :type bandpass: Interval
         :param spec_df: the spectrogram: index is frequencies, 
             columns are time frames.
         :type spec_df: pd.DataFrame
+        :param inplace: whether or not to modify spec_df in memory;
+            deafault: new df
+        :type inplace: bool
+        :param extract: if True, return a (potentially) smaller df
+            with only the qualifying rows
+        :type extract: pd.DataFrame
         :return filtered spectrogram of equal size as the original
         :rtype pd.DataFrame
         '''
 
         if not isinstance(bandpass, Interval):
-            raise TypeError(f"Bandpass must be an Interval of floats or ints, not {bandpass}") 
+            raise TypeError(f"Bandpass must be an Interval of floats or ints, not {bandpass}")
+        
+        if inplace and extract:
+            raise ValueError("Parameters inplace and extract cannot both be True")
+         
         # Remember that spectrograms are
         # arranged high frequency to low frequency
         # to match what visual spectros show. The
@@ -385,12 +807,17 @@ class SignalAnalyzer:
         # Values are in dB FS (i.e. relative to the maximum signal).
         # So the vals are all negative. When we will look
         # for, say, max values, we don't want that to be zero:
-        if inplace:
+        if inplace or extract:
             filtered_spec = spec_df
         else:
             filtered_spec = spec_df.copy()
-        filtered_spec[filtered_spec.index >= high_freq] = -np.inf
-        filtered_spec[filtered_spec.index < low_freq] = -np.inf
+            
+        if extract:
+            # Will always make a copy:
+            filtered_spec = filtered_spec[(filtered_spec.index >= low_freq) & (filtered_spec.index < high_freq)]
+        else: 
+            filtered_spec[filtered_spec.index >= high_freq] = -np.inf
+            filtered_spec[filtered_spec.index < low_freq] = -np.inf
         
         return filtered_spec
 
@@ -499,7 +926,7 @@ class SignalAnalyzer:
     #-------------------
     
     @classmethod
-    def raven_spectrogram(cls, audio, to_db=True):
+    def raven_spectrogram(cls, audio, to_db=True, extra_granularity=False):
         '''
         Returns a spectrogram as the default settings in 
         the Raven program would generate. Same frequency
@@ -519,7 +946,12 @@ class SignalAnalyzer:
         
             mesh = ax.pcolormesh(spectro.columns, list(spectro.index), spectro, cmap='jet', shading='flat')    
             
-
+        If extra_granularity is True, the frequency granularity
+        is doubled compared to the default raven spectrogram by 
+        using n_fft==2048 instead of 512, and hop_length=256 instead
+        of 512
+         
+        
         :param audio: either the path to an audio file,
             or the already loaded audio array
         :type audio: {str | np.array(float)
@@ -534,7 +966,10 @@ class SignalAnalyzer:
         :rtype: pd.DataFrame
         '''
         sr = 22050
-        hop_length = 512
+        if extra_granularity:
+            hop_length = 256
+        else:
+            hop_length = 512
         if type(audio) == str:
             audio_arr, aud_sr = librosa.load(audio)
             # Adjust sr if necessary:
@@ -543,7 +978,10 @@ class SignalAnalyzer:
         else:
             audio_arr = audio 
 
-        spec = np.abs(librosa.stft(audio_arr, n_fft=512, hop_length=512, window='hann'))
+        if extra_granularity:
+            spec = np.abs(librosa.stft(audio_arr, n_fft=2048, hop_length=hop_length, window='hann'))
+        else:
+            spec = np.abs(librosa.stft(audio_arr, n_fft=512, hop_length=hop_length, window='hann'))
         # Convert to dB readings
         if to_db:
             spec_values = librosa.amplitude_to_db(spec, ref=np.max)
@@ -563,6 +1001,106 @@ class SignalAnalyzer:
         # relative to the highest value in the spectrum:
         
         return spec_df
+
+    #------------------------------------
+    # multitaper_spectrogram
+    #-------------------
+    
+    @classmethod
+    def multitaper_spectrogram(cls,
+                               audio_spec,
+                               sr=22050,
+                               bandpass=None,
+                               plot=False
+                               ):
+        '''
+        Given an np.ndarray audio signal, or the path
+        to an audio file, return a spectrogram constructed
+        by the multitaper method. For usage example, see
+        A procedure for an automated measurement of song similarity
+		By Ofer Tchernichovski, Fernando Nottebohm, CHing Elizabeth Ho, 
+		Bijan Pesaran, Partha Pratim Mitra. ANIMAL BEHAVIOUR, 2000, 59, 1167–1176.
+		
+		Well explained in video tutorial #2 at https://prerau.bwh.harvard.edu/multitaper/
+		
+		This method fixes parameters to the underlying workhorse
+		in file multitaper_spectrogram_python.py to work with birds. For
+		info on that program, see git@github.com:preraulab/multitaper_toolbox.git.
+
+        :param audio_spec: path to audio, or audio array
+        :type audio_spec: {str | np.ndarray}
+        :param sr: sample rate. If audio is an audio path, the sr is
+            found automatically. Default is the librosa default sr value.
+        :type sr: int
+        :param bandpass: if not None, an Interval instance with low
+            and high freqs to consider
+        :type bandpass: {None | Interval}
+        :param plot: if True, plot the result spectrogram and pause
+        :type plot: bool
+        :return a spectrogram dataframe; index will be frequencies,
+            columns will be times for each spectrogram timeframe
+        :rtype: pd.DataFrame
+        '''
+
+        if type(audio_spec) == str:
+            audio, sr = SoundProcessor.load_audio(audio_spec)
+        elif type(audio_spec) == np.ndarray:
+            audio = audio_spec
+        else:
+            raise TypeError("Audio spec must be a file path or np array of audio")
+        
+        # Number of audio samples in one timeframe:
+        timeframe_samples = 512
+
+        # Width of one timeframe in seconds
+        # What the multitaper software calls data_window
+        timeframe_secs = timeframe_samples/sr
+        # Max frequency that is discernible with given sr:
+        nyquist_freq = sr/2.0
+        
+        if bandpass is not None:
+            freq_range = (bandpass['low_val'], bandpass['high_val'])
+        else:
+            freq_range = (0, nyquist_freq) 
+
+        top_freq = freq_range[1]
+
+        # Sometimes called TW: timeframe_width_secs * freq_band_width / 2:
+        time_bandwidth = (timeframe_secs * top_freq) / 2.0
+
+        # Multitaper software wants the following:
+        window_params = (timeframe_secs, timeframe_samples/sr)
+        
+        # Computation will use multiple cores; be nice:
+        num_cpus = int(multiprocessing.cpu_count() * 80 / 100)
+        
+        # The min_nfft determines the number of frequency bands,
+        # and therefore the resolution of contour analyis:
+        spectro, times, freqs = MultitaperSpectrogrammer.multitaper_spectrogram(audio, 
+                                                                                sr,
+                                                                                frequency_range=freq_range,
+                                                                                time_bandwidth=time_bandwidth, 
+                                                                                #num_tapers,
+                                                                                window_params=window_params, 
+                                                                                min_nfft=1024,
+                                                                                # detrend_opt, 
+                                                                                multiprocess=True, 
+                                                                                cpus=num_cpus, 
+                                                                                # weighting, 
+                                                                                plot_on=False, 
+                                                                                clim_scale=False
+                                                                                # verbose, 
+                                                                                # xyflip
+                                                                                )
+
+        spectro_df = pd.DataFrame(spectro, columns=times, index=freqs)
+        # Make the top row the highest freq, rather than 0:
+        spectro_df = spectro_df.reindex(index=spectro_df.index[::-1])
+        
+        if plot:
+            Charter.spectrogram_plot(spectro_df, fig_title="Multitaper Spectrogram")
+            input("Hit Enter to dismiss and continue: ")
+        return spectro_df
 
     #------------------------------------
     # zero_crossings
