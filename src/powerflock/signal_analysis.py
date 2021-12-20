@@ -605,16 +605,17 @@ class SignalAnalyzer:
         Given a spectrogram, take the directional
         derivatives in the frequency and time directions
         at each point. Use trigonometry to compute the 
-        direction angle of the derivative for each point.
-        Return an np array with same shape as given spectrogram
+        true direction angle of the derivative for each point.
+        Return an pd Series with the median of the absolute
+        value of the angles at each timeframe (column). 
 
         :param spec_src: audio file or spectrogram.
             Note: if spectrogram, must be fine grained in 
             frequency, such as is returned by raven_spectrogram()
             with extra_granularity set to True
         :type spec_src: {str | pd.DataFrame}
-        :return the harmonic pitch of the overall sound
-        :rtype float
+        :return the median angle of contour normals at each timeframe
+        :rtype pd.Series
         '''
         if type(spec_src) == str:
             if not os.path.exists(spec_src):
@@ -665,18 +666,60 @@ class SignalAnalyzer:
                                         axis=1, 
                                         arr=v0_v1_pairs)[:,0]
         
-        # Similarly with the determinants of the vec pairs:
-        determinants = ##### CONTINUE HERE
-                                        
-                                        
-                                        
+        # Similarly with the determinants of the vec pairs.
+        # np.apply_along_axis() seemed to need each of two paired vectors
+        # as a row [x0,y0, x1,y1]. So need to reshape:
+        #
+        #    [
+        #      [[x0,y0,], [x1,y1,]]
+        #      [[x0,y0,], [x1,y1,]]
+        #         ...
+        #    ]
+        # to:
+        #     [
+        #       [x0,y0,x1,y1,],
+        #       [x0,y0,x1,y1,]
+        #          ...
+        #    ]
+        # I *know* there is a more direct way; I couldn't work it out:
+        num_vec_pairs, _dim1, _dim2 = v0_v1_pairs.shape
+        v0_v1_pairs_flatter = v0_v1_pairs.reshape(num_vec_pairs, 4)
+        
+        determinants = np.apply_along_axis(lambda two_vecs: np.linalg.det([[two_vecs[0], two_vecs[1]], 
+                                                                           [two_vecs[2], two_vecs[3]]]), 
+                                                                           axis=1, arr=v0_v1_pairs_flatter)
+        
+        # Need to apply arctan to determinant/dot-product pairs.
+        # So, combine them pairwise...
+        det_dot_pairs = np.stack([determinants, dot_prods], axis=1)
+        # ... and get the angles in degrees (rather than radians):
+        angles = np.apply_along_axis(lambda determinant_dot_prod_pair: 
+                                        np.degrees(np.math.atan2(determinant_dot_prod_pair[0], 
+                                                                 determinant_dot_prod_pair[1])),
+                                         axis=1, 
+                                         arr=det_dot_pairs)
 
+        # Turn back into shape of original spectrogram:
+        angles_right_shaped = angles.reshape(num_freqs, num_timeframes)
+        angles_df = pd.DataFrame(angles_right_shaped,
+                                 index=spec_df.index,
+                                 columns=spec_df.columns
+                                 )
+        # Only consider the angles of real contours:
+        # create a mask same shape as the angles_df,
+        # with True where a contour exists:
+        contour_mask = cls.contour_mask(spec_df)
         
-        np.dot(np.array(v0_vecs[:,0], v0_vecs[:,1]), np.array(v1_vecs[:,0], v1_vecs[:,1]))
+        # Turn all angles that are off-contour into nan:
+        angles_masked = angles_df.mask(~contour_mask)
         
+        # For each timeframe, compute the median angle 
+        # of all contours, ignoring the sign. So we do
+        # lose the rising vs. falling info of the contours:
         
+        angle_medians = np.abs(angles_masked).median()
         
-        
+        return angle_medians
 
     #------------------------------------
     # Contour_length_filter

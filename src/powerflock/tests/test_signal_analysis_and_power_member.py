@@ -34,6 +34,8 @@ class SignalAnalysisTester(unittest.TestCase):
 
         # Test recordings:
         cls.triangle440 = os.path.join(cls.sound_data, 'artificial/triangle440.wav')
+        cls.triangle440Declining = os.path.join(cls.sound_data, 'artificial/triangle2000Declining.wav')
+        
         
         # Field Recordings
         cls.BAFFG_data = os.path.join(cls.sound_data, 'BAFFG')
@@ -236,32 +238,20 @@ class SignalAnalysisTester(unittest.TestCase):
         # Utils.assertSeriesEqual(pitches, expected)
         
         harm_pitch = SignalAnalyzer.harmonic_pitch(self.triangle440)
-        
-        # Test with a known test tone: fundamental at 
-        # 440, overtones at x3: 1.320kHz, x5: 2.2kHz, x7: 3.080kHz, ...
-        contours, continuity = SignalAnalyzer.spectral_continuity(self.mt_triangle440,
-                                                                  plot_contours=True
-                                                                  )
-        print(contours)
-        
-        # Do it with a real sound file:
-        long_contours, _continuity = SignalAnalyzer.spectral_continuity(spec_df=self.mt_spec,
-                                                                        #bandpass=Interval(1000,6000),
-                                                                        plot_contours=True
-                                                                        )
-        pitches = SignalAnalyzer.harmonic_pitch(long_contours)
-        
+        self.assertEqual(int(np.median(harm_pitch)), 441)
 
     #------------------------------------
     # test_freq_modulations
     #-------------------
     
-    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')\
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_freq_modulations(self):
         
-        res = SignalAnalyzer.freq_modulations(self.triangle440)
-        print(res)
-
+        median_angles = SignalAnalyzer.freq_modulations(self.triangle440Declining)
+        
+        self.assertEqual(len(median_angles), 69)
+        self.assertEqual(median_angles.loc[0.7082086167800453], 46.6672143883264)
+        self.assertEqual(median_angles.loc[0.058049886621315196], 0.0)
 
     #------------------------------------
     # test_multitaper_spectrogram 
