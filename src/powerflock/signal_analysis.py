@@ -9,6 +9,8 @@ import multiprocessing
 import os
 from pathlib import Path
 
+from functools import partial
+
 import librosa
 from scipy.signal import argrelextrema
 
@@ -218,11 +220,10 @@ class SignalAnalyzer:
     
     @classmethod
     def spectral_flatness(cls,
-                          spec_df=None,
-                          audio=None,
+                          spec_src=None,
                           bandpass=None,
                           wiener_entropy=False,
-                          is_power=True
+                          is_power=False
                           ):
         '''
         Given audio or an already computed spectrogram,
@@ -242,11 +243,9 @@ class SignalAnalyzer:
            spectro is a multitaper spectro, leave the default, and the
            values will be used as is.
         
-        :param spec_df: optionally the spectrogram computed as with
-           raven_spectrogram(). 
-        :type spec_df: pd.DataFrame
-        :param audio: optionally an audio array
-        :type audio: np.ndarray(1)
+        :param spec_src: pectrogram computed as with raven_spectrogram(),
+            or path to audio file
+        :type spec_src: {str | pd.DataFrame}
         :param bandpass: if provided, the specification of a bandpass filter
             to apply prior to computation
         :type bandpass: {None | Interval}
@@ -262,22 +261,18 @@ class SignalAnalyzer:
         :rtype pd.Series
         
         '''
-        if spec_df is None and audio is None:
-            raise ValueError("Either spectrogram or audio must be provided.")
-        
-        if spec_df is None:
-            # Get spectrogram from audio:
-            if type(audio) == pd.Series:
-                audio_np = audio.as_numpy()
-            else:
-                audio_np = audio
-            # Spectral flatness computations need absolute energy
-            # values, not decibels relative to max energy:
-            spec_df = cls.raven_spectrogram(audio_np, to_db=False) ** 2
+        if type(spec_src) == str:
+            if not os.path.exists(spec_src):
+                raise FileNotFoundError(f"Audio file {spec_src} does not exist.")
+            spec_df = cls.raven_spectrogram(spec_src, extra_granularity=True)
+        elif type(spec_src) != pd.DataFrame:
+            raise TypeError(f"Arg must be file path or spectrogram, not {type(spec_src)}")
         else:
-            # Do have a passed-in spectro; square the values if needed:
-            if not is_power:
-                spec_df = spec_df ** 2
+            spec_df = spec_src
+        
+        # Do have a passed-in spectro; square the values if needed:
+        if not is_power:
+            spec_df = spec_df ** 2
         
         if bandpass is not None:
             cls.apply_bandpass(bandpass, spec_df, inplace=True)
@@ -309,6 +304,7 @@ class SignalAnalyzer:
                             audio=None,
                             bandpass=None,
                             continuity_time_thres=50,
+                            is_power=False,
                             plot_contours=False
                             ):
         '''
@@ -360,6 +356,9 @@ class SignalAnalyzer:
         :type bandpass:
         :param continuity_time_thres:
         :type continuity_time_thres:
+        :is_power: True if the passed-in spectrogram values are already squared
+            to represent power, rather than energy.
+        :is_power: bool
         :param plot_contours: whether or not to plot contour maps of
             the spectrum along the way
         :type plot_contours: bool
@@ -370,7 +369,12 @@ class SignalAnalyzer:
         
         if spec_df is None:
             #spec_df = cls.raven_spectrogram(audio, to_db=False)
-            spec_df = cls.multitaper_spectrogram(audio)
+            spec_df = cls.raven_spectrogram(audio, extra_granularity=True)
+
+        # Do have a passed-in spectro; square the values if needed:
+        if not is_power:
+            spec_df = spec_df ** 2
+        
         if bandpass is not None:
             spec_df = cls.apply_bandpass(bandpass, spec_df)
             # Bandpass filtering sets out-of-band cells to -np.inf.
@@ -381,34 +385,12 @@ class SignalAnalyzer:
 
         num_rows, _num_cols = spec_df.shape
 
-        # Get a series with an element for each timeframe.
-        # Each element is a measure of how flat the spectrum
-        # is in that timeframe (i.e. the opposite of spiky).
-        # See Wiener Entropy:
-        wiener_ser = cls.spectral_flatness(spec_df, wiener_entropy=True)
-        
-        # Make a df where each row is a copy of the wiener series
-        # with as many rows as spec_df has:
-        wiener_df = pd.DataFrame([wiener_ser.abs()] * num_rows,
-                                 index=spec_df.index,
-                                 columns=spec_df.columns
-                                 )
-        
-        # For each spectrum cell, get the difference of its magnitude
-        # from the mean magnitude in its column (i.e. during the time
-        # frame across all freqs):
-        energy_distance_from_mean = (spec_df - spec_df.mean(axis='rows')).abs()
-
-        # A threshold above which a contour is assumed.
-        # In the subsequent statement it is magnified by 
-        # the ratio of entropy in one timeframe,
-        # and the energy_distance_from_mean. The value
-        # being found is the smallest within each timeframe
-        # that is still greater than zero
-        edge_mag_thres = spec_df[spec_df > 0].min().min()
-        edge_mag_thres_df = edge_mag_thres * wiener_df/energy_distance_from_mean
-        
-        contour_df = spec_df >= edge_mag_thres_df
+        # For each timeframe get the median distance
+        # of the power from the mean within that timeframe:
+        med_dist_from_mean = (spec_df - spec_df.mean(axis='rows')).median().abs()
+        # Contours are moments of power larger than
+        # the median distance from the mean at each timeframe: 
+        contour_df = spec_df >= spec_df.mean(axis='rows') + med_dist_from_mean
 
         if plot_contours:
             fig = plt.figure()
@@ -434,20 +416,20 @@ class SignalAnalyzer:
         long_contours_df = cls.contour_length_filter(contour_df, continuity_time_thres)
         
         if plot_contours:
-            ax = Charter.draw_contours(long_contours_df,
-                                       ax=filtered_contour_ax,
-                                       title='CMTO Contours',
-                                       xlabel='Time',
-                                       ylabel='Frequency',
-                                       decimals_x=2,
-                                       decimals_y=2,
-                                       fewer_labels_x=10,
-                                       fewer_labels_y=12
-                                       )
+            _ax = Charter.draw_contours(long_contours_df,
+                                        ax=filtered_contour_ax,
+                                        title='CMTO Contours',
+                                        xlabel='Time',
+                                        ylabel='Frequency',
+                                        decimals_x=2,
+                                        decimals_y=2,
+                                        fewer_labels_x=10,
+                                        fewer_labels_y=12
+                                        )
             fig.tight_layout()
             input(f"Contours filtered for minimum len; press ENTER to continue: ")
             
-        # Finally, the compute for each timeframe the percentage
+        # Finally, compute for each timeframe the percentage
         # of frequencies that participate in a contour:
         continuity = 100 * long_contours_df.sum(axis=0) / num_rows
         
@@ -566,32 +548,16 @@ class SignalAnalyzer:
         #      time2:  [430, 869]
         
         overtones = contour_mask.apply(lambda col: col[col==True].index, axis='rows')
-        
-        # However, each overtone has some smaller power lobes
-        # next to it. We are looking for the main peaks only.
-        # So, start with Series same length as overtones:
-        timeframe_maxima = pd.Series(index=overtones.index, dtype=overtones.dtype)
-        for time_frame, spike_freq_idxs in overtones.iteritems():
-            vertical_slice = spec_df.loc[spike_freq_idxs, time_frame]
+        overtone_df = pd.DataFrame(overtones.tolist(), index=overtones.index)
+
+        def local_maxima(spike_freq_idxs, data):
+            vertical_slice = data.loc[spike_freq_idxs[~spike_freq_idxs.isna()], spike_freq_idxs.name]
             maxima_idxs = argrelextrema(vertical_slice.values, np.greater, order=3)[0]
-            timeframe_maxima.loc[time_frame] = spike_freq_idxs[maxima_idxs]
+            return spike_freq_idxs[maxima_idxs]
         
-        # For each list of overtone frequencies, find the
-        # median of the difference between them to arrive
-        # at a single pitch. The '2*' is b/c we get two gradient
-        # zero crossings at each overtone peak: 
-        harm_pitches = timeframe_maxima.apply(lambda freqs: np.abs(np.median(np.diff(freqs))) / 2)
-        
-        #************
-        # spectro_src = '/Users/paepcke/EclipseWorkspacesNew/birds/src/powerflock/tests/signal_processing_sounds/artificial/triangle440.wav'
-        # f10 = f10 = overtones.iloc[10]
-        # spec_df = cls.raven_spectrogram(spectro_src, extra_granularity=True)
-        # spec_edges = spec_df.loc[f10]
-        # spec_edge = spec_edges.iloc[:,20]
-        #
-        # # Round frequencies to integers
-        # ax = Charter.linechart(spec_edge, round_labels=0, rotation=45)
-        #************
+        peak_freqs = overtone_df.apply(local_maxima, axis='columns', args=(spec_df,))
+        harm_pitches = peak_freqs.apply(lambda freqs: np.abs(np.median(np.diff(freqs[~freqs.isna()]))) / 2,
+                                         axis='columns')
         
         return harm_pitches 
 
@@ -845,11 +811,6 @@ class SignalAnalyzer:
         # to match what visual spectros show. The
         # "- 1" keeps the low bound included
         low_freq, high_freq = bandpass['low_val'] - 1, bandpass['high_val'] 
-        # Reason for setting unwanted part of the freq spectrum
-        # to -np.inf:
-        # Values are in dB FS (i.e. relative to the maximum signal).
-        # So the vals are all negative. When we will look
-        # for, say, max values, we don't want that to be zero:
         if inplace or extract:
             filtered_spec = spec_df
         else:
@@ -859,6 +820,12 @@ class SignalAnalyzer:
             # Will always make a copy:
             filtered_spec = filtered_spec[(filtered_spec.index >= low_freq) & (filtered_spec.index < high_freq)]
         else: 
+            # Reason for setting unwanted part of the freq spectrum
+            # to -np.inf:
+            # Values are in dB FS (i.e. relative to the maximum signal).
+            # So the vals are all negative. When we will look
+            # for, say, max values, we don't want that to be zero:
+            
             filtered_spec[filtered_spec.index >= high_freq] = -np.inf
             filtered_spec[filtered_spec.index < low_freq] = -np.inf
         

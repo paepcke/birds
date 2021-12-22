@@ -29,7 +29,6 @@ import torch
 import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
-from pandas.core.series import Series
 import seaborn as sns
 
 
@@ -1415,7 +1414,7 @@ class Charter:
         else:
             raise TypeError(f"Arg data_input must be a Pandas Series or DataFrame")
         if ax is None:
-            fig, ax = plt.subplots()
+            _fig, ax = plt.subplots()
 
         if round_labels is not None:
             if type(round_labels) != int:

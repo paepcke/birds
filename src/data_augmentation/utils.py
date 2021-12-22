@@ -1106,7 +1106,7 @@ class Utils:
         
         # Coerce types and unify keys:
         
-        species_spellings = ['species', 'Especie', 'Specie', 'SPECIE', 'specie']
+        species_spellings = ['species', 'Especie', 'Specie', 'SPECIE', 'specie', 'annotation', 'Annotation']
         type_spellings    = ['Type', 'tipo', 'Tipo', 'TYPE', 'TIPPO']
         mix_spellings     = ['Mix', 'MIX', 'mezcla', 'Mezcla', 'MEZCLA']
         number_spellings  = ['Number', 'NUMBER', 'numero', 'Numero', 'NUMERO']

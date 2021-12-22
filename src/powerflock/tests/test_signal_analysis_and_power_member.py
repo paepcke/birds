@@ -20,7 +20,7 @@ from powerflock.signal_analysis import SignalAnalyzer, TemplateSelection
 from result_analysis.charting import Charter
 
 
-#*******TEST_ALL = True
+#*********TEST_ALL = True
 TEST_ALL = False
 
 class SignalAnalysisTester(unittest.TestCase):
@@ -98,13 +98,6 @@ class SignalAnalysisTester(unittest.TestCase):
         #     0.002041     0.255386
         
         cls.probs_rec1_series = cls.probs_rec1_df['Probability']
-        
-        # Create a multitaper spectrogram of the CMTO
-        # for use in contour related tests:
-        #*********cls.mt_spec = SignalAnalyzer.multitaper_spectrogram(cls.sel_rec_cmto_xc1)
-        
-        # Same for the 440 triangle test tone:
-        #********cls.mt_triangle440 = SignalAnalyzer.multitaper_spectrogram(cls.triangle440)
 
     def setUp(self):
         pass
@@ -182,6 +175,18 @@ class SignalAnalysisTester(unittest.TestCase):
         #    ax.figure.show()
 
     #------------------------------------
+    # test_contour_mask 
+    #-------------------
+    
+    #********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_contour_mask(self):
+        
+        mask1 = SignalAnalyzer.contour_mask(self.triangle440Declining)
+        self.assertTupleEqual(mask1.shape, (1025, 69))
+        #Charter.spectrogram_plot(mask1)
+
+
+    #------------------------------------
     # test_spectral_continuity
     #-------------------
     
@@ -193,13 +198,8 @@ class SignalAnalysisTester(unittest.TestCase):
         # continuity = SignalAnalyzer.spectral_continuity(audio=self.sel_rec_cmto_xc1,
         #                                                 edge_mag_thres=0.5
         #                                                 )
-        # continuity = SignalAnalyzer.spectral_continuity(audio=self.sel_rec_cmto_xc1,
-        #                                                 edge_mag_thres=0.1
-        #                                                 )
-        long_contours, continuity = SignalAnalyzer.spectral_continuity(spec_df=self.mt_spec,
-                                                                       #bandpass=Interval(1000,6000),
-                                                                       plot_contours=True
-                                                                       )
+        long_contours, continuity = SignalAnalyzer.spectral_continuity(audio=self.sel_rec_cmto_xc1)
+
         # A few spot checks:
         self.assertTupleEqual(continuity.shape, (1589,))
         self.assertTupleEqual(long_contours.shape, (513, 1589))
