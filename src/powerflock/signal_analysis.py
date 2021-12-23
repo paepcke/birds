@@ -9,8 +9,6 @@ import multiprocessing
 import os
 from pathlib import Path
 
-from functools import partial
-
 import librosa
 from scipy.signal import argrelextrema
 
