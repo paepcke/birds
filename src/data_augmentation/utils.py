@@ -142,6 +142,18 @@ class Interval(dict):
         return 100 * overlap / self.width
         
     
+    def json_dumps(self):
+        return {'low' : self['low_val'],
+                'high': self['high_val'],
+                'step': self['step']}
+
+    @classmethod
+    def from_json(cls, jstr):
+        jdict = self.safe_eval(jstr)
+        self['low_val'] = jdict['low_val']
+        self['high_val'] = jdict['high_val']
+        self['step'] = jdict['step']
+    
     def values(self):
         if self.the_series is not None:
             return iter(self.the_series)
@@ -172,6 +184,12 @@ class Interval(dict):
                 self.the_series.append(val)
             else:
                 break
+
+    def __eq__(self, other):
+        return (self['low_value'] == other['low_value']) and \
+               (self['high_value'] == other['high_value']) and \
+               (self['step'] == other['step'])
+    
 
     @classmethod
     def binary_search_contains(cls, interval_list, value, lo=0, hi=None):
@@ -1583,6 +1601,57 @@ class Utils:
         return new_series
 
     #------------------------------------
+    # df_eq
+    #-------------------
+    
+    @classmethod
+    def df_eq(cls, df1, df2):
+        '''
+        
+        :param df1:
+        :type df1:
+        :param df2:
+        :type df2:
+        :return True if all elements, the index and
+            the columns are equal
+        :rtype bool
+        '''
+        
+        # Test that all elements are pairwise equal.
+        # The test raises ValueError if either the
+        # index or columns are different:
+        try:
+            return (df1 == df2).all().all()
+        except ValueError:
+            return False
+
+    #------------------------------------
+    # series_eq
+    #-------------------
+    
+    @classmethod
+    def series_eq(cls, ser1, ser2):
+        '''
+        Return True if both
+        :param ser1: first series
+        :type ser1: pd.Series
+        :param ser2: second series
+        :type ser2: pd.Series
+        :return True if all elements, the index and
+            series names are equal
+        :rtype bool
+        '''
+        
+        # Test that all elements are pairwise equal.
+        # The test raises ValueError if the index 
+        # values are different. But the name needs
+        # separate testing:
+        try:
+            return (ser1 == ser2).all() and ser1.name == ser2.name
+        except ValueError:
+            return False
+
+    #------------------------------------
     # assertSeriesEqual
     #-------------------
     
@@ -1762,6 +1831,29 @@ class Utils:
         if match is None:
             return None
         return match.groups()[1]
+
+    #------------------------------------
+    # safe_eval
+    #-------------------
+    
+    @classmethod
+    def safe_eval(cls, expr_str):
+        '''
+        Given a string, evaluate it as a Python
+        expression. But do it safely by making
+        almost all Python functions unavailable
+        during the eval.
+
+        :param expr_str: string to evaluate
+        :type expr_str: str
+        :return Python expression result
+        :rtype Any
+        '''
+        res = eval(expr_str,
+                   {"__builtins__":None},    # No built-ins at all
+                   {}                        # No additional func
+                   )
+        return res
 
 # -------------------- Class ProcessWithoutWarnings ----------
 

@@ -178,7 +178,7 @@ class SignalAnalysisTester(unittest.TestCase):
     # test_contour_mask 
     #-------------------
     
-    #********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_contour_mask(self):
         
         mask1 = SignalAnalyzer.contour_mask(self.triangle440Declining)
@@ -354,52 +354,6 @@ class SignalAnalysisTester(unittest.TestCase):
         ax.figure.show()
         print("Put breakpoint here to view")
 
-    #------------------------------------
-    # test_compute_species_templates
-    #-------------------
-    
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    def test_compute_species_templates(self):
-
-        # Now done once in setUpClass() 
-        # recordings = [self.sel_rec_cmto_xc1, self.sel_rec_cmto_xc2, self.sel_rec_cmto_xc3]
-        # sel_tbls   = [self.sel_tbl_cmto_xc1, self.sel_tbl_cmto_xc2, self.sel_tbl_cmto_xc3]
-        # templates = SignalAnalyzer.compute_species_templates('CMTOG', 
-        #                                                      recordings, 
-        #                                                      sel_tbls)
-        self.assertEqual(len(self.templates), 3)
-        self.assertListEqual([len(template) for template in self.templates], [11,8,11])
-        
-        for tmpl_num, template in enumerate(self.templates):
-            for call_num, sig in enumerate(template.signatures):
-                rec_fname = Path(self.recordings[tmpl_num]).name
-                self.assertTrue(sig.name == f"{rec_fname}_call{call_num}")
-
-        expected_sig_lengths = [
-            [85, 72, 133, 60, 59, 45, 48, 42, 37, 87, 107], 
-            [46, 46, 41, 41, 46, 68, 48, 46], 
-            [58, 54, 53, 62, 58, 54, 54, 56, 58, 56, 51]
-            ]
-        observed_sig_lengths = [template.sig_lengths for template in self.templates]
-        self.assertListEqual(observed_sig_lengths, expected_sig_lengths)
-        
-        # While we are in here, test signature averaging in
-        # templates:
-        
-        template = self.templates[0]
-        mean_sig = template.mean_sig
-
-        # The mean sig should be as long as the
-        # longest among the sigs:
-        longest = pd.DataFrame(expected_sig_lengths).max().max()
-        self.assertEqual(len(template.mean_sig), longest)
-        
-        # Compute what the first element of the 
-        # mean sig should be: the mean of the first
-        # element of all sigs in the template:
-        
-        mean_first_els = np.mean([sig[0] for sig in template.signatures])
-        self.assertAlmostEqual(mean_sig[0], mean_first_els, places=3)
 
     #------------------------------------
     # test_match_probabilty

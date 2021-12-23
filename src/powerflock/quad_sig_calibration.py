@@ -230,6 +230,11 @@ class QuadSigCalibrator:
             nearest_spec_end_time   = power_df.columns[power_df.columns < end_time][-1]
             spec_snip = power_df.loc[:,nearest_spec_start_time : nearest_spec_end_time]
             
+            # Change the spectrum snippet's times (the columns)
+            # to be relative to the start of the call, rather than
+            # the beginning of the file:
+            spec_snip.columns = spec_snip.columns - nearest_spec_start_time
+            
             self.log.info(f"... call {species}:{call_num} harmonic pitch")
             pitch_list.append(SignalAnalyzer.harmonic_pitch(spec_snip))
             self.log.info(f"... call {species}:{call_num} frequency modulation")
@@ -245,25 +250,51 @@ class QuadSigCalibrator:
             
 
         # For each measure we now have an array of series,
-        # each series with one element for each timeframe.
-        # Concat the series of a each kind. In the process,
-        # remove entries that have the same index:
+        # each series for one call, with one element for each 
+        # timeframe. Concatenate the series of each measure
+        # to get the measure across all calls for computing
+        # an appropriate scaling factor (see below):
         
-        pitches    = self._dedup_series(pd.concat(pitch_list))
-        freq_mods  = self._dedup_series(pd.concat(freq_mods_list))
-        flatness   = self._dedup_series(pd.concat(flatness_list))
-        continuity =self._dedup_series( pd.concat(continuity_list))
+        pitches    = pd.concat(pitch_list)
+        freq_mods  = pd.concat(freq_mods_list)
+        flatness   = pd.concat(flatness_list)
+        continuity = pd.concat(continuity_list)
         
+        # Combine the four measures of each call into
+        # a df with index being time relative to the start
+        # of its call, and columns being the names of
+        # the measures:
+        
+        sig_df_list = []
+        
+        # Note that all corrsponding lists have the
+        # same length. I.e. len(pitches[0]) == len(freq_mods[0]),
+        # etc., and len(pitches[1]) == len(freq_mods[1]):
+        
+        for call_idx in range(len(pitch_list)):
+            # Df with one row for each measure,
+            # but then transposed to get 
+            # one column for each measure, with
+            # time running down the index:
+            sig_df_list.append(pd.DataFrame(
+                [
+                    pitch_list[call_idx],
+                    freq_mods[call_idx],
+                    flatness[call_idx],
+                    continuity[call_idx]
+                    ],
+                colums=pitch_list[call_idx].index,
+                index=['pitches', 'freq_mods', 'flatness', 'continuity']
+                ).transpose()
+            )
+
         # Compute median distance from mean; the
         # '.item()' turns the resulting np.float64
         # into a Python native float:
         sig = {
             'species'    : species,
             
-            'pitch'      : pitches,
-            'freq_mods'  : freq_mods,
-            'flatness'   : flatness,
-            'continuity' : continuity,
+            'sig'        : sig_df_list,
 
             'pitch_scale'      : np.abs((pitches - pitches.mean()).median()).item(),
             'freq_mods_scale'  : np.abs((freq_mods - freq_mods.mean()).median()).item(),
@@ -273,15 +304,28 @@ class QuadSigCalibrator:
         return sig
 
     #------------------------------------
+    # calibration_template
+    #-------------------
+    
+    def calibration_template(self, species):
+        '''
+        For each example call in the examples soundfile of
+        one species, reference the four spectral measures  
+        :param species:
+        :type species:****** HERE
+        '''
+        
+
+
+    # ---------------------- Utilities ---------------
+    
+    #------------------------------------
     # _sigs_to_json 
     #-------------------
     
     def _sigs_to_json(self, sig_dict):
         new_dict = sig_dict.copy()
-        new_dict['pitch'] = sig_dict['pitch'].to_json()
-        new_dict['freq_mods'] = sig_dict['freq_mods'].to_json()
-        new_dict['flatness'] = sig_dict['flatness'].to_json()
-        new_dict['continuity'] = sig_dict['continuity'].to_json()
+        new_dict['sig'] = sig_dict['sig'].to_json()
         return new_dict
 
     #------------------------------------
@@ -292,8 +336,9 @@ class QuadSigCalibrator:
         '''
         Given a dict of signatures like:
             {'CMTOG' : {'species' : 'CMTOG',
-                        'pitch' : ...
+                        'sig' : ...
                            ...
+                        'pitch_scale' : ...
                        },
              'OtherSpec' : {...}
              },
@@ -322,10 +367,9 @@ class QuadSigCalibrator:
     def sigs_json_load(self, fname):
         '''
         Reconstruct a dict of signatures from
-        the given json file. All nested pd.Series
-        will be reconstructed to be pd.Series again,
-        though they are represented as nested json
-        by sigs_json_dump. The result will look like:
+        the given json file. All nested pd.DataFrame
+        will be reconstructed.
+        The result will look like:
         
             {'CMTOG' : {'species' : 'CMTOG',
                         'pitch' : ...
@@ -374,10 +418,6 @@ class QuadSigCalibrator:
                    {}                        # No additional func
                    )
         return res
-        
-                
-        
-
 
     #------------------------------------
     # _dedup_series
