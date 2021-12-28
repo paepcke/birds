@@ -8,6 +8,7 @@ from enum import Enum
 import multiprocessing
 import os
 from pathlib import Path
+import warnings
 
 import librosa
 from scipy.signal import argrelextrema
@@ -18,9 +19,8 @@ import matplotlib.pyplot as plt
 from multitaper.multitaper_spectrogram_python import MultitaperSpectrogrammer
 import numpy as np
 import pandas as pd
-from result_analysis.charting import Charter
-
 from powerflock.signatures import SpectralTemplate, Signature
+from result_analysis.charting import Charter
 
 
 class TemplateSelection(Enum):
@@ -78,7 +78,7 @@ class SignalAnalyzer:
     #
     # Ex for 12 samples in a signature, and 18
     #    samples in the audio clip to test. 
-    #    SIGNATURE_MATCH_SLIDE_TIME == 0.1 sec
+    #    SIGNATURE_MATCH_SLIDE_FRACTION == 0.1 sec
     #
     #     Audio: abcdefghejklmnopqrs
     # Signature: xxxxxxxxxxxx
@@ -96,7 +96,7 @@ class SignalAnalyzer:
     #          jklmnopqrsMM   <--- MM is mean of j-s
     #          xxxxxxxxxxxx          
     
-    SIGNATURE_MATCH_SLIDE_TIME = 0.1 # seconds
+    SIGNATURE_MATCH_SLIDE_FRACTION = 0.1
     '''Fraction of signature length to slide test clips before each match check'''
 
     #------------------------------------
@@ -291,7 +291,8 @@ class SignalAnalyzer:
             # Take the log10 of each element, taking
             # care of 0 values by setting those to -inf:  
             flatness_ser = flatness_ser.apply(lambda el: -np.inf if el == 0 else np.log10(el))
-            
+
+        flatness_ser.name = 'flatness'
         return flatness_ser
 
     #------------------------------------
@@ -433,6 +434,7 @@ class SignalAnalyzer:
         # of frequencies that participate in a contour:
         continuity = 100 * long_contours_df.sum(axis=0) / num_rows
         
+        continuity.name = 'continuity'
         return long_contours_df, continuity 
 
     #------------------------------------
@@ -556,10 +558,20 @@ class SignalAnalyzer:
             return spike_freq_idxs[maxima_idxs]
         
         peak_freqs = overtone_df.apply(local_maxima, axis='columns', args=(spec_df,))
-        harm_pitches = peak_freqs.apply(lambda freqs: np.abs(np.median(np.diff(freqs[~freqs.isna()]))) / 2,
-                                         axis='columns')
+        freq_diffs = pd.DataFrame(peak_freqs.diff(axis=0))
+        # Some spec frames will have no contours at all,
+        # generating one of two runtime warnings. Temporarily
+        # suppress these:
+        with warnings.catch_warnings():
+            warnings.filterwarnings(action='ignore', category=RuntimeWarning, message='All-NaN slice encountered')
+            warnings.filterwarnings(action='ignore', category=RuntimeWarning, message='Mean of empty slice')
+            
+            harm_pitch = np.abs(freq_diffs.median(axis=1)) / 2
         
-        return harm_pitches 
+        #harm_pitch = peak_freqs.apply(lambda freqs: np.abs(np.median(np.diff(freqs[~freqs.isna()]))) / 2,
+        #                                 axis='columns')
+        harm_pitch.name = 'pitch'
+        return harm_pitch 
 
     #------------------------------------
     # freq_modulations
@@ -682,9 +694,16 @@ class SignalAnalyzer:
         # For each timeframe, compute the median angle 
         # of all contours, ignoring the sign. So we do
         # lose the rising vs. falling info of the contours:
+        # Some spec frames will have no contours at all,
+        # generating one of two runtime warnings. Temporarily
+        # suppress these:
+        with warnings.catch_warnings():
+            warnings.filterwarnings(action='ignore', category=RuntimeWarning, message='All-NaN slice encountered')
+            warnings.filterwarnings(action='ignore', category=RuntimeWarning, message='Mean of empty slice')
         
-        angle_medians = np.abs(angles_masked).median()
-        
+            angle_medians = np.abs(angles_masked).median()
+
+        angle_medians.name = 'freq_mod'
         return angle_medians
 
     #------------------------------------
@@ -832,103 +851,64 @@ class SignalAnalyzer:
         return filtered_spec
 
     #------------------------------------
-    # spectral_centroid_each_timeframe
+    # spectral_measures_each_timeframe
     #-------------------
 
     @classmethod
-    def spectral_centroid_each_timeframe(cls, 
-                                         audio,
-                                         bandpass=None,
-                                         aggregation=None):
+    def spectral_measures_each_timeframe(cls, 
+                                         spec_snip,
+                                         sig
+                                         ):
         '''
-        Return a 1D array with the centroid of energy
-        across all frequencies for each time slice.
+        Return a dataframe 
         
-        There will be ~88 signature entries (time frames)
-        per second, and the mean energy at each time frame
-        will be taken across 1025 frequencies.
+                    'flatness', 'continuity', 'pitch', 'freq_mod'
+          t0
+          t1                    ...
         
-        :param audio: audio in time domain
-        :type audio: {np.array | pd.Series}
-        :param bandpass: Interval with low and high cutoff for
-            masking frequencies below and above a frequency
-            range of interest.
-        :type bandpass: {None | Interval}
-        :param aggregation: method of summarizing the frequencies
-            in one (vertical) time frame in the spectrogram
-        :type aggregation: {None | SpectralAggregation}
-        :return a 1D Series of frequency centroids, one
-            for each time slot. Values are frequencies, index
-            entries are time
-        :rtype pd.Series
+        The df will have as many rows as spec_snip
+        has timeframes.
+        
+        :param spec_df: spectrogram, usually several
+            frames of a larger spectrogram
+        :type spec_df: pd.DataFrame
+        :param sig: a Signature from which to take 
+            information such as bandpass filtering
+        :type sig: Signature
+        :return: a Signature instance containing for 
+            for each timeframe the measurements
+            'flatness', 'continuity', 'pitch', 'freq_mod'
+        :rtype Signature
         '''
-        # if hop_length is None:
-        #     hop_length = cls.hop_length
-        # if n_fft is None:
-        #     n_fft = cls.n_fft
-        # if normalize:
-        #     audio = sklearn.preprocessing.minmax_scale(audio,feature_range=(-1,1))
-        #
-        # sig_ser = pd.Series(librosa.feature.spectral_centroid(y=audio, 
-        #                                                       sr=sr,
-        #                                                       hop_length=hop_length,
-        #                                                       n_fft=n_fft
-        #                                                       )[0])
-        
-        if aggregation is None:
-            aggregation = DEFAULT_SPECTRAL_AGGREGATION
-        
-        spec_df = cls.raven_spectrogram(audio)
-        if bandpass is not None:
-            cls.apply_bandpass(bandpass, spec_df, inplace=True)
 
-        if aggregation == SpectralAggregation.MAX:
-            sig_ser = spec_df.max()
-        elif aggregation == SpectralAggregation.MEAN:
-            # Need to exclude the -np.inf values that we
-            # introducted above from being considered for
-            # mean/median/min:
-            sig_ser = spec_df[~spec_df.isin([-np.inf])].mean()
-        elif aggregation == SpectralAggregation.MEDIAN:
-            sig_ser = spec_df[~spec_df.isin([-np.inf])].median()
-        elif aggregation == SpectralAggregation.MIN:
-            sig_ser = spec_df[~spec_df.isin([-np.inf])].min()
-        else:
-            raise ValueError(f"Aggregation method must be a member of SpectralAggregation, not {aggregation}")
+        # Compute the measures into one series each.
+        # Each series covers all timeframes:
+        flatness = SignalAnalyzer.spectral_flatness(spec_snip, is_power=True)
+        _long_contours_df, continuity = SignalAnalyzer.spectral_continuity(spec_snip,
+                                                                           is_power=True,
+                                                                           plot_contours=False
+                                                                           ) 
+        pitch = SignalAnalyzer.harmonic_pitch(spec_snip)
+        freq_mod = SignalAnalyzer.freq_modulations(spec_snip)
 
-        sig_ser.index = spec_df.columns
-        sig_ser.name  = f"Sig{aggregation.value}"
+        # Each measure makes a col:
+        snip_results = pd.concat([flatness, continuity, pitch, freq_mod], axis=1)
+        # Scale the measures:
+        snip_results = snip_results.mul(sig.scale_factors, axis=1)
         
-        # We now have a series:
-        #   t0   db_val0
-        #   t1   db_val1
-        #     ...
-        # But we need:
-        #   t0   frequency at which power is db_val0
-        #   t1   frequency at which power is db_val1
-        #     ...
-        #
-        # The needed frequencies are the values of spec_df's
-        # index at the rows where power is of desired value
-        # at the column's time.
-        #
-        # There is likely *some* way to bludgeon pandas
-        # in yielding these values... But bird calls are
-        # short, and therefore sig_ser is short, and we
-        # can affort to loop through the columns.
-        
-        sig_freqs = []
-        for sig_idx, desired_val in enumerate(sig_ser):
-            freqs_with_max_val = spec_df.index[spec_df.iloc[:,sig_idx] == desired_val].tolist()
-            # At a given time there could be multiple
-            # frequencies with the desired value. Just pick
-            # the first for now:
-            sig_freqs.append(freqs_with_max_val[0])
-            
-        # Final result:
-        sig_series = pd.Series(sig_freqs, index=sig_ser.index, name=sig_ser.name)
-
-        return sig_series
+        field_recording_sig = Signature(
+            sig.species,
+            snip_results,
+            sig.scale_factors,
+            start_idx=spec_snip.columns[0],
+            end_idx=spec_snip.columns[-1],
+            fname='field-recording',
+            sig_id=f"field_against_sig{sig.sig_id}",
+            freq_interval=Interval(np.min(spec_snip.index), np.max(spec_snip.index)),
+            bandpass_filter=sig.bandpass_filter,
+            extract=sig.extract
+            )
+        return field_recording_sig
 
 
     #------------------------------------
@@ -1158,141 +1138,14 @@ class SignalAnalyzer:
         return pd.DataFrame(res_df)
 
     #------------------------------------
-    # compute_species_templates
-    #-------------------
-    
-    @classmethod
-    def compute_species_templates(cls,
-                                  species,
-                                  recordings,
-                                  sel_tbls,
-                                  apply_bandpass=False,
-                                  aggregation_method=DEFAULT_SPECTRAL_AGGREGATION
-                                  ):
-        '''
-        Given a list of selection table paths, and a list
-        of paths to the corresponding recordings, isolate
-        the audio clips of calls by the given species. 
-        
-        For each clip in each recording, compute for each time 
-        frame the frequency at which energy is the mean of energies
-        at this frame. This computation results in one pd.Series, 
-        a time series of mean-energy-holding frequencies over time 
-        for each call. This time series is the call's "signature".
-        
-        Package the signatures of one recording into SpectralTemplate
-        instance, and return a list of such instances, one for
-        each recording. Each instance contains the signatures of
-        all calls in one recording. 
-        
-        In order to match audio snippets to calls in the template,
-        the snippet centroids will also be computed. That computation
-        must use the same FFT parameters used when computing the
-        signatures in this template. The SpectralTemplate instance
-        will therefore contain:
-        
-            n_fft          number of frequencies (rows in spectrogram)
-                           num_rows = 1 - n_fft/2
-            sr
-            hop_length
-            win_length
-            window
-        
-        :param sel_tbls: list of selection table paths
-        :type sel_tbls: [str]
-        :param recordings: list of paths to corresponding recordings
-        :type recordings: [str]
-        :param species: name of species whose calls are to be
-            analyzed
-        :type species: str
-        :param apply_bandpass: optional tuple (low_frequency, high_frequency)
-            below and above which the spectrogram will be set to 0 before
-            computing the signatures.
-        :type apply_bandpass: {None, ({int | float}, {int | float})
-        :param aggregation_method: method for computing the signature
-            from frequencies of a single time frame. See SpectralAggregation
-            enum. Default is set in DEFAULT_SPECTRAL_AGGREGATION.
-        :type aggregation_method: SpectralAggregation
-        :param apply_bandpass: whether or not to apply a
-            bandpass filter based on the Raven selection table's high/low
-            frequencies for each selection before creating each respective
-            signature
-        :type apply_bandpass: bool
-        :returns a list of SpectralTemplate instances, each holding
-            the signatures of the calls in one recording. If no content
-            for given species is found, returns None
-        :rtype [SpectralTemplate]
-        '''
-
-        spectral_centroids = None
-        res_templates = []
-        if type(sel_tbls) != list:
-            sel_tbls = [sel_tbls]
-            
-        if type(recordings) != list:
-            recordings = [recordings]
-            
-        if len(sel_tbls) != len(recordings):
-            raise ValueError(f"Number of recordings must equal number of selection tbls.")
-        
-        for sel_tbl_path, rec_path in zip(sel_tbls, recordings): 
-            species_clips_dict, sr = SignalAnalyzer.audio_from_selection_table(
-                sel_tbl_path,
-                rec_path,
-                species)
-            # If this selection table has no calls by
-            # current species: next species:
-            if species not in list(species_clips_dict.keys()):
-                continue
-            
-            spectral_centroids = []
-            rec_fname = Path(rec_path).name
-            for clip_num, clip_info in enumerate(species_clips_dict[species]):
-                
-                clip = clip_info['clip']
-                if apply_bandpass:
-                    bandpass_spec = clip_info['freq_interval']
-                else:
-                    bandpass_spec = None
-                #****** RETURNS series of all zeroes:
-                centroid = SignalAnalyzer.spectral_centroid_each_timeframe(
-                    clip,
-                    bandpass=bandpass_spec,
-                    aggregation=aggregation_method
-                    )
-
-                sig = Signature(species,
-                                centroid,
-                                sr=sr,
-                                start_idx=clip_info['start_idx'],
-                                end_idx=clip_info['end_idx'],
-                                fname=rec_path,
-                                sig_id=clip_num,
-                                audio=clip,
-                                freq_interval=clip_info['freq_interval'],
-                                bandpass_filter=bandpass_spec
-                                )
-                spectral_centroids.append(sig)
-                
-            res_templates.append(SpectralTemplate(spectral_centroids, 
-                                                  rec_fname=rec_fname,
-                                                  sr=sr,
-                                                  hop_length=cls.hop_length,
-                                                  n_fft=cls.n_fft
-                                                  ))
-
-        return res_templates
-
-    #------------------------------------
     # match_probability
     #-------------------
     
     @classmethod
     def match_probability(cls, 
                           audio,
-                          spectroid_template,
+                          spectral_template,
                           slide_width_time=None,
-                          aggregation=None
                           ):
         '''
         Given an audio clip, match it to each signatures
@@ -1385,9 +1238,9 @@ class SignalAnalyzer:
                             
         :param audio: audio of a single call
         :type audio: {np.array | pd.Series}
-        :param spectroid_template: one or more SpectralTemplate
+        :param spectral_template: one or more SpectralTemplate
             instance(s) against which to compare the clip
-        :type spectroid_template: {SpectralTemplate | [SpectralTemplate]}
+        :type spectral_template: {SpectralTemplate | [SpectralTemplate]}
         :param slide_width_time: time in (usually fractional) seconds by
             which to slide a signature across the audio
         :type slide_width_time: float
@@ -1399,14 +1252,20 @@ class SignalAnalyzer:
         :rtype (pd.DataFrame, pd.Series)
         '''
 
-        if aggregation is None:
-            aggregation = DEFAULT_SPECTRAL_AGGREGATION
-        
         if slide_width_time is None:
-            slide_width_time = SignalAnalyzer.SIGNATURE_MATCH_SLIDE_TIME 
+            slide_width_time = SignalAnalyzer.SIGNATURE_MATCH_SLIDE_FRACTION 
 
-        if type(spectroid_template) != list:
-            spectroid_template = [spectroid_template]
+        passband = spectral_template.bandpass_filter
+        
+        spec_df = SignalAnalyzer.raven_spectrogram(audio, extra_granularity=True)
+        
+        power_df = spec_df ** 2
+        num_freqs, num_frames = power_df.shape
+
+        #sr = spectral_template[0].sr
+        #if type(audio) != pd.Series:
+        #    # Turn into a series:
+        #    audio = pd.Series(audio, np.arange(0,len(audio)/sr,1/sr))
 
         # An ID number for each signature unique across
         # the templates; simply a running number. Used
@@ -1417,55 +1276,54 @@ class SignalAnalyzer:
         # Match clip sig against the sigs within
         # each template, collecting the probs from
         # each template match into matching_probs:
-        for template in spectroid_template:
 
-            # Match against all of the template's sigs:
-            for sig in template.signatures:
-                sig_id += 1
-                # How many samples underly the signature?
-                sig_width_samples = sig.end_idx - sig.start_idx
-                # Number of samples (as opposed to time) to slide
-                # sig to the right between each measurement:
-                num_sample_slides = int(slide_width_time * cls.sr)
-                # Create subclips to match the present signature:
-                for start_idx in np.arange(0, len(audio), num_sample_slides):
-                    # Take snippet of same width each time:
-                    end_idx = start_idx + sig_width_samples
-                    try:
-                        aud_snip = audio[start_idx:end_idx]
-                        # Do we have a full signature width of audio
-                        # in this snippet?
-                        if len(aud_snip) < sig_width_samples:
-                            # Pad aud with its mean:
-                            missing_width = sig_width_samples - len(aud_snip)
-                            aud_snip = np.append(aud_snip, 
-                                                 [aud_snip.mean()]*missing_width)
-                        
-                        # Get the snippet's signature:
-                        clip_sig = SignalAnalyzer.spectral_centroid_each_timeframe(
-                            aud_snip,
-                            aggregation=aggregation,
-                            bandpass=sig.bandpass_filter
-                            )
-                        # Probability for one subclip on one signature:
-                        matching_prob = cls._compute_prob(clip_sig, sig)
-                        res_df = res_df.append({
-                            'start' : start_idx,
-                            'stop'  : end_idx,
-                            'n_samples' : sig_width_samples,
-                            'probability' : matching_prob,
-                            'sig_id': sig_id
-                            }, 
-                            ignore_index=True)
-                    except IndexError:
-                        # No more subclips to match against current sig.
-                        # Process next signature, and then
-                        # next template:
-                        break
+        # Match against all of the template's sigs:
+        for sig in spectral_template.signatures:
+            sig_id += 1
+            
+            passband = sig.bandpass_filter
+            if passband is not None:
+                power_df_clipped = SignalAnalyzer.apply_bandpass(passband, 
+                                                                 power_df, 
+                                                                 extract=sig.extract)
+            else:
+                power_df_clipped = power_df
+            
+            # How many samples underly the signature?
+            sig_width_samples = len(sig)
+            # Number of samples (as opposed to time) to slide
+            # sig to the right between each measurement. This
+            # is a fraction of the signature width:
+            num_sample_slides = int(slide_width_time * sig_width_samples)
+            # Create subclips to match the present signature:
+            for start_idx in np.arange(0, num_frames, num_sample_slides):
+                # Take snippet of same width each time:
+                end_idx = start_idx + sig_width_samples
+                try:
+                    spec_snip = power_df_clipped.iloc[:, start_idx:end_idx]
+                    # Get the snippet's signature:
+                    clip_sig = SignalAnalyzer.spectral_measures_each_timeframe(
+                        spec_snip,
+                        sig=sig
+                        )
+                    
+                    # Probability for one subclip on one signature:
+                    #********** COMPUTE PROB CHANGES NOW
+                    sig_dist = clip_sig.distance(sig)
+                    res_df = res_df.append({
+                        'start' : start_idx,
+                        'stop'  : end_idx,
+                        'n_samples' : sig_width_samples,
+                        'distance' : sig_dist, 
+                        'sig_id': sig_id
+                        }, 
+                        ignore_index=True)
+                except IndexError:
+                    # No more subclips to match against current sig.
+                    # Process next signature
+                    break
 
-            # Matched against all sigs of one template.
-        # Matched against all templates
-
+            
         # Create the summary:
         min_prob = res_df['probability'].min()
         max_prob = res_df['probability'].max()
@@ -1480,6 +1338,7 @@ class SignalAnalyzer:
                                  'best_fit_prob' : best_fit_prob
                                  })
         return (res_df, res_summary)
+
 
     #------------------------------------
     # _compute_prob

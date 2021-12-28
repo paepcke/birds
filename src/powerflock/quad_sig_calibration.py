@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 '''
 Created on Dec 20, 2021
 
@@ -16,6 +17,7 @@ from data_augmentation.utils import Utils, Interval
 import numpy as np
 import pandas as pd
 from powerflock.signal_analysis import SignalAnalyzer
+from powerflock.signatures import Signature, SpectralTemplate
 
 
 class QuadSigCalibrator:
@@ -63,7 +65,7 @@ class QuadSigCalibrator:
              
                 {
                   'pitch'      : ...,
-                  'freq_mods'  : ...,
+                  'freq_mod'  : ...,
                   'flatness'   : ...,
                   'continuity' : ...
                   }
@@ -96,12 +98,7 @@ class QuadSigCalibrator:
         if cal_outdir is None:
             # Put json of finished calibration into 
             # root of the sound/sel-table files: 
-            cal_outdir = os.path.join(cal_data_root, 'species_calibration_results')
-            try:
-                if not os.path.exists(cal_outdir):
-                    os.makedirs(cal_outdir)
-            except FileExistsError:
-                pass
+            cal_outdir = cal_data_root
 
         self.cal_data_root = cal_data_root
         self.cal_outdir = cal_outdir
@@ -125,7 +122,7 @@ class QuadSigCalibrator:
     def calibrate_species(self):
 
         # Place to hold the results for each species:
-        species_scales = {}
+        templates = {}
 
         for species in self.species_list:
             # The subdir with species sound and selection table file:
@@ -147,29 +144,29 @@ class QuadSigCalibrator:
                     
              
             # Calibrate the four per-timeframe power spectrum values:
-            species_scales[species] = self.calibrate_one_species(sound_file, sel_tbl_file)
-
+            templates[species] = self.calibrate_one_species(sound_file, sel_tbl_file)
+            
         # If cal_data_root already has a species signature 
         # json file, load it, and update it with the current
         # run's result:
         signatures_fname = os.path.join(self.cal_data_root, 'signatures.json')
         if os.path.exists(signatures_fname):
             try:
-                cur_sigs = self.sigs_json_load(signatures_fname)
+                cur_templates = self.sigs_json_load(signatures_fname)
             except Exception as e:
                 self.log.err(f"Loading current sigs from {signatures_fname} failed: {repr(e)}...")
                 self.log.err(f"    ... Moving that file to .bak")
                 shutil.move(signatures_fname, signatures_fname+'.bak')
-                cur_sigs = {}
+                cur_templates = {}
         else:
-            cur_sigs = {}
+            cur_templates = {}
         # Update current sigs with results from this run:
         self.log.info(f"Saving/updating all sigs to {signatures_fname}")
-        cur_sigs.update(species_scales)
-        self.sigs_json_dump(cur_sigs, signatures_fname)
+        cur_templates.update(templates)
+        self.sigs_json_dump(cur_templates, signatures_fname)
         
         self.signatures_fname = signatures_fname
-        return cur_sigs
+        return cur_templates
 
     #------------------------------------
     # calibrate_one_species
@@ -177,25 +174,24 @@ class QuadSigCalibrator:
     
     def calibrate_one_species(self, sound_file, sel_tbl_file, extract=True):
         '''
-        Return a dict with unit-less scale factors for
-        all four power measures:
-        
-            sig = {
-                'pitch'      : np.abs((pitches - pitches.mean()).median()),
-                'freq_mods'  : np.abs((freq_mods - freq_mods.mean()).median()),
-                'flatness'   : np.abs((flatness - flatness.mean()).median()),
-                'continuity' : np.abs((continuity - continuity.mean()).median())
-            }
+        Go through each call of one species, and create
+        a Signature instance. Wrap the Signature instances
+        in a SpectralTemplate, and return that SpectralTemplate 
         
         Timing: for a sound file with 17 calls the method
            takes about 1:10 minutes. 
         
-        :param sound_file:
-        :type sound_file:
-        :param sel_tbl_file:
-        :type sel_tbl_file:
-        :param extract:
-        :type extract:
+        :param sound_file: example sounds 
+        :type sound_file: str
+        :param sel_tbl_file: Raven selection table corresponding
+            to that file.
+        :type sel_tbl_file: str
+        :param extract: Whether or not to compute the signatures
+            on the full height of the spectrogram, or only the
+            spectrograms clipped around calls
+        :type extract: bool
+        :return: template with signatures
+        :rtype: SpectralTemplate
         '''
         
         # For informative logging: find species name
@@ -217,12 +213,28 @@ class QuadSigCalibrator:
         spec_df_clipped = SignalAnalyzer.apply_bandpass(passband, spec_df, extract=extract)
         power_df = spec_df_clipped ** 2
         
+        # Width of frequencies along y axis:
+        freq_step_size = np.abs(spec_df.index[1] - spec_df.index[0])
+        
+        # List of low/high frequency intervals for each call:
+        freq_intervals = [Interval(low_f, high_f, freq_step_size)
+                          for low_f, high_f
+                          in zip(low_freqs, high_freqs)]
+        
+        
         pitch_list    = []
-        freq_mods_list  = []
+        freq_mod_list  = []
         flatness_list   = []
         continuity_list = []
+        
+        sig_instance_list = []
 
+        #************
+        # To shorten testing cycle, 
+        # can use the [0:2] version here.
         for call_num, selection in enumerate(selection_dicts):
+        #for call_num, selection in enumerate(selection_dicts[0:2]):
+        #************
             start_time = selection['Begin Time (s)']
             end_time   = selection['End Time (s)']
 
@@ -235,73 +247,87 @@ class QuadSigCalibrator:
             # the beginning of the file:
             spec_snip.columns = spec_snip.columns - nearest_spec_start_time
             
+            # Each result will be a Series of measures across
+            # one call's time duration:
             self.log.info(f"... call {species}:{call_num} harmonic pitch")
-            pitch_list.append(SignalAnalyzer.harmonic_pitch(spec_snip))
+            pitch = SignalAnalyzer.harmonic_pitch(spec_snip)
             self.log.info(f"... call {species}:{call_num} frequency modulation")
-            freq_mods_list.append(SignalAnalyzer.freq_modulations(spec_snip))
+            freq_mod = SignalAnalyzer.freq_modulations(spec_snip)
             self.log.info(f"... call {species}:{call_num} spectral flatness")
-            flatness_list.append(SignalAnalyzer.spectral_flatness(spec_snip, is_power=True))
+            flatness = SignalAnalyzer.spectral_flatness(spec_snip, is_power=True)
             self.log.info(f"... call {species}:{call_num}  spectral continuity")
             _long_contours_df, continuity = SignalAnalyzer.spectral_continuity(spec_snip, 
                                                                                is_power=True,
                                                                                plot_contours=False
                                                                                ) 
+            # Make a df from the above four measures:
+            sig = pd.DataFrame(
+                [flatness, continuity, pitch, freq_mod],
+                columns=pitch.index, # any of the indexes will do
+                index=['flatness', 'continuity', 'pitch', 'freq_mod']
+                ).transpose()
+
+            # Make a signature instance, setting scale_factors
+            # to an empty Series because we don't know those
+            # values yet:
+            
+            sig_inst = Signature(species=species,
+                                 sig_values=sig,
+                                 scale_factors=pd.Series(dtype=np.float64),
+                                 start_idx=nearest_spec_start_time,
+                                 end_idx=nearest_spec_end_time,
+                                 fname=sound_file,
+                                 sig_id=call_num,
+                                 freq_interval=freq_intervals[call_num],
+                                 bandpass_filter=passband,
+                                 extract=extract
+                                 )
+            sig_instance_list.append(sig_inst)
+            
+            # Keep track of the measures series for later,
+            # when we will need to compute the median of deviations
+            # from the mean for each of them across all calls:
+            pitch_list.append(pitch)
+            freq_mod_list.append(freq_mod)
+            flatness_list.append(flatness)
             continuity_list.append(continuity)
             
-
         # For each measure we now have an array of series,
         # each series for one call, with one element for each 
         # timeframe. Concatenate the series of each measure
         # to get the measure across all calls for computing
         # an appropriate scaling factor (see below):
-        
-        pitches    = pd.concat(pitch_list)
-        freq_mods  = pd.concat(freq_mods_list)
+
         flatness   = pd.concat(flatness_list)
         continuity = pd.concat(continuity_list)
-        
-        # Combine the four measures of each call into
-        # a df with index being time relative to the start
-        # of its call, and columns being the names of
-        # the measures:
-        
-        sig_df_list = []
-        
-        # Note that all corrsponding lists have the
-        # same length. I.e. len(pitches[0]) == len(freq_mods[0]),
-        # etc., and len(pitches[1]) == len(freq_mods[1]):
-        
-        for call_idx in range(len(pitch_list)):
-            # Df with one row for each measure,
-            # but then transposed to get 
-            # one column for each measure, with
-            # time running down the index:
-            sig_df_list.append(pd.DataFrame(
-                [
-                    pitch_list[call_idx],
-                    freq_mods[call_idx],
-                    flatness[call_idx],
-                    continuity[call_idx]
-                    ],
-                colums=pitch_list[call_idx].index,
-                index=['pitches', 'freq_mods', 'flatness', 'continuity']
-                ).transpose()
-            )
+        pitch    = pd.concat(pitch_list)
+        freq_mod  = pd.concat(freq_mod_list)
 
-        # Compute median distance from mean; the
-        # '.item()' turns the resulting np.float64
-        # into a Python native float:
-        sig = {
-            'species'    : species,
-            
-            'sig'        : sig_df_list,
+        # Compute median distance from mean across
+        # all calls; the '.item()' turns the resulting 
+        # np.float64 into a Python native float:
+        
+        scale_factors = pd.Series([np.abs((flatness - flatness.mean()).median()).item(),
+                                   np.abs((continuity - continuity.mean()).median()).item(),
+                                   np.abs((pitch - pitch.mean()).median()).item(),
+                                   np.abs((freq_mod - freq_mod.mean()).median()).item(), 
+                                   ], index=['flatness', 'continuity', 'pitch', 'freq_mod'],
+                                   name='scale_factors')
+        
+        # Set these scale factors in all 
+        # the signature instances we colleced:
+        for sig_inst in sig_instance_list:
+            sig_inst.scale_factors = scale_factors
+            # Execute the scaling of the flatness, 
+            # continuity, pitch, and freq_mod values
+            sig_inst.sig = sig_inst.sig.mul(scale_factors, axis=1) 
 
-            'pitch_scale'      : np.abs((pitches - pitches.mean()).median()).item(),
-            'freq_mods_scale'  : np.abs((freq_mods - freq_mods.mean()).median()).item(),
-            'flatness_scale'   : np.abs((flatness - flatness.mean()).median()).item(),
-            'continuity_scale' : np.abs((continuity - continuity.mean()).median()).item()
-        }
-        return sig
+        # Wrap the Signature instances in a 
+        # SpectralTemplate:
+        
+        template = SpectralTemplate(sig_instance_list, rec_fname=sound_file)
+        
+        return template
 
     #------------------------------------
     # calibration_template
@@ -320,45 +346,27 @@ class QuadSigCalibrator:
     # ---------------------- Utilities ---------------
     
     #------------------------------------
-    # _sigs_to_json 
-    #-------------------
-    
-    def _sigs_to_json(self, sig_dict):
-        new_dict = sig_dict.copy()
-        new_dict['sig'] = sig_dict['sig'].to_json()
-        return new_dict
-
-    #------------------------------------
     # sigs_json_dump
     #-------------------
     
     def sigs_json_dump(self, sigs, fname):
         '''
-        Given a dict of signatures like:
-            {'CMTOG' : {'species' : 'CMTOG',
-                        'sig' : ...
-                           ...
-                        'pitch_scale' : ...
-                       },
-             'OtherSpec' : {...}
+        Given a dict of SpectralTemplate values like:
+            {'CMTOG' : template_cmtog,
+             'OtherSpec' : template_other_spec
              },
              
-        ensure that all values that are pd.Series
-        are individually turned into json, and then
-        write the entire nested dir to fname as a json
-        file.
+        ensure that all values are individually turned 
+        into json, and then write the entire dict to fname 
+        as a json file.
         
         :param sigs: nested dict of signatures
         :type sigs: {str : {str : ANY}}
         :param fname: destination path
         :type fname: str
         '''
-        new_dict = {}
-        for species, sig in sigs.items():
-            new_dict[species] = self._sigs_to_json(sig)
         with open(fname, 'w') as fd:
-            json.dump(new_dict, fd)
-
+            json.dump({key : val.json_dumps() for key,val in sigs.items()}, fd)
 
     #------------------------------------
     # sigs_json_load 
@@ -366,34 +374,28 @@ class QuadSigCalibrator:
     
     def sigs_json_load(self, fname):
         '''
-        Reconstruct a dict of signatures from
-        the given json file. All nested pd.DataFrame
-        will be reconstructed.
+        Reconstruct a dict of templates
+        the given json file. All SpectralTemplate
+        instances will be reconstructed.
         The result will look like:
         
-            {'CMTOG' : {'species' : 'CMTOG',
-                        'pitch' : ...
-                           ...
-                       },
-             'OtherSpec' : {...}
+            {'CMTOG' : template_cmtog,
+             'OtherSpec' : template_other_spec
              }
         
         :param fname: json file to load
         :type fname: str
-        :return dict of signatures
-        :rtype {str : {str : ANY}}
+        :return dict of SpectralTemplate
+        :rtype {str : SpectralTemplate}
         '''
         
         with open(fname, 'r') as fd:
-            new_dict = json.load(fd)
+            raw_dict = json.load(fd)
         
-        for species, sig in new_dict.items():
-            # Turn series into into pd.Series instances:
-            sig['pitch'] = pd.Series(self.safe_eval(sig['pitch']))
-            sig['freq_mods'] = pd.Series(self.safe_eval(sig['freq_mods']))
-            sig['flatness'] = pd.Series(self.safe_eval(sig['flatness']))
-            sig['continuity'] = pd.Series(self.safe_eval(sig['continuity']))
-            new_dict[species] = sig 
+        new_dict = {key : SpectralTemplate.from_json(jstr)
+                    for key, jstr
+                    in raw_dict.items()
+                    }
 
         return new_dict
 
@@ -467,4 +469,5 @@ if __name__ == '__main__':
     QuadSigCalibrator(args.species,
                       args.data,
                       args.outdir 
-                      )
+                      ).calibrate_species()
+    

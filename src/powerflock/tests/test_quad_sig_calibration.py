@@ -9,6 +9,8 @@ from pathlib import Path
 import time
 import unittest
 
+from data_augmentation.utils import Utils
+import pandas as pd
 from powerflock.quad_sig_calibration import QuadSigCalibrator
 from result_analysis.charting import Charter
 
@@ -36,59 +38,30 @@ class QuadSigCalibrationTester(unittest.TestCase):
                                        cal_data_root=data_root)
 
         start_time = time.time()
-        sigs_dict = calibrator.calibrate_species()
+        templates = calibrator.calibrate_species()
         end_time = time.time()
         
         print(timedelta(seconds=end_time - start_time))
 
-        scales_rounded = {key : round(val, 4) 
-                          for key, val 
-                          in sigs_dict['CMTOG'].items()
-                          if key in ['pitch_scale', 
-                                     'freq_mods_scale', 
-                                     'flatness_scale', 
-                                     'continuity_scale']
-                          }
+        sig1 = templates['CMTOG'][0]
+        scale_factors = sig1.scale_factors
+        scales_rounded = scale_factors.round(4)
         
-        expected_keys = [
-            'species',
-            'pitch',
-            'freq_mods',
-            'flatness',
-            'continuity',
-            'pitch_scale',
-            'freq_mods_scale',
-            'flatness_scale',
-            'continuity_scale',
-            ]
-        self.assertListEqual(list(sigs_dict['CMTOG'].keys()), expected_keys)
-        
-        expected_scales = {'pitch_scale': 0.0373,
-                           'freq_mods_scale': 0.5824,
-                           'flatness_scale': 0.0156,
-                           'continuity_scale': 3.2887
-                           }
-        
-        
+        expected_scales = pd.Series({'flatness': 0.0156,
+                                    'continuity': 3.2887,
+                                    'pitch': 0.0373,
+                                    'freq_mod': 0.5824
+                                    }, name='scale_factors')
 
-        self.assertDictEqual(scales_rounded, expected_scales)
+        Utils.assertSeriesEqual(scales_rounded, expected_scales)
 
-        # Read the sigs back from disk
+        # Read the templates back from disk:
+        
         sigs_fname = calibrator.signatures_fname
-        loaded_sigs = calibrator.sigs_json_load(sigs_fname)
+        loaded_templates = calibrator.sigs_json_load(sigs_fname)
+        sig2 = loaded_templates['CMTOG'][0]
         
-        loaded_sigs_rounded = {key : round(val, 4) 
-                               for key, val 
-                               in sigs_dict['CMTOG'].items()
-                               if key in ['pitch_scale', 
-                                          'freq_mods_scale', 
-                                          'flatness_scale', 
-                                          'continuity_scale']
-                               }
-        loaded_sigs_keys = list(loaded_sigs['CMTOG'].keys())
-        self.assertListEqual(loaded_sigs_keys, expected_keys)
-        self.assertDictEqual(loaded_sigs_rounded, expected_scales)
-        
+        self.assertTrue(sig2 == sig1)
 
     #------------------------------------
     # test_save_sig

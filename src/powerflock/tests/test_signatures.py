@@ -65,10 +65,10 @@ class Test(unittest.TestCase):
                                    columns=['flatness',
                                             'continuity',
                                             'pitch',
-                                            'freq_mods']
+                                            'freq_mod']
                                    )
         scale_factors = pd.Series([1,2,3,4],
-                                  index=['flatness', 'continuity', 'pitch', 'freq_mods'])
+                                  index=['flatness', 'continuity', 'pitch', 'freq_mod'])
         sig = Signature('CMTOG',
                         sig_values,
                         scale_factors
@@ -100,7 +100,7 @@ class Test(unittest.TestCase):
                                     columns=['flatness',
                                              'continuity',
                                              'pitch',
-                                             'freq_mods']
+                                             'freq_mod']
                                     )
         
         sig2_values = pd.DataFrame([[5,6,7,8],
@@ -109,14 +109,14 @@ class Test(unittest.TestCase):
                                     columns=['flatness',
                                              'continuity',
                                              'pitch',
-                                             'freq_mods']
+                                             'freq_mod']
                                     )
         
         scale_factors1 = pd.Series([1,2,3,4],
-                                   index=['flatness', 'continuity', 'pitch', 'freq_mods'])
+                                   index=['flatness', 'continuity', 'pitch', 'freq_mod'])
         
         scale_factors2 = pd.Series([5,6,7,8],
-                                   index=['flatness', 'continuity', 'pitch', 'freq_mods'])
+                                   index=['flatness', 'continuity', 'pitch', 'freq_mod'])
         
         sig1 = Signature('CMTOG',
                          sig1_values,
@@ -142,7 +142,6 @@ class Test(unittest.TestCase):
             template1 = SpectralTemplate.from_json_file(fname)
             
             self.assertTrue(template == template1)
-
 
     #------------------------------------
     # test_compute_species_templates

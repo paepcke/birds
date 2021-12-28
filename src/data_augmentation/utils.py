@@ -149,7 +149,7 @@ class Interval(dict):
 
     @classmethod
     def from_json(cls, jstr):
-        jdict = self.safe_eval(jstr)
+        jdict = Utils.safe_eval(jstr)
         self['low_val'] = jdict['low_val']
         self['high_val'] = jdict['high_val']
         self['step'] = jdict['step']
@@ -175,6 +175,12 @@ class Interval(dict):
 
     def __len__(self):
         return (self['high_val'] - self['low_val']) / self['step']
+
+    def __str__(self):
+        return f"<Interval {self['low_val']}/{self['high_val']}/{self['step']} {hex(id(self))}>"
+
+    def __repr__(self):
+        return self.__str__()
 
     def _materialize_series(self):
         self.the_series = [self['low_val']]
@@ -1605,58 +1611,124 @@ class Utils:
     #-------------------
     
     @classmethod
-    def df_eq(cls, df1, df2):
+    def df_eq(cls, df1, df2, decimals=5):
         '''
+        Return True if all elements of two pd.DataFrames
+        are equal. Numpy/Pandas do not have support for
+        the decimal data type, which would avoid non-equality
+        due to floating point data types. The decimals arg
+        specifies to which significance equality is to be
+        tested. 
         
-        :param df1:
-        :type df1:
-        :param df2:
-        :type df2:
+        :param df1: first df
+        :type df1: pd.DataFrame
+        :param df2: second df
+        :type df2: pd.DataFrame
         :return True if all elements, the index and
             the columns are equal
         :rtype bool
         '''
+
+        # Check the index
+        if cls.dtype_numeric(df1.index.dtype):
+            # Both must be numeric:
+            if not cls.dtype_numeric(df2.index.dtype):
+                return False
+            if (df1.index.values.round(decimals) != df2.index.values.round(decimals)).any():
+                return False
+        else:
+            # Non-numeric index:
+            if (df1.index != df2.index).any():
+                return False
         
-        # Test that all elements are pairwise equal.
-        # The test raises ValueError if either the
-        # index or columns are different:
+        # Check the columns:    
+        if cls.dtype_numeric(df1.columns.dtype):
+            if not cls.dtype_numeric(df2.columns.dtype):
+                return False
+            if (df1.columns.values.round(decimals) != df2.columns.values.round(decimals)).any():
+                return False
+        else:
+            # Non numeric columns:
+            if (df1.columns != df2.columns).any():
+                return False
+            
+        # Check the values. Oddly, rounding properly 
+        # does nothing if the values are non-numeric:
         try:
-            return (df1 == df2).all().all()
+            return (df1.round(decimals) == df2.round(decimals)).all().all()
         except ValueError:
-            return False
+            # When index and/or cols are eq only b/c of
+            # rounding, exception thrown because "
+            #   "Can only compare identically-labeled DataFrame objects"
+            if df1.apply(Utils.dtype_numeric).all() and \
+               df2.apply(Utils.dtype_numeric).all():
+                return (df1.values.round(decimals) == df2.values.round(decimals)).all().all()
+            else:
+                return (df1.values == df2.values).all().all()
+        
+
+        # if cls.dtype_numeric(df1.dtypes.dtype):
+        #     if not cls.dtype_numeric(df2.dtypes.dtype):
+        #         return False
+        #     return (df1.values.round(decimals) == df2.values.round(decimals)).all().all()
+        # else:
+        #     return (df1.values == df2.values).all().all()
 
     #------------------------------------
     # series_eq
     #-------------------
     
     @classmethod
-    def series_eq(cls, ser1, ser2):
+    def series_eq(cls, ser1, ser2, decimals=5):
         '''
-        Return True if both
+        Return True if all elements of two pd.Series
+        are equal. Numpy/Pandas do not have support for
+        the decimal data type, which would avoid non-equality
+        due to floating point data types. The decimals arg
+        specifies to which significance equality is to be
+        tested. 
+
         :param ser1: first series
         :type ser1: pd.Series
         :param ser2: second series
         :type ser2: pd.Series
+        :param decimals: number of decimals to which 
+            equality is tested
+        :type decimals: int
         :return True if all elements, the index and
             series names are equal
         :rtype bool
         '''
+
         
-        # Test that all elements are pairwise equal.
-        # The test raises ValueError if the index 
-        # values are different. But the name needs
-        # separate testing:
-        try:
-            return (ser1 == ser2).all() and ser1.name == ser2.name
-        except ValueError:
+
+        if ser1.name != ser2.name:
             return False
+        
+        if cls.dtype_numeric(ser1.index.dtype):
+            # Both must both be numeric:
+            if not cls.dtype_numeric(ser2.index.dtype):
+                return False
+            if (ser1.index.values.round(decimals) != ser2.index.values.round(decimals)).any():
+                return False
+        else:
+            # Non-numeric index; just compare:
+            if (ser1.index != ser1.index).any():
+                return False
+
+        if cls.dtype_numeric(ser1.dtype):
+            if not cls.dtype_numeric(ser2.dtype):
+                return False
+            return (ser1.round(decimals) == ser2.round(decimals)).all().all()
+        else:
+            return (ser1.values == ser2.values)
 
     #------------------------------------
     # assertSeriesEqual
     #-------------------
     
     @classmethod
-    def assertSeriesEqual(cls, ser1, ser2):
+    def assertSeriesEqual(cls, ser1, ser2, decimals=5):
         '''
         Raise exception if ser1 and ser2 differ in index,
         name or content. Note that two Series may be equal
@@ -1670,16 +1742,23 @@ class Utils:
         :type ser1: pd.Series
         :param ser2: second series
         :type ser2: pd.Series
+        :param decimals: number of decimals to which 
+            equality is tested
+        :type decimals: int
         :raises AssertionError on discrepancies
         '''
-        
-        if (ser1.index != ser2.index).any():
-            raise AssertionError(f"Index ser1 differ from index ser2")
+
+        if cls.dtype_numeric(ser1.index.dtype):
+            if (ser1.index != ser2.index).any():
+                raise AssertionError(f"Index ser1 differs from index ser2")
+        else:
+            if (ser1.index.values.round(decimals) != ser2.index.values.round(decimals)).any():
+                raise AssertionError(f"Index ser1 differs from index ser2")
             
         if (ser1.name != ser2.name):
             raise AssertionError(f"Name of ser1 differs from name of ser2")
         
-        if not (ser1 == ser2).all():
+        if not cls.series_eq(ser1, ser2, decimals):
             raise AssertionError(f"Values of ser1 differ from values of ser2")
         
         return
@@ -1691,7 +1770,7 @@ class Utils:
     #-------------------
     
     @classmethod
-    def assertDataframesEqual(cls, df1, df2):
+    def assertDataframesEqual(cls, df1, df2, decimals=5):
         '''
         Raise exception if df1 and df2 differ in index,
         columns or content. Note that two DataFrames may be equal
@@ -1705,16 +1784,27 @@ class Utils:
         :type df1: pd.DataFrame
         :param df2: second series
         :type df2: pd.DataFrame
+        :param decimals: number of decimals to which 
+            equality is tested
+        :type decimals: int
         :raises AssertionError on discrepancies
         '''
         
-        if (df1.index != df2.index).any():
-            raise AssertionError(f"Index df1 differ from index df2")
-            
-        if (df1.columns != df2.columns).any():
-            raise AssertionError(f"Columns df1 differ from columns df2")
+        if cls.dtype_numeric(df1.index.dtype):
+            if (df1.index != df2.index).any():
+                raise AssertionError(f"Index df1 differs from index df2")
+        else:
+            if (df1.index.values.round(decimals) != df2.index.values.round(decimals)).any():
+                raise AssertionError(f"Index df1 differs from index df2")
+
+        if cls.dtype_numeric(df1.columns.dtype):
+            if (df1.columns.values.round(decimals) != df2.columns.values.round(decimals)).any():
+                raise AssertionError(f"Columns df1 differ from columns df2")
+        else:
+            if (df1.columns != df2.columns).any():
+                raise AssertionError(f"Columns df1 differ from columns df2")
         
-        if not (df1 == df2).all().all():
+        if not cls.df_ex(df1, df2, decimals):
             raise AssertionError(f"Values of df1 differ from values of df2")
         
         return
@@ -1854,6 +1944,23 @@ class Utils:
                    {}                        # No additional func
                    )
         return res
+
+    #------------------------------------
+    # dtype_numeric
+    #-------------------
+    
+    @classmethod
+    def dtype_numeric(cls, the_dtype):
+        '''
+        Return True if the given numpy dtype
+        is any of numeric types, such as float, float32,
+        etc.
+
+        :param the_dtype: the numpy dtype to test
+        :type the_dtype: np.dtype
+        '''
+        return np.issubdtype(the_dtype, np.number)
+
 
 # -------------------- Class ProcessWithoutWarnings ----------
 

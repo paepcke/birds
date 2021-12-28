@@ -285,7 +285,7 @@ class SignalAnalysisTester(unittest.TestCase):
         spectral_centroids = pd.DataFrame([])
         
         for clip in cmtog_clips_xc1['CMTOG']:
-            centroid = SignalAnalyzer.spectral_centroid_each_timeframe(clip, sr)
+            centroid = SignalAnalyzer.spectral_measures_each_timeframe(clip, sr)
             spectral_centroids = spectral_centroids.append(centroid, ignore_index=True)
 
         # Replace the nan from unequal
@@ -518,89 +518,6 @@ class SignalAnalysisTester(unittest.TestCase):
 
 
     #------------------------------------
-    # test_matching_one_sig
-    #-------------------
-    
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    def test_matching_one_sig(self):
-
-        onecall_tmplt = copy.deepcopy(self.templates[0])
-        onecall_tmplt.signatures = [onecall_tmplt[0]]
-        # Force re-calc of mean sig:
-        onecall_tmplt.cached_mean_sig = None
-        sig1 = onecall_tmplt[0]
-        
-        # Take the clip that underlies this
-        # one sig, and get its clip signature:
-        sig_times_walltime = sig1.as_walltime().index
-        rec1_audio, _sr = SoundProcessor.load_audio(self.sel_rec_cmto_xc1)
-        clip = SoundProcessor.extract_clip(rec1_audio,
-                                           sig_times_walltime[0], 
-                                           sig_times_walltime[-1])
-        
-        details_df, summary = SignalAnalyzer.match_probability(clip, onecall_tmplt)
-        
-        expected_res_df = pd.DataFrame([
-           {
-            'n_samples'   : 43136.0,
-            'probability' : 1.000000,
-            'sig_id'      : 1.0,
-            'start'       : 0.0,
-            'stop'        : 43136.0
-            },
-           {
-            'n_samples'   : 43136.0,
-            'probability' : 0.179206,
-            'sig_id'      : 1.0,
-            'start'       : 10784.0,
-            'stop'        : 53920.0
-            },
-           {
-            'n_samples'   : 43136.0,
-            'probability' : 0.115142,
-            'sig_id'      : 1.0,
-            'start'       : 21568.0,
-            'stop'        : 64704.0
-            },
-           {
-            'n_samples'   : 43136.0,
-            'probability' : 0.112187,
-            'sig_id'      : 1.0,
-            'start'       : 32352.0,
-            'stop'        : 75488.0
-            }])
-
-
-        details_df['probability'] = details_df['probability'].round(6)
-        self.assertTrue((details_df == expected_res_df).all().all())
-        
-        expected_summary = pd.Series({
-                         'min_prob'      :  0.112187,
-                         'max_prob'      :  1.000000,
-                         'med_prob'      :  0.147174,
-                         'best_fit_prob' :  1.000000
-                         })
-
-        summary = summary.round(6)
-        
-        self.assertTrue((summary == expected_summary).all())
-
-    #------------------------------------
-    # test_matching_multiple_sigs
-    #-------------------
-    
-    #*********** REVISIT THIS
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    def test_matching_multiple_sigs(self):
-
-        template11 = copy.deepcopy(self.templates[0])
-        rec1, _sr = SoundProcessor.load_audio(self.sel_rec_cmto_xc1)
-        details_df, summary = SignalAnalyzer.match_probability(rec1, template11)
-        pow_res = PowerResult(details_df, summary, 'CMTOG')
-        pow_res.add_overlap_and_truth(self.sel_tbl_cmto_xc1)
-        print('foo')
-
-    #------------------------------------
     # test_power_grid_search 
     #-------------------
     
@@ -691,7 +608,7 @@ class SignalAnalysisTester(unittest.TestCase):
 
             try:
                 aud_snip = audio[start_idx:end_idx]
-                clip_sig = SignalAnalyzer.spectral_centroid_each_timeframe(aud_snip)
+                clip_sig = SignalAnalyzer.spectral_measures_each_timeframe(aud_snip)
                 # Make clip sig same length
                 clip_sig.index = [round(time_tick, 2) 
                                   for time_tick 

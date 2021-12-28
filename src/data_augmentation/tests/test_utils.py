@@ -491,7 +491,7 @@ class Test(unittest.TestCase):
     # test_df_extract_rect
     #-------------------
 
-    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_df_extract_rect(self):
         
         # Make a df:
@@ -542,6 +542,47 @@ class Test(unittest.TestCase):
         
         expected = pd.DataFrame([[12], [16]], index=[2000,1000], columns=[20.5])
         Utils.assertDataframesEqual(rect, expected)
+
+    #------------------------------------
+    # test_df_eq
+    #-------------------
+    
+    #********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_df_eq(self):
+        
+        # Index numeric:
+        df1 = pd.DataFrame([[1,2,3],[4,5,6]], index=[0.1234, 0.2345])
+        df2 = df1.copy()
+        self.assertTrue(Utils.df_eq(df1, df2))
+        
+        # Index numeric, but diff in last dig, yet decimal saves it:
+        df2.index = pd.Index([0.1234, 0.2347])
+        self.assertFalse(Utils.df_eq(df1, df2))
+        self.assertTrue(Utils.df_eq(df1, df2, decimals=2))
+
+        # Cols numeric:
+        df1 = pd.DataFrame([[1,2,3],[4,5,6]], columns=[0.1234, 0.2345, 0.7890])
+        df2 = df1.copy()
+        df2.columns = pd.Index([0.1234, 0.2347, 0.7890])
+        self.assertFalse(Utils.df_eq(df1, df2))
+        self.assertTrue(Utils.df_eq(df1, df2, decimals=2))
+        
+        # Number part, index, and col different, but saved by decimal:
+        df1 = pd.DataFrame([[1.1234,2.1234,3.1234],[4,5,6]], 
+                           index=[0.1234, 0.2345],
+                           columns=[0.1234, 0.2345, 0.7890])
+        df2 = df1.copy()
+        self.assertTrue(Utils.df_eq(df1, df2))
+        df2.iloc[0,1] = 2.1236
+        df2.index = pd.Index([0.1234, 0.2347])
+        df2.columns = pd.Index([0.1234, 0.2345, 0.7899])
+        self.assertFalse(Utils.df_eq(df1, df2))
+        self.assertTrue(Utils.df_eq(df1, df2, decimals=2))
+        
+        #*******TEST Non-numeric index/columns
+        #*******TEST series_eq
+        # Adjust assertDfEqual/assertSerEqual. 
+
 
 # ---------------- Main --------------
 if __name__ == "__main__":

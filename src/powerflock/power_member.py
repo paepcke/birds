@@ -133,7 +133,7 @@ class PowerMember:
         # --------- Argument Checks -----------
         # Init slide width:
         if the_slide_width_time is None:
-            the_slide_width_time = SignalAnalyzer.SIGNATURE_MATCH_SLIDE_TIME
+            the_slide_width_time = SignalAnalyzer.SIGNATURE_MATCH_SLIDE_FRACTION
 
         # Figure out what client passed for spectral template(s):
         if type(spectral_template_info) == SpectralTemplate:
