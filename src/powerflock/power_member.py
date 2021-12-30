@@ -12,18 +12,19 @@ import datetime
 import os
 
 import librosa
+from logging_service.logging_service import LoggingService
 import sklearn
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.exceptions import NotFittedError
-from sklearn.metrics import PrecisionRecallDisplay
+#from sklearn.metrics import PrecisionRecallDisplay
 
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import Utils, Interval
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from powerflock.signal_analysis import SignalAnalyzer, TemplateSelection, \
-    SpectralTemplate
+from powerflock.signal_analysis import SignalAnalyzer, TemplateSelection
+from powerflock.signatures import SpectralTemplate
 
 
 #from result_analysis.charting import Charter
@@ -128,6 +129,7 @@ class PowerMember:
         :type template_selection:
         '''
 
+        self.log = LoggingService()
         self.experiment = experiment
         
         # --------- Argument Checks -----------
@@ -278,6 +280,7 @@ class PowerMember:
         if type(full_audio) == str:
             if not os.path.exists(full_audio):
                 raise FileNotFoundError(f"Could not find audio file {full_audio}")
+            self.log.info(f"Loading audio {full_audio}")
             full_audio, sr = SoundProcessor.load_audio(full_audio)
 
         if len(full_audio) < self.min_call_len:
@@ -298,99 +301,6 @@ class PowerMember:
         self.output_ready = True
         return self.power_result
     
-    #------------------------------------
-    # calibrate_probabilities
-    #-------------------
-    
-    def calibrate_probabilities(self,
-                                reference_recording_info,
-                                reference_sel_tbl_info,
-                                plot_pr=False
-                                ):
-        '''
-        Compute weights to guide how much the probabilities
-        from this PowerMember template's signatures should be used when
-        providing a probability output for any given time in a recording.
-        
-        Passed in are a recording and matching selection table.
-        
-        The reference_sel_tbl_info can be the path to the selection table
-        that corresponds to the reference_recording_info. Or it may be 
-        a list of Interval instances that define times when a call was 
-        present in the reference recording.
-        
-        The intent is that this method is called once, and
-        that the weights are made persistent. 
-        
-        :param reference_recording_info: recording (path or np_array) that
-            matches the reference_sel_tbl_info
-        :type reference_recording_info: {str | np.ndarray} 
-        :param reference_sel_tbl_info: path to selection table, or
-            list of Interval instances with times of call occurrences
-        :type reference_sel_tbl_info: {str | [Interval]}
-        :param plot_pr: whether or not to plot a pr curve
-        :type plot_pr: bool
-        '''
-
-        if type(reference_recording_info) == str:
-            if not os.path.exists(reference_recording_info):
-                raise FileNotFoundError(f"Cannot find {reference_recording_info}")
-            rec, sr = SoundProcessor.load_audio(reference_recording_info)
-
-        if type(reference_sel_tbl_info) == str:
-            call_intervals = Utils.get_call_intervals(reference_sel_tbl_info)
-        else:
-            call_intervals = reference_sel_tbl_info
-            
-        # Compute probs for all sigs over the given recording:
-        pwr_res = self.compute_probabilities(rec, sr)
-        pwr_res.add_overlap_and_truth(call_intervals)
-        
-        # For convenience:
-        res_probs = pwr_res.prob_df
-        
-        # Partition the all-sigs prob_df into multiple
-        # dfs, one for each signature:
-        gb = res_probs.groupby(by='sig_id')
-        df_list = list(gb)
-        
-        # Build a new df like:
-        # 
-        #              prob_1    prob_2  ... Truth
-        # start_time
-        #    0.1        0.3       0.6         True
-        #    0.2        0.6       0.2         False
-        #                 ...
-        
-        # Get start_time and Truth of just the first sig_id;
-        # they are the same for all the sig_ids:
-        start_times = res_probs[res_probs['sig_id'] == 1]['start_time']
-        truth       = res_probs[res_probs['sig_id'] == 1]['Truth']
-        truth.index = start_times
-        sig_results = pd.DataFrame(truth, index=start_times, columns=['Truth'])
-        for sig_id, df in df_list:
-            # Go through each signature's probabities over time,
-            # and adjoin them to sig_results:
-            prob = df.probability
-            # Must set index so that indexes will match
-            # when adjoining:
-            prob.index = start_times
-            sig_results[f"prob_{sig_id}"] = df.probability
-
-        if plot_pr:
-            # Pull out cols that start with 'prob_':
-            sig_res_col_names = [nm for nm in sig_results.columns if nm.startswith('prob_')]
-            prob_cols = sig_results[sig_res_col_names]
-            for sig_num, col in enumerate(prob_cols):
-                probs = prob_cols[col]
-                PrecisionRecallDisplay.from_predictions(
-                    y_true=sig_results.Truth, 
-                    y_pred=probs,
-                    ax=plt.gca(),
-                    name=f"sig{sig_num}")
-
-        print('foo')
-
 
     # ----------------------- Visualizations --------------------
 

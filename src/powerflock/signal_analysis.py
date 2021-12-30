@@ -7,10 +7,10 @@ from collections import namedtuple
 from enum import Enum
 import multiprocessing
 import os
-from pathlib import Path
 import warnings
 
 import librosa
+from logging_service.logging_service import LoggingService
 from scipy.signal import argrelextrema
 
 from data_augmentation.sound_processor import SoundProcessor
@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 from multitaper.multitaper_spectrogram_python import MultitaperSpectrogrammer
 import numpy as np
 import pandas as pd
-from powerflock.signatures import SpectralTemplate, Signature
+from powerflock.signatures import Signature
 from result_analysis.charting import Charter
 
 
@@ -98,6 +98,8 @@ class SignalAnalyzer:
     
     SIGNATURE_MATCH_SLIDE_FRACTION = 0.1
     '''Fraction of signature length to slide test clips before each match check'''
+    
+    log = LoggingService()
 
     #------------------------------------
     # Constructor 
@@ -542,31 +544,42 @@ class SignalAnalyzer:
         # the frequencies that are overtones at that column's
         # timeframe:
         contour_mask = cls.contour_mask(spec_src)
-        # Get Series in which each element is a series
-        # of overtone frequencies. The sub-series do not 
-        # generally have the same length; like:
-        #
-        #      time1:  [500, 1000, 2000, ...],
-        #      time2:  [430, 869]
         
-        overtones = contour_mask.apply(lambda col: col[col==True].index, axis='rows')
-        overtone_df = pd.DataFrame(overtones.tolist(), index=overtones.index)
+        # Set spectral magnitudes that are not part of
+        # a contour to negative infinity:
+        masked_spec_df = spec_df.where(~contour_mask, -np.inf)
+        # Discover the frequencies of local maxima in magnitudes.
+        # Done by getting the index values of the local maxima one
+        # column at a time. Order is number of neighbor points
+        # to consider for maxima discovery:
+        extrema_idxs_row_wise, extrema_idxs_col_wise = \
+            argrelextrema(masked_spec_df.values, np.greater, order=3)
 
-        def local_maxima(spike_freq_idxs, data):
-            vertical_slice = data.loc[spike_freq_idxs[~spike_freq_idxs.isna()], spike_freq_idxs.name]
-            maxima_idxs = argrelextrema(vertical_slice.values, np.greater, order=3)[0]
-            return spike_freq_idxs[maxima_idxs]
+        # If we were to pair the extrema indices for rows and cols,
+        # we would get:
+        #     list(zip(extrema_idxs_row_wise, extrema_idxs_col_wise))
+        #   --> [(6, 258),    # (index-of-row, index-of-col)
+        #        (11, 257), 
+        #        (11, 258),
+        #           ... for 
+        # Thus: frequency at masked_spec_df.index[6] has a peak
+        # at timeframe number 258. Same for frequency at masked_spec_df.index[11]
         
-        peak_freqs = overtone_df.apply(local_maxima, axis='columns', args=(spec_df,))
-        freq_diffs = pd.DataFrame(peak_freqs.diff(axis=0))
-        # Some spec frames will have no contours at all,
-        # generating one of two runtime warnings. Temporarily
-        # suppress these:
-        with warnings.catch_warnings():
-            warnings.filterwarnings(action='ignore', category=RuntimeWarning, message='All-NaN slice encountered')
-            warnings.filterwarnings(action='ignore', category=RuntimeWarning, message='Mean of empty slice')
-            
-            harm_pitch = np.abs(freq_diffs.median(axis=1)) / 2
+        # Organize the above into a 2-col df:
+        #       timeframe_idx, frequency 
+        
+        peak_freq_df = pd.DataFrame({'timeframe_idx' : extrema_idxs_col_wise,
+                                     'freq' : spec_df.index[extrema_idxs_row_wise]}
+                                     )
+
+        # Get peak frequencies within each timeframe (i.e. column):
+        timeframe_groups = peak_freq_df.groupby('timeframe_idx')
+        
+        # Within each timeframe (a.k.a column, a.k.a. group),
+        # compute the median difference between frequencies
+        # with peaks. The division by 2 is because we can only
+        # observe the odd harmonics, since the even ones cancel out: 
+        harm_pitch = np.abs(timeframe_groups.freq.apply(np.diff).apply(np.median)) / 2.
         
         #harm_pitch = peak_freqs.apply(lambda freqs: np.abs(np.median(np.diff(freqs[~freqs.isna()]))) / 2,
         #                                 axis='columns')
@@ -584,7 +597,7 @@ class SignalAnalyzer:
         derivatives in the frequency and time directions
         at each point. Use trigonometry to compute the 
         true direction angle of the derivative for each point.
-        Return an pd Series with the median of the absolute
+        Return a pd Series with the median of the absolute
         value of the angles at each timeframe (column). 
 
         :param spec_src: audio file or spectrogram.
@@ -634,48 +647,31 @@ class SignalAnalyzer:
         v0_vecs = v0.reshape(num_freqs*num_timeframes, 2)
         v1_vecs = v1.reshape(num_freqs*num_timeframes, 2)
         
-        v0_v1_pairs = np.stack((v0_vecs, v1_vecs), axis=1)
         # Pairwise compute the dot product of vectors v0, v1.
-        # The np.apply_along_axis() returns an additional
-        # column, which we chop off with the trailing
-        # "[:,0]". We end up with a long 1d array of the
-        # dot products:
-        dot_prods = np.apply_along_axis(lambda two_vecs: np.dot(two_vecs[0], two_vecs[1]), 
-                                        axis=1, 
-                                        arr=v0_v1_pairs)[:,0]
+        # Since v0's second element is 0, the computation
+        # turns from: 
+        #     v0_vecs[:,0] * v1_vecs[:,0] +  v0_vecs[:,1] * v1_vecs[:,1])
+        # to:
+        #      v0_vecs[:,0] * v1_vecs[:,0]
+        dot_prods = v0_vecs[:,0] * v1_vecs[:,0]
         
         # Similarly with the determinants of the vec pairs.
-        # np.apply_along_axis() seemed to need each of two paired vectors
-        # as a row [x0,y0, x1,y1]. So need to reshape:
+        # Determinant of:
+        #    | a    b|
+        #    | c    d|
+        # is:
+        #    ad-bc
+        # or:
+        #    v0_vecs[0] * v1_vecs[1] - v0_vecs[1] * v1_vecs[0]
         #
-        #    [
-        #      [[x0,y0,], [x1,y1,]]
-        #      [[x0,y0,], [x1,y1,]]
-        #         ...
-        #    ]
-        # to:
-        #     [
-        #       [x0,y0,x1,y1,],
-        #       [x0,y0,x1,y1,]
-        #          ...
-        #    ]
-        # I *know* there is a more direct way; I couldn't work it out:
-        num_vec_pairs, _dim1, _dim2 = v0_v1_pairs.shape
-        v0_v1_pairs_flatter = v0_v1_pairs.reshape(num_vec_pairs, 4)
+        # Since v0_vec[1] == 0, this reduces to:
+        #
+        #    determinants = ad, or v0_vecs[:,0] * v1_vecs[:,1] 
         
-        determinants = np.apply_along_axis(lambda two_vecs: np.linalg.det([[two_vecs[0], two_vecs[1]], 
-                                                                           [two_vecs[2], two_vecs[3]]]), 
-                                                                           axis=1, arr=v0_v1_pairs_flatter)
-        
+        determinants = v0_vecs[:,0] * v1_vecs[:,1]
         # Need to apply arctan to determinant/dot-product pairs.
-        # So, combine them pairwise...
-        det_dot_pairs = np.stack([determinants, dot_prods], axis=1)
-        # ... and get the angles in degrees (rather than radians):
-        angles = np.apply_along_axis(lambda determinant_dot_prod_pair: 
-                                        np.degrees(np.math.atan2(determinant_dot_prod_pair[0], 
-                                                                 determinant_dot_prod_pair[1])),
-                                         axis=1, 
-                                         arr=det_dot_pairs)
+        
+        angles = np.degrees(np.arctan2(determinants, dot_prods))
 
         # Turn back into shape of original spectrogram:
         angles_right_shaped = angles.reshape(num_freqs, num_timeframes)
@@ -893,13 +889,11 @@ class SignalAnalyzer:
 
         # Each measure makes a col:
         snip_results = pd.concat([flatness, continuity, pitch, freq_mod], axis=1)
-        # Scale the measures:
-        snip_results = snip_results.mul(sig.scale_factors, axis=1)
         
         field_recording_sig = Signature(
             sig.species,
             snip_results,
-            sig.scale_factors,
+            scale_info=sig.scale_info,
             start_idx=spec_snip.columns[0],
             end_idx=spec_snip.columns[-1],
             fname='field-recording',
@@ -993,6 +987,39 @@ class SignalAnalyzer:
         return spec_df
 
     #------------------------------------
+    # raven_spectro_duration
+    #-------------------
+    
+    @classmethod
+    def raven_spectro_duration(cls, spec, extra_granularity=False):
+        '''
+        Compute time duration of a given spectrogram.
+        The spectrogram is assumed to have been computed
+        via STFT parameters used in raven_spectro_duration().
+        
+        The extra_granularity argument must match the one used
+        when the spectrogram was created.
+        
+        :param spec: spectrogram to examine
+        :type spec: pd.DataFrame
+        :param extra_granularity: whether or not the time
+            granularity was enhanced when the spectrogram
+            was created
+        :type extra_granularity: bool
+        :return: time in fractional seconds
+        :rtype: float
+        '''
+        
+        if extra_granularity:
+            hop_length = 256
+        else:
+            hop_length = 512
+            
+        _num_freqs, num_timeframes = spec.shape
+        return num_timeframes * hop_length / 22050 
+
+
+    #------------------------------------
     # multitaper_spectrogram
     #-------------------
     
@@ -1004,6 +1031,8 @@ class SignalAnalyzer:
                                plot=False
                                ):
         '''
+        SOME DOUBT ABOUT CORRECTNESS!
+        
         Given an np.ndarray audio signal, or the path
         to an audio file, return a spectrogram constructed
         by the multitaper method. For usage example, see
@@ -1257,10 +1286,11 @@ class SignalAnalyzer:
 
         passband = spectral_template.bandpass_filter
         
+        cls.log.info(f"Creating spectrogram")
         spec_df = SignalAnalyzer.raven_spectrogram(audio, extra_granularity=True)
         
         power_df = spec_df ** 2
-        num_freqs, num_frames = power_df.shape
+        _num_freqs, num_frames = power_df.shape
 
         #sr = spectral_template[0].sr
         #if type(audio) != pd.Series:
@@ -1280,9 +1310,10 @@ class SignalAnalyzer:
         # Match against all of the template's sigs:
         for sig in spectral_template.signatures:
             sig_id += 1
-            
+            cls.log.info(f"Matching against sig {sig_id}")
             passband = sig.bandpass_filter
             if passband is not None:
+                cls.log.info(f"Applying bandpass [{passband['low_val']},{passband['high_val']}]")
                 power_df_clipped = SignalAnalyzer.apply_bandpass(passband, 
                                                                  power_df, 
                                                                  extract=sig.extract)
@@ -1295,8 +1326,12 @@ class SignalAnalyzer:
             # sig to the right between each measurement. This
             # is a fraction of the signature width:
             num_sample_slides = int(slide_width_time * sig_width_samples)
-            # Create subclips to match the present signature:
-            for start_idx in np.arange(0, num_frames, num_sample_slides):
+            # Create subclips that match the width of the present signature;
+            # the subtraction of num_sample_slides ensures
+            # that we don't slide beyond the spectrogram:
+            for start_idx in np.arange(0, 
+                                       num_frames-num_sample_slides, 
+                                       num_sample_slides):
                 # Take snippet of same width each time:
                 end_idx = start_idx + sig_width_samples
                 try:
@@ -1311,8 +1346,9 @@ class SignalAnalyzer:
                     #********** COMPUTE PROB CHANGES NOW
                     sig_dist = clip_sig.distance(sig)
                     res_df = res_df.append({
-                        'start' : start_idx,
-                        'stop'  : end_idx,
+                        'start_idx' : start_idx,
+                        'stop_idx'  : end_idx,
+                        'start_time': start_idx * cls.hop_length / cls.sr,
                         'n_samples' : sig_width_samples,
                         'distance' : sig_dist, 
                         'sig_id': sig_id
@@ -1323,7 +1359,8 @@ class SignalAnalyzer:
                     # Process next signature
                     break
 
-            
+        cls.log.info(f"Done matching snippets against all {sig_id} signatures")
+
         # Create the summary:
         min_prob = res_df['probability'].min()
         max_prob = res_df['probability'].max()

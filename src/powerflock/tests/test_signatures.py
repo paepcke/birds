@@ -92,7 +92,7 @@ class Test(unittest.TestCase):
     # test_dumps_template
     #-------------------
     
-    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_dumps_template(self):
         sig1_values = pd.DataFrame([[1,2,3,4],
                                     [0.1, 0.2, 0.3, 0.4]],
@@ -190,10 +190,7 @@ class Test(unittest.TestCase):
         mean_first_els = np.mean([sig[0] for sig in template.signatures])
         self.assertAlmostEqual(mean_sig[0], mean_first_els, places=3)
 
-    def testName(self):
-        pass
-
-
+# -------------------- Main ----------
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']
     unittest.main()

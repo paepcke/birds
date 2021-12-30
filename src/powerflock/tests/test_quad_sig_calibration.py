@@ -44,14 +44,14 @@ class QuadSigCalibrationTester(unittest.TestCase):
         print(timedelta(seconds=end_time - start_time))
 
         sig1 = templates['CMTOG'][0]
-        scale_factors = sig1.scale_factors
+        scale_factors = sig1.scale_info
         scales_rounded = scale_factors.round(4)
         
         expected_scales = pd.Series({'flatness': 0.0156,
                                     'continuity': 3.2887,
                                     'pitch': 0.0373,
                                     'freq_mod': 0.5824
-                                    }, name='scale_factors')
+                                    }, name='scale_info')
 
         Utils.assertSeriesEqual(scales_rounded, expected_scales)
 

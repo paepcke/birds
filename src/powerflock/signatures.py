@@ -467,7 +467,7 @@ class Signature:
     def __init__(self,
                  species, 
                  sig_values,
-                 scale_factors,
+                 scale_info=None,
                  sr=22050, 
                  start_idx=0, 
                  end_idx=None, 
@@ -487,15 +487,27 @@ class Signature:
         from which the call was lifted. Columns are expected
         to be ['flatness', 'continuity', 'pitch', 'freq_mod'].  
         
-        The scale_factors consists of four values: the
-        factors by which raw measures of spectral flatness,
-        spectral continuity, pitch, and frequency modulation
-        are multiplied to turn them into comparable quantities.
-        The scales are derived from median distance from mean
-        of the respective measures taken from a set of (~10)
-        vocalizations. The argument is expected to be a pd.Series
-        with index ['flatness', 'continuity', 'pitch', 'freq_mod'],
-        and name 'scale_factors'.
+        
+        NOTE ABOUT scale_info: if provided it is assumed that the
+                   the passed in sig df has been normalized with
+                   the given values. If this is not the case, pass
+                   None, and call method normalize_self() with the
+                   scale_info on the instance.
+                   
+        If provicded, the scale_info consists of a dict with four entries,
+        one each for flatness, continuity, pitch, and freq_mod.
+        Each of the corresponding values is a nested dict holding
+        the mean of the vocalizations across all calibration samples,
+        and the median distance from the mean:
+        
+               {'flatness' : {'mean' : 10,
+                              'standard_measure' : 2},
+                'continuity':{'mean' : ...,
+                              'standard_measure' : ...}
+                              ...
+                }
+                
+        This information is used in the norm_to_sig() method.
 
         The start_idx/end_idx are the indices to the clip samples
         in the full recording from which the clip is lifted.
@@ -505,10 +517,10 @@ class Signature:
         :param sig_values: spectral measures flatness,
             continuity, pitch, and frequency modulationb.
         :type sig_values: pd.DataFrame
-        :param scale_factors: scale factors derived from median
+        :param scale_info: scale factors derived from median
             distance from mean of pitch, frequency modulation,
             spectral flatness, and spectral continuity.
-        :type scale_factors: pd.Series
+        :type scale_info: pd.Series
         :param sr: sample rate
         :type sr: int
         :param start_idx: index into the full recording's samples
@@ -542,16 +554,25 @@ class Signature:
         :type extract: bool
         '''
 
+        # Until we know better, assume that the
+        # passed-in signature values are raw:
+        self.normalized = False
+        
         if type(sig_values) == pd.DataFrame:
             self.sig = sig_values
         else:
             raise TypeError(f"The spectral values must be a pd.DataFrame, not {type(sig_values)}")
 
-        if type(scale_factors) == pd.Series:
-            self.scale_factors = scale_factors
+        if scale_info is None:
+            # Leave signature values raw will
+            # normalize_self is called:
+            self.scale_info = None
         else:
-            raise TypeError(f"The scale factors must be a pd.Series, not {type(scale_factors)}")
-        
+            if type(scale_info) != dict:
+                raise TypeError(f"The scale factors must be a pd.Series, not {type(scale_info)}")
+            self.scale_info = scale_info
+            self.normalize_self(scale_info)
+
         if fname is not None:
             rec_fname = Path(fname).name
         else:
@@ -598,18 +619,77 @@ class Signature:
         :returns
         '''
         
-        # 
-        dist_over_time = np.mean(np.sqrt(np.nansum((self.sig - other.sig)**2, axis=1)) / 2.)
+        # The .values is required because the
+        # index of self.sig and other.sig will likely differ.
+        # Without the .value we get NaN whenever an index
+        # is mismatched:
+        dist_over_time = np.mean(np.sqrt(np.nansum((self.sig.values - other.sig.values)**2, axis=1)) / 2.)
         return dist_over_time
 
     #------------------------------------
     # norm_to_sig
     #-------------------
     
-    def norm_to_sig(self, arr):
-        ******
-
-
+    def norm_to_sig(self, val, measure_type):
+        '''
+        Given a number, pd.Series, pd.DataFrame, or
+        np.ndarray, element-wise normalize the value.
+        
+        The formula used is:
+        
+                    val - overall_mean
+                    -------------------
+                   median_dist_from_mean 
+        
+        Where overall_mean is the mean of values across all
+        calibration vocalizations, and median_dist_from_mean is
+        also computed across all calbration samples.
+        
+        The measure_type must be one of 'flatness', 'continuity', 
+        'pitch', or 'freq_mod'. The value is used to select the
+        proper overall_mean and median_dist_from_mean. 
+        
+        :param val: value to be normalized
+        :type val: {number | pd.Series | pd.DataFrame | np.ndarray}
+        :param measure_type: which kind of measure is to be normalized
+        :type measure_type: str
+        :return element-wise normalized value
+        :rtype {number | pd.Series | pd.DataFrame | np.ndarray}
+        '''
+        
+        try:
+            measure_info = self.scale_info[measure_type]
+        except KeyError:
+            raise ValueError(f"Measure type must be one of 'flatness', 'continuity', 'pitch', or 'freq_mod', not {measure_type}")
+        res = (val - measure_info['mean']) / measure_info['standard_measure']
+        return res
+        
+    #------------------------------------
+    # normalize_self
+    #-------------------
+    
+    def normalize_self(self, scale_info):
+        '''
+        
+        '''
+        if self.normalized:
+            raise RuntimeError("Already normalized")
+        
+        self.scale_info = scale_info
+        
+        normed_flatness   = self.norm_to_sig(self.sig['flatness'], measure_type='flatness')
+        normed_continuity = self.norm_to_sig(self.sig['continuity'], measure_type='continuity')
+        normed_pitch      = self.norm_to_sig(self.sig['pitch'], measure_type='pitch')
+        normed_freq_mod   = self.norm_to_sig(self.sig['freq_mod'], measure_type='freq_mod')
+        
+        new_sig = pd.DataFrame({'flatness' : normed_flatness,
+                                'continuity' : normed_continuity,
+                                'pitch' : normed_pitch,
+                                'freq_mod' : normed_freq_mod
+                                })
+        self.sig = new_sig
+        self.normalized = True
+        
     #------------------------------------
     # as_walltime
     #-------------------
@@ -689,18 +769,18 @@ class Signature:
         
         # Only save what we need, e.g. not the audio:
         recovery_dict = {
-
             "sig" : self.sig.to_json(),
-            "scale_factors" : self.scale_factors.to_json(),
+            "scale_info" : self.scale_info,
             "sr" : self.sr,
             "fname" : self.fname,
             "start_idx" : self.start_idx,
             "end_idx" : self.end_idx,
             "species" : self.species,
             "sig_id" : self.sig_id,
+            "normalized" : self.normalized,
             "freq_interval" : None if self.freq_interval is None else self.freq_interval.json_dumps(),
             "freq_span" : self.freq_span,
-            "bandpass_filter" : None if self.bandpass_filter is None else self.bandpass_filter.json_dumps()  
+            "bandpass_filter" : None if self.bandpass_filter is None else self.bandpass_filter.json_dumps()
             }
 
         return json.dumps(recovery_dict)
@@ -730,11 +810,6 @@ class Signature:
         except Exception as e:
             raise ValueError(f"Could not read signature df from string ({repr(e)})")
 
-        try:
-            scale_factors = pd.Series(Utils.safe_eval(jdict['scale_factors']))
-        except Exception as e:
-            raise ValueError(f"Could not read scale factors df from string ({repr(e)})")
-        
         freq_interval = jdict['freq_interval'] 
         if freq_interval is not None:
             freq_interval = Interval(*list(freq_interval.values()))
@@ -743,10 +818,17 @@ class Signature:
         if bandpass_filter is not None:
             bandpass_filter = Interval(*list(bandpass_filter.values()))
 
+        # Set scale_info to None when creating the
+        # instance to avoid re-normalizing a sig that
+        # was already normalized before saving:
+        
+        scale_info =jdict['scale_info']
+        normalized = jdict['normalized']
+
         sig_instance = Signature(
             jdict['species'],
             sig,
-            scale_factors,
+            scale_info=None,
             sr=jdict['sr'],
             start_idx=jdict['start_idx'],
             end_idx=jdict['end_idx'],
@@ -755,6 +837,12 @@ class Signature:
             freq_interval=freq_interval,
             bandpass_filter=bandpass_filter
             )
+        
+        sig_instance.normalized = normalized
+        sig_instance.scale_info = scale_info
+        if not normalized:
+            sig_instance.normalize_self(scale_info)
+        
         return sig_instance
 
 
@@ -833,7 +921,7 @@ class Signature:
         # Now the dataframes and Series:
         if not Utils.df_eq(self.sig, other.sig):
             return False
-        if not Utils.series_eq(self.scale_factors, other.scale_factors):
+        if not Utils.series_eq(self.scale_info, other.scale_factors):
             return False
 
         if self.bandpass_filter != other.bandpass_filter:

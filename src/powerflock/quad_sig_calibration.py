@@ -267,13 +267,11 @@ class QuadSigCalibrator:
                 index=['flatness', 'continuity', 'pitch', 'freq_mod']
                 ).transpose()
 
-            # Make a signature instance, setting scale_factors
-            # to an empty Series because we don't know those
-            # values yet:
+            # Make a signature instance, leaving the scale_info
+            # uninitialized, because we don't know that values yet:
             
             sig_inst = Signature(species=species,
                                  sig_values=sig,
-                                 scale_factors=pd.Series(dtype=np.float64),
                                  start_idx=nearest_spec_start_time,
                                  end_idx=nearest_spec_end_time,
                                  fname=sound_file,
@@ -302,25 +300,35 @@ class QuadSigCalibrator:
         continuity = pd.concat(continuity_list)
         pitch    = pd.concat(pitch_list)
         freq_mod  = pd.concat(freq_mod_list)
+        
+        flatness_mean = flatness.mean()
+        continuity_mean = continuity.mean()
+        pitch_mean = pitch.mean()
+        freq_mod_mean = freq_mod.mean()
 
         # Compute median distance from mean across
         # all calls; the '.item()' turns the resulting 
         # np.float64 into a Python native float:
-        
-        scale_factors = pd.Series([np.abs((flatness - flatness.mean()).median()).item(),
-                                   np.abs((continuity - continuity.mean()).median()).item(),
-                                   np.abs((pitch - pitch.mean()).median()).item(),
-                                   np.abs((freq_mod - freq_mod.mean()).median()).item(), 
-                                   ], index=['flatness', 'continuity', 'pitch', 'freq_mod'],
-                                   name='scale_factors')
+        scale_info = {
+            'flatness' : {'mean' : flatness_mean.item(),
+                          'standard_measure' : np.abs((flatness - flatness_mean).median()).item() 
+                          },
+            'continuity' : {'mean' : continuity_mean.item(),
+                            'standard_measure' : np.abs((continuity - continuity_mean).median()).item() 
+                            },
+            'pitch' : {'mean' : pitch_mean.item(),
+                       'standard_measure' : np.abs((pitch - pitch_mean).median()).item() 
+                       },
+
+            'freq_mod' : {'mean' : freq_mod_mean.item(),
+                        'standard_measure' : np.abs((freq_mod - freq_mod_mean).median()).item()
+                        }
+            }
         
         # Set these scale factors in all 
         # the signature instances we colleced:
         for sig_inst in sig_instance_list:
-            sig_inst.scale_factors = scale_factors
-            # Execute the scaling of the flatness, 
-            # continuity, pitch, and freq_mod values
-            sig_inst.sig = sig_inst.sig.mul(scale_factors, axis=1) 
+            sig_inst.normalize_self(scale_info)
 
         # Wrap the Signature instances in a 
         # SpectralTemplate:
