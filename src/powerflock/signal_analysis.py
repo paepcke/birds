@@ -548,7 +548,7 @@ class SignalAnalyzer:
         # Set spectral magnitudes that are not part of
         # a contour to negative infinity:
         masked_spec_df = spec_df.where(~contour_mask, -np.inf)
-        # Discover the frequencies of local maxima in magnitudes.
+        # Discover the frequencies of local magnitude maxima.
         # Done by getting the index values of the local maxima one
         # column at a time. Order is number of neighbor points
         # to consider for maxima discovery:
@@ -564,6 +564,9 @@ class SignalAnalyzer:
         #           ... for 
         # Thus: frequency at masked_spec_df.index[6] has a peak
         # at timeframe number 258. Same for frequency at masked_spec_df.index[11]
+        # NOTE: argrelextrema excludes results for columns of all equal values.
+        # So the extrema_idxs_col_wise may be missing some cols.
+        # we fill those in later:
         
         # Organize the above into a 2-col df:
         #       timeframe_idx, frequency 
@@ -579,11 +582,38 @@ class SignalAnalyzer:
         # compute the median difference between frequencies
         # with peaks. The division by 2 is because we can only
         # observe the odd harmonics, since the even ones cancel out: 
-        harm_pitch = np.abs(timeframe_groups.freq.apply(np.diff).apply(np.median)) / 2.
+        freq_diffs = timeframe_groups.freq.apply(np.diff)
+        # Remove empty lists created by np.diff at the edges
+        # of dataframes and series:
+        freq_diffs = freq_diffs[freq_diffs.apply(len) > 0]
+        harm_pitch = np.abs(freq_diffs.apply(np.median)) / 2.
         
-        #harm_pitch = peak_freqs.apply(lambda freqs: np.abs(np.median(np.diff(freqs[~freqs.isna()]))) / 2,
-        #                                 axis='columns')
+        # harm_pitch may be missing pitches for some
+        # timeframes (columns), because they only had 
+        # the same values (e.g. all 0). Give those a 
+        # median frequency of 0. First, discover the missing
+        # cols:
+        # set of col numbers that *should* be there:
+        spec_cols_idx_set = set(np.arange(0,len(spec_df.columns)))
+        # set of col numbers that are in fact there:
+        freq_diffs_idxs_set = set(freq_diffs.index)
+        # the missing ones:
+        missing_col_idxs = spec_cols_idx_set - freq_diffs_idxs_set
+        harm_pitch = harm_pitch.combine(pd.Series([0.0]*len(missing_col_idxs), 
+                                                  index=missing_col_idxs,
+                                                  dtype=float
+                                                  ),
+                                        max,
+                                        fill_value=0.0)
+        
+        # The diff() operation above naturally introduces
+        # nan values at the edges of the df to which it is
+        # applied. Set those to 0.0 as well:
+        
+        harm_pitch.fillna(0.0, inplace=True)
         harm_pitch.name = 'pitch'
+        # Set the index to the timeframe times in secs:
+        harm_pitch.index = spec_df.columns
         return harm_pitch 
 
     #------------------------------------
@@ -1310,7 +1340,7 @@ class SignalAnalyzer:
         # Match against all of the template's sigs:
         for sig in spectral_template.signatures:
             sig_id += 1
-            cls.log.info(f"Matching against sig {sig_id}")
+            cls.log.info(f"Matching against sig-{sig_id}")
             passband = sig.bandpass_filter
             if passband is not None:
                 cls.log.info(f"Applying bandpass [{passband['low_val']},{passband['high_val']}]")
@@ -1329,11 +1359,17 @@ class SignalAnalyzer:
             # Create subclips that match the width of the present signature;
             # the subtraction of num_sample_slides ensures
             # that we don't slide beyond the spectrogram:
-            for start_idx in np.arange(0, 
-                                       num_frames-num_sample_slides, 
-                                       num_sample_slides):
+            last_idx = num_frames - sig_width_samples - 1
+            percentage_reported = 0
+            for start_idx in np.arange(0, last_idx, num_sample_slides):
                 # Take snippet of same width each time:
                 end_idx = start_idx + sig_width_samples
+                # Time for sign of life? Do that about every 10% done: 
+                perc_done = 100*start_idx/last_idx
+                if perc_done > percentage_reported + 10:
+                    cls.log.info(f"... done {int(perc_done)}% of sig-{sig_id}")
+                    percentage_reported = perc_done
+
                 try:
                     spec_snip = power_df_clipped.iloc[:, start_idx:end_idx]
                     # Get the snippet's signature:
@@ -1343,14 +1379,13 @@ class SignalAnalyzer:
                         )
                     
                     # Probability for one subclip on one signature:
-                    #********** COMPUTE PROB CHANGES NOW
-                    sig_dist = clip_sig.distance(sig)
+
+                    sig_dist = clip_sig.match_probability(sig)
                     res_df = res_df.append({
-                        'start_idx' : start_idx,
-                        'stop_idx'  : end_idx,
-                        'start_time': start_idx * cls.hop_length / cls.sr,
-                        'n_samples' : sig_width_samples,
-                        'distance' : sig_dist, 
+                        'start_idx'  : start_idx,
+                        'stop_idx'   : end_idx,
+                        'n_samples'  : sig_width_samples,
+                        'distance'   : sig_dist, 
                         'sig_id': sig_id
                         }, 
                         ignore_index=True)
@@ -1361,20 +1396,7 @@ class SignalAnalyzer:
 
         cls.log.info(f"Done matching snippets against all {sig_id} signatures")
 
-        # Create the summary:
-        min_prob = res_df['probability'].min()
-        max_prob = res_df['probability'].max()
-        med_prob = res_df['probability'].median()
-        # Best probability for the longest signature
-        longest_sig = res_df['n_samples'].max()
-        best_fit_prob = res_df[res_df['n_samples'] == longest_sig].probability.max()
-        
-        res_summary = pd.Series({'min_prob' : min_prob,
-                                 'max_prob' : max_prob,
-                                 'med_prob' : med_prob,
-                                 'best_fit_prob' : best_fit_prob
-                                 })
-        return (res_df, res_summary)
+        return res_df
 
 
     #------------------------------------

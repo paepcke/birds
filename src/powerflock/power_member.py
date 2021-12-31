@@ -289,16 +289,24 @@ class PowerMember:
         audio = self._right_size_sr(full_audio, sr)
         # Get results of matching audio against each
         # signature of the current SpectralTemplate:
-        probs_df, summary_ser = SignalAnalyzer.match_probability(
+        probs_df = SignalAnalyzer.match_probability(
             audio, 
             self.spectral_template,
             slide_width_time=self.slide_width_time
             )
-        self.power_result = PowerResult(probs_df, summary_ser, self.species_name)
+        self.log.info("Matched all signatures")
+
+        #***********
+        print("*********Saving probs_df")
+        probs_df.to_csv('/tmp/powertest.csv')
+        #***********
+        
+        self.power_result = PowerResult(probs_df, self.species_name)
 
         # Indicate that probabilities were computed
         # on an input:
         self.output_ready = True
+        
         return self.power_result
     
 
@@ -402,7 +410,7 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
     0.75 for the forth quartile; though any quantile is acceptable.
     The estimator considers the matching probabilities that resulted from
     a single signature being slid across the audio with some slide width.
-    See computer_probabilities() in PowerMember for details on that width.
+    See compute_probabilities() in PowerMember for details on that width.
     
     Given a probability this estimator returns True if the probability is the
     GE to the given signature's threshold probability.
@@ -654,7 +662,7 @@ class PowerResult:
     # Constructor
     #-------------------
     
-    def __init__(self, prob_df, summary_ser, species, sr=22050):
+    def __init__(self, prob_df, species, sr=22050):
         '''
         Life begins with the result of a PowerMember's
         compute_probabilities() computation. To its result
@@ -697,22 +705,16 @@ class PowerResult:
         self.sr = sr
         
         # Add start, end, and middle wallclock times to the df:
-        prob_df['start_time']  = prob_df.start / sr
-        prob_df['stop_time']   = prob_df.stop / sr
+        prob_df['start_time'] = prob_df.start_idx / sr
+        prob_df['stop_time']   = prob_df.stop_idx / sr
         prob_df['center_time'] = prob_df.start_time + (prob_df.stop_time - prob_df.start_time)/2. 
 
         self.prob_df = prob_df
-        self.summary_ser = summary_ser
         self.species  = species
         
         # The truths column has not been added yet.
         # The column is added by a client calling add_overlap_and_truth().
         # The following property can be tested via 
-
-    #------------------------------------
-    # truths
-    #-------------------
-
 
     #------------------------------------
     # add_and_truth

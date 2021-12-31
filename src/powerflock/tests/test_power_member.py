@@ -61,8 +61,8 @@ class TestPowerMember(unittest.TestCase):
             spectral_template_info=self.cmtog_template,
             apply_bandpass=True
             )
-        pmember.compute_probabilities(self.rec_XC)
-        
+        power_result = pmember.compute_probabilities(self.rec_XC)
+        print(pmember)
 
     #------------------------------------
     # test_matching_one_sig

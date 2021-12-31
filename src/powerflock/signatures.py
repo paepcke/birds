@@ -592,12 +592,35 @@ class Signature:
             self.freq_span = None
         self.bandpass_filter = bandpass_filter
         self.extract = extract
-        
+
     #------------------------------------
-    # distance
+    # match_probabilities
     #-------------------
     
-    def distance(self, other):
+    def match_probabilities(self, other):
+        '''
+        Given another Signature, compute the pairwise
+        feature vector distances. Apply a sigmoid, and
+        return
+         
+             1 - sigmoid(distance(self, other))
+             
+        :param other: signature against which other is to be compared
+        :type other: Signature
+        :returns: a Series of probabilities over time. Each element
+            is the probability that self and others are matched at
+            the element's time.
+        :rtype: pd.Series
+        '''
+
+        res = Signature._distances_to_probs(self._distance(other))
+        return res
+    
+    #------------------------------------
+    # _distance
+    #-------------------
+    
+    def _distance(self, other):
         '''
         Compute Euclidean distance between the
         sig df of this Signature instance and another.
@@ -612,11 +635,14 @@ class Signature:
         n=4 (the four features). The division by 2
         in the implementation below is the 1/n taken
         out of the sqrt: sqrt(1/4) == 1/2
-
+        
         :param other: Signature instance from which the
             distance is to be computed
         :type other: Signature
-        :returns
+        :returns a series of probabilities by time; each
+            element is the probability that other is a
+            match to signature self.
+        :rtype pd.Series 
         '''
         
         # The .values is required because the
@@ -624,7 +650,37 @@ class Signature:
         # Without the .value we get NaN whenever an index
         # is mismatched:
         dist_over_time = np.mean(np.sqrt(np.nansum((self.sig.values - other.sig.values)**2, axis=1)) / 2.)
-        return dist_over_time
+        return dist_over_time 
+
+    #------------------------------------
+    # _distances_to_probs
+    #-------------------
+    
+    def _distances_to_probs(self, distances):
+        '''
+        Given a Series of distances between two signatures,
+        return the corresponding probabilities that the
+        two signatures are a match. The index of the given
+        distances is assumed to be time, and that index is
+        retained in the result. However, the computation does
+        not depend on the index.
+        
+        Strategy: apply a sigmoid to each distance, and return
+        1-sigmoid(distance).
+        
+        :param distances: the pairwise distances of feature
+            vectors, for example as returned by distance()
+        :type distances: pd.Series
+        :returns: a Series with distances replaced by probabilities
+            of being a match
+        :rtype: pd.Series
+        '''
+        # Apply a sigmoid to squeeze the distances
+        # into the [0,1] probabilities range:
+        probs = 1. / (1+np.exp(-distances))
+        # The *smaller* the distance that higher the probability:
+        return 1 - probs
+
 
     #------------------------------------
     # norm_to_sig
