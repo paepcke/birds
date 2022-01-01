@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 '''
 Created on Oct 18, 2021
 
@@ -8,25 +9,28 @@ TODO:
     o Identify hyper parameters
 
 '''
+import argparse
 import datetime
+import json
 import os
+import sys
 
 import librosa
 from logging_service.logging_service import LoggingService
 import sklearn
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.exceptions import NotFittedError
-#from sklearn.metrics import PrecisionRecallDisplay
 
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import Utils, Interval
-#import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from powerflock.signal_analysis import SignalAnalyzer, TemplateSelection
 from powerflock.signatures import SpectralTemplate
 
 
+#from sklearn.metrics import PrecisionRecallDisplay
+#import matplotlib.pyplot as plt
 #from result_analysis.charting import Charter
 #from seaborn.matrix import heatmap
 class PowerMember:
@@ -124,7 +128,7 @@ class PowerMember:
             or not. Only relevant if spectral_template_info is a
             zip for creating signatures, rather than the already-made
             templates.
-        :type apply_bandpass: bool 
+        :type apply_bandpass: bool
         :param template_selection:
         :type template_selection:
         '''
@@ -147,6 +151,13 @@ class PowerMember:
                     raise TypeError(f"Template info {maybe_tmplt} is not a SpectralTemplate")
             # A list of ready-made templates
             self.spectral_templates = spectral_template_info
+        elif type(spectral_template_info) == str:
+            # Path to json file:
+            try:
+                self.spectral_templates = \
+                    [SpectralTemplate.from_json_file(spectral_template_info)[species_name]]
+            except KeyError:
+                raise ValueError(f"No template for {species_name} in file {spectral_template_info}")
         else:
             # Must be a zip of recording/RavenTable pairs:
             if not isinstance(spectral_template_info, zip):
@@ -240,7 +251,8 @@ class PowerMember:
     #-------------------
     
     def compute_probabilities(self, 
-                              full_audio, 
+                              full_audio,
+                              outfile, 
                               sr=SignalAnalyzer.sr
                               ):
         '''
@@ -295,20 +307,16 @@ class PowerMember:
             slide_width_time=self.slide_width_time
             )
         self.log.info("Matched all signatures")
-
-        #***********
-        print("*********Saving probs_df")
-        probs_df.to_csv('/tmp/powertest.csv')
-        #***********
-        
         self.power_result = PowerResult(probs_df, self.species_name)
+
+        print(f"Saving power_result to {outfile}")
+        self.power_result.json_dump(outfile)
 
         # Indicate that probabilities were computed
         # on an input:
         self.output_ready = True
         
         return self.power_result
-    
 
     # ----------------------- Visualizations --------------------
 
@@ -340,6 +348,8 @@ class PowerMember:
                                    apply_bandpass=False
                                    ):
         '''
+        DEPRECATED: use the separate quad_sig_calibration.py.
+        
         Compute templates of call signatures from 
         the call files and associated selection table files.
         
@@ -705,11 +715,12 @@ class PowerResult:
         self.sr = sr
         
         # Add start, end, and middle wallclock times to the df:
-        prob_df['start_time'] = prob_df.start_idx / sr
-        prob_df['stop_time']   = prob_df.stop_idx / sr
-        prob_df['center_time'] = prob_df.start_time + (prob_df.stop_time - prob_df.start_time)/2. 
+        prob_df['start_time'] = SignalAnalyzer.hop_length  * prob_df.start_idx / sr
+        prob_df['stop_time']  = SignalAnalyzer.hop_length  * prob_df.stop_idx / sr
+        center_time = prob_df.start_time + (prob_df.stop_time - prob_df.start_time)/2. 
 
         self.prob_df = prob_df
+        self.prob_df.index = center_time
         self.species  = species
         
         # The truths column has not been added yet.
@@ -802,7 +813,7 @@ class PowerResult:
                     # look at the next start_time:
                     break
 
-        cur_sig_id = self.prob_df.loc[0,'sig_id']
+        cur_sig_id = self.prob_df.sig_id.iloc[0]
         truth_intervals = iter(call_intervals)
         cur_truth_interval = next(truth_intervals)
         for row_num, prob_ser in self.prob_df.iterrows():
@@ -831,10 +842,10 @@ class PowerResult:
 
         # Attach the overlap percentages to the right
         # of self.prob_df:
-        self.prob_df = self.prob_df.assign(overlap=overlap_percentages.values)
+        self.prob_df['sig_overlap_perc'] = overlap_percentages
 
         # Same for the Truths column:
-        self.prob_df = self.prob_df.assign(Truth=truths.values)
+        self.prob_df['Truth'] = truths
 
         #**********
         # if plot:
@@ -899,3 +910,153 @@ class PowerResult:
         truths = self.prob_df[self.prob_df.sig_id == sig_id].Truth
         truths.index = self.prob_df[self.prob_df.sig_id == sig_id].center_time 
         return truths
+
+    #------------------------------------
+    # json_dumps
+    #-------------------
+    
+    def json_dumps(self):
+        
+        # Create a dict with the instance vars.
+        # The prob_df is rendered to json in place.
+        # The orient='table' is required b/c the
+        # default needs the index to be unique, which
+        # this one isn't:
+        
+        as_dict = {
+            'species' : self.species,
+            'sr' : self.sr,
+            'prob_df' : self.prob_df.to_json(orient='table')
+            }
+        return json.dumps(as_dict)
+    
+    #------------------------------------
+    # json_loads
+    #-------------------
+    
+    @classmethod
+    def json_loads(cls, jstr):
+        '''
+        Given a json string created by
+        json_dumps(), materialize a PowerResult
+        instance filled with the proper instance
+        var values.
+        
+        :param jstr: json string created via json_dumps()
+        :type jstr: str
+        :return: new instance of PowerResult
+        :rtype PowerResult
+        '''
+        
+        as_dict = json.loads(jstr)
+        # Read df as:
+
+        #     'index'  'col1'   'col2'
+        # 0      1       10       20
+        # 1      2       30       10
+        # 2      2        ...
+        # 3      10       ...
+
+        prob_df = pd.read_json(as_dict['prob_df'], orient='table')
+        # Replace the index with the column labeled 'index':
+        prob_df.index = prob_df['index']
+        # Remove the 'index' column that was added by df.to_json()
+        # in json_dumps():
+        prob_df.drop(labels='index', axis='columns', inplace=True)
+        
+        pwr_res = PowerResult(prob_df, as_dict['species'], as_dict['sr'])
+        return pwr_res
+
+    #------------------------------------
+    # json_dump 
+    #-------------------
+    
+    def json_dump(self, fpath):
+        '''
+        Render self onto disk, json encoded.
+        Recoverable via PowerResult.json_load()
+        
+        :param fpath: destination path
+        :type fpath: str
+        '''
+        with open(fpath, 'w') as fd:
+            fd.write(self.json_dumps())
+            
+    #------------------------------------
+    # json_load 
+    #-------------------
+
+    @classmethod
+    def json_load(cls, fpath):
+        '''
+        Return a PowerResult instance materialized
+        from a previously stored, json encoded file.
+        This method is the inverse of json_dump() 
+
+        :param fpath: file with json-rendered PowerResult instance
+        :type fpath: str
+        :return new PowerResult instance
+        :rtype PowerResult
+        '''
+        with open(fpath, 'r') as fd:
+            jstr = fd.read()
+        return cls.json_loads(jstr)
+
+# ------------------------ Main ------------
+if __name__ == '__main__':
+    
+    parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
+                                     formatter_class=argparse.RawTextHelpFormatter,
+                                     description="Start a species-specific vocalization detector."
+                                     )
+
+    parser.add_argument('species',
+                        help='name of species to recognize')
+
+    parser.add_argument('template',
+                        help='path to calibrated-template file; run quad_sig_calibration.py if unavailable') 
+
+    parser.add_argument('recording',
+                        help='recording on which to find vocalizations'
+                        )
+    
+    parser.add_argument('outfile',
+                        help='path where to save the json-formatted result'
+                        )
+
+    parser.add_argument('-b', '--bandpass',
+                        help='apply a bandpass filter; low/high frequencies as per signatures',
+                        action='store_true')
+
+    args = parser.parse_args()
+    
+    if not os.path.exists(args.template):
+        print(f"Cannot find template file {args.template}")
+        sys.exit(1)
+        
+    if not os.path.exists(args.recording):
+        print(f"Cannot find recording {args.recording}")
+        sys.exit(1)
+        
+    if os.path.exists(args.outfile):
+        response = input(f"WARNING: outfile {args.outfile} exists; overwrite? (y/n):")
+        if response not in ['Y', 'y', 'yes']:
+            print("Aborting.")
+            sys.exit(0)
+    
+    templates_dict = SpectralTemplate.from_json_file(args.template)
+    try:
+        cmtog_template = templates_dict[args.species]
+    except KeyError:
+        avail_species = templates_dict.keys()
+        print(f"Species {args.species} is not available in template. Available are {avail_species}")
+        sys.exit(1)
+    
+        
+    pwr_member = PowerMember(species_name=args.species, 
+                             spectral_template_info=args.template, 
+                             apply_bandpass=args.bandpass
+                             )
+    
+    pwr_result = pwr_member.compute_probabilities(args.recording, outfile=args.outfile)
+    

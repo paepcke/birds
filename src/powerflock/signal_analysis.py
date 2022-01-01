@@ -5,7 +5,7 @@ Created on Oct 1, 2021
 '''
 from collections import namedtuple
 from enum import Enum
-import multiprocessing
+import multiprocessing as mp
 import os
 import warnings
 
@@ -1121,7 +1121,7 @@ class SignalAnalyzer:
         window_params = (timeframe_secs, timeframe_samples/sr)
         
         # Computation will use multiple cores; be nice:
-        num_cpus = int(multiprocessing.cpu_count() * 80 / 100)
+        num_cpus = int(mp.cpu_count() * 80 / 100)
         
         # The min_nfft determines the number of frequency bands,
         # and therefore the resolution of contour analyis:
@@ -1314,90 +1314,110 @@ class SignalAnalyzer:
         if slide_width_time is None:
             slide_width_time = SignalAnalyzer.SIGNATURE_MATCH_SLIDE_FRACTION 
 
-        passband = spectral_template.bandpass_filter
-        
         cls.log.info(f"Creating spectrogram")
         spec_df = SignalAnalyzer.raven_spectrogram(audio, extra_granularity=True)
         
         power_df = spec_df ** 2
-        _num_freqs, num_frames = power_df.shape
 
         #sr = spectral_template[0].sr
         #if type(audio) != pd.Series:
         #    # Turn into a series:
         #    audio = pd.Series(audio, np.arange(0,len(audio)/sr,1/sr))
 
-        # An ID number for each signature unique across
-        # the templates; simply a running number. Used
-        # only for aggregation (group-by):
-        sig_id = 0 
-        res_df = pd.DataFrame()
-
         # Match clip sig against the sigs within
         # each template, collecting the probs from
         # each template match into matching_probs:
 
         # Match against all of the template's sigs:
-        for sig in spectral_template.signatures:
-            sig_id += 1
-            cls.log.info(f"Matching against sig-{sig_id}")
-            passband = sig.bandpass_filter
-            if passband is not None:
-                cls.log.info(f"Applying bandpass [{passband['low_val']},{passband['high_val']}]")
-                power_df_clipped = SignalAnalyzer.apply_bandpass(passband, 
-                                                                 power_df, 
-                                                                 extract=sig.extract)
-            else:
-                power_df_clipped = power_df
-            
-            # How many samples underly the signature?
-            sig_width_samples = len(sig)
-            # Number of samples (as opposed to time) to slide
-            # sig to the right between each measurement. This
-            # is a fraction of the signature width:
-            num_sample_slides = int(slide_width_time * sig_width_samples)
-            # Create subclips that match the width of the present signature;
-            # the subtraction of num_sample_slides ensures
-            # that we don't slide beyond the spectrogram:
-            last_idx = num_frames - sig_width_samples - 1
-            percentage_reported = 0
-            for start_idx in np.arange(0, last_idx, num_sample_slides):
-                # Take snippet of same width each time:
-                end_idx = start_idx + sig_width_samples
-                # Time for sign of life? Do that about every 10% done: 
-                perc_done = 100*start_idx/last_idx
-                if perc_done > percentage_reported + 10:
-                    cls.log.info(f"... done {int(perc_done)}% of sig-{sig_id}")
-                    percentage_reported = perc_done
+        num_cores = mp.cpu_count()
+        # Use 80% of the cores:
+        #num_workers = round(num_cores * 90  / 100)
+        num_workers = num_cores
+        match_results = []
+        
+        with mp.Pool(processes=num_workers) as pool:
+            for sig in spectral_template.signatures:
+                match_results.append(
+                    pool.apply_async(cls.process_one_sig,
+                                     (power_df, sig, slide_width_time))
+                    )
+            res_dfs = []
+            for worker in match_results:
+                res_dfs.append(worker.get())
+                
+        # Composite the result dfs from all workers
+        # into a single df:
+        res = pd.concat(res_dfs)
+        return res
 
-                try:
-                    spec_snip = power_df_clipped.iloc[:, start_idx:end_idx]
-                    # Get the snippet's signature:
-                    clip_sig = SignalAnalyzer.spectral_measures_each_timeframe(
-                        spec_snip,
-                        sig=sig
-                        )
-                    
-                    # Probability for one subclip on one signature:
+    #------------------------------------
+    # process_one_sig 
+    #-------------------
+    
+    @classmethod
+    def process_one_sig(cls, power_df, sig, slide_width_time):
 
-                    sig_dist = clip_sig.match_probability(sig)
-                    res_df = res_df.append({
-                        'start_idx'  : start_idx,
-                        'stop_idx'   : end_idx,
-                        'n_samples'  : sig_width_samples,
-                        'distance'   : sig_dist, 
-                        'sig_id': sig_id
-                        }, 
-                        ignore_index=True)
-                except IndexError:
-                    # No more subclips to match against current sig.
-                    # Process next signature
-                    break
+        sig_id = sig.sig_id
+        _num_freqs, num_frames = power_df.shape
+        res_df = pd.DataFrame()
+        
+        cls.log.info(f"Matching against sig-{sig_id}")
+        passband = sig.bandpass_filter
+        if passband is not None:
+            cls.log.info(f"Applying bandpass [{passband['low_val']},{passband['high_val']}]")
+            power_df_clipped = SignalAnalyzer.apply_bandpass(passband, 
+                                                             power_df, 
+                                                             extract=sig.extract)
+        else:
+            power_df_clipped = power_df
+        
+        # How many samples underly the signature?
+        sig_width_samples = len(sig)
+        # Number of samples (as opposed to time) to slide
+        # sig to the right between each measurement. This
+        # is a fraction of the signature width:
+        num_sample_slides = int(slide_width_time * sig_width_samples)
+        # Create subclips that match the width of the present signature;
+        # the subtraction of num_sample_slides ensures
+        # that we don't slide beyond the spectrogram:
+        last_idx = num_frames - sig_width_samples - 1
+        percentage_reported = 0
+        for start_idx in np.arange(0, last_idx, num_sample_slides):
+            # Take snippet of same width each time:
+            end_idx = start_idx + sig_width_samples
+            # Time for sign of life? Do that about every 10% done: 
+            perc_done = 100*start_idx/last_idx
+            if perc_done > percentage_reported + 10:
+                cls.log.info(f"... done {int(perc_done)}% of sig-{sig_id}")
+                percentage_reported = perc_done
 
-        cls.log.info(f"Done matching snippets against all {sig_id} signatures")
+            try:
+                spec_snip = power_df_clipped.iloc[:, start_idx:end_idx]
+                # Get the snippet's signature:
+                clip_sig = SignalAnalyzer.spectral_measures_each_timeframe(
+                    spec_snip,
+                    sig=sig
+                    )
+                
+                # Probability for one subclip on one signature:
+
+                sig_dist = clip_sig.match_probabilities(sig)
+                res_df = res_df.append({
+                    'start_idx'  : start_idx,
+                    'stop_idx'   : end_idx,
+                    'n_samples'  : sig_width_samples,
+                    'match_prob' : sig_dist, 
+                    'sig_id': sig_id
+                    }, 
+                    ignore_index=True)
+            except IndexError:
+                # No more subclips to match against current sig.
+                # Process next signature
+                break
+
+        cls.log.info(f"Done matching snippets against signature {sig_id}")
 
         return res_df
-
 
     #------------------------------------
     # _compute_prob

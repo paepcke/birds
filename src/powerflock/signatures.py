@@ -613,7 +613,7 @@ class Signature:
         :rtype: pd.Series
         '''
 
-        res = Signature._distances_to_probs(self._distance(other))
+        res = self._distances_to_probs(self._distance(other))
         return res
     
     #------------------------------------

@@ -53,16 +53,38 @@ class TestPowerMember(unittest.TestCase):
     # test_init 
     #-------------------
     
-    #********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_init(self):
+        
+        # prob_df = pd.read_csv('/tmp/powertest.csv')
+        # pwr_res = PowerResult(prob_df, 'CMTOG')
+        # pwr_res.json_dump('/tmp/power_result.json')
+        #
+        # pwr_res1 = PowerResult.json_load('/tmp/power_result.json')
         
         pmember = PowerMember(
             species_name='CMTOG',
             spectral_template_info=self.cmtog_template,
             apply_bandpass=True
             )
-        power_result = pmember.compute_probabilities(self.rec_XC)
+        power_result = pmember.compute_probabilities(self.rec_XC, '/tmp/power_result_test.json')
+        power_result.add_overlap_and_truth(self.sel_tbl_XC)
         print(pmember)
+
+    #------------------------------------
+    # test_power_result_examination
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_power_result_examination(self):
+        pwr_res_file = os.path.join(os.getenv('HOME'),
+                                    'tmp/cmtog_match_with_templateDec31_2021.json')
+        pwr_res = PowerResult.json_load(pwr_res_file)
+        pwr_res.add_overlap_and_truth(self.sel_tbl_XC)
+        
+        
+        print(pwr_res)
+
 
     #------------------------------------
     # test_matching_one_sig
