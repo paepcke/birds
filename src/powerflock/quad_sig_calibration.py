@@ -11,6 +11,7 @@ from pathlib import Path
 import shutil
 import sys
 
+from experiment_manager.experiment_manager import JsonDumpableMixin
 from logging_service import LoggingService
 
 from data_augmentation.utils import Utils, Interval
@@ -20,7 +21,7 @@ from powerflock.signal_analysis import SignalAnalyzer
 from powerflock.signatures import Signature, SpectralTemplate
 
 
-class QuadSigCalibrator:
+class QuadSigCalibrator(JsonDumpableMixin):
     '''
     classdocs
     '''
@@ -33,6 +34,7 @@ class QuadSigCalibrator:
                  species=None, 
                  cal_data_root=None,
                  cal_outdir=None,
+                 experiment=None,
                  unittesting=False):
         
         '''
@@ -71,7 +73,21 @@ class QuadSigCalibrator:
                   }
                   
              The json files will have the same name as the species subdirectories. 
-              
+
+        The result is saved in one or two places:
+            o A json representation of the templates dict is
+              saved in <dir-of-this-file>/species_calibration_data/signatures.json
+              Recover as QuadSigCalibrator.json_load(<...signatures.json>)
+            o If an experiment instance is provided, the result
+              is additionally saved as experiment.save('signatures') as
+              json. Recover using experiment.read('signatures', QuadSigCalibrator)
+        
+        If an experiment is provided, the signatures stored
+        there will take precedence over the signatures.json under dir-of-this-file.
+        Meaning that the experiment version will be loaded, modified 
+        and then written both to the experiment and the signatures.json file.
+        So signatures.json will track what is in the experiment.
+
         :param species: individual or list of (for example) five-letter species
             names. The species names must match the subdirectories under
             cal_data_root. Default: all species under cal_data_root.
@@ -81,6 +97,9 @@ class QuadSigCalibrator:
         :type cal_data_root: {None | str}
         :param cal_outdir: directory for result json files
         :type cal_outdir: {None | str}
+        :param experiment: optional name of experiment where to save
+            the dict of SpectralTemplates
+        :type experiment {None | str}
         :param unittesting: if True, return without initializing anything
         :type unittesting: bool
         '''
@@ -89,6 +108,8 @@ class QuadSigCalibrator:
 
         if unittesting:
             return
+
+        self.experiment = experiment
 
         self.cur_dir = os.path.dirname(__file__)
         
@@ -150,20 +171,36 @@ class QuadSigCalibrator:
         # json file, load it, and update it with the current
         # run's result:
         signatures_fname = os.path.join(self.cal_data_root, 'signatures.json')
-        if os.path.exists(signatures_fname):
-            try:
-                cur_templates = self.sigs_json_load(signatures_fname)
-            except Exception as e:
-                self.log.err(f"Loading current sigs from {signatures_fname} failed: {repr(e)}...")
-                self.log.err(f"    ... Moving that file to .bak")
-                shutil.move(signatures_fname, signatures_fname+'.bak')
+
+        if self.experiment is None:
+            if os.path.exists(signatures_fname):
+                try:
+                    cur_templates = self.json_load(signatures_fname)
+                except Exception as e:
+                    self.log.err(f"Loading current sigs from {signatures_fname} failed: {repr(e)}...")
+                    self.log.err(f"    ... Moving that file to .bak")
+                    shutil.move(signatures_fname, signatures_fname+'.bak')
+                    cur_templates = {}
+            else:
                 cur_templates = {}
         else:
-            cur_templates = {}
+            # Look in the experiment for the dict of
+            # templates
+            try:
+                cur_templates = self.experiment.read('signatures', QuadSigCalibrator)
+            except FileNotFoundError:
+                cur_templates = {}
+
         # Update current sigs with results from this run:
         self.log.info(f"Saving/updating all sigs to {signatures_fname}")
         cur_templates.update(templates)
-        self.sigs_json_dump(cur_templates, signatures_fname)
+        self.cur_templates = cur_templates
+        # Save the template:
+        self.json_dump(signatures_fname)
+        # Additionally, save in experiment if one was provided:
+        if self.experiment is not None:
+            self.log.info(f"Saving/updating all sigs to 'signatures' in experiment")
+            self.experiment.save('signatures', self)
         
         self.signatures_fname = signatures_fname
         return cur_templates
@@ -354,12 +391,13 @@ class QuadSigCalibrator:
     # ---------------------- Utilities ---------------
     
     #------------------------------------
-    # sigs_json_dump
+    # json_dump
     #-------------------
     
-    def sigs_json_dump(self, sigs, fname):
+    def json_dump(self, fname):
         '''
-        Given a dict of SpectralTemplate values like:
+        Given that self.cur_templates is a dict of 
+        SpectralTemplate values like:
             {'CMTOG' : template_cmtog,
              'OtherSpec' : template_other_spec
              },
@@ -374,15 +412,16 @@ class QuadSigCalibrator:
         :type fname: str
         '''
         with open(fname, 'w') as fd:
-            json.dump({key : val.json_dumps() for key,val in sigs.items()}, fd)
+            json.dump({key : val.json_dumps() for key,val in self.cur_templates.items()}, fd)
 
     #------------------------------------
-    # sigs_json_load 
+    # json_load 
     #-------------------
     
-    def sigs_json_load(self, fname):
+    @classmethod
+    def json_load(cls, fname):
         '''
-        Reconstruct a dict of templates
+        Reconstruct a dict of templates from
         the given json file. All SpectralTemplate
         instances will be reconstructed.
         The result will look like:
@@ -398,11 +437,11 @@ class QuadSigCalibrator:
         '''
         
         with open(fname, 'r') as fd:
-            raw_dict = json.load(fd)
+            dict_of_templates = json.load(fd)
         
-        new_dict = {key : SpectralTemplate.from_json(jstr)
-                    for key, jstr
-                    in raw_dict.items()
+        new_dict = {species : SpectralTemplate.json_loads(jstr)
+                    for species, jstr
+                    in dict_of_templates.items()
                     }
 
         return new_dict

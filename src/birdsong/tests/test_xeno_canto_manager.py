@@ -87,7 +87,7 @@ class XenoCantoProcessorTester(unittest.TestCase):
         rec  = coll['Tangaragyrola'][0]
         jstr = rec.to_json()
         
-        rec_recovered = XenoCantoRecording.from_json(jstr)
+        rec_recovered = XenoCantoRecording.json_loads(jstr)
         
         for inst_var_nm, inst_var_val in rec_recovered.__dict__.items():
             if type(inst_var_val) == str:
@@ -135,7 +135,7 @@ class XenoCantoProcessorTester(unittest.TestCase):
         
         for phylo_nm, rec_dict_jstr_list in coll_as_dict.items():
             for rec_jstr in rec_dict_jstr_list:
-                rec_obj = XenoCantoRecording.from_json(rec_jstr)
+                rec_obj = XenoCantoRecording.json_loads(rec_jstr)
                 self.assertEqual(rec_obj.phylo_name, phylo_nm)
 
     #------------------------------------
@@ -159,7 +159,7 @@ class XenoCantoProcessorTester(unittest.TestCase):
             coll.to_json(dest=fname, force=True)
             
             # Get it back:
-            new_coll = XenoCantoCollection.from_json(src=fname)
+            new_coll = XenoCantoCollection.json_loads(src=fname)
         finally:
             os.remove(fname)
         

@@ -1204,7 +1204,7 @@ class SignalAnalyzer:
     def match_probability(cls, 
                           audio,
                           spectral_template,
-                          slide_width_time=None,
+                          slide_width_time_fraction=None,
                           ):
         '''
         Given an audio clip, match it to each signatures
@@ -1300,9 +1300,9 @@ class SignalAnalyzer:
         :param spectral_template: one or more SpectralTemplate
             instance(s) against which to compare the clip
         :type spectral_template: {SpectralTemplate | [SpectralTemplate]}
-        :param slide_width_time: time in (usually fractional) seconds by
+        :param slide_width_time_fraction: time in (usually fractional) seconds by
             which to slide a signature across the audio
-        :type slide_width_time: float
+        :type slide_width_time_fraction: float
         :param aggregation: method for computing the signature
             from frequencies of a single time frame. See SpectralAggregation
             enum. Default is set in DEFAULT_SPECTRAL_AGGREGATION.
@@ -1311,8 +1311,8 @@ class SignalAnalyzer:
         :rtype (pd.DataFrame, pd.Series)
         '''
 
-        if slide_width_time is None:
-            slide_width_time = SignalAnalyzer.SIGNATURE_MATCH_SLIDE_FRACTION 
+        if slide_width_time_fraction is None:
+            slide_width_time_fraction = SignalAnalyzer.SIGNATURE_MATCH_SLIDE_FRACTION 
 
         cls.log.info(f"Creating spectrogram")
         spec_df = SignalAnalyzer.raven_spectrogram(audio, extra_granularity=True)
@@ -1335,11 +1335,16 @@ class SignalAnalyzer:
         num_workers = num_cores
         match_results = []
         
+        sigs = spectral_template.signatures
+        # Number of samples to slide between each 
+        # measurement is slide_width_time_fraction * <shortest-sig>
+        slide_width_samples = round(min([len(sig) for sig in sigs]) * slide_width_time_fraction)
+        
         with mp.Pool(processes=num_workers) as pool:
             for sig in spectral_template.signatures:
                 match_results.append(
                     pool.apply_async(cls.process_one_sig,
-                                     (power_df, sig, slide_width_time))
+                                     (power_df, sig, slide_width_samples))
                     )
             res_dfs = []
             for worker in match_results:
@@ -1355,7 +1360,7 @@ class SignalAnalyzer:
     #-------------------
     
     @classmethod
-    def process_one_sig(cls, power_df, sig, slide_width_time):
+    def process_one_sig(cls, power_df, sig, slide_width_samples):
 
         sig_id = sig.sig_id
         _num_freqs, num_frames = power_df.shape
@@ -1373,17 +1378,14 @@ class SignalAnalyzer:
         
         # How many samples underly the signature?
         sig_width_samples = len(sig)
-        # Number of samples (as opposed to time) to slide
-        # sig to the right between each measurement. This
-        # is a fraction of the signature width:
-        num_sample_slides = int(slide_width_time * sig_width_samples)
+        
         # Create subclips that match the width of the present signature;
         # the subtraction of num_sample_slides ensures
         # that we don't slide beyond the spectrogram:
         last_idx = num_frames - sig_width_samples - 1
         percentage_reported = 0
-        for start_idx in np.arange(0, last_idx, num_sample_slides):
-            # Take snippet of same width each time:
+        for start_idx in np.arange(0, last_idx, slide_width_samples):
+            # Take snippet of same width as the current sig each time:
             end_idx = start_idx + sig_width_samples
             # Time for sign of life? Do that about every 10% done: 
             perc_done = 100*start_idx/last_idx
@@ -1398,9 +1400,7 @@ class SignalAnalyzer:
                     spec_snip,
                     sig=sig
                     )
-                
                 # Probability for one subclip on one signature:
-
                 sig_dist = clip_sig.match_probabilities(sig)
                 res_df = res_df.append({
                     'start_idx'  : start_idx,

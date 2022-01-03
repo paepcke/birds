@@ -964,7 +964,7 @@ class BirdsBasicTrainerCV:
             # Is it a JSON str? Should have a better test!
             if config_info.startswith('{'):
                 # JSON String:
-                config = NeuralNetConfig.from_json(config_info)
+                config = NeuralNetConfig.json_loads(config_info)
             else: 
                 config = Utils.read_configuration(config_info)
         elif isinstance(config_info, NeuralNetConfig):

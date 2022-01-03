@@ -113,7 +113,7 @@ class SpectralTemplate:
         Return a json string holding the contents
         of this SpectralTemplate instance, ready to json.dump() into
         a file. To create a new SpectralTemplate instance,
-        pass the string to class method SpectralTemplate.from_json()
+        pass the string to class method SpectralTemplate.json_loads()
         '''
         
         # Only save what we need, e.g. not the audio:
@@ -135,45 +135,37 @@ class SpectralTemplate:
         return json.dumps(recovery_dict)
 
     #------------------------------------
-    # from_json
+    # json_loads
     #-------------------
     
     @classmethod
-    def from_json(cls, jstr):
+    def json_loads(cls, jstr):
         '''
-        Given a dict straight from reading (not loading!)
-        a json file, return a list of SpectralTemplate instances
+        Given a json formatted SpectralTemplate instance string
+        return a materialized SpectralTemplate.
 
         :param jstr: unevaluated json string 
         :type str: {str : str}
-        :return a dict of new SpectralTemplate instances, keyed\
-            by species
-        :rtype {str : SpectralTemplate}
+        :return a new SpectralTemplate instance
+        :rtype SpectralTemplate
         '''
-        
-        templates = {}
-        # Get a dict with one key for each
-        # species for which a SpectralTemplate is encoded
-        # in the json. The values will still be json:
-        jdict = json.loads(jstr)
-        for species, jsonized_template in jdict.items():
-            try:
-                template_jdict = json.loads(jsonized_template)
-                json_sigs_list = template_jdict['json_sig_list']
-                signatures = [Signature.from_json(json_sig)
-                              for json_sig in json_sigs_list]
-            except Exception as e:
-                raise ValueError(f"Could not read signature list from string ({repr(e)})")
+        try:
+            template_jdict = json.loads(jstr)
+            json_sigs_list = template_jdict['json_sig_list']
+            signatures = [Signature.json_loads(json_sig)
+                          for json_sig in json_sigs_list]
+        except Exception as e:
+            raise ValueError(f"Could not read signature list from string ({repr(e)})")
 
-            templates[species] = SpectralTemplate(
-                signatures=signatures,
-                rec_fname=template_jdict['rec_fname'],
-                sr=template_jdict['sr'],
-                hop_length=template_jdict['hop_length'],
-                n_fft=template_jdict['_n_fft']
-                )
+        materialized_inst = SpectralTemplate(
+            signatures=signatures,
+            rec_fname=template_jdict['rec_fname'],
+            sr=template_jdict['sr'],
+            hop_length=template_jdict['hop_length'],
+            n_fft=template_jdict['_n_fft']
+            )
 
-        return templates
+        return materialized_inst
 
     #------------------------------------
     # json_dump
@@ -185,11 +177,11 @@ class SpectralTemplate:
             json.dump(self.json_dumps(), fd)
 
     #------------------------------------
-    # from_json_file
+    # json_load
     #-------------------
     
     @classmethod
-    def from_json_file(cls, fname):
+    def json_load(cls, fname):
         '''
         Read fname content as a json structure
         from which a SpectralTemplate instance can be
@@ -198,13 +190,13 @@ class SpectralTemplate:
         
         :param fname: json file name
         :type fname:str
-        :return list of fully initialized SpectralTemplate instances
-        :rtype [SpectralTemplate]
+        :return a fully initialized SpectralTemplate instance
+        :rtype SpectralTemplate
         '''
         with open(fname, 'r') as fd:
             jstr = fd.read()
-        templates_dict = cls.from_json(jstr)
-        return templates_dict
+        template = cls.json_loads(jstr)
+        return template
 
     #------------------------------------
     # mean_sig
@@ -820,7 +812,7 @@ class Signature:
         Return a json string holding the contents
         of this instance, ready to json.dump() into
         a file. To create a new Signature instance,
-        pass the string to class method Signature.from_json()
+        pass the string to class method Signature.json_loads()
         '''
         
         # Only save what we need, e.g. not the audio:
@@ -842,11 +834,11 @@ class Signature:
         return json.dumps(recovery_dict)
 
     #------------------------------------
-    # from_json
+    # json_loads
     #-------------------
     
     @classmethod
-    def from_json(cls, jstr):
+    def json_loads(cls, jstr):
         '''
         Given a json string straight from reading
         from a json file, return an instance of Signature.
@@ -912,11 +904,11 @@ class Signature:
             json.dump(self.json_dumps(), fd)
 
     #------------------------------------
-    # from_json_file
+    # json_load
     #-------------------
     
     @classmethod
-    def from_json_file(cls, fname):
+    def json_load(cls, fname):
         '''
         Read fname content as a json structure
         from which a Signature instance can be
@@ -930,7 +922,7 @@ class Signature:
         '''
         with open(fname, 'r') as fd:
             json_str = json.load(fd)
-        inst = cls.from_json(json_str)
+        inst = cls.json_loads(json_str)
         return inst
 
     #------------------------------------
@@ -977,7 +969,7 @@ class Signature:
         # Now the dataframes and Series:
         if not Utils.df_eq(self.sig, other.sig):
             return False
-        if not Utils.series_eq(self.scale_info, other.scale_factors):
+        if self.scale_info != other.scale_info:
             return False
 
         if self.bandpass_filter != other.bandpass_filter:

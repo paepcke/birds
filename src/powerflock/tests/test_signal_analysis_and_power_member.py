@@ -74,7 +74,7 @@ class SignalAnalysisTester(unittest.TestCase):
         #          use calibration method
         templates_json_file = os.path.join(cls.cur_dir, 
                                            'species_calibration_data/signatures.json')
-        cls.templates = SpectralTemplate.from_json_file(templates_json_file)
+        cls.templates = SpectralTemplate.json_load(templates_json_file)
         
         # Computing the probability of CMTOG on
         # recording 1 takes a few minutes. So those
@@ -212,7 +212,7 @@ class SignalAnalysisTester(unittest.TestCase):
     # test_harmonic_pitch
     #-------------------
     
-    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_harmonic_pitch(self):
         
         # contours = pd.DataFrame([[True,  True,  False],
@@ -362,18 +362,19 @@ class SignalAnalysisTester(unittest.TestCase):
     # test_match_probabilty
     #-------------------
     
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_match_probabilty(self):
         # NOTE: truth values for final and intermediate
         #       steps for all three templates are in the
         #       giant comment at the end:
         
 
-        clip,_sr = SoundProcessor.load_audio(self.sel_rec_cmto_xc1)
-        xc1_template = self.templates[0]
-        self.assertEqual(xc1_template.recording_fname,
-                         Path(self.sel_rec_cmto_xc1).name
-                         ) 
+        #clip,_sr = SoundProcessor.load_audio(self.sel_rec_cmto_xc1)
+        xc1_template = self.templates['CMTOG']
+        clip,_sr = SoundProcessor.load_audio(xc1_template.recording_fname)
+        #self.assertEqual(xc1_template.recording_fname,
+        #                 Path(self.sel_rec_cmto_xc1).name
+        #                 ) 
         df, summary = SignalAnalyzer.match_probability(clip, xc1_template)
         self.assertTupleEqual(df.shape, (293,5))
         

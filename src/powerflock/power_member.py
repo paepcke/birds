@@ -157,7 +157,7 @@ class PowerMember:
             # Path to json file:
             try:
                 self.spectral_templates = \
-                    [SpectralTemplate.from_json_file(spectral_template_info)[species_name]]
+                    [SpectralTemplate.json_load(spectral_template_info)[species_name]]
             except KeyError:
                 raise ValueError(f"No template for {species_name} in file {spectral_template_info}")
         else:
@@ -306,7 +306,7 @@ class PowerMember:
         probs_df = SignalAnalyzer.match_probability(
             audio, 
             self.spectral_template,
-            slide_width_time=self.slide_width_time
+            slide_width_time_fraction=self.slide_width_time
             )
         self.log.info("Matched all signatures")
         self.power_result = PowerResult(probs_df, self.species_name)
@@ -1000,7 +1000,7 @@ if __name__ == '__main__':
             print("Aborting.")
             sys.exit(0)
     
-    templates_dict = SpectralTemplate.from_json_file(args.template)
+    templates_dict = SpectralTemplate.json_load(args.template)
     try:
         cmtog_template = templates_dict[args.species]
     except KeyError:

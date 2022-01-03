@@ -75,8 +75,8 @@ class Test(unittest.TestCase):
                         )
 
         jstr = sig.json_dumps()
-        #****sig1 = Signature.from_json(jstr)
-        sig1 = Signature.from_json(jstr)
+        #****sig1 = Signature.json_loads(jstr)
+        sig1 = Signature.json_loads(jstr)
         
         self.assertTrue(sig1 == sig)
         
@@ -84,7 +84,7 @@ class Test(unittest.TestCase):
         with tempfile.NamedTemporaryFile(dir='/tmp') as wrapper:
             fname = wrapper.name
             sig.json_dump(fname)
-            sig1 = Signature.from_json_file(fname)
+            sig1 = Signature.json_load(fname)
             
             self.assertTrue(sig == sig1)
 
@@ -131,7 +131,7 @@ class Test(unittest.TestCase):
 
         jstr = template.json_dumps()
 
-        template1 = SpectralTemplate.from_json(jstr)
+        template1 = SpectralTemplate.json_loads(jstr)
         
         self.assertTrue(template == template1)
         
@@ -139,7 +139,7 @@ class Test(unittest.TestCase):
         with tempfile.NamedTemporaryFile(dir='/tmp') as wrapper:
             fname = wrapper.name
             template.json_dump(fname)
-            template1 = SpectralTemplate.from_json_file(fname)
+            template1 = SpectralTemplate.json_load(fname)
             
             self.assertTrue(template == template1)
 

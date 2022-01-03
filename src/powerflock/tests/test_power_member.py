@@ -36,7 +36,7 @@ class TestPowerMember(unittest.TestCase):
 
         templates_file = os.path.join(cls.cur_dir, '../species_calibration_data/signatures.json')
         
-        templates_dict = SpectralTemplate.from_json_file(templates_file)
+        templates_dict = SpectralTemplate.json_load(templates_file)
         cls.cmtog_template = templates_dict['CMTOG']
 
         

@@ -25,7 +25,7 @@ class PowerEvaluationTester(unittest.TestCase):
         cls.cur_dir = os.path.dirname(__file__)
         templates_file = os.path.join(cls.cur_dir, 'signatures.json')
         
-        templates_dict = SpectralTemplate.from_json_file(templates_file)
+        templates_dict = SpectralTemplate.json_load(templates_file)
         cls.cmtog_template = templates_dict['CMTOG']
 
     def setUp(self):

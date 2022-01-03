@@ -148,7 +148,7 @@ class Interval(dict):
                 'step': self['step']}
 
     @classmethod
-    def from_json(cls, jstr):
+    def json_loads(cls, jstr):
         jdict = Utils.safe_eval(jstr)
         self['low_val'] = jdict['low_val']
         self['high_val'] = jdict['high_val']

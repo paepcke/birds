@@ -885,7 +885,7 @@ class XenoCantoCollection:
         # Allow use of tilde in fnames:
         src = os.path.expanduser(src)
         if src.endswith('.json'):
-            return cls.from_json(src=src)
+            return cls.json_loads(src=src)
         else:
             # Assume pickle file
             with open(src, 'rb') as fd:
@@ -903,7 +903,7 @@ class XenoCantoCollection:
         file where the json will be saved.
         If none, the generated JSON string 
         is returned. It can be passed to 
-        from_json() in the json_str
+        json_loads() in the json_str
         kwarg.
         
         If the file exists, the user is warned,
@@ -945,11 +945,11 @@ class XenoCantoCollection:
         return dest
 
     #------------------------------------
-    # from_json 
+    # json_loads 
     #-------------------
     
     @classmethod
-    def from_json(cls, src):
+    def json_loads(cls, src):
         '''
         Load a collection either from a JSON string,
         or from a file that contains JSON.
@@ -979,7 +979,7 @@ class XenoCantoCollection:
         
         # First, get an empty XenoCantoCollection,
         # but with care: 
-        # This method (from_json()) may be
+        # This method (json_loads()) may be
         # called from __new__(). That following
         # call will call __new__() recursively.
         # But: passing None will make the __new__()
@@ -989,7 +989,7 @@ class XenoCantoCollection:
         inst = XenoCantoCollection(None)
 
         for phylo_nm, rec_dict_list in inst_vars.items():
-            recs = [XenoCantoRecording.from_json(rec_dict)
+            recs = [XenoCantoRecording.json_loads(rec_dict)
                     for rec_dict
                     in rec_dict_list
                     ]
@@ -1082,7 +1082,7 @@ class XenoCantoRecording:
             self.log = log
             
         # 'Secret' entry: used when creating
-        # from json string (see from_json()):
+        # from json string (see json_loads()):
         
         if recording_metadata is None:
             # Have caller initialize the instance vars
@@ -1382,11 +1382,11 @@ class XenoCantoRecording:
         return as_dict
 
     #------------------------------------
-    # from_json 
+    # json_loads 
     #-------------------
     
     @classmethod
-    def from_json(cls, json_str_or_dict):
+    def json_loads(cls, json_str_or_dict):
         if type(json_str_or_dict) in (str, bytes):
             # Get a dict if one wasn't passed in:
             inst_vars = orjson.loads(json_str_or_dict)
@@ -1577,7 +1577,7 @@ if __name__ == '__main__':
 #     rec.download()
 #     print(sound_collection)
 #     
-#     sound_collection = XenoCantoCollection.from_json(src='/Users/paepcke/EclipseWorkspacesNew/birds/test_metadata.json')
+#     sound_collection = XenoCantoCollection.json_loads(src='/Users/paepcke/EclipseWorkspacesNew/birds/test_metadata.json')
 #     for rec in sound_collection:
 #         rec.download()
 #         print(rec)
