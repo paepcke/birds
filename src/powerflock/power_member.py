@@ -21,6 +21,8 @@ import sklearn
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.exceptions import NotFittedError
 
+import matplotlib.pyplot as plt
+
 from experiment_manager.experiment_manager import JsonDumpableMixin
 
 from data_augmentation.sound_processor import SoundProcessor
@@ -327,15 +329,46 @@ class PowerMember:
     # plot_pr_curve
     #-------------------
 
-    def plot_pr_curve(self, power_result):
+    def plot_pr_curve(self, power_result, sig_ids=None):
 
-        y_true = power_result.truth_df['Truth']
-        y_pred = power_result.truth_df['Probability']
-        pred_display = sklearn.metrics.PrecisionRecallDisplay.from_predictions(
-            y_true, 
-            y_pred, 
-            name='CMTOG PowerFlock Member')
-        return pred_display
+        ax_cols_n = 4
+        
+        if sig_ids is None:
+            sig_ids = power_result.sig_ids()
+            num_sig_ids = len(sig_ids)
+            num_subplots = num_sig_ids
+            ax_rows_n = int(np.ceil(num_subplots / ax_cols_n))
+            fig, axs  = plt.subplots(ax_rows_n, ax_cols_n)
+            
+        elif type(sig_ids) == list:
+            num_sig_ids = len(sig_ids)
+            num_subplots = num_sig_ids
+            ax_rows_n = int(np.ceil(num_subplots / ax_cols_n))
+            fig, axs  = plt.subplots(ax_rows_n, ax_cols_n)
+        else:
+            # A single sig_ids:
+            num_sig_ids = 1
+            fig, axs  = plt.subplots(1)
+            # Uniformly deal with multiple charts,
+            # with one being a degenerate case:
+            axs = (axs)
+            sig_ids = [sig_ids]
+        # The axes returned by subplots are an
+        # array of axes instances, get just a list:
+        axs = axs.flatten()
+        pred_displays = []
+        fig.suptitle(f"PR Plot(s) {power_result.species} ({num_sig_ids}/{len(power_result.sig_ids())} call sigs)")
+        for sig_id, ax in zip(sig_ids, axs):
+            y_true = power_result.prob_df['truth'][power_result.prob_df['sig_id'] == sig_id]
+            y_pred = power_result.prob_df['match_prob'][power_result.prob_df['sig_id'] == sig_id]
+            pred_displays.append(sklearn.metrics.PrecisionRecallDisplay.from_predictions(
+                y_true, 
+                y_pred,
+                ax=ax,
+                name=f"Sig-{sig_id}"
+                ))
+        fig.show()
+        return pred_displays
 
 
     # ------------------------- Utilities ------------
@@ -855,6 +888,20 @@ class PowerResult(JsonDumpableMixin):
         truths = self.prob_df[self.prob_df.sig_id == sig_id].Truth
         truths.index = self.prob_df[self.prob_df.sig_id == sig_id].center_time 
         return truths
+
+    #------------------------------------
+    # sig_ids
+    #-------------------
+    
+    def sig_ids(self):
+        '''
+        Return a list of all signature IDs that
+        are represented in the prob_df.
+        
+        :return: list of signature IDs. These are usually numbers
+        :rtype: [Any] 
+        '''
+        return self.prob_df['sig_id'].unique()
 
     #------------------------------------
     # json_dumps

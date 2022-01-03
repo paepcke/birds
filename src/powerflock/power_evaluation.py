@@ -22,6 +22,7 @@ import numpy as np
 from powerflock.matplotlib_crosshair_cursor import CrosshairCursor
 from powerflock.power_member import PowerMember, PowerQuantileClassifier, \
     PowerResult
+from powerflock.quad_sig_calibration import QuadSigCalibrator
 from powerflock.signal_analysis import SignalAnalyzer, TemplateSelection
 
 
@@ -64,7 +65,6 @@ class PowerEvaluator:
         
         self.species = species
         self.actions = actions if type(actions) == list else [actions]
-        self.templates = templates
         self.test_recording = test_recording
         self.test_sel_tbl = test_sel_tbl
         
@@ -83,14 +83,25 @@ class PowerEvaluator:
         # in experiment, or elsewhere on the file system, materialize
         # that PowerResult instance:
         if power_result_info is not None:
-            pwr_res = self.experiment.read(power_result_info, Datatype.json)
+            pwr_res = self.experiment.read(power_result_info, PowerResult)
         else:
             # See whether the experiment has PowerResult instances:
             pwr_res = self._latest_power_result(self.experiment)
+
+        if templates is None:
+            # Does the experiment have templates from a
+            # prior quad_sig_calibration run?
+            try:
+                templates = self.experiment.read('signatures', QuadSigCalibrator)
+            except FileNotFoundError:
+                # The templates remains at None
+                pass
+        template = templates[species]
+        self.template = template
         
         self.power_member = PowerMember(
             species_name=species, 
-            spectral_template_info=templates,
+            spectral_template_info=template,
             the_slide_width_time=self.SLIDE_WIDTH,
             experiment=self.experiment,
             apply_bandpass=apply_bandpass
@@ -107,7 +118,6 @@ class PowerEvaluator:
                                         pwr_res=pwr_res,
                                         pwr_member=self.power_member,
                                         rec_path=self.test_recording,
-                                        
                                         )
                 self.log.info("Done running action 'test'.")
                 self.log.info(f"Saving power result under 'pwr_res' to exp {self.experiment.root}")
@@ -134,23 +144,12 @@ class PowerEvaluator:
                  rec_path=None
                  ):
 
-        #*********
-        #pwr_res = PowerResult.json_load('/tmp/pwr_res.json')
-        #pwr_res.add_truth(sel_tbl_path)
-        #*********
         if pwr_res is None and pwr_member is None:
             raise ValueError("Either pwr_res or pwr_member plus rec_path must be provided")
             
         if pwr_res is None:
             pwr_res = pwr_member.compute_probabilities(rec_path) 
             
-            #****************
-            #print(f"Saving to /tmp/pwr_res.json")
-            #pwr_res.json_dump('/tmp/pwr_res.json')
-            #print("exiting early")
-            #sys.exit()
-            #****************
-    
             # Add a Truth column to the result:
             pwr_res.add_truth(sel_tbl_path)
             
@@ -162,7 +161,8 @@ class PowerEvaluator:
                 )
             self.experiment.save(pwr_res_fname, pwr_res)
 
-        pwr_res.add_truth('/Users/paepcke/EclipseWorkspacesNew/birds/src/powerflock/tests/selection_tables/XenoCanto/sel_tbl_Kelley_SONG_XC274155-429_CMTO_KEL.txt')
+        pwr_member.plot_pr_curve(pwr_res)
+        input("Press any key to quit: ")
         print('foo')
         #call_intervals = Utils.get_call_intervals(sel_tbl_path)
 
@@ -313,7 +313,11 @@ class PowerEvaluator:
             # Jfile names are like PwrRes_2022-01-02T11_45_07.json
             # Get the parts:
             fparts = FileUtils.parse_filename(jfile)
-            if fparts['prefix'] != 'PwrRes':
+            try:
+                if fparts['prefix'] != 'PwrRes':
+                    continue
+            except KeyError:
+                # Filename does not even have a 'prefix' part to it:
                 continue
             # Replace the underscores w/ colons to get
             # correct iso formated times:
@@ -592,10 +596,10 @@ if __name__ == '__main__':
     cur_dir = os.path.dirname(__file__)
     # Check file existence:
 
-    if args.templates is None:
-        default_templates_path = os.path.join(cur_dir, 'species_calibration_data/signatures.json')
+    #if args.templates is None:
+    #    default_templates_path = os.path.join(cur_dir, 'species_calibration_data/signatures.json')
 
-    if not os.path.exists(args.templates):
+    if args.templates is not None and not os.path.exists(args.templates):
         raise FileNotFoundError(f"Templates file not found ({args.templates})")
 
     if args.test_rec is not None and not os.path.exists(args.test_rec):

@@ -11,7 +11,8 @@ from pathlib import Path
 import shutil
 import sys
 
-from experiment_manager.experiment_manager import JsonDumpableMixin
+from experiment_manager.experiment_manager import JsonDumpableMixin, \
+    ExperimentManager
 from logging_service import LoggingService
 
 from data_augmentation.utils import Utils, Interval
@@ -97,9 +98,9 @@ class QuadSigCalibrator(JsonDumpableMixin):
         :type cal_data_root: {None | str}
         :param cal_outdir: directory for result json files
         :type cal_outdir: {None | str}
-        :param experiment: optional name of experiment where to save
-            the dict of SpectralTemplates
-        :type experiment {None | str}
+        :param experiment: optional name or ExperimentManager instance of 
+            experiment where to save the dict of SpectralTemplates
+        :type experiment {None | str | ExperimentManager}
         :param unittesting: if True, return without initializing anything
         :type unittesting: bool
         '''
@@ -109,6 +110,13 @@ class QuadSigCalibrator(JsonDumpableMixin):
         if unittesting:
             return
 
+        if type(experiment) == str:
+            # Experiment is root of experiment info;
+            # create an experiment:
+            experiment = ExperimentManager(experiment)
+        # Else experiment must be None or an ExperimentManager instance
+        if experiment is not None and not isinstance(experiment, ExperimentManager):
+            raise TypeError(f"Experiment arg must be None, the root path of an experiment, or an ExperimentManager instance; not {type(experiment)}")
         self.experiment = experiment
 
         self.cur_dir = os.path.dirname(__file__)
@@ -506,6 +514,10 @@ if __name__ == '__main__':
                              "default: subdirectory of this file's dir: species_calibration_data.",
                         default=None)
     
+    parser.add_argument('-e', '--experiment',
+                        help='root directory of experiment to be managed by ExperimentManager',
+                        default=None)
+    
     parser.add_argument('-o', '--outdir',
                         help='where to place the json files with calibration numbers; \n' +\
                              "default: subdirectory of this file's dir: species_calibration_results.",
@@ -514,7 +526,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     QuadSigCalibrator(args.species,
-                      args.data,
-                      args.outdir 
+                      cal_data_root=args.data,
+                      cal_outdir=args.outdir,
+                      experiment=args.experiment
                       ).calibrate_species()
     
