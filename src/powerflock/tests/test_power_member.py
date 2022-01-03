@@ -68,7 +68,7 @@ class TestPowerMember(unittest.TestCase):
             apply_bandpass=True
             )
         power_result = pmember.compute_probabilities(self.rec_XC, '/tmp/power_result_test.json')
-        power_result.add_overlap_and_truth(self.sel_tbl_XC)
+        power_result.add_truth(self.sel_tbl_XC)
         print(pmember)
 
     #------------------------------------
@@ -80,7 +80,7 @@ class TestPowerMember(unittest.TestCase):
         pwr_res_file = os.path.join(os.getenv('HOME'),
                                     'tmp/cmtog_match_with_templateDec31_2021.json')
         pwr_res = PowerResult.json_load(pwr_res_file)
-        pwr_res.add_overlap_and_truth(self.sel_tbl_XC)
+        pwr_res.add_truth(self.sel_tbl_XC)
         
         
         print(pwr_res)
@@ -166,7 +166,7 @@ class TestPowerMember(unittest.TestCase):
         rec1, _sr = SoundProcessor.load_audio(self.sel_rec_cmto_xc1)
         details_df, summary = SignalAnalyzer.match_probability(rec1, template11)
         pow_res = PowerResult(details_df, summary, 'CMTOG')
-        pow_res.add_overlap_and_truth(self.sel_tbl_cmto_xc1)
+        pow_res.add_truth(self.sel_tbl_cmto_xc1)
         print('foo')
 
     #------------------------------------

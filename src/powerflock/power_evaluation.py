@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 '''
 Created on Nov 5, 2021
 
@@ -5,18 +6,22 @@ Created on Nov 5, 2021
 '''
 import argparse
 from bisect import bisect_left
+from datetime import datetime
 from enum import Enum
 import os
 import sys
 
-from experiment_manager.experiment_manager import ExperimentManager
+from experiment_manager.experiment_manager import ExperimentManager, Datatype
+from logging_service.logging_service import LoggingService
 from matplotlib.patches import Rectangle
 
+from birdsong.utils.utilities import FileUtils
 from data_augmentation.utils import Utils, Interval
 import matplotlib.pyplot as plt
 import numpy as np
 from powerflock.matplotlib_crosshair_cursor import CrosshairCursor
-from powerflock.power_member import PowerMember, PowerQuantileClassifier
+from powerflock.power_member import PowerMember, PowerQuantileClassifier, \
+    PowerResult
 from powerflock.signal_analysis import SignalAnalyzer, TemplateSelection
 
 
@@ -31,7 +36,7 @@ class PowerEvaluator:
     classdocs
     '''
     THRESHOLD = 0.9   # Probability threshold
-    SLIDE_WIDTH = 0.2 # sec
+    SLIDE_WIDTH = 0.1 # fraction of signature
     SIG_ID = 3
     
     TRUTH_RECT_HEIGHTS = 500 # Hz
@@ -46,8 +51,8 @@ class PowerEvaluator:
                  experiment_name,
                  species, 
                  actions,
-                 sig_source_recording=None,
-                 sig_source_sel_tbl=None,
+                 templates=None,
+                 power_result_info=None,
                  test_recording=None,
                  test_sel_tbl=None,
                  apply_bandpass=False
@@ -55,37 +60,39 @@ class PowerEvaluator:
         '''
         Constructor
         '''
-
+        self.log = LoggingService()
+        
         self.species = species
         self.actions = actions if type(actions) == list else [actions]
-        self.sig_source_recording = sig_source_recording
-        self.sig_source_sel_tbl = sig_source_sel_tbl
+        self.templates = templates
         self.test_recording = test_recording
         self.test_sel_tbl = test_sel_tbl
         
-        self._init_data_paths(apply_bandpass)
+        self._init_data_paths()
 
-        if sig_source_recording is None:
-            self.sig_source_recording = self.sel_rec_cmto_xc1
-        if sig_source_sel_tbl is None:
-            self.sig_source_sel_tbl = self.sel_tbl_cmto_xc1
-            
         # Cache of loaded audio for visualizations
         # maps fileName --> np_array
         self.audio_dict = {}
         # Map audioFile to Raven spectrogram df
         self.spectro_dict = {}
-
         
-        experiments = []
-        experiments.append(
-            ExperimentManager(os.path.join(self.experiment_dir, 
-                                           experiment_name)))
+        self.experiment = ExperimentManager(os.path.join(self.experiment_dir, 
+                                                         experiment_name))
+        
+        # Was a PowerResult computed, and stored as json either
+        # in experiment, or elsewhere on the file system, materialize
+        # that PowerResult instance:
+        if power_result_info is not None:
+            pwr_res = self.experiment.read(power_result_info, Datatype.json)
+        else:
+            # See whether the experiment has PowerResult instances:
+            pwr_res = self._latest_power_result(self.experiment)
+        
         self.power_member = PowerMember(
             species_name=species, 
-            spectral_template_info=zip([sig_source_recording], [sig_source_sel_tbl]),
+            spectral_template_info=templates,
             the_slide_width_time=self.SLIDE_WIDTH,
-            experiment=experiments[0],
+            experiment=self.experiment,
             apply_bandpass=apply_bandpass
             )
 
@@ -95,12 +102,16 @@ class PowerEvaluator:
             elif action == Action.GRID_SEARCH:
                 grid_res = self.grid_search()
             elif action == Action.TEST:
-                pwr_res = self.run_test(self.power_member,
-                                        self.test_recording,
-                                        self.test_sel_tbl,
-                                        self.SIG_ID,
-                                        self.THRESHOLD
+                self.log.info("Running action 'test'...")
+                pwr_res = self.run_test(self.test_sel_tbl,
+                                        pwr_res=pwr_res,
+                                        pwr_member=self.power_member,
+                                        rec_path=self.test_recording,
+                                        
                                         )
+                self.log.info("Done running action 'test'.")
+                self.log.info(f"Saving power result under 'pwr_res' to exp {self.experiment.root}")
+                self.experiment.save('pwr_res', pwr_res)
             elif action == Action.VIZ_PROBS:
                 ax = self.viz_probs(self.power_member,
                                     self.test_recording,
@@ -117,33 +128,51 @@ class PowerEvaluator:
     #-------------------
     
     def run_test(self,
-                 pwr_member,
-                 rec_path,
                  sel_tbl_path,
-                 sig_id,
-                 thres,
-                 
+                 pwr_res=None,
+                 pwr_member=None,
+                 rec_path=None
                  ):
 
-        pwr_res = pwr_member.compute_probabilities(rec_path)
+        #*********
+        #pwr_res = PowerResult.json_load('/tmp/pwr_res.json')
+        #pwr_res.add_truth(sel_tbl_path)
+        #*********
+        if pwr_res is None and pwr_member is None:
+            raise ValueError("Either pwr_res or pwr_member plus rec_path must be provided")
+            
+        if pwr_res is None:
+            pwr_res = pwr_member.compute_probabilities(rec_path) 
+            
+            #****************
+            #print(f"Saving to /tmp/pwr_res.json")
+            #pwr_res.json_dump('/tmp/pwr_res.json')
+            #print("exiting early")
+            #sys.exit()
+            #****************
+    
+            # Add a Truth column to the result:
+            pwr_res.add_truth(sel_tbl_path)
+            
+            pwr_res_fname = FileUtils.construct_filename(
+                props_info = {'species' : pwr_res.species},
+                suffix='.json',
+                prefix='PwrRes',
+                incl_date=True
+                )
+            self.experiment.save(pwr_res_fname, pwr_res)
 
-        # Add a Truth column to the result:
-        pwr_res.add_overlap_and_truth(sel_tbl_path)
-
+        pwr_res.add_truth('/Users/paepcke/EclipseWorkspacesNew/birds/src/powerflock/tests/selection_tables/XenoCanto/sel_tbl_Kelley_SONG_XC274155-429_CMTO_KEL.txt')
+        print('foo')
         #call_intervals = Utils.get_call_intervals(sel_tbl_path)
-        
-        #**********
-        pwr_res.prob_df.to_csv('/Users/paepcke/Project/Wildlife/Birds/CostaRica/ExperimentResults/PowerSigs/probs_dfCMTOGOverField.csv',
-                               index_label='row_id'
-                               )
-        
-        clf = PowerQuantileClassifier(sig_id, thres)
-        clf.fit(pwr_res)
-        score = clf.score(pwr_res.probabilities(sig_id), 
-                          pwr_res.truths(sig_id),
-                          name=f"({self.SIG_ID}/{self.THRESHOLD}/{self.SLIDE_WIDTH})"
-                          )
-        return score
+
+        #clf = PowerQuantileClassifier(sig_id, thres)
+        #clf.fit(pwr_res)
+        #score = clf.score(pwr_res.probabilities(sig_id), 
+        #                  pwr_res.truths(sig_id),
+        #                  name=f"({self.SIG_ID}/{self.THRESHOLD}/{self.SLIDE_WIDTH})"
+        #                  )
+        #return score
 
     #------------------------------------
     # grid_search
@@ -213,7 +242,7 @@ class PowerEvaluator:
             # Nobody has told this power result about
             # what is true: 
             # Add a Truth column to the result:
-            pwr_res.add_overlap_and_truth(test_sel_tbl)
+            pwr_res.add_truth(test_sel_tbl)
             truths = pwr_res.truths(sig_id)
         
         try:
@@ -262,15 +291,50 @@ class PowerEvaluator:
 # --------------  Utilities -----------------
 
     #------------------------------------
+    # _latest_power_result
+    #-------------------
+    
+    def _latest_power_result(self, exp):
+        '''
+        Given an experiment check whether it contains
+        PowerResult instances. If so, return the newest
+        instance.
+        
+        :param exp: experiment to check
+        :type exp: ExperimentManager
+        :return: newest power result or None if none available
+        :rtype {None | PowerResult}
+        '''
+
+        # Dict mapping timestamps to file names:
+        time_files = {}
+        jfiles = exp.listdir(PowerResult)
+        for jfile in jfiles:
+            # Jfile names are like PwrRes_2022-01-02T11_45_07.json
+            # Get the parts:
+            fparts = FileUtils.parse_filename(jfile)
+            if fparts['prefix'] != 'PwrRes':
+                continue
+            # Replace the underscores w/ colons to get
+            # correct iso formated times:
+            timestamp = fparts['timestamp'].replace('_',':')
+            time_files[datetime.fromisoformat(timestamp)] = jfile
+        if len(time_files) == 0:
+            return None
+        newest_date = max(time_files.keys())
+        exp_key = time_files[newest_date]
+        pwr_res = exp.read(exp_key, PowerResult)
+        return pwr_res
+
+    #------------------------------------
     # _init_data_paths
     #-------------------
 
-    def _init_data_paths(self, apply_bandpass=False):
+    def _init_data_paths(self):
         
         self.cur_dir = os.path.dirname(__file__)
         proj_root = os.path.join(self.cur_dir, '../..')
         self.experiment_dir = os.path.join(proj_root, 'experiments/PowerSignatures')
-                                  
 
         self.sound_data = os.path.join(self.cur_dir, 'tests/signal_processing_sounds')
         self.xc_sound_data = os.path.join(self.cur_dir, 'tests/signal_processing_sounds/XenoCanto')
@@ -304,14 +368,7 @@ class PowerEvaluator:
     
         self.sel_tbl_cmto_xc3 = os.path.join(self.cur_dir, 'tests/selection_tables/XenoCanto/cmto3.selections.txt')
         self.sel_rec_cmto_xc3 = os.path.join(self.xc_sound_data, 'CMTOG/SONG_Black-mandibled_Toucan2011-1-24-1.mp3')
-        
-        # Create signature templates to work with:
-        self.recordings = [self.sel_rec_cmto_xc1, self.sel_rec_cmto_xc2, self.sel_rec_cmto_xc3]
-        self.sel_tbls   = [self.sel_tbl_cmto_xc1, self.sel_tbl_cmto_xc2, self.sel_tbl_cmto_xc3]
-        self.templates = SignalAnalyzer.compute_species_templates('CMTOG', 
-                                                                 self.recordings, 
-                                                                 self.sel_tbls,
-                                                                 apply_bandpass=apply_bandpass)
+
 # ---------------- Class PowerInfoCursor --------
 
 class PowerInfoCursor(CrosshairCursor):
@@ -500,12 +557,15 @@ if __name__ == '__main__':
                                      description="Evaluate or calibrate the power signature approach"
                                      )
 
-    parser.add_argument('--sig_rec',
-                        help='path to recording from which signatures are to be computed',
+    parser.add_argument('--templates',
+                        help='path to already computed templates',
                         default=None)
-    parser.add_argument('--sig_sel',
-                        help='path to selection table for signature',
-                        default=None)
+    # parser.add_argument('--sig_rec',
+    #                     help='path to recording from which signatures are to be computed',
+    #                     default=None)
+    # parser.add_argument('--sig_sel',
+    #                     help='path to selection table for signature',
+    #                     default=None)
     parser.add_argument('--test_rec',
                         help='path to recording that is to be tested against a given signature',
                         default=None)
@@ -529,13 +589,15 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
+    cur_dir = os.path.dirname(__file__)
     # Check file existence:
 
-    if args.sig_rec is not None and not os.path.exists(args.sig_rec):
-        raise FileNotFoundError(f"Audio file for signature creation not found ({args.sig_rec})")
-    if args.sig_sel is not None and not os.path.exists(args.sig_sel):
-        raise FileNotFoundError(f"Raven selection table file for signature creation not found ({args.sig_sel})")
-    
+    if args.templates is None:
+        default_templates_path = os.path.join(cur_dir, 'species_calibration_data/signatures.json')
+
+    if not os.path.exists(args.templates):
+        raise FileNotFoundError(f"Templates file not found ({args.templates})")
+
     if args.test_rec is not None and not os.path.exists(args.test_rec):
         raise FileNotFoundError(f"Audio file for testing not found ({args.test_rec})")
     if args.test_sel is not None and not os.path.exists(args.test_sel):
@@ -559,8 +621,7 @@ if __name__ == '__main__':
     PowerEvaluator(args.experiment_name,
                    args.species,
                    actions,
-                   sig_source_recording=args.sig_rec,
-                   sig_source_sel_tbl=args.sig_sel,
+                   args.templates,
                    test_recording=args.test_rec,
                    test_sel_tbl=args.test_sel,
                    apply_bandpass=args.bandpass

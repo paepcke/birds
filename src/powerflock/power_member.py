@@ -21,6 +21,8 @@ import sklearn
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.exceptions import NotFittedError
 
+from experiment_manager.experiment_manager import JsonDumpableMixin
+
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import Utils, Interval
 import numpy as np
@@ -252,7 +254,7 @@ class PowerMember:
     
     def compute_probabilities(self, 
                               full_audio,
-                              outfile, 
+                              outfile=None, 
                               sr=SignalAnalyzer.sr
                               ):
         '''
@@ -309,8 +311,9 @@ class PowerMember:
         self.log.info("Matched all signatures")
         self.power_result = PowerResult(probs_df, self.species_name)
 
-        print(f"Saving power_result to {outfile}")
-        self.power_result.json_dump(outfile)
+        if outfile is not None:
+            print(f"Saving power_result to {outfile}")
+            self.power_result.json_dump(outfile)
 
         # Indicate that probabilities were computed
         # on an input:
@@ -628,7 +631,7 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
                     # to samples: 
                     power_member.slide_width_time = slide_width
                     power_res = power_member.compute_probabilities(rec_arr, rec_sr)
-                    power_res.add_overlap_and_truth(selection_tbl_file)
+                    power_res.add_truth(selection_tbl_file)
 
                     clf = PowerQuantileClassifier(sig_id, thres)
                     clf.fit(power_res)
@@ -661,7 +664,7 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
 
 # ------------------------ Class PowerResult --------
 
-class PowerResult:
+class PowerResult(JsonDumpableMixin):
     '''
     Instances hold results from an individual PowerMember.
     Also provided are methods for accuracy and other outcome
@@ -684,15 +687,15 @@ class PowerResult:
         
         Example prob_df:
         
-               n_samples    probability  sig_id  start   stop
-            0         10.0         0.85     0.0   10.0   20.0
-            1         10.0         0.85     0.0   20.0   30.0
-            2         10.0         0.75     0.0   31.0   40.0
-            3         10.0         0.65     0.0   41.0   50.0
-            4          4.0         0.65     2.0    0.0    4.0
-            5          4.0         0.55     2.0    5.0    9.0
-            6        100.0         0.65     3.0    0.0  100.0
-            7        100.0         0.55     3.0  101.0  200.0
+               n_samples     match_prob  sig_id  start_idx   stop_idx
+            0         10.0         0.85     0.0   10.0       20.0
+            1         10.0         0.85     0.0   20.0       30.0
+            2         10.0         0.75     0.0   31.0       40.0
+            3         10.0         0.65     0.0   41.0       50.0
+            4          4.0         0.65     2.0    0.0        4.0
+            5          4.0         0.55     2.0    5.0        9.0
+            6        100.0         0.65     3.0    0.0  1    00.0
+            7        100.0         0.55     3.0  101.0  2    00.0
              
 
         Example summary_ser:
@@ -721,17 +724,18 @@ class PowerResult:
 
         self.prob_df = prob_df
         self.prob_df.index = center_time
+        self.prob_df.index.name = 'time'
         self.species  = species
         
         # The truths column has not been added yet.
-        # The column is added by a client calling add_overlap_and_truth().
+        # The column is added by a client calling add_truth().
         # The following property can be tested via 
 
     #------------------------------------
     # add_and_truth
     #-------------------
     
-    def add_overlap_and_truth(self, truth_source, plot=False):
+    def add_truth(self, truth_source, plot=False):
         '''
         Add two new columns: 'Overlap' and 'Truth' to the matching results
         df. For each row the Truth column is 1 or 0, depending
@@ -773,79 +777,20 @@ class PowerResult:
             if sum(types) != len(truth_source):
                 raise TypeError(f"List in truth_source does not contain Interval instances")
             call_intervals = truth_source
-            
-        # Build a Series whose index are the times from the 
-        # probability series. Fill the series with the percentage
-        # of overlap of the interval in each probability row:
-        
-        overlap_percentages = pd.Series([0.]*len(self.prob_df.index),
-                                        name='sig_overlap_perc')
-        # Create a series same length of prob_df.
-        # Set all elements to True for which the
-        # prob_df's start_time lies in one of the call 
-        # intervals.
-        # First set all vals to False
-        truths = pd.Series([False]*len(self.prob_df), 
-                           name='Truth', 
-                           index=self.prob_df.start_time)
-        # The prob_df repeats the sequence of start_times for
-        # each signature. Set *all* start_time occurrences 
-        # with a call to True.
-        # Get the start_time series that gets repeated in prob_df.
-        # The length of this array will depend on the slide window.
-        # With a 0.2 slide window: recording_length / slide_window.
-        # With a 60 second recording that is 300 entries: 
-        df_unique_start_times = self.prob_df.start_time.unique()
-        # Check each of the unique start times against the
-        # call intervals:
-        for start_time in df_unique_start_times:
-            for call_interval in call_intervals:
-                if call_interval.contains(start_time):
-                    # Set *all* rows in the truth series with
-                    # start_time in its index to True. This
-                    # will set as many positions to True as there
-                    # are signatures:
-                    truths[truths.index == start_time] = True
-                elif start_time < call_interval['low_val']:
-                    # Since call intervals are sorted by time,
-                    # if start_time is less than the current call
-                    # interval, no need to check the following ones;
-                    # look at the next start_time:
-                    break
 
-        cur_sig_id = self.prob_df.sig_id.iloc[0]
-        truth_intervals = iter(call_intervals)
-        cur_truth_interval = next(truth_intervals)
-        for row_num, prob_ser in self.prob_df.iterrows():
-            if prob_ser.sig_id != cur_sig_id:
-                # Starting a section of the probs_df that was
-                # generated using a different signature:
-                try:
-                    cur_truth_interval = next(truth_intervals)
-                except StopIteration:
-                    # We tried all the truth intervals against
-                    # this probability df's entries for the
-                    # sig in the batch of the prob_df that was
-                    # produced with the current sig. Now time
-                    # starts again as we start with the results
-                    # from a new sig:
-                    truth_intervals = iter(call_intervals)
-                    cur_truth_interval = next(truth_intervals)
-                cur_sig_id = prob_ser.sig_id 
-            prob_interval = Interval(prob_ser.start_time, 
-                                     prob_ser.stop_time,
-                                     step=1/SignalAnalyzer.sr)
-            ovlp = cur_truth_interval.percent_overlap(prob_interval)
-            overlap_percentages[row_num] = ovlp
-            if ovlp > 0:
-                truths[row_num] = True
+        # Find all rows shows timestamp (i.e. index)
+        # lies within any of the call intervals:
+        ntime_frames, _n_facts = self.prob_df.shape
+        overlaps = pd.Series([False]*ntime_frames, index=self.prob_df.index)
+        time_slots = pd.Series(self.prob_df.index)
+        for call_intv in call_intervals:
+            new_overlaps = time_slots.apply(call_intv.contains)
+            new_overlaps.index = overlaps.index
+            overlaps = np.logical_or(overlaps, new_overlaps)
 
-        # Attach the overlap percentages to the right
-        # of self.prob_df:
-        self.prob_df['sig_overlap_perc'] = overlap_percentages
-
-        # Same for the Truths column:
-        self.prob_df['Truth'] = truths
+        # New column with True when a row is
+        # within a call.
+        self.prob_df['truth'] = overlaps
 
         #**********
         # if plot:
@@ -906,7 +851,7 @@ class PowerResult:
         :rtype pd.Series(bool)
         '''
         if 'Truth' not in self.prob_df.columns:
-            raise IndexError(f"Power result missing Truth column; call add_overlap_and_truth() first")
+            raise IndexError(f"Power result missing Truth column; call add_truth() first")
         truths = self.prob_df[self.prob_df.sig_id == sig_id].Truth
         truths.index = self.prob_df[self.prob_df.sig_id == sig_id].center_time 
         return truths
@@ -958,12 +903,9 @@ class PowerResult:
         # 3      10       ...
 
         prob_df = pd.read_json(as_dict['prob_df'], orient='table')
-        # Replace the index with the column labeled 'index':
-        prob_df.index = prob_df['index']
-        # Remove the 'index' column that was added by df.to_json()
-        # in json_dumps():
-        prob_df.drop(labels='index', axis='columns', inplace=True)
-        
+        # Remove the auxiliary column 'time' that
+        # was added by the pr.dump():
+        prob_df.drop(labels='time', axis='columns', inplace=True)
         pwr_res = PowerResult(prob_df, as_dict['species'], as_dict['sr'])
         return pwr_res
 
@@ -1001,6 +943,20 @@ class PowerResult:
         with open(fpath, 'r') as fd:
             jstr = fd.read()
         return cls.json_loads(jstr)
+
+    #------------------------------------
+    # __repr__
+    #-------------------
+    
+    def __repr__(self):
+        return f"<PowerResult {self.species} {round(self.prob_df.index[-1])}sec {hex(id(self))}>"
+
+    #------------------------------------
+    # __str__
+    #-------------------
+    
+    def __str__(self):
+        return self.__repr__()
 
 # ------------------------ Main ------------
 if __name__ == '__main__':

@@ -574,7 +574,7 @@ class SignalAnalysisTester(unittest.TestCase):
         })
         
         self.assertTrue((first_row.round(4) == first_row_expected).all())
-        power_res.add_overlap_and_truth(self.sel_tbl_cmto_xc1)
+        power_res.add_truth(self.sel_tbl_cmto_xc1)
         
         clf = PowerQuantileClassifier(1.0,        # sig_id, 
                                       0.75        # threshold_quantile)

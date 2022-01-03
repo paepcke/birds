@@ -177,7 +177,7 @@ class Interval(dict):
         return (self['high_val'] - self['low_val']) / self['step']
 
     def __str__(self):
-        return f"<Interval {self['low_val']}/{self['high_val']}/{self['step']} {hex(id(self))}>"
+        return f"<Interval {round(self['low_val'],2)}/{round(self['high_val'], 2)}/{round(self['step'],2)} {hex(id(self))}>"
 
     def __repr__(self):
         return self.__str__()
@@ -1804,7 +1804,7 @@ class Utils:
             if (df1.columns != df2.columns).any():
                 raise AssertionError(f"Columns df1 differ from columns df2")
         
-        if not cls.df_ex(df1, df2, decimals):
+        if not cls.df_eq(df1, df2, decimals):
             raise AssertionError(f"Values of df1 differ from values of df2")
         
         return
