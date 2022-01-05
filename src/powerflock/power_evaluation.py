@@ -6,7 +6,7 @@ Created on Nov 5, 2021
 '''
 import argparse
 from bisect import bisect_left
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 import os
 import sys
@@ -210,12 +210,13 @@ class PowerEvaluator:
             audio_file=self.test_recording,
             selection_tbl_file=self.test_sel_tbl,
             #******quantile_thresholds=[0.80, 0.85, 0.90, 0.99],
-            quantile_thresholds=[0.18, 0.19, 0.20, 0.80],
-            slide_widths=[0.05, 0.1, 0.2],
+            #******quantile_thresholds=[0.18, 0.19, 0.20, 0.80],
+            quantile_thresholds=[0.21, 0.22, 0.3],
+            slide_widths=[0.01, 0.02, 0.03],
             experiment=self.experiment
             )
         end = timer()
-        self.log.info(f"Runtime: {str(datetime.timedelta(seconds=end - start))}")
+        self.log.info(f"Runtime: {str(timedelta(seconds=end - start))}")
         self.log.info(f"Grid result in {self.experiment.root}")
         
 # ---------------- Visualization -------------
