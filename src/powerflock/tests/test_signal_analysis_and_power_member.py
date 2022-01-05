@@ -256,20 +256,20 @@ class SignalAnalysisTester(unittest.TestCase):
         self.assertEqual(median_angles.loc[0.7082086167800453].round(5), 46.66721)
         self.assertEqual(median_angles.loc[0.058049886621315196], 0.0)
 
-    #------------------------------------
-    # test_multitaper_spectrogram 
-    #-------------------
-    
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    def test_multitaper_spectrogram(self):
-        
-        mt_spec = SignalAnalyzer.multitaper_spectrogram(self.sel_rec_cmto_xc1)
-        ax = Charter.spectrogram_plot(mt_spec, fig_title="Multitaper Spectrogram")
-        
-        self.assertTupleEqual(mt_spec.shape, (513, 1589))
-        # Put breakpoint on statement below if in Eclipse: 
-        ax.figure.show()
-        input("Hit Enter to continue: ")
+    # #------------------------------------
+    # # test_multitaper_spectrogram 
+    # #-------------------
+    #
+    # @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    # def test_multitaper_spectrogram(self):
+    #
+    #     mt_spec = SignalAnalyzer.multitaper_spectrogram(self.sel_rec_cmto_xc1)
+    #     ax = Charter.spectrogram_plot(mt_spec, fig_title="Multitaper Spectrogram")
+    #
+    #     self.assertTupleEqual(mt_spec.shape, (513, 1589))
+    #     # Put breakpoint on statement below if in Eclipse: 
+    #     ax.figure.show()
+    #     input("Hit Enter to continue: ")
 
     #------------------------------------
     # test_spectral_centroid_each_timeframe

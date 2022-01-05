@@ -45,7 +45,7 @@ setup(
                         'ml-experiment-manager>=0.1.12',
                         'mplcursors>=0.5',
                         'tabulate>=0.8.9',
-                        'mtspec>=0.3.2',
+                        #'mtspec>=0.3.2',
                         ],
 
     tests_require    =[

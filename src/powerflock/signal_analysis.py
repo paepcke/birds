@@ -16,7 +16,7 @@ from scipy.signal import argrelextrema
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import Utils, Interval
 import matplotlib.pyplot as plt
-from multitaper.multitaper_spectrogram_python import MultitaperSpectrogrammer
+#from multitaper.multitaper_spectrogram_python import MultitaperSpectrogrammer
 import numpy as np
 import pandas as pd
 from powerflock.signatures import Signature
@@ -1049,107 +1049,107 @@ class SignalAnalyzer:
         return num_timeframes * hop_length / 22050 
 
 
-    #------------------------------------
-    # multitaper_spectrogram
-    #-------------------
-    
-    @classmethod
-    def multitaper_spectrogram(cls,
-                               audio_spec,
-                               sr=22050,
-                               bandpass=None,
-                               plot=False
-                               ):
-        '''
-        SOME DOUBT ABOUT CORRECTNESS!
-        
-        Given an np.ndarray audio signal, or the path
-        to an audio file, return a spectrogram constructed
-        by the multitaper method. For usage example, see
-        A procedure for an automated measurement of song similarity
-		By Ofer Tchernichovski, Fernando Nottebohm, CHing Elizabeth Ho, 
-		Bijan Pesaran, Partha Pratim Mitra. ANIMAL BEHAVIOUR, 2000, 59, 1167–1176.
-		
-		Well explained in video tutorial #2 at https://prerau.bwh.harvard.edu/multitaper/
-		
-		This method fixes parameters to the underlying workhorse
-		in file multitaper_spectrogram_python.py to work with birds. For
-		info on that program, see git@github.com:preraulab/multitaper_toolbox.git.
-
-        :param audio_spec: path to audio, or audio array
-        :type audio_spec: {str | np.ndarray}
-        :param sr: sample rate. If audio is an audio path, the sr is
-            found automatically. Default is the librosa default sr value.
-        :type sr: int
-        :param bandpass: if not None, an Interval instance with low
-            and high freqs to consider
-        :type bandpass: {None | Interval}
-        :param plot: if True, plot the result spectrogram and pause
-        :type plot: bool
-        :return a spectrogram dataframe; index will be frequencies,
-            columns will be times for each spectrogram timeframe
-        :rtype: pd.DataFrame
-        '''
-
-        if type(audio_spec) == str:
-            audio, sr = SoundProcessor.load_audio(audio_spec)
-        elif type(audio_spec) == np.ndarray:
-            audio = audio_spec
-        else:
-            raise TypeError("Audio spec must be a file path or np array of audio")
-        
-        # Number of audio samples in one timeframe:
-        timeframe_samples = 512
-
-        # Width of one timeframe in seconds
-        # What the multitaper software calls data_window
-        timeframe_secs = timeframe_samples/sr
-        # Max frequency that is discernible with given sr:
-        nyquist_freq = sr/2.0
-        
-        if bandpass is not None:
-            freq_range = (bandpass['low_val'], bandpass['high_val'])
-        else:
-            freq_range = (0, nyquist_freq) 
-
-        top_freq = freq_range[1]
-
-        # Sometimes called TW: timeframe_width_secs * freq_band_width / 2:
-        time_bandwidth = (timeframe_secs * top_freq) / 2.0
-
-        # Multitaper software wants the following:
-        window_params = (timeframe_secs, timeframe_samples/sr)
-        
-        # Computation will use multiple cores; be nice:
-        num_cpus = int(mp.cpu_count() * 80 / 100)
-        
-        # The min_nfft determines the number of frequency bands,
-        # and therefore the resolution of contour analyis:
-        spectro, times, freqs = MultitaperSpectrogrammer.multitaper_spectrogram(audio, 
-                                                                                sr,
-                                                                                frequency_range=freq_range,
-                                                                                time_bandwidth=time_bandwidth, 
-                                                                                #num_tapers,
-                                                                                window_params=window_params, 
-                                                                                min_nfft=1024,
-                                                                                # detrend_opt, 
-                                                                                multiprocess=True, 
-                                                                                cpus=num_cpus, 
-                                                                                # weighting, 
-                                                                                plot_on=False, 
-                                                                                clim_scale=False
-                                                                                # verbose, 
-                                                                                # xyflip
-                                                                                )
-
-        spectro_df = pd.DataFrame(spectro, columns=times, index=freqs)
-        # Make the top row the highest freq, rather than 0:
-        spectro_df = spectro_df.reindex(index=spectro_df.index[::-1])
-        
-        if plot:
-            Charter.spectrogram_plot(spectro_df, fig_title="Multitaper Spectrogram")
-            input("Hit Enter to dismiss and continue: ")
-        return spectro_df
+#   #------------------------------------
+#   # multitaper_spectrogram
+#   #-------------------
+#
+#   @classmethod
+#   def multitaper_spectrogram(cls,
+#                              audio_spec,
+#                              sr=22050,
+#                              bandpass=None,
+#                              plot=False
+#                              ):
+#       '''
+#       SOME DOUBT ABOUT CORRECTNESS!
+#
+#       Given an np.ndarray audio signal, or the path
+#       to an audio file, return a spectrogram constructed
+#       by the multitaper method. For usage example, see
+#       A procedure for an automated measurement of song similarity
+# By Ofer Tchernichovski, Fernando Nottebohm, CHing Elizabeth Ho, 
+# Bijan Pesaran, Partha Pratim Mitra. ANIMAL BEHAVIOUR, 2000, 59, 1167–1176.
+#
+# Well explained in video tutorial #2 at https://prerau.bwh.harvard.edu/multitaper/
+#
+# This method fixes parameters to the underlying workhorse
+# in file multitaper_spectrogram_python.py to work with birds. For
+# info on that program, see git@github.com:preraulab/multitaper_toolbox.git.
+#
+#       :param audio_spec: path to audio, or audio array
+#       :type audio_spec: {str | np.ndarray}
+#       :param sr: sample rate. If audio is an audio path, the sr is
+#           found automatically. Default is the librosa default sr value.
+#       :type sr: int
+#       :param bandpass: if not None, an Interval instance with low
+#           and high freqs to consider
+#       :type bandpass: {None | Interval}
+#       :param plot: if True, plot the result spectrogram and pause
+#       :type plot: bool
+#       :return a spectrogram dataframe; index will be frequencies,
+#           columns will be times for each spectrogram timeframe
+#       :rtype: pd.DataFrame
+#       '''
+#
+#       if type(audio_spec) == str:
+#           audio, sr = SoundProcessor.load_audio(audio_spec)
+#       elif type(audio_spec) == np.ndarray:
+#           audio = audio_spec
+#       else:
+#           raise TypeError("Audio spec must be a file path or np array of audio")
+#
+#       # Number of audio samples in one timeframe:
+#       timeframe_samples = 512
+#
+#       # Width of one timeframe in seconds
+#       # What the multitaper software calls data_window
+#       timeframe_secs = timeframe_samples/sr
+#       # Max frequency that is discernible with given sr:
+#       nyquist_freq = sr/2.0
+#
+#       if bandpass is not None:
+#           freq_range = (bandpass['low_val'], bandpass['high_val'])
+#       else:
+#           freq_range = (0, nyquist_freq) 
+#
+#       top_freq = freq_range[1]
+#
+#       # Sometimes called TW: timeframe_width_secs * freq_band_width / 2:
+#       time_bandwidth = (timeframe_secs * top_freq) / 2.0
+#
+#       # Multitaper software wants the following:
+#       window_params = (timeframe_secs, timeframe_samples/sr)
+#
+#       # Computation will use multiple cores; be nice:
+#       num_cpus = int(mp.cpu_count() * 80 / 100)
+#
+#       # The min_nfft determines the number of frequency bands,
+#       # and therefore the resolution of contour analyis:
+#       spectro, times, freqs = MultitaperSpectrogrammer.multitaper_spectrogram(audio, 
+#                                                                               sr,
+#                                                                               frequency_range=freq_range,
+#                                                                               time_bandwidth=time_bandwidth, 
+#                                                                               #num_tapers,
+#                                                                               window_params=window_params, 
+#                                                                               min_nfft=1024,
+#                                                                               # detrend_opt, 
+#                                                                               multiprocess=True, 
+#                                                                               cpus=num_cpus, 
+#                                                                               # weighting, 
+#                                                                               plot_on=False, 
+#                                                                               clim_scale=False
+#                                                                               # verbose, 
+#                                                                               # xyflip
+#                                                                               )
+#
+#       spectro_df = pd.DataFrame(spectro, columns=times, index=freqs)
+#       # Make the top row the highest freq, rather than 0:
+#       spectro_df = spectro_df.reindex(index=spectro_df.index[::-1])
+#
+#       if plot:
+#           Charter.spectrogram_plot(spectro_df, fig_title="Multitaper Spectrogram")
+#           input("Hit Enter to dismiss and continue: ")
+#       return spectro_df
 
     #------------------------------------
     # zero_crossings
