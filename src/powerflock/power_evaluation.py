@@ -11,7 +11,7 @@ from enum import Enum
 import os
 import sys
 
-from experiment_manager.experiment_manager import ExperimentManager, Datatype
+from experiment_manager.experiment_manager import ExperimentManager
 from logging_service.logging_service import LoggingService
 from matplotlib.patches import Rectangle
 
@@ -23,8 +23,7 @@ from powerflock.matplotlib_crosshair_cursor import CrosshairCursor
 from powerflock.power_member import PowerMember, PowerQuantileClassifier, \
     PowerResult
 from powerflock.quad_sig_calibration import QuadSigCalibrator
-from powerflock.signal_analysis import SignalAnalyzer, TemplateSelection
-
+from powerflock.signal_analysis import SignalAnalyzer
 
 class Action(Enum):
     UNITTEST = 0
@@ -76,8 +75,9 @@ class PowerEvaluator:
         # Map audioFile to Raven spectrogram df
         self.spectro_dict = {}
         
-        self.experiment = ExperimentManager(os.path.join(self.experiment_dir, 
+        experiment_root = os.path.abspath(os.path.join(self.experiment_dir, 
                                                          experiment_name))
+        self.experiment = ExperimentManager(experiment_root)
         
         # Was a PowerResult computed, and stored as json either
         # in experiment, or elsewhere on the file system, materialize
@@ -96,7 +96,11 @@ class PowerEvaluator:
             except FileNotFoundError:
                 # The templates remains at None
                 pass
-        template = templates[species]
+        else:
+            # Path to signatures json file stored by QuadSigCalibrator:
+            templates_dict = QuadSigCalibrator.json_load(templates)
+            template = templates_dict[species]
+
         self.template = template
         
         self.power_member = PowerMember(
@@ -161,7 +165,18 @@ class PowerEvaluator:
                 )
             self.experiment.save(pwr_res_fname, pwr_res)
 
-        pwr_member.plot_pr_curve(pwr_res)
+        _axes = pwr_member.plot_pr_curve(pwr_res)
+        
+        threshold = 0.75
+        
+        scores = {}
+        for sig_id in pwr_res.sig_ids():
+            quantile_evaluator = PowerQuantileClassifier(sig_id=sig_id, 
+                                                         threshold_quantile=threshold)
+            quantile_evaluator.fit(pwr_res)
+            score_name = f"score_sig_id{sig_id}_thres{threshold}" 
+            scores[score_name] = quantile_evaluator.score(None, None, name=score_name)
+        
         input("Press any key to quit: ")
         print('foo')
         #call_intervals = Utils.get_call_intervals(sel_tbl_path)
@@ -180,12 +195,6 @@ class PowerEvaluator:
     
     def grid_search(self):
         
-        exp_path = os.path.join(os.path.dirname(__file__), 
-                                '../../experiments/PowerSignatures/grid_search')
-        experiment = ExperimentManager(root_path=exp_path)
-        template_info = zip([self.sig_source_recording], [self.sig_source_sel_tbl])
-        pwr_member = PowerMember(self.species, template_info)
-        
         # pr_disp = sklearn.metrics.PrecisionRecallDisplay.from_estimator(
         #     clf,
         #     pwr_res.prob_df.probability,
@@ -196,26 +205,18 @@ class PowerEvaluator:
 
         start = timer()
         # 1hr:20min
-        grid_res = PowerQuantileClassifier.grid_search(
-            pwr_member,
-            audio_file=self.sel_rec_cmto_xc1,
-            selection_tbl_file=self.sel_tbl_cmto_xc1,
-            
-            # Signatures over which to range:
-            sig_ids=np.arange(1.0, len(self.templates[0].signatures)),
+        _grid_res = PowerQuantileClassifier.grid_search(
+            self.power_member,
+            audio_file=self.test_recording,
+            selection_tbl_file=self.test_sel_tbl,
             #******quantile_thresholds=[0.80, 0.85, 0.90, 0.99],
             quantile_thresholds=[0.18, 0.19, 0.20, 0.80],
             slide_widths=[0.05, 0.1, 0.2],
-            sig_combination=[TemplateSelection.MIN_PROB,
-                             TemplateSelection.MAX_PROB,
-                             TemplateSelection.MED_PROB,
-                             TemplateSelection.MEAN_PROB
-                             ],
-            experiment=experiment
+            experiment=self.experiment
             )
         end = timer()
-        print(end - start)
-        print(grid_res)
+        self.log.info(f"Runtime: {str(datetime.timedelta(seconds=end - start))}")
+        self.log.info(f"Grid result in {self.experiment.root}")
         
 # ---------------- Visualization -------------
 

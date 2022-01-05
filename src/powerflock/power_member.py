@@ -31,7 +31,7 @@ import numpy as np
 import pandas as pd
 from powerflock.signal_analysis import SignalAnalyzer, TemplateSelection
 from powerflock.signatures import SpectralTemplate
-
+from powerflock.quad_sig_calibration import QuadSigCalibrator
 
 #from sklearn.metrics import PrecisionRecallDisplay
 #import matplotlib.pyplot as plt
@@ -265,9 +265,9 @@ class PowerMember:
         Given an audio clip array or file longer than the shortest call
         of this PowerMember's species, or a file path to a recording. 
         Slide the signal template past the full_audio in increments 
-        of self._slide_width_samples array elements. Each time, find 
-        the probability of the audiosnippet being a call of this member's 
-        species.
+        of (self.slide_width_time * <samples-in-shortest-call>) array 
+        elements. Each time, find the probability of the audiosnippet 
+        being a call of this member's species.
         
         If full_audio is an audio file, the sample rate does not need
         to be supplied in this call. 
@@ -338,24 +338,30 @@ class PowerMember:
             num_sig_ids = len(sig_ids)
             num_subplots = num_sig_ids
             ax_rows_n = int(np.ceil(num_subplots / ax_cols_n))
-            fig, axs  = plt.subplots(ax_rows_n, ax_cols_n)
-            
+
         elif type(sig_ids) == list:
             num_sig_ids = len(sig_ids)
             num_subplots = num_sig_ids
             ax_rows_n = int(np.ceil(num_subplots / ax_cols_n))
-            fig, axs  = plt.subplots(ax_rows_n, ax_cols_n)
+
         else:
             # A single sig_ids:
             num_sig_ids = 1
-            fig, axs  = plt.subplots(1)
+            ax_rows_n = 1
+            ax_cols_n = 1
             # Uniformly deal with multiple charts,
             # with one being a degenerate case:
-            axs = (axs)
+            #*****axs = (axs)
             sig_ids = [sig_ids]
-        # The axes returned by subplots are an
-        # array of axes instances, get just a list:
-        axs = axs.flatten()
+        fig, axs  = plt.subplots(ax_rows_n, ax_cols_n, sharex=True, sharey=True)
+        # If just one axes, make it a list to
+        # match what the branches above would produce:
+        if type(axs) != np.ndarray:
+            axs = [axs]
+        else:
+            # The axes returned by multi-chart subplots are an
+            # array of axes instances, get just a list:
+            axs = axs.flatten()
         pred_displays = []
         fig.suptitle(f"PR Plot(s) {power_result.species} ({num_sig_ids}/{len(power_result.sig_ids())} call sigs)")
         for sig_id, ax in zip(sig_ids, axs):
@@ -445,12 +451,12 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
     that holds the result of matching an audio file to a template, i.e. to
     one or more power signatures. Given is therefore information like:
     
-             n_samples  probability  sig_id    start     stop  start_time  stop_time  center_time    overlap  Truth
-          0    43136.0     0.711948     1.0      0.0  43136.0    0.000000   1.956281     0.978141  29.090684   True 
-          1    43136.0     0.662506     1.0  10784.0  53920.0    0.489070   2.445351     1.467211  54.090628   True 
-          2    43136.0     0.810184     1.0  21568.0  64704.0    0.978141   2.934422     1.956281  79.090572   True 
-          3    36862.0     0.725635     2.0   9215.0  46077.0    0.417914   2.089660     1.253787      0.0    False  
-          4    36862.0     0.756336     2.0  18430.0  55292.0    0.835828   2.507574     1.671701      0.0    False
+             n_samples   match_prob  sig_id start_idx stop_idx   start_time stop_time  truth
+          0    43136.0     0.711948     1.0      0.0  43136.0    0.000000   1.956281   True 
+          1    43136.0     0.662506     1.0  10784.0  53920.0    0.489070   2.445351   True 
+          2    43136.0     0.810184     1.0  21568.0  64704.0    0.978141   2.934422   True 
+          3    36862.0     0.725635     2.0   9215.0  46077.0    0.417914   2.089660  False  
+          4    36862.0     0.756336     2.0  18430.0  55292.0    0.835828   2.507574  False
           
     This classifier is initialized with a quantile threshold, such as
     0.75 for the forth quartile; though any quantile is acceptable.
@@ -460,8 +466,7 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
     
     Given a probability this estimator returns True if the probability is the
     GE to the given signature's threshold probability.
-    
-    
+
     Usage:
     
          estimator = PowerQuantileClassifier(pwr_result, 3, 0.53)
@@ -469,14 +474,16 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
          estimator.predict([0.23, 0.87, 0.51])
     '''
     
-    
-    
+    log = LoggingService()
+
+
     #------------------------------------
     #  Constructor
     #-------------------
     
     def __init__(self, sig_id, threshold_quantile):
         super().__init__()
+        
         self.sig_id = sig_id
         self.threshold_quantile = threshold_quantile
         
@@ -507,16 +514,16 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
         '''
 
         self.power_result = power_result
-        y = power_result.prob_df.Truth
+        y = power_result.prob_df.truth
         self.classes_, y = np.unique(y, return_inverse=True)
 
         # Get like:
-        #        n_samples  probability  sig_id    start     stop  start_time  stop_time  center_time    overlap  Truth
-        #     0    43136.0     0.711948     1.0      0.0  43136.0    0.000000   1.956281     0.978141  29.090684   True 
-        #     1    43136.0     0.662506     1.0  10784.0  53920.0    0.489070   2.445351     1.467211  54.090628   True 
-        #     2    43136.0     0.810184     1.0  21568.0  64704.0    0.978141   2.934422     1.956281  79.090572   True 
-        #     3    36862.0     0.725635     2.0   9215.0  46077.0    0.417914   2.089660     1.253787      0.0    False  
-        #     4    36862.0     0.756336     2.0  18430.0  55292.0    0.835828   2.507574     1.671701      0.0    False
+        #        n_samples  match_prob   sig_id start_idx stop_idx   start_time  stop_time truth
+        #     0    43136.0     0.711948     1.0      0.0  43136.0    0.000000   1.956281  True 
+        #     1    43136.0     0.662506     1.0  10784.0  53920.0    0.489070   2.445351  True 
+        #     2    43136.0     0.810184     1.0  21568.0  64704.0    0.978141   2.934422  True 
+        #     3    36862.0     0.725635     2.0   9215.0  46077.0    0.417914   2.089660 False  
+        #     4    36862.0     0.756336     2.0  18430.0  55292.0    0.835828   2.507574 False
         
         df = self.power_result.prob_df
         
@@ -548,11 +555,11 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
         #                     )
         # sig_df.columns = ['probability', 'mean_prob', 'med_prob', 'max_prob', 'center_time', 'Truth']
         
-        probs_by_time = df_this_sig.probability
-        probs_by_time.index = df_this_sig.center_time
+        probs_by_time = df_this_sig.match_prob
+        probs_by_time.index = df_this_sig.index
         
-        truth_by_time = df_this_sig.Truth
-        truth_by_time.index = df_this_sig.center_time
+        truth_by_time = df_this_sig.truth
+        truth_by_time.index = df_this_sig.index
          
         sig_df = pd.concat(
             [probs_by_time,
@@ -561,11 +568,11 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
         
         # Compute the absolute threshold probability for
         # this signature from the given threshold quantile:
-        self.prob_threshold = df_this_sig.probability.quantile(q=self.threshold_quantile)
+        self.prob_threshold = df_this_sig.match_prob.quantile(q=self.threshold_quantile)
         
-        self.X = self.probabilities = df_this_sig.probability
-        self.y = self.truth         = sig_df.Truth
-        self.center_time            = sig_df.Truth.index
+        self.X = self.probabilities = df_this_sig.match_prob
+        self.y = self.truth         = sig_df.truth
+        self.center_time            = sig_df.truth.index
         self.mean_prob = self.probabilities.mean()
         self.median_prob = self.probabilities.median()
         self.max_prob = self.probabilities.max() 
@@ -579,9 +586,8 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
  
     # UNCLEAR WHETHER NEEDED AND CORRECT: UNTESTED
     def predict(self, X):
-        decisions = self.decision_function(X)
-        return self.classes_[np.argmax(decisions, axis=1)]
-
+        decision = self.decision_function(X)
+        return decision
 
     #------------------------------------
     # decision_function
@@ -633,18 +639,53 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
                     power_member,
                     audio_file,
                     selection_tbl_file, 
-                    sig_ids=[1.0],
                     quantile_thresholds=[0.75, 0.80, 0.90, 0.95],
-                    slide_widths=[0.05, 0.1, 0.2], # seconds
-                    sig_combination=[TemplateSelection.MED_PROB],
+                    slide_widths=[0.05, 0.1, 0.2], # fraction of samples in shortest call
                     experiment=None
                     ):
+        '''
+        Perform a grid search sig_id x decision_threshold x slide_win_width.
+        
+        Repeatedly match an audio file against
+        all Signature instances of the power_member's spectral template.
+        Vary the quantile threshold of probability above 
+        which a positive decision is made (separate for each
+        Signature instance). Also vary the fraction of samples
+        of the shortest Signature by which signatures are slid
+        across the audio file (analogous to hop-length in STFT)
+        
+        Returns a dataframe with columns ['bal_acc', 'recall', 'precision', 'f1'].
+        This df is also saved in the experiment.
+         
+        :param power_member: the PowerMember for one species; it
+            contains the SpectralTemplate previously computed by
+            a run of quad_sig_calibration.py
+        :type power_member: PowerMember
+        :param audio_file: path to audio that is to be matched
+            against the signatures
+        :type audio_file: str
+        :param selection_tbl_file: path to Raven selection table from
+            which the ground truth is determined
+        :type selection_tbl_file: str
+        :param quantile_thresholds: quantiles of probabilities to
+            include in the search. These are numbers in [0,1].
+        :type quantile_thresholds: [float]
+        :param slide_widths: fraction the samples in the shortest call
+            that are to be tried in the search
+        :type slide_widths: [float]
+        :returns: dataframe with columns ['bal_acc', 'recall', 'precision', 'f1']
+        :rtype: pd.DataFrame
+        '''
 
         cls.best_f1        = 0.0
         cls.best_f1_probs  = None
         cls.best_f1_truths = None
         cls.best_f1_preds  = None
         rec_arr, rec_sr = SoundProcessor.load_audio(audio_file)
+        
+        sig_ids = [sig.sig_id 
+                   for sig 
+                   in power_member.spectral_template.signatures]
         
         # DF with schema:
         #                                 prob0    prob1    ...
@@ -656,27 +697,34 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
                               )
         from timeit import default_timer as timer
         start = timer()
-        for sig_id in sig_ids:
-            for thres in quantile_thresholds:
-                for slide_width in slide_widths:
-                    # Set slide width fractional seconds
-                    # The associated setter method will convert
-                    # to samples: 
-                    power_member.slide_width_time = slide_width
-                    power_res = power_member.compute_probabilities(rec_arr, rec_sr)
-                    power_res.add_truth(selection_tbl_file)
+        for thres in quantile_thresholds:
+            for slide_width in slide_widths:
+                # Set slide width fractional seconds
+                # The associated setter method will convert
+                # to samples: 
+                power_member.slide_width_time = slide_width
+                cls.log.info(f"Compute probabilities for thres {thres}/{len(quantile_thresholds)}, slide fraction {slide_width}/{len(slide_widths)}...")
+                power_res = power_member.compute_probabilities(rec_arr, sr=rec_sr)
+                cls.log.info(f"Done compute probabilities for thres {thres}, slide fraction {slide_width}...")
+                power_res.add_truth(selection_tbl_file)
 
+                for sig_id in sig_ids:
+                    cls.log.info(f"Compute score for sig-{sig_id}/{len(sig_ids)}...")
                     clf = PowerQuantileClassifier(sig_id, thres)
                     clf.fit(power_res)
                     probs  = clf.probabilities
                     preds  = clf.decision_function(probs)
                     truths = clf.truth
                     score = pd.Series({
+                        'threshold'  : thres,
+                        'slide_fraction': slide_width,
+                        'sig_id'     : sig_id,
                         'bal_acc'    : sklearn.metrics.balanced_accuracy_score(truths, preds),
                         'acc'        : sklearn.metrics.accuracy_score(truths, preds),
                         'recall'     : sklearn.metrics.recall_score(truths, preds),
                         'precision'  : sklearn.metrics.precision_score(truths, preds),
-                        'f1'         : sklearn.metrics.f1_score(truths, preds)
+                        'f1'         : sklearn.metrics.f1_score(truths, preds),
+                        'f0.5'       : sklearn.metrics.fbeta_score(truths, preds, beta=0.5)
                         }, name=(sig_id, thres, slide_width)
                         )
     
@@ -865,8 +913,8 @@ class PowerResult(JsonDumpableMixin):
             that signature; the index are the recording times
         :rtype pd.Series(float)
         '''
-        probs = self.prob_df[self.prob_df.sig_id == sig_id].probability
-        probs.index = self.prob_df[self.prob_df.sig_id == sig_id].center_time
+        probs = self.prob_df[self.prob_df.sig_id == sig_id].match_prob
+        probs.index = self.prob_df[self.prob_df.sig_id == sig_id].index
         return probs 
 
     #------------------------------------
@@ -883,10 +931,10 @@ class PowerResult(JsonDumpableMixin):
             index will be the center times
         :rtype pd.Series(bool)
         '''
-        if 'Truth' not in self.prob_df.columns:
-            raise IndexError(f"Power result missing Truth column; call add_truth() first")
-        truths = self.prob_df[self.prob_df.sig_id == sig_id].Truth
-        truths.index = self.prob_df[self.prob_df.sig_id == sig_id].center_time 
+        if 'truth' not in self.prob_df.columns:
+            raise IndexError(f"Power result missing 'truth' column; call add_truth() first")
+        truths = self.prob_df[self.prob_df.sig_id == sig_id].truth
+        truths.index = self.prob_df[self.prob_df.sig_id == sig_id].index
         return truths
 
     #------------------------------------

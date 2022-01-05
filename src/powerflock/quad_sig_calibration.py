@@ -320,7 +320,7 @@ class QuadSigCalibrator(JsonDumpableMixin):
                                  start_idx=nearest_spec_start_time,
                                  end_idx=nearest_spec_end_time,
                                  fname=sound_file,
-                                 sig_id=call_num,
+                                 sig_id=(call_num + 1), # want sig-ids 1-origin to match Raven table rows
                                  freq_interval=freq_intervals[call_num],
                                  bandpass_filter=passband,
                                  extract=extract
