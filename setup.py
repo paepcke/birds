@@ -44,6 +44,7 @@ setup(
                         'skorch>=0.10.0',
                         'ml-experiment-manager>=0.1.12',
                         'mplcursors>=0.5',
+                        'tabulate>=0.8.9',
                         ],
 
     tests_require    =[
