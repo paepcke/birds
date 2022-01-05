@@ -1338,7 +1338,10 @@ class SignalAnalyzer:
         sigs = spectral_template.signatures
         # Number of samples to slide between each 
         # measurement is slide_width_time_fraction * <shortest-sig>
-        slide_width_samples = round(min([len(sig) for sig in sigs]) * slide_width_time_fraction)
+        # The max(..., 1) guards against slide window
+        # going to 0. Least number of samples to slide
+        # is 1:
+        slide_width_samples = max(round(min([len(sig) for sig in sigs]) * slide_width_time_fraction), 1)
         
         with mp.Pool(processes=num_workers) as pool:
             for sig in spectral_template.signatures:
