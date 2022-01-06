@@ -216,9 +216,7 @@ class PowerEvaluator:
             #******quantile_thresholds=[0.4, 0.5, 0.6],
             #******slide_widths=[0.03, 0.04, 0.05],
             quantile_thresholds=[0.7, 0.8, 0.9],
-            slide_widths=[0.03, 0.04, 0.05]
-            
-            
+            slide_widths=[0.03, 0.04, 0.05],
             experiment=self.experiment
             )
         end = timer()
