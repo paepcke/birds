@@ -11,6 +11,8 @@ from enum import Enum
 import os
 import sys
 
+import pandas as pd
+
 from experiment_manager.experiment_manager import ExperimentManager
 from logging_service.logging_service import LoggingService
 from matplotlib.patches import Rectangle
@@ -29,14 +31,15 @@ class Action(Enum):
     UNITTEST = 0
     GRID_SEARCH = 1
     TEST = 2
-    VIZ_PROBS = 3 
+    VIZ_PROBS = 3
 
 class PowerEvaluator:
     '''
     classdocs
     '''
-    THRESHOLD = 0.9   # Probability threshold
-    SLIDE_WIDTH = 0.1 # fraction of signature
+    # Probability thresholds for use in result_analysis
+    THRESHOLDS = [0.6, 0.7, 0.8, 0.9]   
+    SLIDE_WIDTH = 0.05 # fraction of signature
     SIG_ID = 3
     
     TRUTH_RECT_HEIGHTS = 500 # Hz
@@ -126,6 +129,7 @@ class PowerEvaluator:
                 self.log.info("Done running action 'test'.")
                 self.log.info(f"Saving power result under 'pwr_res' to exp {self.experiment.root}")
                 self.experiment.save('pwr_res', pwr_res)
+                 
             elif action == Action.VIZ_PROBS:
                 ax = self.viz_probs(self.power_member,
                                     self.test_recording,
@@ -164,21 +168,27 @@ class PowerEvaluator:
                 incl_date=True
                 )
             self.experiment.save(pwr_res_fname, pwr_res)
+            self.log.info(f"Power result saved in experiment under '{pwr_res_fname}' PowerResult")
 
-        _axes = pwr_member.plot_pr_curve(pwr_res)
+        #_axes = pwr_member.plot_pr_curve(pwr_res)
+
+        res_df = pd.DataFrame()
+        for threshold in self.THRESHOLDS:
+            for sig_id in pwr_res.sig_ids():
+                quantile_evaluator = PowerQuantileClassifier(sig_id=sig_id, 
+                                                             threshold_quantile=threshold)
+                quantile_evaluator.fit(pwr_res)
+                score_name = f"score_sig_id{sig_id}_thres{threshold}" 
+                score = quantile_evaluator.score(None, None, name=score_name)
+                score['sig_id'] = sig_id
+                score['threshold'] = threshold
+                res_df = res_df.append(score)
         
-        threshold = 0.75
+        self.experiment.save('scores', res_df)
+        self.log.info(f"Scores saved in experiment under 'scores' tabular")
         
-        scores = {}
-        for sig_id in pwr_res.sig_ids():
-            quantile_evaluator = PowerQuantileClassifier(sig_id=sig_id, 
-                                                         threshold_quantile=threshold)
-            quantile_evaluator.fit(pwr_res)
-            score_name = f"score_sig_id{sig_id}_thres{threshold}" 
-            scores[score_name] = quantile_evaluator.score(None, None, name=score_name)
-        
-        input("Press any key to quit: ")
-        print('foo')
+        #input("Press any key to quit: ")
+
         #call_intervals = Utils.get_call_intervals(sel_tbl_path)
 
         #clf = PowerQuantileClassifier(sig_id, thres)
@@ -222,9 +232,8 @@ class PowerEvaluator:
         end = timer()
         self.log.info(f"Runtime: {str(timedelta(seconds=end - start))}")
         self.log.info(f"Grid result in {self.experiment.root}")
-        
-# ---------------- Visualization -------------
 
+# ---------------- Visualization -------------
 
     #------------------------------------
     # viz_probs

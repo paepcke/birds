@@ -584,8 +584,18 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
     # predict
     #-------------------
  
-    # UNCLEAR WHETHER NEEDED AND CORRECT: UNTESTED
     def predict(self, X):
+        '''
+        Given a probability of an input being of the
+        focus class output True or False, given the
+        decision threshold with which this instance
+        was created. This is a simple greater-than test.
+                
+        :param X: probability
+        :type X: float
+        :result whether or not the probability indictes class membership
+        :rtype: bool
+        '''
         decision = self.decision_function(X)
         return decision
 
@@ -625,7 +635,8 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
             'acc'        : sklearn.metrics.accuracy_score(truth, preds),
             'recall'     : sklearn.metrics.recall_score(truth, preds),
             'precision'  : sklearn.metrics.precision_score(truth, preds),
-            'f1'         : sklearn.metrics.f1_score(truth, preds)
+            'f1'         : sklearn.metrics.f1_score(truth, preds),
+            'f0.5'       : sklearn.metrics.fbeta_score(truth, preds, beta=0.5),
             }, name=name
             )
         return score
