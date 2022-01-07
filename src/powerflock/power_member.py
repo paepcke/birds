@@ -741,7 +741,9 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
     
                     res_df = res_df.append(score)
                     
-                    all_probs = all_probs.append(pd.Series(probs, name=(sig_id, thres, slide_width)))
+                    new_probs = probs.copy()
+                    new_probs.name = (sig_id, thres, slide_width)
+                    all_probs = all_probs.append(new_probs)
                     # Save the best f1's probabilities and truths
                     if score.f1 > cls.best_f1:
                         cls.best_f1 = score.f1
