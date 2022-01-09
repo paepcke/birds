@@ -974,6 +974,9 @@ class SignalAnalyzer:
             the default is True. But procedures such as spectral flatness
             computations need the absolute values.
         :type to_db: bool
+        :param extra_granularity: whether or not to double 
+            resolution of the spectrogram
+        :type extra_granularity: bool
         :return: dataframe with a spectrogram that reflects
             what a Raven labeling software user would see
             in its spectrogram display.

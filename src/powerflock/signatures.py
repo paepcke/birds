@@ -199,6 +199,43 @@ class SpectralTemplate:
         return template
 
     #------------------------------------
+    # json_load_templates
+    #-------------------
+    
+    @classmethod
+    def json_load_templates(cls, fname):
+        '''
+        Sometimes a dict with values being jsonized SpectralTemplate
+        instances is stored on disk. This happens in
+        quad_sig_calibration(). This method recovers
+        such a file. The code is a convenience duplicate
+        of the method json_load() in quad_sig_calibration.py.
+
+        Reconstruct a dict of templates from
+        the given json file. All SpectralTemplate
+        instances will be reconstructed.
+        The result will look like:
+        
+            {'CMTOG' : template_cmtog,
+             'OtherSpec' : template_other_spec
+             }
+
+        :param fname: json file to load
+        :type fname: str
+        :return dict of SpectralTemplate
+        :rtype {str : SpectralTemplate}
+        '''
+        with open(fname, 'r') as fd:
+            dict_of_templates = json.load(fd)
+        
+        new_dict = {species : SpectralTemplate.json_loads(jstr)
+                    for species, jstr
+                    in dict_of_templates.items()
+                    }
+
+        return new_dict
+
+    #------------------------------------
     # mean_sig
     #-------------------
 

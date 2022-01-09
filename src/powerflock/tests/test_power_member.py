@@ -7,11 +7,14 @@ import copy
 import os
 import unittest
 
+from experiment_manager.experiment_manager import ExperimentManager
+
 from data_augmentation.sound_processor import SoundProcessor
+from data_augmentation.utils import Utils
 import pandas as pd
-from powerflock.power_member import PowerMember, PowerResult
+from powerflock.power_member import PowerMember, PowerResult, CallLevelScore
 from powerflock.signal_analysis import SignalAnalyzer
-from powerflock.signatures import SpectralTemplate
+from powerflock.signatures import SpectralTemplate, Signature
 
 
 #*******TEST_ALL = True
@@ -36,8 +39,11 @@ class TestPowerMember(unittest.TestCase):
 
         templates_file = os.path.join(cls.cur_dir, '../species_calibration_data/signatures.json')
         
-        templates_dict = SpectralTemplate.json_load(templates_file)
+        templates_dict = SpectralTemplate.json_load_templates(templates_file)
         cls.cmtog_template = templates_dict['CMTOG']
+        
+        cls.exp_root = os.path.join(cls.cur_dir, 'data/experiments_root/CMTOG_Quintus')
+        cls.pwr_res_key = 'PwrRes_2022-01-07T09_53_18' 
 
         
     def setUp(self):
@@ -53,7 +59,7 @@ class TestPowerMember(unittest.TestCase):
     # test_init 
     #-------------------
     
-    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_init(self):
         
         # prob_df = pd.read_csv('/tmp/powertest.csv')
@@ -155,6 +161,69 @@ class TestPowerMember(unittest.TestCase):
         self.assertTrue((summary == expected_summary).all())
 
     #------------------------------------
+    # test_find_calls
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_find_calls(self):
+        
+        exp = ExperimentManager(self.exp_root)
+        pwr_res = exp.read(self.pwr_res_key, PowerResult)
+        pwr_member = PowerMember('CMTOG',
+                                 experiment=exp,
+                                 spectral_template_info=self.cmtog_template 
+                                 )
+        peaks = pwr_member.find_calls(pwr_res)
+        
+        # Expect like this:
+        #            peak_prob  sig_id  low_bound  high_bound
+        # time                                               
+        # 2.095601    0.416110     1.0   1.433832    2.757370
+        # 5.183855    0.415394     2.0   4.405986    5.961723
+        # 7.024036    0.371405     3.0   6.623492    7.424580
+        #                       ...
+        
+        # Expect as many peaks as the test template
+        # has signatures
+        
+        num_sigs = len(self.cmtog_template)
+        self.assertEqual(len(peaks), num_sigs)
+        # Spot check first line:
+        expected = [0.4161, 1.0, 1.4338, 2.7574]
+        self.assertListEqual(peaks.iloc[0].round(4).to_list(), expected)
+        self.assertEqual(peaks.index[0].round(4), 2.0956)
+        
+
+    #------------------------------------
+    # test_call_level_score
+    #-------------------
+    
+    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_call_level_score(self):
+        
+        exp = ExperimentManager(self.exp_root)
+        pwr_res = exp.read(self.pwr_res_key, PowerResult)
+        pwr_member = PowerMember('CMTOG',
+                                 experiment=exp,
+                                 spectral_template_info=self.cmtog_template 
+                                 )
+        peaks = pwr_member.find_calls(pwr_res)
+        
+        scorer = CallLevelScore(peaks, self.sel_tbl_XC)
+        
+        score = scorer.score()
+        expected = pd.Series({ 
+            'bal_acc'   :   0.979183,
+            'acc'       :   0.983672,
+            'recall'    :   0.959762,
+            'precision' :   0.997676,
+            'f1'        :   0.978352,
+            'f0.5'      :   0.989856
+            }, name='score')
+        Utils.assertSeriesEqual(score, expected)
+
+
+    #------------------------------------
     # test_matching_multiple_sigs
     #-------------------
     
@@ -169,22 +238,6 @@ class TestPowerMember(unittest.TestCase):
         pow_res.add_truth(self.sel_tbl_cmto_xc1)
         print('foo')
 
-    #------------------------------------
-    # test_calibrate_probabilities
-    #-------------------
-    
-    # @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    # def test_calibrate_probabilities(self):
-    #
-    #     pm = PowerMember(
-    #         species_name='CMTOG', 
-    #         spectral_template_info=zip([self.rec_XC], [self.sel_tbl_XC]),
-    #         apply_bandpass=True
-    #         )
-    #
-    #     pm.calibrate_probabilities(self.rec_XC, self.sel_tbl_XC, apply_bandpass=True, plot_pr=True)
-    #
-    #     print('foo')
 
 
 if __name__ == "__main__":

@@ -11,8 +11,6 @@ from enum import Enum
 import os
 import sys
 
-import pandas as pd
-
 from experiment_manager.experiment_manager import ExperimentManager
 from logging_service.logging_service import LoggingService
 from matplotlib.patches import Rectangle
@@ -21,17 +19,21 @@ from birdsong.utils.utilities import FileUtils
 from data_augmentation.utils import Utils, Interval
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from powerflock.matplotlib_crosshair_cursor import CrosshairCursor
 from powerflock.power_member import PowerMember, PowerQuantileClassifier, \
     PowerResult
 from powerflock.quad_sig_calibration import QuadSigCalibrator
 from powerflock.signal_analysis import SignalAnalyzer
+from result_analysis.charting import Charter
+
 
 class Action(Enum):
     UNITTEST = 0
     GRID_SEARCH = 1
     TEST = 2
-    VIZ_PROBS = 3
+    VIZ_PROBS = 3,
+    ANALYZE_RESULT = 4
 
 class PowerEvaluator:
     '''
@@ -136,6 +138,8 @@ class PowerEvaluator:
                                     self.test_sel_tbl,
                                     self.SIG_ID
                                     )
+            elif action == Action.ANALYZE_RESULT:
+                self.analyze_result(pwr_res)
             else:
                 raise ValueError(f"Unknown action: {action}")
 
@@ -302,6 +306,26 @@ class PowerEvaluator:
         if Action.UNITTEST in self.actions:
             return fig, ax, cursor
         input("Press ENTER to finish: ")
+
+    #------------------------------------
+    # analyze_result
+    #-------------------
+    
+    def analyze_result(self, pwr_res):
+        
+        gp = pwr_res.prob_df.groupby('sig_id')
+        ax = None
+        for sig_id, probs in gp.match_prob:
+            sig_id = int(sig_id)
+            ax = Charter.linechart(probs,
+                                   ylabel=f"Probability of Match",
+                                   xlabel="Time into recording",
+                                   title=f"Match Probabilities During Window Slide",
+                                   ax=ax
+                                   )
+
+        print(f"Done analysis for pwr_res {pwr_res.sig_ids()}")
+
 
 # --------------  Utilities -----------------
 
@@ -602,7 +626,7 @@ if __name__ == '__main__':
                         help='apply bandpass filters to sigs and inferenced audio with the freq range of signatures default: False',
                         default=False)
     parser.add_argument('actions',
-                        choices=['test', 'gridSearch', 'viz_probs'],
+                        choices=['test', 'gridSearch', 'viz_probs', 'analyze'],
                         nargs='+',
                         help='Repeatable: actions to perform')
 
@@ -631,6 +655,8 @@ if __name__ == '__main__':
             actions.append(Action.GRID_SEARCH)
         elif action == 'viz_probs':
             actions.append(Action.VIZ_PROBS)
+        elif action == 'analyze':
+            actions.append(Action.ANALYZE_RESULT)
         else:
             raise NotImplementedError(f"Action {action} is not implemented")
     

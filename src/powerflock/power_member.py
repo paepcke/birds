@@ -15,23 +15,22 @@ import json
 import os
 import sys
 
+from experiment_manager.experiment_manager import JsonDumpableMixin
 import librosa
 from logging_service.logging_service import LoggingService
+import scipy
 import sklearn
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.exceptions import NotFittedError
 
-import matplotlib.pyplot as plt
-
-from experiment_manager.experiment_manager import JsonDumpableMixin
-
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import Utils, Interval
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from powerflock.signal_analysis import SignalAnalyzer, TemplateSelection
 from powerflock.signatures import SpectralTemplate
-from powerflock.quad_sig_calibration import QuadSigCalibrator
+
 
 #from sklearn.metrics import PrecisionRecallDisplay
 #import matplotlib.pyplot as plt
@@ -70,7 +69,9 @@ class PowerMember:
     compute the probability of species presence during
     a window of time, such as a few milliseconds.
     '''
-
+    
+    THRES_PROMINENCE = 0.3
+    
     #------------------------------------
     # Constructor
     #-------------------
@@ -323,6 +324,121 @@ class PowerMember:
         
         return self.power_result
 
+    #------------------------------------
+    # find_calls
+    #-------------------
+    
+    def find_calls(self, pwr_res):
+        '''
+        Given a PowerResult computed by compute_probabilities()
+        across an entire recording, mark an estimate of the center 
+        time of each call, plus a lower and upper time bound
+        of each call. 
+        
+        Return a df:
+              peak_prob   low_bound       high_bound
+        t0      0.123     t0 - some_num     t0 + some_num
+        t8      0.543     t8 - some_num     t8 + some_num
+                   ...
+        
+        :param pwr_res: the probabilities for each timeframe
+            according to every signature
+        :type pwr_res: PowerResult
+        :result center time and probability of each call, plus
+            estimates of low and high time bounds of the calls
+        :rtype pd.DataFrame
+        '''
+        
+        sig_ids = pd.Series(pwr_res.sig_ids())
+        
+        prob_df = pwr_res.prob_df
+        
+        prob_peaks_by_sig_list = []
+        for sig_id in sig_ids:
+            probs = prob_df[prob_df.sig_id == sig_id].match_prob
+            peak_indices, properties = scipy.signal.find_peaks(probs, prominence=self.THRES_PROMINENCE)
+            peak_probs = properties['prominences']
+            times   = probs.index[peak_indices]
+            prob_peaks = pd.Series(peak_probs, index=times, name=sig_id)
+            prob_peaks_by_sig_list.append(prob_peaks)
+        
+        # Get a df with rows for each time when a probability
+        # peak occurs. Each column is either a peak probability,
+        # or NaN if no peak occurred at the row's time. Like this,
+        # for 17 signatures:
+        #
+        #               1.0       2.0       3.0   ...      15.0      16.0      17.0
+        # time                                    ...                              
+        # 2.095601   0.41611       NaN       NaN  ...       NaN       NaN       NaN
+        # 5.183855       NaN  0.415394       NaN  ...       NaN       NaN       NaN
+        # 7.024036       NaN       NaN  0.371405  ...       NaN       NaN       NaN
+        #             ... 
+        peaks_by_time_all_sigs = pd.concat(prob_peaks_by_sig_list, axis=1)
+        
+        # For each timeframe that has a peak in
+        # at least one sig, get the max among the
+        # sigs, and the sig that provided the max. 
+        # That gives a series without nan vals:
+        #
+        # t0   prob1  sig3
+        # t1   prob2  sig6
+        #    ...
+        
+        col_idxs_with_max_prob = np.nanargmax(peaks_by_time_all_sigs, axis=1)
+        # Get col names from the idxs into columns:
+        sig_ids_with_max_prob = sig_ids[col_idxs_with_max_prob]
+        sig_ids_with_max_prob.index = peaks_by_time_all_sigs.index
+        
+        # Now twist and turn, following the ridiculously 
+        # complex recipe at https://pandas.pydata.org/docs/user_guide/indexing.html#indexing-lookup
+        # "Looking up values by index/column labels":
+        # Add the name of the column to select in a row
+        # to each row, arriving e.g. at:
+        #               1.0       2.0       3.0    'sig_pick'
+        # time                                  
+        # 2.095601   0.41611       NaN       NaN     1.0
+        # 5.183855       NaN  0.415394       NaN     2.0
+        # 7.024036   0.51234  0.371405       0.1     1.0
+        peaks_by_time_all_sigs['sig_pick'] = sig_ids_with_max_prob
+
+        # The 'magic': get:
+        #   idx: [0,1,0], and cols: Index([1.0, 2.0]):
+        idx, cols = pd.factorize(peaks_by_time_all_sigs['sig_pick'])
+        # Get just the max values: array([0.41611, 0.415394, 0.51234]):
+        peak_sigs_np = peaks_by_time_all_sigs.reindex(cols, axis=1)\
+                        .to_numpy()[np.arange(len(peaks_by_time_all_sigs)), idx]
+        # Create df with maximum prob of peaks, and the IDs
+        # of the sigs the contributed that max in each case:
+        peak_sig_col = pd.Series(peak_sigs_np, 
+                                 index=peaks_by_time_all_sigs.index,
+                                 name='peak_prob')
+        # Make df from 2 cols: max_prob and sig_id:
+        sig_id_col = pd.Series(sig_ids[sig_ids==cols].values, 
+                               index=peaks_by_time_all_sigs.index,
+                               name='sig_id')
+        peaks = pd.concat([peak_sig_col, sig_id_col], axis=1)
+
+        # Add estimated width of the call simply
+        # based on the width of the 'winning' sig:
+        
+        all_sigs = self.spectral_template.signatures
+        sig_widths = pd.Series({sig.sig_id : sig.as_walltime().index[-1] - sig.as_walltime().index[0]
+                                for sig
+                                in all_sigs
+                                })
+        half_widths = sig_widths[peaks.sig_id] / 2.
+        half_widths.index = peaks.index
+        
+        # Ensure lower not negative, and upper not gt recording len:
+        peaks['low_bound']  = peaks.index - half_widths
+        peaks['high_bound'] = peaks.index + half_widths
+        
+        peaks['low_bound'] = peaks['low_bound'].where(peaks['low_bound'] >=0, 0)
+        peaks['high_bound'] = peaks['high_bound'].where(peaks['high_bound'] <= peaks.index[-1], 
+                                                        peaks.index[-1])
+
+        return peaks
+
     # ----------------------- Visualizations --------------------
 
     #------------------------------------
@@ -441,6 +557,143 @@ class PowerMember:
             return librosa.resample(audio, sr, self.spectral_template.sample_rate())
         else:
             return audio
+
+# ------------------------- CallLevelScore -----------
+class CallLevelScore:
+    '''
+    Used when a labeled recording is available
+    to compute recall and precision at the call level.
+    Given from a call to PowerMember.find_calls() is the
+    following:
+    
+              peak_prob   low_bound                        high_bound
+        t0      0.123     t0 - 1/2 signature_width_S3     t0 + 1/2 signature_width_S3 
+        t8      0.543     t8 - 1/2 signature_width_S1     t8 + 1/2 signature_width_S1
+        
+    where t_n are the estimated center times of a call,
+    peak_prob is the highest probability amongst the probabilities
+    computed from all signatures. Column low_bound is the estimated
+    beginning of the call, calculated based on the width of the signature
+    that generated peak_prob. Analogously for high_bound.
+    
+    Success criteria:
+    
+       o The positive classification of a call at time t_n 
+         is correct if t_n lies within the start and end times
+         of any call label. It is all right for the classifier
+         to mark multiple time frames within a call as positive.
+         However, all positive outcomes between low_bound and high_bound
+         count as one single successfully identified call, i.e. true positive (TP)
+         
+       o A positive classification outside any labeled time interval
+         is a false positive (FP)
+         
+       o Recall is measured by adding the number of TPs and dividing by
+         the number of labeled calls. 
+
+    '''
+
+    #------------------------------------
+    # Constructor
+    #-------------------
+    
+    def __init__(self, peaks, sel_tbl_path):
+        
+        self.peaks = peaks
+        self.sel_tbl = Utils.read_raven_selection_table(sel_tbl_path)
+
+    #------------------------------------
+    # score
+    #-------------------
+    
+    def score(self):
+        
+        # Pick out the true call Interval instances
+        # from the selection table:
+        true_time_intervals = [sel['time_interval']
+                               for sel
+                               in self.sel_tbl
+                               ]
+        # Ensure the list is sorted by start time:
+        true_time_intervals.sort()
+        
+        # Note the (constant) step size of the truth
+        # intervals, and create a list of Interval instances
+        # for the predictions: 
+        step_size = true_time_intervals[0]['step']
+        # Each interval denotes the estimated start and stop
+        # of one call. The low_bound/high_bound were computed
+        # as center time +/ half the width of the signature that
+        # generated the probability peak:
+        pred_time_intervals = [Interval(low_time, high_time, step_size)
+                               for low_time, high_time, step_size
+                               in zip(self.peaks.low_bound, 
+                                      self.peaks.high_bound,
+                                      [step_size]*len(self.peaks)
+                                      )
+                               ]
+        TPs = []
+        FPs = []
+
+        # For each predicted call interval, see
+        # whether it overlaps any truth interval.
+        # When it does, we call that a true positive,
+        # else the predicted call is a false positive:
+        for pred_intv in pred_time_intervals:
+            overlap = Interval.binary_search_overlap(true_time_intervals, pred_intv)
+            if overlap > -1:
+                TPs.append(pred_intv)
+            else:
+                FPs.append(pred_intv)
+                
+        # To use the scypy scoring, we need two array-like
+        # of 1s and 0s. One array each for the predictions
+        # and one for the truth.
+        # We therefore need corresponding 1/0 values for each
+        # timeframe:
+        #                     |     True Interval         |
+        # Truth   0   0   0   1    1    1     1     1     1   0
+        #
+        # Pred    0   0   1   0    1    0     0     1     0   0
+        #                FP   |    Turn these to 1s       |   0
+        #
+        # We accept some 0s inside predictions, as long as there
+        # is at least one 1 to identify the call.
+        # We no long have access to the spectrogram here, so
+        # we create a 10ms time scale that covers the earliest 
+        # to latest interval:
+        
+        latest =   max(true_time_intervals[-1]['high_val'],
+                       pred_time_intervals[-1]['high_val'])
+        earliest = min(true_time_intervals[0]['low_val'],
+                       pred_time_intervals[0]['low_val'])
+        
+        times = np.arange(earliest, latest, 0.01)
+        # Start with all 0s in the truth and predictions
+        # timeline:
+        truth = pd.Series(np.zeros(len(times)), index=times)
+        preds = pd.Series(np.zeros(len(times)), index=times)
+        
+        # Set values to 1 in truth wherever a truth interval
+        # straddles the timeline
+        for true_intv in true_time_intervals:
+            truth[(truth.index >= true_intv['low_val']) & (truth.index < true_intv['high_val'])] = 1.0
+        
+        # Same for predictions:
+        for pred_intv in pred_time_intervals:
+            preds[(preds.index >= pred_intv['low_val']) & (preds.index < pred_intv['high_val'])] = 1.0
+
+        all_scores = {
+            'bal_acc'    : sklearn.metrics.balanced_accuracy_score(truth, preds),
+            'acc'        : sklearn.metrics.accuracy_score(truth, preds),
+            'recall'     : sklearn.metrics.recall_score(truth, preds),
+            'precision'  : sklearn.metrics.precision_score(truth, preds),
+            'f1'         : sklearn.metrics.f1_score(truth, preds),
+            'f0.5'       : sklearn.metrics.fbeta_score(truth, preds, beta=0.5),
+            }
+
+        score = pd.Series(all_scores, name='score') 
+        return score
 
 # ------------------------ PowerQuantileClassifier ------------
 
