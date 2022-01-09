@@ -1535,17 +1535,17 @@ class Charter:
         :return the pyplot Axes instance
         :rtype plt.Axes
         '''
-        mesh = plt.pcolormesh(spectro_df.columns, 
+        fig, ax = plt.subplots()
+        _mesh = ax.pcolormesh(spectro_df.columns, 
                               list(spectro_df.index), 
                               spectro_df, 
                               cmap='jet', 
                               shading='auto')
         
-        ax = mesh.axes
         ax.set_xlabel('Time (sec)')
         ax.set_ylabel('Frequency (Hz)')
         if fig_title is not None:
-            ax.figure.suptitle(fig_title)
+            fig.suptitle(fig_title)
         return ax
 
     #------------------------------------
