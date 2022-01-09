@@ -196,6 +196,17 @@ class Interval(dict):
                (self['high_value'] == other['high_value']) and \
                (self['step'] == other['step'])
     
+    
+    def __lt__(self, other):
+        '''
+        Enable sorting a list of intervals with a
+        simple call to sort:
+            l = [intv1, intv2]
+            l.sort()
+        Will leave l sorted in place by low value of
+        the intervals.
+        '''
+        return self['low_val'] < other['low_val']
 
     @classmethod
     def binary_search_contains(cls, interval_list, value, lo=0, hi=None):
@@ -263,7 +274,7 @@ class Interval(dict):
         :param hi: uppoer index slice bound if only subset
             of list is to be searched. Default: entire list
         :type hi: int
-        :returns index of interval that contains value, 
+        :returns index of interval that overlaps value, 
             or -1 if value is out of bounds for all intervals
         :rtype int
         '''
@@ -1748,7 +1759,7 @@ class Utils:
         :raises AssertionError on discrepancies
         '''
 
-        if cls.dtype_numeric(ser1.index.dtype):
+        if cls.dtype_numeric(ser1.index.dtype) or ser1.index.dtype == np.dtype('O'):
             if (ser1.index != ser2.index).any():
                 raise AssertionError(f"Index ser1 differs from index ser2")
         else:

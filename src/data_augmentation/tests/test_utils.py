@@ -374,6 +374,40 @@ class Test(unittest.TestCase):
         Utils.assertDataframesEqual(df1,df2)
 
     #------------------------------------
+    # test_assertSeriesEqual
+    #-------------------
+    
+    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_assertSeriesEqual(self):
+        
+        ser_base = pd.Series([1.1234, 2.6789], name='test')
+        ser = pd.Series([1.1234, 2.6789], name='test')
+        Utils.assertSeriesEqual(ser, ser_base)
+
+        # Test diff in name only:
+        ser = pd.Series([1.1234, 2.6789], name='foo')
+        with self.assertRaises(AssertionError):
+            Utils.assertSeriesEqual(ser_base, ser)
+            
+        # Test equal to given decimals
+        ser = pd.Series([1.1234, 2.7289], name='test')
+        # Should be OK if decimals specified to
+        # one place, but fail is required equality
+        # to 2nd place:
+        Utils.assertSeriesEqual(ser, ser_base, decimals=1)
+        with self.assertRaises(AssertionError):
+            Utils.assertSeriesEqual(ser_base, ser, decimals=2)
+
+        # Test with non-numeric index:
+        
+        ser_base_str_idx = pd.Series({'foo' : 1.1234, 'bar' : 2.6789}, name='test')
+        ser = ser_base_str_idx
+        Utils.assertSeriesEqual(ser, ser_base_str_idx)
+        
+        
+
+
+    #------------------------------------
     # test_intervals
     #-------------------
     
@@ -547,7 +581,7 @@ class Test(unittest.TestCase):
     # test_df_eq
     #-------------------
     
-    #********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_df_eq(self):
         
         # Index numeric:
