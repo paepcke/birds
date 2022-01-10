@@ -24,15 +24,16 @@ import sklearn
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.exceptions import NotFittedError
 
+from birdsong.utils.utilities import FileUtils
 from data_augmentation.sound_processor import SoundProcessor
-from data_augmentation.utils import Utils, Interval
+from data_augmentation.utils import Utils, Interval, RavenSelectionTable
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from powerflock.signal_analysis import SignalAnalyzer, TemplateSelection
 from powerflock.signatures import SpectralTemplate
-
 from result_analysis.charting import Charter
+
 
 #from sklearn.metrics import PrecisionRecallDisplay
 #import matplotlib.pyplot as plt
@@ -72,7 +73,7 @@ class PowerMember:
     a window of time, such as a few milliseconds.
     '''
     
-    THRES_PROMINENCE = 0.4
+    PROMINENCE_THRES = 0.4
     '''Minimum cutoff for call to find_peaks(); higher is more discriminative'''
     
     #------------------------------------
@@ -337,7 +338,7 @@ class PowerMember:
     # find_calls
     #-------------------
     
-    def find_calls(self, pwr_res):
+    def find_calls(self, pwr_res, prominence_threshold=None):
         '''
         Given a PowerResult computed by compute_probabilities()
         across an entire recording, mark an estimate of the center 
@@ -349,15 +350,26 @@ class PowerMember:
         t0      0.123     t0 - some_num     t0 + some_num
         t8      0.543     t8 - some_num     t8 + some_num
                    ...
+        The prominence_threshold specifies how 'important'
+        a probability peak is in the context of probabilities
+        neighboring in time. See scipy.signal.find_peaks and
+        Wikipedia 'Topographic prominence' for details. Default
+        is set in the class variable PROMINENCE_THRES. Values
+        must be in [0,1]
         
         :param pwr_res: the probabilities for each timeframe
             according to every signature
         :type pwr_res: PowerResult
+        :param prominence_threshold: importance of probability
+            peak in context
+        :rtype prominence_threshold: {None | float} 
         :result center time and probability of each call, plus
             estimates of low and high time bounds of the calls
         :rtype pd.DataFrame
         '''
-        
+
+        if prominence_threshold is None:
+            prominence_threshold = self.PROMINENCE_THRES
         sig_ids = pd.Series(pwr_res.sig_ids())
         
         prob_df = pwr_res.prob_df
@@ -379,7 +391,7 @@ class PowerMember:
         for sig_id in sig_ids:
             probs = all_sig_probs[all_sig_probs.sig_id == sig_id].match_prob
             peak_indices, properties = scipy.signal.find_peaks(probs,
-                                                               prominence=self.THRES_PROMINENCE)
+                                                               prominence=prominence_threshold)
             peak_probs = properties['prominences']
             times = probs.index[peak_indices]
             prob_peaks = pd.Series(peak_probs, index=times, name=sig_id)
@@ -431,16 +443,19 @@ class PowerMember:
         peak_sigs_np = peaks_by_time_all_sigs.reindex(cols, axis=1)\
                         .to_numpy()[np.arange(len(peaks_by_time_all_sigs)), idx]
         # Create df with maximum prob of peaks, and the IDs
-        # of the sigs that contributed that max in each case:
+        # of the sigs that contributed that max in each case,
+        # like 
+        #              peak_prob     sig_id
+        #     t3        0.4024        11
+        #     t12       0.3125        2
+        #     t22            ...
+
         peak_sig_col = pd.Series(peak_sigs_np, 
                                  index=peaks_by_time_all_sigs.index,
                                  name='peak_prob')
-        # Make df from 2 cols: max_prob and sig_id:
-        sig_id_col = pd.Series(sig_ids[sig_ids==cols].values, 
-                               index=peaks_by_time_all_sigs.index,
-                               name='sig_id')
-        peaks = pd.concat([peak_sig_col, sig_id_col], axis=1)
-
+        peaks = pd.concat([peak_sig_col, peaks_by_time_all_sigs['sig_pick']], axis=1)
+        peaks.columns = ['peak_prob', 'sig_id']
+        
         # Add estimated width of the call simply
         # based on the width of the 'winning' sig:
         
@@ -460,17 +475,30 @@ class PowerMember:
         peaks['high_bound'] = peaks['high_bound'].where(peaks['high_bound'] <= peaks.index[-1], 
                                                         peaks.index[-1])
 
+        # Add a column that repeats the prominence_threshold
+        # for each row; redundant, but easy:
+        peaks['prominence_threshold'] = [prominence_threshold]*len(peaks)
         if self.experiment is not None:
-            self.experiment.save('probability_peaks', peaks)
-            self.log.info(f"Saved probability peaks in exp {self.exp_name} under 'probability_peaks")
+            # Build an experiment key:
+            pwr_res_nm_date = Path(pwr_res.name).stem
+            exp_key = FileUtils.fname_from_props({
+                'sp': pwr_res.species, 
+                'pr' : pwr_res_nm_date,
+                'promThres' : prominence_threshold
+                },
+                prefix='prob_peaks',
+                incl_date=True
+            )
+            self.experiment.save(exp_key, peaks)
+            self.log.info(f"Saved probability peaks in exp {self.exp_name} under '{exp_key}'")
         return peaks
 
     #------------------------------------
     # score_call_level
     #-------------------
     
-    def score_call_level(self, peaks, sel_tbl_path):
-        scorer = CallLevelScorer(peaks, sel_tbl_path)
+    def score_call_level(self, peaks, sel_tbl):
+        scorer = CallLevelScorer(peaks, sel_tbl, self.species_name)
         call_level_score = scorer.score()
         if self.experiment is not None:
             self.experiment.save('call_level_score', call_level_score)
@@ -634,10 +662,11 @@ class CallLevelScorer:
     # Constructor
     #-------------------
     
-    def __init__(self, peaks, sel_tbl_path):
+    def __init__(self, peaks, sel_tbl, species):
         
         self.peaks = peaks
-        self.sel_tbl = Utils.read_raven_selection_table(sel_tbl_path)
+        self.species = species
+        self.sel_tbl = sel_tbl
 
     #------------------------------------
     # score
@@ -647,10 +676,7 @@ class CallLevelScorer:
         
         # Pick out the true call Interval instances
         # from the selection table:
-        true_time_intervals = [sel['time_interval']
-                               for sel
-                               in self.sel_tbl
-                               ]
+        true_time_intervals = self.sel_tbl.species_times(self.species) 
         # Ensure the list is sorted by start time:
         true_time_intervals.sort()
         
@@ -1059,7 +1085,7 @@ class PowerResult(JsonDumpableMixin):
     # Constructor
     #-------------------
     
-    def __init__(self, prob_df, species, sr=22050):
+    def __init__(self, prob_df, species, sr=22050, name=None):
         '''
         Life begins with the result of a PowerMember's
         compute_probabilities() computation. To its result
@@ -1089,17 +1115,26 @@ class PowerResult(JsonDumpableMixin):
             med_prob        the median of the probabilities among all matches
             best_fit_prob   max probability among matches with the 
                             longest signature
+                            
+        The name argument allows assignment of a client
+        determined name for the new instance. No attempt
+        is made to verify uniqueness. The name can be set any
+        time after instance creation.
 
         :param prob_df: all match probabilities
         :type prob_df: pd.DataFrame
-        :param summary_ser: aggregates of probabilities
-        :type summary_ser: pd.Series
         :param species: the species for which the PowerMember
             is specialized
         :type species: str
+        :param sr: sample rate
+        :type sr: {None | float}
+        :param name: name for this instance
+        :type name: {None | str} 
+        
         '''
         
         self.sr = sr
+        self.name = name
         
         # Add start, end, and middle wallclock times to the df:
         prob_df['start_time'] = SignalAnalyzer.hop_length  * prob_df.start_idx / sr

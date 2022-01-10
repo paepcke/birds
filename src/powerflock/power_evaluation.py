@@ -16,7 +16,7 @@ from logging_service.logging_service import LoggingService
 from matplotlib.patches import Rectangle
 
 from birdsong.utils.utilities import FileUtils
-from data_augmentation.utils import Utils, Interval
+from data_augmentation.utils import Utils, Interval, RavenSelectionTable
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -71,7 +71,13 @@ class PowerEvaluator:
         self.species = species
         self.actions = actions if type(actions) == list else [actions]
         self.test_recording = test_recording
-        self.test_sel_tbl = test_sel_tbl
+        # If given path to a Raven selection table,
+        # import that table into an instance of 
+        # RavenSelectionTable:
+        if test_sel_tbl is not None and type(test_sel_tbl) == str:
+            self.test_sel_tbl = RavenSelectionTable(test_sel_tbl)
+        else:
+            self.test_sel_tbl = test_sel_tbl
         
         self._init_data_paths()
 
@@ -93,6 +99,8 @@ class PowerEvaluator:
         else:
             # See whether the experiment has PowerResult instances:
             pwr_res = self._latest_power_result(self.experiment)
+            if pwr_res is not None:
+                self.log.info(f"Using PowerResult {repr(pwr_res)} ({pwr_res.name})")
 
         if templates is None:
             # Does the experiment have templates from a
@@ -190,10 +198,16 @@ class PowerEvaluator:
             raise ValueError("Either pwr_res or pwr_member plus rec_path must be provided")
             
         if pwr_res is None:
+            # No PowerResult yet, so find a 'is-class-of-interest' 
+            # probability for each timeframe of the given recording:
             pwr_res = pwr_member.compute_probabilities(rec_path) 
             
             # Add a Truth column to the result:
-            pwr_res.add_truth(sel_tbl_path)
+            if sel_tbl_path is not None:
+                # A label set is available for the given
+                # recording, so add a 'truth' column to
+                # the result probabilities:
+                pwr_res.add_truth(sel_tbl_path)
             
             pwr_res_fname = FileUtils.construct_filename(
                 props_info = {'species' : pwr_res.species},
@@ -206,6 +220,9 @@ class PowerEvaluator:
 
         #_axes = pwr_member.plot_pr_curve(pwr_res)
 
+        # Make final decisions about timeframe level, and
+        # call level classification:
+         
         res_df = pd.DataFrame()
         for threshold in self.THRESHOLDS:
             for sig_id in pwr_res.sig_ids():
@@ -223,10 +240,17 @@ class PowerEvaluator:
         
         # On to scores of finding calls, as opposed to 
         # predicting every time frame:
+        # NOTE: to get pr-curve over prominence_thres,
+        #       repeat the following call with different
+        #       prominence_thres values (default is 
+        #       PowerMember.PROMINENCE_THRES:
+        
         peaks = pwr_member.find_calls(pwr_res)
-        
+        #****** NEXT: better  Exp save key for scores
+                 AND pr-curve!!!!
         score = pwr_member.score_call_level(peaks, self.test_sel_tbl)
-        
+        self.experiment.save('scores_by_calls', score)
+        print(score)
         #input("Press any key to quit: ")
 
         #call_intervals = Utils.get_call_intervals(sel_tbl_path)
@@ -403,6 +427,7 @@ class PowerEvaluator:
         newest_date = max(time_files.keys())
         exp_key = time_files[newest_date]
         pwr_res = exp.read(exp_key, PowerResult)
+        pwr_res.name = exp_key
         return pwr_res
 
     #------------------------------------
