@@ -13,6 +13,7 @@ import argparse
 import datetime
 import json
 import os
+from pathlib import Path
 import sys
 
 from experiment_manager.experiment_manager import JsonDumpableMixin
@@ -31,6 +32,7 @@ import pandas as pd
 from powerflock.signal_analysis import SignalAnalyzer, TemplateSelection
 from powerflock.signatures import SpectralTemplate
 
+from result_analysis.charting import Charter
 
 #from sklearn.metrics import PrecisionRecallDisplay
 #import matplotlib.pyplot as plt
@@ -70,7 +72,8 @@ class PowerMember:
     a window of time, such as a few milliseconds.
     '''
     
-    THRES_PROMINENCE = 0.3
+    THRES_PROMINENCE = 0.4
+    '''Minimum cutoff for call to find_peaks(); higher is more discriminative'''
     
     #------------------------------------
     # Constructor
@@ -140,6 +143,9 @@ class PowerMember:
 
         self.log = LoggingService()
         self.experiment = experiment
+        if experiment is not None:
+            # Create name to refer to the experiment: its root di:
+            self.exp_name = Path(experiment.root).stem
         
         # --------- Argument Checks -----------
         # Init slide width:
@@ -191,6 +197,9 @@ class PowerMember:
             raise NotImplementedError(f"Current implementation only supports a single SpectralTemplate instance")
 
         self.spectral_template = self.spectral_templates[0]
+        # Preserve the template in the experiment:
+        if self.experiment is not None:
+            self.experiment.save(f"template_{species_name}", self.spectral_template)
         
         self.min_call_len = min(self.spectral_template.sig_lengths)
         
@@ -353,12 +362,26 @@ class PowerMember:
         
         prob_df = pwr_res.prob_df
         
+        # Pull out a copy of sig id and their match probabilities
+        # Need to copy, because filtering and normalizing
+        # will make changes to the probabilities:
+        all_sig_probs = prob_df[['sig_id', 'match_prob']].copy()
+        all_probs = all_sig_probs.match_prob
+        probs_filtered = np.abs(pd.Series(scipy.signal.savgol_filter(all_probs, 
+                                                                     window_length=51, 
+                                                                     polyorder=11), 
+                                          index=all_probs.index))
+        probs_normed = pd.Series(sklearn.preprocessing.minmax_scale(probs_filtered), 
+                                 index=probs_filtered.index)
+        all_sig_probs['match_prob'] = probs_normed
+        
         prob_peaks_by_sig_list = []
         for sig_id in sig_ids:
-            probs = prob_df[prob_df.sig_id == sig_id].match_prob
-            peak_indices, properties = scipy.signal.find_peaks(probs, prominence=self.THRES_PROMINENCE)
+            probs = all_sig_probs[all_sig_probs.sig_id == sig_id].match_prob
+            peak_indices, properties = scipy.signal.find_peaks(probs,
+                                                               prominence=self.THRES_PROMINENCE)
             peak_probs = properties['prominences']
-            times   = probs.index[peak_indices]
+            times = probs.index[peak_indices]
             prob_peaks = pd.Series(peak_probs, index=times, name=sig_id)
             prob_peaks_by_sig_list.append(prob_peaks)
         
@@ -408,7 +431,7 @@ class PowerMember:
         peak_sigs_np = peaks_by_time_all_sigs.reindex(cols, axis=1)\
                         .to_numpy()[np.arange(len(peaks_by_time_all_sigs)), idx]
         # Create df with maximum prob of peaks, and the IDs
-        # of the sigs the contributed that max in each case:
+        # of the sigs that contributed that max in each case:
         peak_sig_col = pd.Series(peak_sigs_np, 
                                  index=peaks_by_time_all_sigs.index,
                                  name='peak_prob')
@@ -437,7 +460,21 @@ class PowerMember:
         peaks['high_bound'] = peaks['high_bound'].where(peaks['high_bound'] <= peaks.index[-1], 
                                                         peaks.index[-1])
 
+        if self.experiment is not None:
+            self.experiment.save('probability_peaks', peaks)
+            self.log.info(f"Saved probability peaks in exp {self.exp_name} under 'probability_peaks")
         return peaks
+
+    #------------------------------------
+    # score_call_level
+    #-------------------
+    
+    def score_call_level(self, peaks, sel_tbl_path):
+        scorer = CallLevelScorer(peaks, sel_tbl_path)
+        call_level_score = scorer.score()
+        if self.experiment is not None:
+            self.experiment.save('call_level_score', call_level_score)
+        return call_level_score
 
     # ----------------------- Visualizations --------------------
 
@@ -559,7 +596,7 @@ class PowerMember:
             return audio
 
 # ------------------------- CallLevelScore -----------
-class CallLevelScore:
+class CallLevelScorer:
     '''
     Used when a labeled recording is available
     to compute recall and precision at the call level.

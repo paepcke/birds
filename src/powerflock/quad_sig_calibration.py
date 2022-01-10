@@ -80,7 +80,7 @@ class QuadSigCalibrator(JsonDumpableMixin):
               saved in <dir-of-this-file>/species_calibration_data/signatures.json
               Recover as QuadSigCalibrator.json_load(<...signatures.json>)
             o If an experiment instance is provided, the result
-              is additionally saved as experiment.save('signatures') as
+              is additionally saved as experiment.save('templates') as
               json. Recover using experiment.read('signatures', QuadSigCalibrator)
         
         If an experiment is provided, the signatures stored
@@ -195,7 +195,7 @@ class QuadSigCalibrator(JsonDumpableMixin):
             # Look in the experiment for the dict of
             # templates
             try:
-                cur_templates = self.experiment.read('signatures', QuadSigCalibrator)
+                cur_templates = self.experiment.read('templates', QuadSigCalibrator)
             except FileNotFoundError:
                 cur_templates = {}
 
@@ -208,7 +208,7 @@ class QuadSigCalibrator(JsonDumpableMixin):
         # Additionally, save in experiment if one was provided:
         if self.experiment is not None:
             self.log.info(f"Saving/updating all sigs to 'signatures' in experiment")
-            self.experiment.save('signatures', self)
+            self.experiment.save('templates', self)
         
         self.signatures_fname = signatures_fname
         return cur_templates

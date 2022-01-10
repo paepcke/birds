@@ -25,6 +25,7 @@ from powerflock.power_member import PowerMember, PowerQuantileClassifier, \
     PowerResult
 from powerflock.quad_sig_calibration import QuadSigCalibrator
 from powerflock.signal_analysis import SignalAnalyzer
+from powerflock.signatures import SpectralTemplate
 from result_analysis.charting import Charter
 
 
@@ -97,12 +98,19 @@ class PowerEvaluator:
             # Does the experiment have templates from a
             # prior quad_sig_calibration run?
             try:
-                templates = self.experiment.read('signatures', QuadSigCalibrator)
+                templates = self.experiment.read('templates', QuadSigCalibrator)
+                template = templates[species]
             except FileNotFoundError:
-                # The templates remains at None
-                pass
+                # One last try: does the experiment have
+                # single template for the species under analysis?
+                try:
+                    template = self.experiment.read(f"template_{species}", SpectralTemplate)
+                except FileNotFoundError:
+                    # The templates remains at None
+                    pass
         else:
-            # Path to signatures json file stored by QuadSigCalibrator:
+            # Path to signatures json file stored by QuadSigCalibrator
+            # somewhere outside the experiment:
             templates_dict = QuadSigCalibrator.json_load(templates)
             template = templates_dict[species]
 
@@ -155,6 +163,28 @@ class PowerEvaluator:
                  pwr_member=None,
                  rec_path=None
                  ):
+        '''
+        Computes information retrieval scores for call
+        detection. The method can either start from scratch
+        with a PowerMember instance, which will analyze its
+        recording, and generate a PowerResult instance. Or
+        the method can start with an already computed PowerResult.
+        
+        Computes two sets of scores: one that considers predictions
+        for each timeframe of the recording's spectrogram, and another
+        at a coarser level that considers calls.
+        
+        :param sel_tbl_path: path to Raven selection table
+        :type sel_tbl_path: str
+        :param pwr_res: optionally and already computed PowerResult
+            with the probabilities at each timeframe
+        :type pwr_res: {None | PowerResult}
+        :param pwr_member: optionally a PowerMember instance to use
+            for computing the PowerResult
+        :type pwr_member: {None | PowerMember}
+        :param rec_path: path to the recording to analyze
+        :type rec_path: {None | str}
+        '''
 
         if pwr_res is None and pwr_member is None:
             raise ValueError("Either pwr_res or pwr_member plus rec_path must be provided")
@@ -188,8 +218,14 @@ class PowerEvaluator:
                 score['threshold'] = threshold
                 res_df = res_df.append(score)
         
-        self.experiment.save('scores', res_df)
-        self.log.info(f"Scores saved in experiment under 'scores' tabular")
+        self.experiment.save('scores_by_timeframe', res_df)
+        self.log.info(f"Scores saved in experiment under 'scores_by_timeframe' tabular")
+        
+        # On to scores of finding calls, as opposed to 
+        # predicting every time frame:
+        peaks = pwr_member.find_calls(pwr_res)
+        
+        score = pwr_member.score_call_level(peaks, self.test_sel_tbl)
         
         #input("Press any key to quit: ")
 

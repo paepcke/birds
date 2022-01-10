@@ -4,18 +4,19 @@ Created on Dec 23, 2021
 @author: paepcke
 '''
 
-from pathlib import Path
 import json
+from pathlib import Path
 
+from experiment_manager.experiment_manager import JsonDumpableMixin
 import librosa
 
 from data_augmentation.utils import Utils, Interval
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
 
-class SpectralTemplate:
+class SpectralTemplate(JsonDumpableMixin):
     '''
     Hold the spectral centroid timelines (signatures)
     of all calls in one recording.
@@ -205,7 +206,7 @@ class SpectralTemplate:
     @classmethod
     def json_load_templates(cls, fname):
         '''
-        Sometimes a dict with values being jsonized SpectralTemplate
+        Sometimes a dict with values that are jsonized SpectralTemplate
         instances is stored on disk. This happens in
         quad_sig_calibration(). This method recovers
         such a file. The code is a convenience duplicate
@@ -452,7 +453,7 @@ class SpectralTemplate:
     
 # -------------------------- Class Signature -----------
 
-class Signature:
+class Signature(JsonDumpableMixin):
     '''
     Instances hold the spectral signature of a
     single bird call. Information includes the
