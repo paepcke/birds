@@ -336,6 +336,11 @@ class FileUtils:
         NOTE: if changes are made to how filenames
               are constructed, check method parse_filename()
               for needed mods
+        NOTE: this method ignores all properties that are 
+              not in fname_long_2_short. It is therefore specific
+              to machine learning contexts. 
+              Consider fname_from_props() for more general
+              use. 
         Given either:
         
             o a dict of property names and
@@ -495,6 +500,79 @@ class FileUtils:
             prop_dict['timestamp'] = match[2]
         
         return prop_dict
+
+    #------------------------------------
+    # fname_from_props
+    #-------------------
+    
+    @classmethod
+    def fname_from_props(cls, 
+                         props_info,
+                         prefix=None,
+                         suffix=None, 
+                         incl_date=False):
+        '''
+        Create a filename that includes all 
+        the information held in the keys and 
+        values of the dict/obj:
+
+        Ex props_info is a dict:
+             {
+               'lr' : 0.001,
+               'bs' : 32,
+               optimizer : 'Adam'
+             }
+             
+        would return the string:
+            
+            'lr_0.001_bs_32_optimizer_Adam'
+        
+        If a prefix is provided, it will lead the
+        string. Example: "Exp" would yield:
+        
+            'EXP_lr_0.001_bs_32_optimizer_Adam'
+            
+        If suffix is provided, it will be appended to the
+        name: Example, suffix='.csv':
+        
+            'EXP_lr_0.001_bs_32_optimizer_Adam.csv'
+            
+        Finally, if incl_date is True, a timestamp is added
+        at the start of the returned name, or right after
+        the prefix
+
+        :param props_info: names and values to include,
+            or an object that provides all needed values
+            as attributes (instance vars)
+        :type props_info: {str : Any}
+        :param prefix: leading part of file name
+        :type prefix: str
+        :param suffix: trailing part of file name
+        :type suffix: str
+        :param incl_date: whether or not to include current
+            data in the file name
+        :type incl_date: bool
+        :return: a string appropriate for use as a filename
+        :rtype: str
+        ''' 
+        fname = prefix if prefix is not None else ''
+        if incl_date:
+            fname += f"_{cls.file_timestamp()}"
+
+        if not isinstance(props_info, dict):
+            # An obj that promises attrs for each
+            # needed value:
+            property_dict = cls.make_run_props_dict(props_info)
+        else:
+            property_dict = props_info
+            
+        for prop_name, prop_val in property_dict.items():
+            fname += f"_{prop_name}_{str(prop_val)}"
+
+        if suffix is not None:
+            fname += suffix
+            
+        return fname
 
     #------------------------------------
     # extract_recording_id
