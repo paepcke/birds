@@ -10,11 +10,11 @@ import re
 import shutil
 import warnings
 
+from experiment_manager.experiment_manager import JsonDumpableMixin
 from experiment_manager.neural_net_config import NeuralNetConfig
 import librosa
 from matplotlib import MatplotlibDeprecationWarning
 from natsort import natsorted
-#from seaborn.matrix import heatmap
 from torch import cuda
 import torch
 
@@ -25,6 +25,7 @@ import numpy as np
 import pandas as pd
 
 
+#from seaborn.matrix import heatmap
 #-------------------------- Enum for Policy When Output Files Exist -----------
 class WhenAlreadyDone(Enum):
     ASK = 0
@@ -79,7 +80,7 @@ class ImgAugMethod(Enum):
 
 # ------------------- Class Interval -------------
 
-class Interval(dict):
+class Interval(dict, JsonDumpableMixin):
     '''
     Instances store intervals of ints or
     floats. Supports a dict API for retrieving
@@ -146,13 +147,22 @@ class Interval(dict):
         return {'low' : self['low_val'],
                 'high': self['high_val'],
                 'step': self['step']}
+        
+    def json_dump(self, fname):
+        with open(fname, 'w') as fd:
+            fd.write(self.json_dumps())
 
     @classmethod
     def json_loads(cls, jstr):
         jdict = Utils.safe_eval(jstr)
-        self['low_val'] = jdict['low_val']
-        self['high_val'] = jdict['high_val']
-        self['step'] = jdict['step']
+        inst  = Interval(jdict['low_val'], jdict['high_val'], jdict['step']) 
+        return inst
+    
+    @classmethod
+    def json_load(cls, fname):
+        with open(fname, 'r') as fd:
+            jstr = fd.read()
+        return cls.json_loads(jstr)
     
     def values(self):
         if self.the_series is not None:
@@ -1087,6 +1097,11 @@ class Utils:
     @classmethod
     def read_raven_selection_table(cls, tbl_path):
         '''
+        NOTE: consider instantiating RavenSelectionTable
+              instead of using this method directly. 
+              This method should rightly be in that class,
+              but backward compatibility...
+
         Given the path to a Raven selection table
         .csv file, return a list of dicts. Each dict
         contains the information in one selection table
@@ -1972,6 +1987,169 @@ class Utils:
         '''
         return np.issubdtype(the_dtype, np.number)
 
+# -------------------- Class RavenSelectionTable -------------
+
+class RavenSelectionTable:
+    '''
+    Encapsulates information present in Raven selection table
+    files
+    '''
+    #------------------------------------
+    # Constructor
+    #-------------------
+    
+    def __init__(self, tbl_path):
+        
+        dict_list = Utils.read_raven_selection_table(tbl_path)
+        # Simple list of sel tbl entry records: 
+        self.entries = [RavenSelectionTableEntry(dict_entry)
+                        for dict_entry in dict_list
+                        ]
+        
+        # Sort by time:
+        self.entries = sorted(self.entries)
+        
+        # Lookup of entries by species:
+        #    {species1 : [entry4, entry 11],
+        #     species2 : [entry4, entry 2]
+        #    }
+        self.entries_by_species = {}
+        for tbl_entry in self.entries:
+            for species in tbl_entry.species_list:
+                try:
+                    self.entries_by_species[species].append(tbl_entry)
+                except KeyError:
+                    # First encounter:
+                    self.entries_by_species[species] = [tbl_entry]
+
+    #------------------------------------
+    # species_times
+    #-------------------
+    
+    def species_times(self, species):
+        '''
+        Return all time intervals during which 
+        given species was vocalizing.
+         
+        :param species: species to select
+        :type species: str
+        :return: list of time intervals when species
+            was vocalizing
+        :rtype: [Interval]
+        '''
+        species = species.lower()
+        intervals = [entry.time_interval
+                     for entry in self.entries_by_species[species]
+                     ]
+        return intervals
+
+    #------------------------------------
+    # __getitem__ 
+    #-------------------
+    
+    def __getitem__(self, species):
+        '''
+        Given a species, return a list of RavenSelectionTableEntry
+        instances where species vocalized.
+        
+        :param species: species name to look up
+        :type species: str
+        :return: list of RavenSelectionTableEntry instances
+            when species vocalized, possibly overlaid with 
+            other species as well
+        :rtype: [RavenSelectionTableEntry]
+        :raises: KeyError if no entries exists
+        '''
+        return self.entries_by_species[species.lower()]
+
+    #------------------------------------
+    # __str__
+    #-------------------
+    
+    def __str__(self):
+        times = f"{round(self.entries[0].start_time, 2)}-{round(self.entries[-1].stop_time, 2)}secs"
+        return f"<RavenSelectionTable {times} {hex(id(self))}>"
+
+    #------------------------------------
+    # __repr__
+    #-------------------
+    
+    def __repr__(self):
+        return self.__str__()
+
+
+# --------------------- Class RavenSelectionTableEntry -----
+
+class RavenSelectionTableEntry:
+    
+    #------------------------------------
+    # Constructor
+    #-------------------
+    
+    def __init__(self, entry_dict):
+        
+        self.sel_id = entry_dict['Selection']
+        self.start_time = entry_dict['Begin Time (s)']
+        self.stop_time  = entry_dict['End Time (s)']
+        self.low_freq   = entry_dict['Low Freq (Hz)']
+        self.high_freq  = entry_dict['High Freq (Hz)']
+        self.delta_time = entry_dict['Delta Time (s)']
+        # Get lower-cased list of species that are
+        # co-occurring during this selection table 
+        # entry's time interval:
+        mix_list        = [mix_species.lower() 
+                           for mix_species in entry_dict['mix']
+                           ]
+        
+        self.species_list  = [entry_dict['species'].lower()]
+        self.species_list.extend(mix_list)
+        self.type          = entry_dict['type']
+        self.time_interval = entry_dict['time_interval']
+        self.freq_interval = entry_dict['freq_interval']
+        
+    #------------------------------------
+    # start_time
+    #-------------------
+    
+    def start_time(self):
+        self.time_interval['low_value']
+
+    #------------------------------------
+    # stop_time
+    #-------------------
+    
+    def stop_time(self):
+        self.time_interval['high_value']
+
+    #------------------------------------
+    # __str__
+    #-------------------
+    
+    def __str__(self):
+        times = f"{round(self.start_time, 2)}-{round(self.start_time, 2)}secs"
+        return f"<RavenSelectionTableEntry {times} {hex(id(self))}>"
+
+    #------------------------------------
+    # __repr__
+    #-------------------
+    
+    def __repr__(self):
+        return self.__str__()
+
+    #------------------------------------
+    # __eq__
+    #-------------------
+    
+    def __eq__(self, other):
+        return (self.time_interval == other.time_interval)
+                
+    #------------------------------------
+    # __lt__
+    #-------------------
+    
+    def __lt__(self, other):
+        
+        return (self.time_interval < other.time_interval)
 
 # -------------------- Class ProcessWithoutWarnings ----------
 
