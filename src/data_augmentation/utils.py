@@ -2044,23 +2044,82 @@ class RavenSelectionTable:
         return intervals
 
     #------------------------------------
+    # vocalization_time
+    #-------------------
+    
+    def vocalization_time(self, species=None):
+        '''
+        If species is provided, returns the number
+        of seconds the species vocalized. If species
+        is None, returns the total vocalizations
+        occurred.
+        
+        :param species:
+        :type species:
+        '''
+        
+        if species is None:
+            total_time = self.test_sel_tbl.sum()
+        else:
+            species = species.lower()
+            intvs = self.entries_by_species[species]
+            total_time = sum([entry.delta_time
+                              for entry in intvs
+                              ])
+        return total_time
+
+
+    #------------------------------------
+    # species
+    #-------------------
+    
+    def species(self):
+        '''
+        Return iterator over all the species
+        represented. 
+
+        :return iterator over species that appear
+            in the labels
+        :rtype iter(str)
+        '''
+        return self.entries_by_species.keys()
+
+    #------------------------------------
     # __getitem__ 
     #-------------------
     
-    def __getitem__(self, species):
+    def __getitem__(self, species_or_nth):
         '''
-        Given a species, return a list of RavenSelectionTableEntry
-        instances where species vocalized.
+        Given a species name, or an integer into 
+        the list of table entries: 
+           o return a list of RavenSelectionTableEntry 
+             instances where species_or_nth vocalized.
+           o the nth RavenSelectionTableEntry entry in the
+             table 
         
-        :param species: species name to look up
-        :type species: str
-        :return: list of RavenSelectionTableEntry instances
-            when species vocalized, possibly overlaid with 
-            other species as well
+        :param species_or_nth: species_or_nth name to look up
+        :type species_or_nth: {str | nth\}
+        :return: if given a species name, list of RavenSelectionTableEntry 
+            instances when species vocalized; or the nth entry
+            if species_or_nth is an int. 
         :rtype: [RavenSelectionTableEntry]
         :raises: KeyError if no entries exists
+        :raises: TypeError for wrongly typed arg
         '''
-        return self.entries_by_species[species.lower()]
+        if type(species_or_nth) == int:
+            return self.entries[species_or_nth]
+        elif type(species_or_nth) == str:
+            return self.entries_by_species[species_or_nth.lower()]
+        else:
+            raise TypeError(f"species_or_nth must be int or str, not {type(species_or_nth)}")
+
+
+    #------------------------------------
+    # __len__
+    #-------------------
+    
+    def __len__(self):
+        return len(self.entries)
 
     #------------------------------------
     # __str__
@@ -2093,7 +2152,7 @@ class RavenSelectionTableEntry:
         self.stop_time  = entry_dict['End Time (s)']
         self.low_freq   = entry_dict['Low Freq (Hz)']
         self.high_freq  = entry_dict['High Freq (Hz)']
-        self.delta_time = entry_dict['Delta Time (s)']
+        self.delta_time = float(entry_dict['Delta Time (s)'])
         # Get lower-cased list of species that are
         # co-occurring during this selection table 
         # entry's time interval:
