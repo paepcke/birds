@@ -354,8 +354,8 @@ class PowerMember:
         a probability peak is in the context of probabilities
         neighboring in time. See scipy.signal.find_peaks and
         Wikipedia 'Topographic prominence' for details. Default
-        is set in the class variable PROMINENCE_THRES. Values
-        must be in [0,1]
+        is set in the class variable DEFAULT_PROMINENCE_THRESHOLD. 
+        Values must be in [0,1]
         
         :param pwr_res: the probabilities for each timeframe
             according to every signature
@@ -369,7 +369,7 @@ class PowerMember:
         '''
 
         if prominence_threshold is None:
-            prominence_threshold = self.PROMINENCE_THRES
+            prominence_threshold = self.DEFAULT_PROMINENCE_THRESHOLD
         sig_ids = pd.Series(pwr_res.sig_ids())
         
         prob_df = pwr_res.prob_df
@@ -478,19 +478,6 @@ class PowerMember:
         # Add a column that repeats the prominence_threshold
         # for each row; redundant, but easy:
         peaks['prominence_threshold'] = [prominence_threshold]*len(peaks)
-        if self.experiment is not None:
-            # Build an experiment key:
-            pwr_res_nm_date = Path(pwr_res.name).stem
-            exp_key = FileUtils.fname_from_props({
-                'sp': pwr_res.species, 
-                'pr' : pwr_res_nm_date,
-                'promThres' : prominence_threshold
-                },
-                prefix='prob_peaks',
-                incl_date=True
-            )
-            self.experiment.save(exp_key, peaks)
-            self.log.info(f"Saved probability peaks in exp {self.exp_name} under '{exp_key}'")
         return peaks
 
     #------------------------------------
@@ -500,8 +487,6 @@ class PowerMember:
     def score_call_level(self, peaks, sel_tbl):
         scorer = CallLevelScorer(peaks, sel_tbl, self.species_name)
         call_level_score = scorer.score()
-        if self.experiment is not None:
-            self.experiment.save('call_level_score', call_level_score)
         return call_level_score
 
     # ----------------------- Visualizations --------------------
@@ -802,7 +787,7 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
         
         self.sig_id = sig_id
         self.threshold_quantile = threshold_quantile
-        
+
         # No absolute power result or probability threshold 
         # yet: use one of these None-assignment to check in predict()
         # fit() was called:
@@ -828,10 +813,8 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
         :param y: not used
         :type y: Any
         '''
-
         self.power_result = power_result
-        y = power_result.prob_df.truth
-        self.classes_, y = np.unique(y, return_inverse=True)
+        self.classes_ = [True, False]
 
         # Get like:
         #        n_samples  match_prob   sig_id start_idx stop_idx   start_time  stop_time truth
@@ -848,50 +831,15 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
 
         # Dig out just the results for the given signature:
         df_this_sig = df[df.sig_id == sig_id]
-        
-        # Isolate results that pertain to the given sig_id
-        # to get: 
-        #         probability  mean_prob  med_prob  max_prob  center_time  Truth
-        #     0      0.711948   0.406659   0.38578  0.962312     0.978141    1.0
-        #     1      0.662506   0.406659   0.38578  0.962312     1.467211    1.0
-        #     2      0.810184   0.406659   0.38578  0.962312     1.956281    1.0
-        
-        # The phrase gb.size().iloc[sig_idx] is the number of measurements
-        # taken with the given signature: 
-        # num_probs = len(df_this_sig)
-        # sig_df = pd.concat([df_this_sig.probability.reset_index().probability,
-        #                     pd.Series([df_this_sig.probability.mean()]*num_probs),
-        #                     pd.Series([df_this_sig.probability.median()]*num_probs),
-        #                     pd.Series([df_this_sig.probability.max()]*num_probs),
-        #                     df_this_sig.center_time.reset_index().center_time,
-        #                     df_this_sig.Truth.reset_index().Truth
-        #                     ],
-        #                     ignore_index=True,
-        #                     axis='columns'
-        #                     )
-        # sig_df.columns = ['probability', 'mean_prob', 'med_prob', 'max_prob', 'center_time', 'Truth']
-        
-        probs_by_time = df_this_sig.match_prob
-        probs_by_time.index = df_this_sig.index
-        
-        truth_by_time = df_this_sig.truth
-        truth_by_time.index = df_this_sig.index
-         
-        sig_df = pd.concat(
-            [probs_by_time,
-             truth_by_time
-            ], axis='columns')
-        
+                
         # Compute the absolute threshold probability for
         # this signature from the given threshold quantile:
         self.prob_threshold = df_this_sig.match_prob.quantile(q=self.threshold_quantile)
-        
-        self.X = self.probabilities = df_this_sig.match_prob
-        self.y = self.truth         = sig_df.truth
-        self.center_time            = sig_df.truth.index
-        self.mean_prob = self.probabilities.mean()
-        self.median_prob = self.probabilities.median()
-        self.max_prob = self.probabilities.max() 
+
+        # Some convenience instance vars:
+        self.X             = df_this_sig.match_prob
+        self.probabilities = df_this_sig.match_prob
+        self.center_time   = df_this_sig.index
         
         # Return the classifier:
         return self
@@ -903,7 +851,7 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
     def predict(self, X):
         '''
         Given a probability of an input being of the
-        focus class output True or False, given the
+        focus class output True or False, and given the
         decision threshold with which this instance
         was created. This is a simple greater-than test.
                 
@@ -945,7 +893,11 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
 
         probs  = self.probabilities
         preds  = self.decision_function(probs)
-        truth = self.truth
+        
+        if not self.power_result.knows_truth():
+            raise AttributeError("Score was called without updating PowerResult with a truth column")
+        
+        truth = self.power_result.truths(self.sig_id)
         score = pd.Series({
             'bal_acc'    : sklearn.metrics.balanced_accuracy_score(truth, preds),
             'acc'        : sklearn.metrics.accuracy_score(truth, preds),
@@ -1134,6 +1086,9 @@ class PowerResult(JsonDumpableMixin):
         '''
         
         self.sr = sr
+        
+        if name is None:
+            name = f"PwrRes_{FileUtils.file_timestamp()}"
         self.name = name
         
         # Add start, end, and middle wallclock times to the df:
@@ -1145,16 +1100,28 @@ class PowerResult(JsonDumpableMixin):
         self.prob_df.index = center_time
         self.prob_df.index.name = 'time'
         self.species  = species
-        
-        # The truths column has not been added yet.
-        # The column is added by a client calling add_truth().
-        # The following property can be tested via 
 
     #------------------------------------
-    # add_and_truth
+    # knows_truth
     #-------------------
     
-    def add_truth(self, truth_source, plot=False):
+    def knows_truth(self):
+        '''
+        Returns True if this instance has information
+        about the (timeframe level) truth values. This
+        condition is met after add_truth() was called.
+         
+        :return: True if instance has truth label info
+        :rtype bool
+        '''
+
+        return 'truth' in self.prob_df.columns
+
+    #------------------------------------
+    # add_truth
+    #-------------------
+    
+    def add_truth(self, truth_sel_tbl):
         '''
         Add two new columns: 'Overlap' and 'Truth' to the matching results
         df. For each row the Truth column is 1 or 0, depending
@@ -1165,38 +1132,11 @@ class PowerResult(JsonDumpableMixin):
         
         The prob_df will permanently contain the columns.
         
-        :param truth_source: either a selection table file, 
-            or a list of Interval instances with time intervals
-            of calls
-        :type truth_source: {str | [Interval]}
+        :param truth_sel_tbl: a RavenSelectionTable instance
+        :type RavenSelectionTable
         '''
         
-        if type(truth_source) == str:
-            # File name to a selection table that covers
-            # the recording that was the input to the result
-            if not os.path.exists(truth_source):
-                raise FileNotFoundError(f"Could not find selection table {truth_source}")
-            
-            # Get list of dicts, each holding one row of
-            # the selection table, plus time_interval, which
-            # is a data_augmentation.utils.Interval instance
-            row_dicts = Utils.read_raven_selection_table(truth_source)
-            # Cannot use list comprehension here, b/c
-            # self won't be known:
-            call_intervals = []
-            for row_dict in row_dicts:
-                if row_dict['species'] == self.species:
-                    call_intervals.append(row_dict['time_interval'])
-
-        elif type(truth_source) == list:
-            # Assume source is a list of Interval instances,
-            # each describing the time period in the input 
-            # recording where a bird call happened:
-            types = [type(el) == Interval for el in truth_source]
-            if sum(types) != len(truth_source):
-                raise TypeError(f"List in truth_source does not contain Interval instances")
-            call_intervals = truth_source
-
+        call_intervals = truth_sel_tbl.species_times(self.species)
         # Find all rows shows timestamp (i.e. index)
         # lies within any of the call intervals:
         ntime_frames, _n_facts = self.prob_df.shape

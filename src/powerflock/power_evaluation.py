@@ -9,6 +9,7 @@ from bisect import bisect_left
 from datetime import datetime, timedelta
 from enum import Enum
 import os
+from pathlib import Path
 import sys
 
 from experiment_manager.experiment_manager import ExperimentManager
@@ -31,17 +32,22 @@ from result_analysis.charting import Charter
 
 class Action(Enum):
     UNITTEST = 0
-    GRID_SEARCH = 1
-    TEST = 2
+    ANALYSIS = 1
+    SCORE = 2
     VIZ_PROBS = 3,
-    ANALYZE_RESULT = 4
+    GRID_SEARCH = 4
 
 class PowerEvaluator:
     '''
     classdocs
     '''
     # Probability thresholds for use in result_analysis
-    THRESHOLDS = [0.6, 0.7, 0.8, 0.9]   
+    THRESHOLDS = [0.6, 0.7, 0.8, 0.9]
+    PROMINENCE_THRESHOLDS = [0.1, 0.2, 0.3, 0.4, 0.5]
+    
+    DEFAULT_PROBABILITY_THRESHOLD = 0.6
+    DEFAULT_PERCENTAGE_AGREEMENT  = .5
+    DEFAULT_PROMINENCE_THRESHOLD  = 0.3
     SLIDE_WIDTH = 0.05 # fraction of signature
     SIG_ID = 3
     
@@ -61,7 +67,9 @@ class PowerEvaluator:
                  power_result_info=None,
                  test_recording=None,
                  test_sel_tbl=None,
-                 apply_bandpass=False
+                 apply_bandpass=False,
+                 prominence_thresholds=None,
+                 probability_thresholds=None
                  ):
         '''
         Constructor
@@ -135,96 +143,215 @@ class PowerEvaluator:
         for action in self.actions:
             if action == Action.UNITTEST:
                 return
-            elif action == Action.GRID_SEARCH:
-                grid_res = self.grid_search()
-            elif action == Action.TEST:
-                self.log.info("Running action 'test'...")
-                pwr_res = self.run_test(self.test_sel_tbl,
-                                        pwr_res=pwr_res,
-                                        pwr_member=self.power_member,
-                                        rec_path=self.test_recording,
-                                        )
-                self.log.info("Done running action 'test'.")
-                self.log.info(f"Saving power result under 'pwr_res' to exp {self.experiment.root}")
-                self.experiment.save('pwr_res', pwr_res)
+            elif action == Action.ANALYSIS:
+                # Analysis of a recording (~ 20min processing for 1min recording):
+                self.log.info("Running action 'analysis'...")
+                pwr_res = self.run_analysis(pwr_member=self.power_member,
+                                            rec_path=self.test_recording,
+                                            )
+                self.log.info("Done running action 'analysis'.")
                  
+            elif action == Action.SCORE:
+                self.log.info("Running action 'score'...")
+                scores = self.score(self.test_sel_tbl,
+                                    pwr_res_info=pwr_res,
+                                    pwr_member=self.power_member,
+                                    prominence_thresholds=prominence_thresholds,
+                                    probability_thresholds=probability_thresholds
+                                    )
+                self.log.info("Done running action 'score'.")
+                
             elif action == Action.VIZ_PROBS:
                 ax = self.viz_probs(self.power_member,
                                     self.test_recording,
                                     self.test_sel_tbl,
                                     self.SIG_ID
                                     )
-            elif action == Action.ANALYZE_RESULT:
-                self.analyze_result(pwr_res)
+            elif action == Action.GRID_SEARCH:
+                grid_res = self.grid_search()
+                
             else:
                 raise ValueError(f"Unknown action: {action}")
 
         print("Done")
 
     #------------------------------------
-    # run_test
+    # run_analysis
     #-------------------
     
-    def run_test(self,
-                 sel_tbl_path,
-                 pwr_res=None,
-                 pwr_member=None,
-                 rec_path=None
-                 ):
+    def run_analysis(self, 
+                     pwr_member, 
+                     rec_path,
+                     probability_thres=None,
+                     percentage_agreement=None,
+                     prominence_thres=None
+                     ):
+                 
         '''
-        Computes information retrieval scores for call
-        detection. The method can either start from scratch
-        with a PowerMember instance, which will analyze its
-        recording, and generate a PowerResult instance. Or
-        the method can start with an already computed PowerResult.
+        Used to compute decisions on the presence of one
+        species' articulation both by timeframe and at the
+        granularity of calls. Use before running score()
+        No labels are used/required in this method.
         
-        Computes two sets of scores: one that considers predictions
-        for each timeframe of the recording's spectrogram, and another
-        at a coarser level that considers calls.
+        Runs through a recording, generating a PowerResult instance
+        that holds probabilities at each timeframe of the recording
+        containing a vocalization by the power member's species.
         
-        :param sel_tbl_path: path to Raven selection table
-        :type sel_tbl_path: str
-        :param pwr_res: optionally and already computed PowerResult
-            with the probabilities at each timeframe
-        :type pwr_res: {None | PowerResult}
-        :param pwr_member: optionally a PowerMember instance to use
+        Also generates decision, both at the timeframe and call level.
+        For timeframe level decisions the probability_threshold and 
+        percentage_agreement are relevant:
+           
+           o probability_threshold is the probability of a class
+             during one timeframe above which class membership is
+             concluded.
+           o percentage_agreement is the percentage of signatures
+             that must have decided positively on class membership
+             during a given timeframe to conclude as a final decision
+             that a class is positive during the timeframe
+             
+        For call level decisions the prominence of probability peaks
+        are used to determine whether a peak is distinguished enough
+        from surrounding noise that the associated timeframe can be 
+        considered the center time of a vocalization. Value are 
+        in [0,1]
+        
+        For all three quantities, class variables are used if None
+        is passed in:
+           o cls.DEFAULT_PROMINENCE_THRESHOLD 
+           o cls.DEFAULT_PERCENTAGE_AGREEMENT
+           o cls.DEFAULT_PROMINENCE_THRESHOLD
+        
+        
+        Saves PowerResult instance in experiment as json.
+        
+        :param pwr_member: PowerMember instance to use
             for computing the PowerResult
-        :type pwr_member: {None | PowerMember}
+        :type pwr_member: PowerMember
         :param rec_path: path to the recording to analyze
-        :type rec_path: {None | str}
+        :type rec_path: str
+        :param percentage_agreement: percentage of signatures that
+            must have voted True to conclude that a timeframe contains
+            a vocalization of the focus species.
+        :type percentage: {None | float}
+        :param prominence_thres: the importance of a probability
+            peak to be considered a vocalization.
+        :type prominence_thres: {None | float}
         '''
 
-        if pwr_res is None and pwr_member is None:
-            raise ValueError("Either pwr_res or pwr_member plus rec_path must be provided")
-            
-        if pwr_res is None:
-            # No PowerResult yet, so find a 'is-class-of-interest' 
-            # probability for each timeframe of the given recording:
-            pwr_res = pwr_member.compute_probabilities(rec_path) 
-            
-            # Add a Truth column to the result:
-            if sel_tbl_path is not None:
-                # A label set is available for the given
-                # recording, so add a 'truth' column to
-                # the result probabilities:
-                pwr_res.add_truth(sel_tbl_path)
-            
-            pwr_res_fname = FileUtils.construct_filename(
-                props_info = {'species' : pwr_res.species},
-                suffix='.json',
-                prefix='PwrRes',
-                incl_date=True
+        if probability_thres is None:
+            probability_thres = PowerEvaluator.DEFAULT_PROBABILITY_THRESHOLD
+        if percentage_agreement is None:
+            percentage_agreement = PowerEvaluator.DEFAULT_PERCENTAGE_AGREEMENT
+        if prominence_thres is None:
+            prominence_thres = PowerEvaluator.DEFAULT_PROMINENCE_THRESHOLD
+
+        species = pwr_member.species_name
+        self.log.info(f"Analyzing recording to detect {species} vocalizatoins...")
+        #************
+        pwr_res = pwr_member.compute_probabilities(rec_path)
+        #pwr_res = self.experiment.read('PwrRes_2022-01-09T18_30_03', PowerResult)
+        #pwr_res.name = 'PwrRes_2022-01-09T18_30_03'
+        # Save in experiment:
+        self.log.info(f"Done analyzing recording to detect {species} vocalizations.") 
+        pwr_res_fname = self._make_experiment_key(
+            species=pwr_res.species,
+            prefix='PwrRes'
+            )
+        self.experiment.save(pwr_res_fname, pwr_res)
+        self.log.info(f"Power result saved in experiment under '{pwr_res_fname}' PowerResult")
+
+        # Make the per-timeframe decisions based on
+        timeframe_scores = []
+        for sig_id in pwr_res.sig_ids():
+            pwr_classifier = PowerQuantileClassifier(
+                sig_id=sig_id, 
+                threshold_quantile=probability_thres
                 )
-            self.experiment.save(pwr_res_fname, pwr_res)
-            self.log.info(f"Power result saved in experiment under '{pwr_res_fname}' PowerResult")
+            pwr_classifier.fit(pwr_res)
+            decision = pwr_classifier.predict(pwr_res.probabilities(sig_id))
+            decision.name = sig_id
+            timeframe_scores.append(decision)
 
-        #_axes = pwr_member.plot_pr_curve(pwr_res)
+        # Get:
+        #           1.0  2.0  3.0  4.0  5.0  6.0   ...   12.0 13.0 14.0 15.0 16.0 17.0
+        # time                                     ...                                
+        # 0.162540   NaN  NaN  NaN  NaN  NaN  NaN  ...  False  NaN  NaN  NaN  NaN  NaN
+        # 0.174150   NaN  NaN  NaN  NaN  NaN  NaN  ...  False  NaN  NaN  NaN  NaN  NaN
+        timeframe_votes = pd.concat(timeframe_scores, axis=1)
+        # Compute number of sigs that must have voted True
+        # to conclude class positive:
+        num_sigs = len(pwr_res.sig_ids())
+        required_agreement = round(percentage_agreement * num_sigs)
+        
+        # Get subset of rows in timeframe_votes that
+        # have sufficient True votes:
+        timeframe_vote_result = timeframe_votes[timeframe_votes.sum(axis=1) >= required_agreement]
+        
+        # Prepare the final data structure as a 
+        # Series that will have True where a class is
+        # concluded, and has as many elements as 
+        # the num of timeframes:
+        timeframe_decision = pd.Series([False]*len(timeframe_votes), 
+                                       index=timeframe_votes.index,
+                                       name=f"is-{self.species}-call")
+        
+        timeframe_decision.loc[timeframe_vote_result.index] = True
+        
+        exp_key = self._make_experiment_key(
+            sp=self.species,
+            prefix='TmFrmDecisions'
+            )
+        self.experiment.save(exp_key, timeframe_decision)
+        self.log.info(f"Saved timeframe level decisions to {exp_key} tabular")
+        
+        # Now the analysis at call level (which also saves the result
+        # to the experiment):
+        peaks = pwr_member.find_calls(pwr_res, prominence_threshold=prominence_thres)
+        
+        exp_key = self._make_experiment_key(
+            sp=self.species,
+            pr=pwr_res.name,
+            promThres=prominence_thres,
+            prefix='CallDecisions'
+        )
+        self.experiment.save(exp_key, peaks)
+        self.log.info(f"Saved timeframe level decisions to {exp_key} tabular")
 
+        return pwr_res
+
+    #------------------------------------
+    # score
+    #-------------------
+
+    def score(self, 
+              sel_tbl, 
+              pwr_member, 
+              pwr_res_info=None,
+              probability_thresholds=None,
+              prominence_thresholds=None
+              ):
+        
         # Make final decisions about timeframe level, and
         # call level classification:
-         
+
+        if pwr_res_info is None:
+            pwr_res = self._latest_power_result(self.experiment)
+        elif type(pwr_res_info) == PowerResult:
+            pwr_res = pwr_res_info
+        else:
+            # Must be a string that's the key into the experiment:
+            pwr_res = self.experiment.read(pwr_res_info, PowerResult)
+
+        if not pwr_res.knows_truth():
+            pwr_res.add_truth(sel_tbl)
+
+        if probability_thresholds is None:
+            probability_thresholds = [self.DEFAULT_PROBABILITY_THRESHOLD]
+        if prominence_thresholds is None:
+            prominence_thresholds = [self.DEFAULT_PROMINENCE_THRESHOLD]
+
         res_df = pd.DataFrame()
-        for threshold in self.THRESHOLDS:
+        for threshold in probability_thresholds:
             for sig_id in pwr_res.sig_ids():
                 quantile_evaluator = PowerQuantileClassifier(sig_id=sig_id, 
                                                              threshold_quantile=threshold)
@@ -235,22 +362,40 @@ class PowerEvaluator:
                 score['threshold'] = threshold
                 res_df = res_df.append(score)
         
-        self.experiment.save('scores_by_timeframe', res_df)
-        self.log.info(f"Scores saved in experiment under 'scores_by_timeframe' tabular")
+        pwr_res_nm_date = Path(pwr_res.name).stem
+        exp_key = self._make_experiment_key(
+            sp=pwr_res.species,
+            pr=pwr_res_nm_date,
+            prefix='scores_frames'
+            )
+        self.experiment.save(exp_key, res_df)
+        self.log.info(f"Scores saved in experiment under '{exp_key}, 'tabular")
         
         # On to scores of finding calls, as opposed to 
         # predicting every time frame:
-        # NOTE: to get pr-curve over prominence_thres,
-        #       repeat the following call with different
-        #       prominence_thres values (default is 
-        #       PowerMember.PROMINENCE_THRES:
+
+        call_scores = []
+        for prominence_threshold in prominence_thresholds:
+            peaks = pwr_member.find_calls(pwr_res, prominence_threshold=prominence_threshold)
+            score = pwr_member.score_call_level(peaks, self.test_sel_tbl)
+            score['prom_thres'] = prominence_threshold
+            score.name = f"prominence_thres_{prominence_threshold}"
+            call_scores.append(score)
+
+        # Get like:
+        #                        bal_acc       acc  ...      f0.5  prom_thres
+        # prominence_thres_0.3  0.578212  0.606010  ...  0.686055         0.3
+        # prominence_thres_0.6  0.551401  0.412645  ...  0.386556         0.6
         
-        peaks = pwr_member.find_calls(pwr_res)
-        #****** NEXT: better  Exp save key for scores
-                 AND pr-curve!!!!
-        score = pwr_member.score_call_level(peaks, self.test_sel_tbl)
-        self.experiment.save('scores_by_calls', score)
-        print(score)
+        scores = pd.concat(call_scores, axis=1).T
+        exp_key = self._make_experiment_key(
+            sp=pwr_res.species,
+            pr=pwr_res_nm_date,
+            prefix='scores_calls'
+            )
+
+        self.experiment.save('scores_by_calls', scores)
+        return scores
         #input("Press any key to quit: ")
 
         #call_intervals = Utils.get_call_intervals(sel_tbl_path)
@@ -388,6 +533,49 @@ class PowerEvaluator:
 
 
 # --------------  Utilities -----------------
+
+    #------------------------------------
+    # make_experiment_key
+    #-------------------
+    
+    def _make_experiment_key(self, **kwargs):
+        '''
+        Create an informative key (i.e. filename without its extension)
+        for saving to an ExperimentManager instance.
+        
+        Client provides info to include in arbitrary
+        keyword arguments:
+        
+            species='CMTOG', thres=0.6
+            
+        Will return:
+        
+            <date>_species_CMTOG_thres_0.6
+            
+        The special keyword 'prefix' is available:
+        
+            species='CMTOG', thres=0.6, prefix='PwrRes'
+            
+        would return:
+        
+            PwrRes_<date>_species_CMTOG_thres_0.6
+        '''
+
+        try:
+            prefix = kwargs['prefix']
+            del kwargs['prefix']
+        except KeyError:
+            prefix = None
+            
+        exp_key = FileUtils.fname_from_props(
+            props_info=kwargs,
+            prefix=prefix,
+            incl_date=True
+            )
+
+        return exp_key
+
+
 
     #------------------------------------
     # _latest_power_result
@@ -684,10 +872,21 @@ if __name__ == '__main__':
                         default=None)
     parser.add_argument('-b', '--bandpass',
                         action='store_true',
-                        help='apply bandpass filters to sigs and inferenced audio with the freq range of signatures default: False',
-                        default=False)
+                        help='apply bandpass filters to sigs and inferenced audio with the freq range of signatures default: True',
+                        default=True)
+
+    parser.add_argument('--prominence_thres',
+                        type=float,
+                        nargs='+',
+                        help=f"For call level scoring: Repeatable floats for prominence thresholds to try; default {PowerEvaluator.DEFAULT_PROMINENCE_THRESHOLD}")
+    
+    parser.add_argument('--probability_thres',
+                        type=float,
+                        nargs='+',
+                        help=f"For timeframe level scoring: Repeatable floats for probability thresholds to try; default {PowerEvaluator.DEFAULT_PROBABILITY_THRESHOLD}")
+    
     parser.add_argument('actions',
-                        choices=['test', 'gridSearch', 'viz_probs', 'analyze'],
+                        choices=['analyze', 'score', 'viz_probs', 'gridSearch'],
                         nargs='+',
                         help='Repeatable: actions to perform')
 
@@ -710,14 +909,14 @@ if __name__ == '__main__':
     # Convert text actions to Action enum members:
     actions = []
     for action in args.actions:
-        if action == 'test':
-            actions.append(Action.TEST)
+        if action == 'analyze':
+            actions.append(Action.ANALYSIS)
+        elif action == 'score':
+            actions.append(Action.SCORE)
         elif action == 'gridSearch':
             actions.append(Action.GRID_SEARCH)
         elif action == 'viz_probs':
             actions.append(Action.VIZ_PROBS)
-        elif action == 'analyze':
-            actions.append(Action.ANALYZE_RESULT)
         else:
             raise NotImplementedError(f"Action {action} is not implemented")
     
@@ -730,6 +929,7 @@ if __name__ == '__main__':
                    args.templates,
                    test_recording=args.test_rec,
                    test_sel_tbl=args.test_sel,
-                   apply_bandpass=args.bandpass
+                   apply_bandpass=args.bandpass,
+                   prominence_thresholds=args.prominence_thres,
+                   probability_thresholds=args.probability_thres
                    )
-    print('foo')
