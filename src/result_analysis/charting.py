@@ -1391,17 +1391,14 @@ class Charter:
         # In this context it is more convenient 
         # to key by row-label (index), with values 
         # being color:
-        #************************
-        # if color_groups is not None:
-        #     new_col_grps = {}
-        #     for color, row_label_list in color_groups.items():
-        #         for row_idx, _row_val in enumerate(row_label_list):
-        #             new_col_grps[row_idx] = color
-        #     colors = new_col_grps
-        # else:
-        #     colors = None
-        colors = color_groups
-        #************************            
+        if color_groups is not None:
+            new_col_grps = {}
+            for color, row_label_list in color_groups.items():
+                for row_label in row_label_list:
+                    new_col_grps[row_label] = color
+            colors = new_col_grps
+        else:
+            colors = None
             
         if type(data_input) == pd.Series:
             data = pd.DataFrame()
