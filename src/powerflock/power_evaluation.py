@@ -11,6 +11,7 @@ from enum import Enum
 import os
 from pathlib import Path
 import sys
+import time
 
 from experiment_manager.experiment_manager import ExperimentManager
 from logging_service.logging_service import LoggingService
@@ -139,7 +140,8 @@ class PowerEvaluator:
             experiment=self.experiment,
             apply_bandpass=apply_bandpass
             )
-
+        self.power_member.power_result = pwr_res
+        
         for action in self.actions:
             if action == Action.UNITTEST:
                 return
@@ -315,7 +317,7 @@ class PowerEvaluator:
             prefix='CallDecisions'
         )
         self.experiment.save(exp_key, peaks)
-        self.log.info(f"Saved timeframe level decisions to {exp_key} tabular")
+        self.log.info(f"Saved call level decisions to {exp_key} tabular")
 
         return pwr_res
 
@@ -330,6 +332,49 @@ class PowerEvaluator:
               probability_thresholds=None,
               prominence_thresholds=None
               ):
+        '''        Once a PowerResult has been computed via the
+        'analyze' action, this method computes success
+        scores for two levels of detail: at each spectrogram
+        timeframe, and at the level of 'detected call'. Computed
+        scores are:
+        
+            o balanced accuracy
+            o accuracy
+            o recall
+            o precision
+            o f0.5 score
+            o f1 score
+        
+        Sets of these scores can be computed with multiple
+        probability thresholds (for timeframe level) and/or
+        prominence thresholds (for call level). 
+        
+        Results are saved in self.experiment under keys with
+        prefix:
+            'scores_frames...' for timeframe level
+            'scores_calls...'  for call level
+        the string '...' will be information about the probability
+        or prominence thresholds that yielded the score.
+            
+                   
+        :param sel_tbl: Raven selection table with truth 
+        :type sel_tbl: str
+        :param pwr_member: the PowerMember instance for the species
+        :type pwr_member: PowerMember
+        :param pwr_res_info: the PowerResult from the prior 'analysis'
+            action. If None, the PowerResult is pulled from the experiment.
+        :type pwr_res_info: {None | PowerResult}
+        :param probability_thresholds: optionally, a list of probability
+            thresholds under which to compute the timeframe level results
+            Default: self.DEFAULT_PROBABILITY_THRESHOLD
+        :type {None | [float]}
+        :param prominence_thresholds: probability_thresholds: optionally, a list of prominence
+            thresholds under which to compute the call level results
+            Default: self.DEFAULT_PROMINENCE_THRESHOLD
+        :type prominence_thresholds: {None | [float]}
+        :return: the timeframe level and call level scores
+        :rtype: [pd.DataFrame, pd.DataFrame]
+        '''
         
         # Make final decisions about timeframe level, and
         # call level classification:
@@ -394,7 +439,7 @@ class PowerEvaluator:
             prefix='scores_calls'
             )
 
-        self.experiment.save('scores_by_calls', scores)
+        self.experiment.save(exp_key, scores)
         return scores
         #input("Press any key to quit: ")
 
@@ -452,13 +497,14 @@ class PowerEvaluator:
                   power_member,
                   test_recording,
                   test_sel_tbl,
-                  sig_id
+                  sig_id,
+                  save_figs_dir=None
                   ):
         
         if not power_member.output_ready:
             pwr_res = power_member.compute_probabilities(test_recording)
         else:
-            pwr_res = power_member.power_member
+            pwr_res = power_member.power_result
 
         try:
             truths = pwr_res.truths(sig_id)
@@ -475,6 +521,8 @@ class PowerEvaluator:
             spectro = SignalAnalyzer.raven_spectrogram(test_recording)
             self.spectro_dict[test_recording] = spectro
         
+        species = power_member.species_name
+        # Show spectrogram of the recording:
         mesh = plt.pcolormesh(spectro.columns, 
                               list(spectro.index), 
                               spectro, 
@@ -483,7 +531,9 @@ class PowerEvaluator:
         
         ax = mesh.axes
 
-        call_intervals = Utils.get_call_intervals(test_sel_tbl)
+        # Superimpose rectangles at the bottom of the
+        # spectrogram, to show the true location of calls:
+        call_intervals = test_sel_tbl.species_times(power_member.species_name)
         truth_rects_x = [interval['low_val']
                          for interval
                          in call_intervals]
@@ -493,10 +543,6 @@ class PowerEvaluator:
                          in call_intervals]
         heights       = [self.TRUTH_RECT_HEIGHTS]*len(call_intervals)
 
-        fig = ax.figure
-        fig.suptitle(f"{os.path.basename(test_recording)} ({power_member.species_name})")
-        fig.show()
-        
         for x,y,width,height in zip(truth_rects_x, truth_rects_y, widths, heights):
             ax.add_patch(Rectangle((x,y),
                                    width, height,
@@ -505,6 +551,37 @@ class PowerEvaluator:
                                    edgecolor='black',
                                    hatch='*')
                                    )
+
+        fig = ax.figure
+        fig.set_size_inches(10,7)
+        fig.suptitle(f"{os.path.basename(test_recording)} ({power_member.species_name})")
+
+        # Next, if show the probabilities as a line graph,
+        # one sig at a time:
+        ax_probs = ax.twinx()
+        ax.set_xlabel('Time (sec)')
+        ax.set_ylabel('Frequency (Hertz)')
+        fig.show()
+        
+        ax_probs.set_ylabel("Probability")
+        for i, probs in enumerate(pwr_res):
+            Charter.linechart(probs, ax=ax_probs, color_groups={'red' : ['match_prob']})
+            sig_id = pwr_res.sig_ids()[i]
+            ax_probs.set_title(f"Signature {sig_id}")
+            
+            if save_figs_dir is not None:
+                fname  = f"{species}_sig{sig_id}_xparent.png"
+                dst    = os.path.join(save_figs_dir, fname)
+                self.log.info(f"Saving sig-{sig_id}...")
+                fig.savefig(dst, transparent=True)
+            resp = input("Enter for next probs; q for quit: ")
+            if resp in ('Q', 'q', 'Quit', 'quit'):
+                break
+            # Remove the current line chart:
+            ax_probs.clear()
+            
+
+
         cursor = PowerInfoCursor(ax, pwr_res, truths, call_intervals, spectro)
         _motion_conn_id = fig.canvas.mpl_connect('motion_notify_event', cursor.on_mouse_move)
         _click_conn_id  = fig.canvas.mpl_connect('button_press_event', cursor.onclick)

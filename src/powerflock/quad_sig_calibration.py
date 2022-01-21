@@ -24,7 +24,9 @@ from powerflock.signatures import Signature, SpectralTemplate
 
 class QuadSigCalibrator(JsonDumpableMixin):
     '''
-    classdocs
+    Given recordings of example calls for one or more species, 
+    creates signature templates for each species. Stores the
+    combined json file on disk for use in subsequent analyses. 
     '''
 
     #------------------------------------
@@ -500,7 +502,7 @@ if __name__ == '__main__':
     
     parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
                                      formatter_class=argparse.RawTextHelpFormatter,
-                                     description="Calibrate quad power for one or more species"
+                                     description="Create signatures for one or more species"
                                      )
 
     parser.add_argument('-s', '--species',
