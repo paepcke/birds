@@ -625,11 +625,11 @@ class PowerEvaluator:
             # Put the right-side axis label back in:
             ax_probs.set_ylabel("Probability", fontsize=self.AX_LBL_FONTSIZE)
 
-        cursor = PowerInfoCursor(ax, pwr_res, truths, call_intervals, spectro)
-        _motion_conn_id = fig.canvas.mpl_connect('motion_notify_event', cursor.on_mouse_move)
-        _click_conn_id  = fig.canvas.mpl_connect('button_press_event', cursor.onclick)
-        if Action.UNITTEST in self.actions:
-            return fig, ax, cursor
+        # cursor = PowerInfoCursor(ax, pwr_res, truths, call_intervals, spectro)
+        # _motion_conn_id = fig.canvas.mpl_connect('motion_notify_event', cursor.on_mouse_move)
+        # _click_conn_id  = fig.canvas.mpl_connect('button_press_event', cursor.onclick)
+        # if Action.UNITTEST in self.actions:
+        #     return fig, ax, cursor
         input("Press ENTER to finish: ")
 
     #------------------------------------
