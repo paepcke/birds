@@ -52,6 +52,12 @@ class PowerEvaluator:
     SLIDE_WIDTH = 0.05 # fraction of signature
     SIG_ID = 3
     
+    # Default font size of axis tick labels 
+    # and axis labels in figures. Super titles 
+    # will be one pt higher, subtitles will be 
+    # 2pt lower
+    AX_LBL_FONTSIZE = 16
+    
     TRUTH_RECT_HEIGHTS = 500 # Hz
     '''Height of rectangles that indicate location of true bird calls in viz_probs'''
     
@@ -70,7 +76,8 @@ class PowerEvaluator:
                  test_sel_tbl=None,
                  apply_bandpass=False,
                  prominence_thresholds=None,
-                 probability_thresholds=None
+                 probability_thresholds=None,
+                 outfigs=False
                  ):
         '''
         Constructor
@@ -80,6 +87,7 @@ class PowerEvaluator:
         self.species = species
         self.actions = actions if type(actions) == list else [actions]
         self.test_recording = test_recording
+        
         # If given path to a Raven selection table,
         # import that table into an instance of 
         # RavenSelectionTable:
@@ -167,7 +175,8 @@ class PowerEvaluator:
                 ax = self.viz_probs(self.power_member,
                                     self.test_recording,
                                     self.test_sel_tbl,
-                                    self.SIG_ID
+                                    self.SIG_ID,
+                                    outfigs
                                     )
             elif action == Action.GRID_SEARCH:
                 grid_res = self.grid_search()
@@ -498,7 +507,7 @@ class PowerEvaluator:
                   test_recording,
                   test_sel_tbl,
                   sig_id,
-                  save_figs_dir=None
+                  save_figs=None
                   ):
         
         if not power_member.output_ready:
@@ -553,34 +562,68 @@ class PowerEvaluator:
                                    )
 
         fig = ax.figure
-        fig.set_size_inches(10,7)
-        fig.suptitle(f"{os.path.basename(test_recording)} ({power_member.species_name})")
+        fig.set_size_inches(14,7)
+        fig.suptitle(f"{os.path.basename(test_recording)} ({power_member.species_name})", 
+                     fontsize=self.AX_LBL_FONTSIZE + 1)
 
         # Next, if show the probabilities as a line graph,
         # one sig at a time:
         ax_probs = ax.twinx()
-        ax.set_xlabel('Time (sec)')
-        ax.set_ylabel('Frequency (Hertz)')
+        ax.set_xlabel('Time (sec)', fontsize=self.AX_LBL_FONTSIZE)
+        ax.set_ylabel('Frequency (Hertz)', fontsize=self.AX_LBL_FONTSIZE)
+        ax_probs.set_ylabel("Probability", fontsize=self.AX_LBL_FONTSIZE)
+        
+        ax.tick_params(axis='both', labelsize=self.AX_LBL_FONTSIZE)
+        ax_probs.tick_params(axis='y', labelsize=self.AX_LBL_FONTSIZE)
+        
         fig.show()
         
-        ax_probs.set_ylabel("Probability")
+        # Offering one chart at a time to user:
+        batch_mode = False
+        
+        # Are we to save figs? If so: to experiment or to a 
+        # runtime specified dir?
+        if save_figs and self.experiment is None:
+            # Place for destination directory asked from human:
+            dst_dir = None
         for i, probs in enumerate(pwr_res):
             Charter.linechart(probs, ax=ax_probs, color_groups={'red' : ['match_prob']})
             sig_id = pwr_res.sig_ids()[i]
-            ax_probs.set_title(f"Signature {sig_id}")
+            ax_probs.set_title(f"Signature {sig_id}", fontsize=self.AX_LBL_FONTSIZE - 2)
             
-            if save_figs_dir is not None:
+            if save_figs:
                 fname  = f"{species}_sig{sig_id}_xparent.png"
-                dst    = os.path.join(save_figs_dir, fname)
-                self.log.info(f"Saving sig-{sig_id}...")
-                fig.savefig(dst, transparent=True)
-            resp = input("Enter for next probs; q for quit: ")
-            if resp in ('Q', 'q', 'Quit', 'quit'):
-                break
+                # Save to experiment?
+                if self.experiment is not None:
+                    key = Path(fname).stem
+                    self.log.info(f"Saving sig-{sig_id} to experiment under key {key}...")
+                    self.experiment.save(key, fig, transparent=True, format='png')
+                else:
+                    # Only ask dst_dir once:
+                    if dst_dir is None:
+                        dst_dir = input("Figures destination directory: ")
+                    if not os.path.exists(dst_dir):
+                        os.makedirs(dst_dir)
+                    dst    = os.path.join(dst_dir, fname)
+                    self.log.info(f"Saving sig-{sig_id}...")
+                    fig.savefig(dst, transparent=True)
+
+            # If saving figs, might just want to go batch
+            # mode, and save them all without visually inspecting
+            # each chart, and hitting key in between:
+            if not batch_mode:
+                if save_figs:
+                    resp = input("ENTER for next chart; q for quit; b for batch mode (don't pause): ")
+                else:
+                    resp = input("ENTER for next chart; q for quit: ")
+                if resp in ('Q', 'q', 'Quit', 'quit'):
+                    break
+                if resp in ('b', 'B'):
+                    batch_mode = True
             # Remove the current line chart:
             ax_probs.clear()
-            
-
+            # Put the right-side axis label back in:
+            ax_probs.set_ylabel("Probability", fontsize=self.AX_LBL_FONTSIZE)
 
         cursor = PowerInfoCursor(ax, pwr_res, truths, call_intervals, spectro)
         _motion_conn_id = fig.canvas.mpl_connect('motion_notify_event', cursor.on_mouse_move)
@@ -947,6 +990,10 @@ if __name__ == '__main__':
     parser.add_argument('-e', '--experiment_name',
                         help='name for root dir of experiment where to save results; default: Species name',
                         default=None)
+    parser.add_argument('-o', '--outfigs',
+                        action='store_true',
+                        help='write figures to disk: into experiment if given, or ask outfile',
+                        default=False)
     parser.add_argument('-b', '--bandpass',
                         action='store_true',
                         help='apply bandpass filters to sigs and inferenced audio with the freq range of signatures default: True',
@@ -1008,5 +1055,6 @@ if __name__ == '__main__':
                    test_sel_tbl=args.test_sel,
                    apply_bandpass=args.bandpass,
                    prominence_thresholds=args.prominence_thres,
-                   probability_thresholds=args.probability_thres
+                   probability_thresholds=args.probability_thres,
+                   outfigs=args.outfigs
                    )
