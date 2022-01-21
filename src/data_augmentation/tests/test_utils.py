@@ -336,7 +336,7 @@ class Test(unittest.TestCase):
     # test_assertDataframesEqual
     #-------------------
     
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_assertDataframesEqual(self):
         
         df1 = pd.DataFrame([[1,2,3], [4,5,6]])
@@ -377,7 +377,7 @@ class Test(unittest.TestCase):
     # test_assertSeriesEqual
     #-------------------
     
-    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_assertSeriesEqual(self):
         
         ser_base = pd.Series([1.1234, 2.6789], name='test')
@@ -403,9 +403,6 @@ class Test(unittest.TestCase):
         ser_base_str_idx = pd.Series({'foo' : 1.1234, 'bar' : 2.6789}, name='test')
         ser = ser_base_str_idx
         Utils.assertSeriesEqual(ser, ser_base_str_idx)
-        
-        
-
 
     #------------------------------------
     # test_intervals

@@ -1132,7 +1132,8 @@ class Utils:
         In the incoming selection tables, the header 'species' is sometimes called
         any of 'species', 'Especie', 'Specie', 'SPECIE'
 
-        :param tbl_path: full path to Raven selection table
+        :param tbl_path: full path to Raven selection table,
+            
         :type tbl_path: src
         :return: list of dicts, each dict reflecting the content
             of one selection table row
@@ -1275,7 +1276,14 @@ class Utils:
             
             # Same for the single (4-letter) species:
             try:
-                if len(sel_dict['species']) != 4:
+                # Try to turn entries like 'motorcycle' into 
+                # 'NOISG'. Real species may have been entered
+                # as 4-letter names (by the ornithologists), or
+                # as 5-letter names (BANAS, CMTOG) by us. So
+                # a noise description that is 4 or 5 letters
+                # long will be kept as a 'species'. Very few
+                # of those if any:
+                if len(sel_dict['species']) not in (4,5):
                     sel_dict['species'] = 'NOISG'
                 else:
                     sel_dict['species'] = cls._four_to_five_from_sel_row_dict(sel_dict['species'], 
@@ -1304,25 +1312,26 @@ class Utils:
     # get_call_intervals 
     #-------------------
 
-    @classmethod
-    def get_call_intervals(cls, test_sel_tbl):
-        '''
-        Given the path to a selection table, read
-        the table, and return a list of Interval instances
-        with times when a call of any species is present.
-        
-        :param test_sel_tbl: path to Raven selection table
-        :type test_sel_tbl: str
-        :return list of Interval instances where calls
-            are labeled.
-        '''
-        row_dicts = Utils.read_raven_selection_table(test_sel_tbl)
-        call_intervals = [row_dict['time_interval']
-                          for row_dict
-                          in row_dicts
-                          ]
-        
-        return call_intervals
+    # @classmethod
+    # def get_call_intervals(cls, test_sel_tbl):
+    #     '''
+    #     Given the path to a selection table, read
+    #     the table, and return a list of Interval instances
+    #     with times when a call of any species is present.
+    #
+    #     :param test_sel_tbl: path to Raven selection table
+    #     :type test_sel_tbl: str
+    #     :return list of Interval instances where calls
+    #         are labeled.
+    #     '''
+    #     if type(test_sel_tbl) == str:
+    #         row_dicts = Utils.read_raven_selection_table(test_sel_tbl)
+    #     call_intervals = [row_dict['time_interval']
+    #                       for row_dict
+    #                       in row_dicts
+    #                       ]
+    #
+    #     return call_intervals
 
     #------------------------------------
     # align_sequences
@@ -1404,6 +1413,9 @@ class Utils:
             or when given species must be split into SONG/CALL, but the
             'Type' entry in sel_row_dict does not contain 'SONG' or 'CALL.
         '''
+        # Already in 5-letter form?
+        if len(four_code) == 5:
+            return four_code
         try: 
             five_code = SpeciesNameConverter()[four_code, DIRECTION.FOUR_FIVE]
         except ConversionError:
@@ -1654,51 +1666,38 @@ class Utils:
             the columns are equal
         :rtype bool
         '''
-
+        tolerance_exp = decimals
         # Check the index
         if cls.dtype_numeric(df1.index.dtype):
             # Both must be numeric:
             if not cls.dtype_numeric(df2.index.dtype):
                 return False
-            if (df1.index.values.round(decimals) != df2.index.values.round(decimals)).any():
+            if not np.isclose(df1.index, df2.index, atol=1*10**(-tolerance_exp)).all():
                 return False
         else:
             # Non-numeric index:
             if (df1.index != df2.index).any():
                 return False
         
-        # Check the columns:    
+        # Check the columns index 
         if cls.dtype_numeric(df1.columns.dtype):
+            # Dtype of other df must also be numeric:
             if not cls.dtype_numeric(df2.columns.dtype):
                 return False
-            if (df1.columns.values.round(decimals) != df2.columns.values.round(decimals)).any():
+            if not np.isclose(df1.columns, df2.columns, atol=10**(-tolerance_exp)).all():
                 return False
         else:
             # Non numeric columns:
             if (df1.columns != df2.columns).any():
                 return False
             
-        # Check the values. Oddly, rounding properly 
-        # does nothing if the values are non-numeric:
+        # Check the values themselves:
         try:
-            return (df1.round(decimals) == df2.round(decimals)).all().all()
-        except ValueError:
-            # When index and/or cols are eq only b/c of
-            # rounding, exception thrown because "
-            #   "Can only compare identically-labeled DataFrame objects"
-            if df1.apply(Utils.dtype_numeric).all() and \
-               df2.apply(Utils.dtype_numeric).all():
-                return (df1.values.round(decimals) == df2.values.round(decimals)).all().all()
-            else:
-                return (df1.values == df2.values).all().all()
-        
-
-        # if cls.dtype_numeric(df1.dtypes.dtype):
-        #     if not cls.dtype_numeric(df2.dtypes.dtype):
-        #         return False
-        #     return (df1.values.round(decimals) == df2.values.round(decimals)).all().all()
-        # else:
-        #     return (df1.values == df2.values).all().all()
+            # Start with assumption that values are numeric:
+            return np.isclose(df1, df2, atol=10**(-tolerance_exp)).all()
+        except TypeError:
+            # At least some non numeric values:
+            return (df1.values == df2.values).all().all()
 
     #------------------------------------
     # series_eq
@@ -1725,8 +1724,7 @@ class Utils:
             series names are equal
         :rtype bool
         '''
-
-        
+        tolerance_exp = decimals
 
         if ser1.name != ser2.name:
             return False
@@ -1735,61 +1733,24 @@ class Utils:
             # Both must both be numeric:
             if not cls.dtype_numeric(ser2.index.dtype):
                 return False
-            if (ser1.index.values.round(decimals) != ser2.index.values.round(decimals)).any():
+            if not np.isclose(ser1.index, ser2.index, atol=10**(-tolerance_exp)).all():
                 return False
         else:
             # Non-numeric index; just compare:
             if (ser1.index != ser1.index).any():
                 return False
 
+        # Check the values:
         if cls.dtype_numeric(ser1.dtype):
             if not cls.dtype_numeric(ser2.dtype):
                 return False
-            return (ser1.round(decimals) == ser2.round(decimals)).all().all()
+            if not np.isclose(ser1, ser2, atol=10**(-tolerance_exp)).all():
+                return False
         else:
+            # Non numeric:
             return (ser1.values == ser2.values)
-
-    #------------------------------------
-    # assertSeriesEqual
-    #-------------------
-    
-    @classmethod
-    def assertSeriesEqual(cls, ser1, ser2, decimals=5):
-        '''
-        Raise exception if ser1 and ser2 differ in index,
-        name or content. Note that two Series may be equal
-        even if they are not the identical data structure.
-        It's the content/index/name that count. 
         
-        The camel case naming convention makes this method fit
-        into the Python unittest self.assertXXX() convention.
-         
-        :param ser1: first series
-        :type ser1: pd.Series
-        :param ser2: second series
-        :type ser2: pd.Series
-        :param decimals: number of decimals to which 
-            equality is tested
-        :type decimals: int
-        :raises AssertionError on discrepancies
-        '''
-
-        if cls.dtype_numeric(ser1.index.dtype) or ser1.index.dtype == np.dtype('O'):
-            if (ser1.index != ser2.index).any():
-                raise AssertionError(f"Index ser1 differs from index ser2")
-        else:
-            if (ser1.index.values.round(decimals) != ser2.index.values.round(decimals)).any():
-                raise AssertionError(f"Index ser1 differs from index ser2")
-            
-        if (ser1.name != ser2.name):
-            raise AssertionError(f"Name of ser1 differs from name of ser2")
-        
-        if not cls.series_eq(ser1, ser2, decimals):
-            raise AssertionError(f"Values of ser1 differ from values of ser2")
-        
-        return
-        
-
+        return True
 
     #------------------------------------
     # assertDataframesEqual
@@ -1806,32 +1767,85 @@ class Utils:
         The camel case naming convention makes this method fit
         into the Python unittest self.assertXXX() convention.
          
-        :param df1: first series
+        :param df1: first dataframe
         :type df1: pd.DataFrame
-        :param df2: second series
+        :param df2: second dataframe
         :type df2: pd.DataFrame
         :param decimals: number of decimals to which 
             equality is tested
         :type decimals: int
         :raises AssertionError on discrepancies
         '''
-        
+
+        tolerance_exp = decimals
+
         if cls.dtype_numeric(df1.index.dtype):
+            if not cls.dtype_numeric(df2.index.dtype):
+                raise AssertionError(f"Index df1 different types than index df2")
+            if not np.isclose(df1.index, df2.index, atol=10**(-tolerance_exp)).all(): 
+                raise AssertionError(f"Index values of df1 differ from those of df2")
+        else:
+            # Non-numeric index:
             if (df1.index != df2.index).any():
                 raise AssertionError(f"Index df1 differs from index df2")
-        else:
-            if (df1.index.values.round(decimals) != df2.index.values.round(decimals)).any():
-                raise AssertionError(f"Index df1 differs from index df2")
 
+        # Column index:
         if cls.dtype_numeric(df1.columns.dtype):
-            if (df1.columns.values.round(decimals) != df2.columns.values.round(decimals)).any():
-                raise AssertionError(f"Columns df1 differ from columns df2")
+            if not cls.dtype_numeric(df2.columns.dtype):
+                raise AssertionError(f"Column index dtypes of df1 differ from those of df2")
+            if not np.isclose(df1.columns, df2.columns, atol=10**(-tolerance_exp)).all():
+                raise AssertionError(f"Column index of df1 differs from that of df2")
         else:
+            # Non-numeric cols:
             if (df1.columns != df2.columns).any():
                 raise AssertionError(f"Columns df1 differ from columns df2")
         
         if not cls.df_eq(df1, df2, decimals):
             raise AssertionError(f"Values of df1 differ from values of df2")
+        
+        return
+
+    #------------------------------------
+    # assertSeriesEqual
+    #-------------------
+    
+    @classmethod
+    def assertSeriesEqual(cls, ser1, ser2, decimals=5):
+        '''
+        Raise exception if ser1 and ser2 differ in index,
+        name, or content.
+        
+        The camel case naming convention makes this method fit
+        into the Python unittest self.assertXXX() convention.
+         
+        :param ser1: first series
+        :type ser1: pd.Series
+        :param ser2: second series
+        :type ser2: pd.Series
+        :param decimals: number of decimals to which 
+            equality is tested
+        :type decimals: int
+        :raises AssertionError on discrepancies
+        '''
+
+        tolerance_exp = decimals
+
+        if cls.dtype_numeric(ser1.index.dtype):
+            if not cls.dtype_numeric(ser2.index.dtype):
+                raise AssertionError(f"Index ser1 different types than index ser2")
+            if not np.isclose(ser1.index, ser2.index, atol=10**(-tolerance_exp)).all(): 
+                raise AssertionError(f"Index values of ser1 differ from those of ser2")
+        else:
+            # Non-numeric index:
+            if (ser1.index != ser2.index).any():
+                raise AssertionError(f"Index ser1 differs from index ser2")
+
+        # Name:
+        if ser1.name != ser2.name:
+            raise AssertionError(f"Names of ser1 and ser2 differ")
+        
+        if not cls.series_eq(ser1, ser2, decimals):
+            raise AssertionError(f"Values of ser1 differ from values of ser2")
         
         return
 
@@ -2152,7 +2166,8 @@ class RavenSelectionTableEntry:
         self.stop_time  = entry_dict['End Time (s)']
         self.low_freq   = entry_dict['Low Freq (Hz)']
         self.high_freq  = entry_dict['High Freq (Hz)']
-        self.delta_time = float(entry_dict['Delta Time (s)'])
+        # Get diff between start and stop time:
+        self.delta_time = self.stop_time - self.start_time
         # Get lower-cased list of species that are
         # co-occurring during this selection table 
         # entry's time interval:
