@@ -322,15 +322,12 @@ class PowerMember:
             slide_width_time_fraction=self.slide_width_time
             )
         self.log.info("Matched all signatures")
+        # Uses setter method, which sets output_ready to True:
         self.power_result = PowerResult(probs_df, self.species_name)
 
         if outfile is not None:
             print(f"Saving power_result to {outfile}")
             self.power_result.json_dump(outfile)
-
-        # Indicate that probabilities were computed
-        # on an input:
-        self.output_ready = True
         
         return self.power_result
 
@@ -542,6 +539,25 @@ class PowerMember:
         fig.show()
         return pred_displays
 
+    #------------------------------------
+    # power_result
+    #-------------------
+    
+    @property
+    def power_result(self):
+        return self._power_result
+    
+    @power_result.setter
+    def power_result(self, new_val):
+        if new_val is None:
+            self._power_result = None
+            self.output_ready = False
+            return
+        
+        if type(new_val) != PowerResult:
+            raise TypeError(f"Power result must be of class PowerResult, not {type(new_val)}")
+        self._power_result = new_val
+        self.output_ready = True
 
     # ------------------------- Utilities ------------
     
@@ -1194,6 +1210,52 @@ class PowerResult(JsonDumpableMixin):
         probs = self.prob_df[self.prob_df.sig_id == sig_id].match_prob
         probs.index = self.prob_df[self.prob_df.sig_id == sig_id].index
         return probs 
+    
+    #------------------------------------
+    # __iter__
+    #-------------------
+    
+    def __iter__(self):
+        '''
+        Iterator over the probability Series,
+        one signature at a time.
+        '''
+        # Init the index into the signature IDs: 
+        self._cur_sig_idx = -1
+        return self
+    
+    #------------------------------------
+    # __next__
+    #-------------------
+    
+    def __next__(self):
+        '''
+        Probabilities for the next signature.
+        
+        :return: probabilities for next signature,
+            excerpted from self.prob_df.
+        :type pd.Series
+        :raise StopIteration
+        '''
+        self._cur_sig_idx += 1
+        try:
+            nxt_prob_sig = self.sig_ids()[self._cur_sig_idx]
+        except IndexError:
+            raise StopIteration
+        probs = self.prob_df[self.prob_df.sig_id == nxt_prob_sig].match_prob
+        probs.index = self.prob_df[self.prob_df.sig_id == nxt_prob_sig].index
+        return probs
+    
+    #------------------------------------
+    # __len__
+    #-------------------
+    
+    def __len__(self):
+        '''
+        The number of signatures for which probabilities
+        are contained in this PowerResult
+        '''
+        return len(self.sig_ids())
 
     #------------------------------------
     # truths
