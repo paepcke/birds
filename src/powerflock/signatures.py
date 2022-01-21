@@ -150,7 +150,7 @@ class SpectralTemplate(JsonDumpableMixin):
         :return a new SpectralTemplate instance
         :rtype SpectralTemplate
         '''
-        try:
+        try: #*******template_jdict unexpectedly is a string!!!!
             template_jdict = json.loads(jstr)
             json_sigs_list = template_jdict['json_sig_list']
             signatures = [Signature.json_loads(json_sig)
@@ -173,9 +173,17 @@ class SpectralTemplate(JsonDumpableMixin):
     #-------------------
 
     def json_dump(self, fname):
+        '''
+        write SpectralTemplate instance to
+        file.
+        
+        :param fname: destination path
+        :type fname: str
+        '''
         
         with open(fname, 'w') as fd:
-            json.dump(self.json_dumps(), fd)
+            #json.dump(self.json_dumps(), fd)
+            fd.write(self.json_dumps())
 
     #------------------------------------
     # json_load
@@ -184,6 +192,7 @@ class SpectralTemplate(JsonDumpableMixin):
     @classmethod
     def json_load(cls, fname):
         '''
+        Load SpectralTemplate instance from file
         Read fname content as a json structure
         from which a SpectralTemplate instance can be
         retrieved. Return a new SpectralTemplate instance
@@ -489,6 +498,10 @@ class Signature(JsonDumpableMixin):
             default to which the librosa.load() function resamples
             
     '''
+    
+    # Code for np.inf and -np.inf when rendering to json:
+    JSON_INF     = '!infinity'
+    JSON_NEG_INF = '!infinity_neg'
 
     #------------------------------------
     # Constructor
@@ -594,12 +607,12 @@ class Signature(JsonDumpableMixin):
             raise TypeError(f"The spectral values must be a pd.DataFrame, not {type(sig_values)}")
 
         if scale_info is None:
-            # Leave signature values raw will
+            # Leave signature values raw when
             # normalize_self is called:
             self.scale_info = None
         else:
             if type(scale_info) != dict:
-                raise TypeError(f"The scale factors must be a pd.Series, not {type(scale_info)}")
+                raise TypeError(f"The scale factors must be a dict, not {type(scale_info)}")
             self.scale_info = scale_info
             self.normalize_self(scale_info)
 
@@ -853,9 +866,26 @@ class Signature(JsonDumpableMixin):
         pass the string to class method Signature.json_loads()
         '''
         
-        # Only save what we need, e.g. not the audio:
+        # Only save what we need, e.g. not the audio.
+        # Cannot use form df.to_json() for self.sig, 
+        # because df.to_json() does not handle np.inf
+        # or -np.inf values. So, if necessary, make a
+        # copy of self.sig, and replace those values with
+        # ones that we then revert back to np.inf/-np.inf:
+        
+        has_inf     = self.sig[self.sig == np.inf].any().any()
+        has_neg_inf = self.sig[self.sig == -np.inf].any().any()
+        if has_inf or has_neg_inf:
+            sig_df = self.sig.copy()
+        else:
+            sig_df = self.sig
+        if has_inf:
+            sig_df.replace(np.inf, self.JSON_INF, inplace=True)
+        if has_neg_inf:
+            sig_df.replace(-np.inf, self.JSON_NEG_INF, inplace=True)
+
         recovery_dict = {
-            "sig" : self.sig.to_json(),
+            "sig" : sig_df.to_json(),
             "scale_info" : self.scale_info,
             "sr" : self.sr,
             "fname" : self.fname,
@@ -890,6 +920,13 @@ class Signature(JsonDumpableMixin):
         jdict = json.loads(jstr)
         try:
             sig = pd.DataFrame(json.loads(jdict['sig']))
+            # Replace the np.inf and -np.inf codes that may
+            # have been used in self.json_dumps() to denote
+            # np.inf and -np.inf:
+            
+            sig.replace(cls.JSON_INF, np.inf, inplace=True)
+            sig.replace(cls.JSON_NEG_INF, -np.inf, inplace=True)
+            
             # The index dtype will have defaulted to Object.
             # Cast it to float64:
             sig.index = sig.index.astype('float64') 

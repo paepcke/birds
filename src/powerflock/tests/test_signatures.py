@@ -92,7 +92,7 @@ class Test(unittest.TestCase):
     # test_dumps_template
     #-------------------
     
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_dumps_template(self):
         sig1_values = pd.DataFrame([[1,2,3,4],
                                     [0.1, 0.2, 0.3, 0.4]],
@@ -102,6 +102,33 @@ class Test(unittest.TestCase):
                                              'pitch',
                                              'freq_mod']
                                     )
+
+        flatness1   = sig1_values.flatness
+        continuity1 = sig1_values.continuity
+        pitch1      = sig1_values.pitch
+        freq_mod1   = sig1_values.freq_mod
+        
+        flatness1_mean   = flatness1.mean()
+        continuity1_mean = continuity1.mean()
+        pitch1_mean      = pitch1.mean()
+        freq_mod1_mean   = freq_mod1.mean()
+
+        scale_info1 = {
+            'flatness' : {'mean' : flatness1_mean.item(),
+                          'standard_measure' : np.abs((flatness1 - flatness1_mean).median()).item() 
+                          },
+            'continuity' : {'mean' : continuity1_mean.item(),
+                            'standard_measure' : np.abs((continuity1 - continuity1_mean).median()).item() 
+                            },
+            'pitch' : {'mean' : pitch1_mean.item(),
+                       'standard_measure' : np.abs((pitch1 - pitch1_mean).median()).item() 
+                       },
+
+            'freq_mod' : {'mean' : freq_mod1_mean.item(),
+                        'standard_measure' : np.abs((freq_mod1 - freq_mod1_mean).median()).item()
+                        }
+            }
+
         
         sig2_values = pd.DataFrame([[5,6,7,8],
                                     [0.5, 0.7, 0.7, 0.8]],
@@ -111,20 +138,40 @@ class Test(unittest.TestCase):
                                              'pitch',
                                              'freq_mod']
                                     )
+        flatness2   = sig2_values.flatness
+        continuity2 = sig2_values.continuity
+        pitch2      = sig2_values.pitch
+        freq_mod2   = sig2_values.freq_mod
         
-        scale_factors1 = pd.Series([1,2,3,4],
-                                   index=['flatness', 'continuity', 'pitch', 'freq_mod'])
+        flatness2_mean   = flatness2.mean()
+        continuity2_mean = continuity2.mean()
+        pitch2_mean      = pitch2.mean()
+        freq_mod2_mean   = freq_mod2.mean()
+
+        scale_info2 = {
+            'flatness' : {'mean' : flatness2_mean.item(),
+                          'standard_measure' : np.abs((flatness2 - flatness2_mean).median()).item() 
+                          },
+            'continuity' : {'mean' : continuity2_mean.item(),
+                            'standard_measure' : np.abs((continuity2 - continuity2_mean).median()).item() 
+                            },
+            'pitch' : {'mean' : pitch2_mean.item(),
+                       'standard_measure' : np.abs((pitch2 - pitch2_mean).median()).item() 
+                       },
+
+            'freq_mod' : {'mean' : freq_mod2_mean.item(),
+                        'standard_measure' : np.abs((freq_mod2 - freq_mod2_mean).median()).item()
+                        }
+            }
         
-        scale_factors2 = pd.Series([5,6,7,8],
-                                   index=['flatness', 'continuity', 'pitch', 'freq_mod'])
-        
+
         sig1 = Signature('CMTOG',
                          sig1_values,
-                         scale_factors1
+                         scale_info1
                          )
         sig2 = Signature('CMTOG',
                          sig2_values,
-                         scale_factors2
+                         scale_info2
                          )
         
         template = SpectralTemplate([sig1, sig2])
