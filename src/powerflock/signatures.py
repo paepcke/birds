@@ -829,6 +829,20 @@ class Signature(JsonDumpableMixin):
         return sig_copy
 
     #------------------------------------
+    # duration
+    #-------------------
+
+    def duration(self):
+        '''
+        Returns the duration of the vocalization that
+        generated the signature.
+        
+        :return: duration of underlying call in fractional seconds
+        :rtype: float
+        '''
+        return self.sig.index[-1]
+
+    #------------------------------------
     # plot
     #-------------------
     
