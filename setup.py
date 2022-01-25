@@ -17,7 +17,7 @@ setup(
     # an out-of-band: sudo apt-get install python-dev
     setup_requires   = ['pytest-runner'],
     install_requires = ['scikit-learn>=1.0',
-                        'pandas>=1.1.3',
+                        'pandas>=1.4.0',
                         'numpy>=1.19.1',           
                         'torch>=1.7.1',       
                         'torchvision>=0.8.2', 
