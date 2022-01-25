@@ -142,7 +142,16 @@ class Interval(dict, JsonDumpableMixin):
             
         return 100 * overlap / self.width
         
-    
+    def center(self):
+        '''
+        Return the center of the interval: 
+             start + 0.5*(end-start)
+
+        :return: the center point of the interval 
+        :rtype: float
+        '''
+        return self['low_val'] + 0.5 * self.width
+        
     def json_dumps(self):
         return {'low' : self['low_val'],
                 'high': self['high_val'],
@@ -170,6 +179,19 @@ class Interval(dict, JsonDumpableMixin):
         # Materialize the series:
         self._materialize_series()
         return iter(self.the_series)
+
+    def __contains__(self, num):
+        '''
+        Enable expressions like:
+            num in my_interval
+        
+        :param num: number to check
+        :type num: numeric
+        :return: whether or not the given number is contained
+            in the interval: [low,high)
+        :rtype: bool
+        '''
+        return self.contains(num)
     
     def __getitem__(self, key):
         if key in ['low_val', 'high_val', 'step']:
@@ -202,8 +224,8 @@ class Interval(dict, JsonDumpableMixin):
                 break
 
     def __eq__(self, other):
-        return (self['low_value'] == other['low_value']) and \
-               (self['high_value'] == other['high_value']) and \
+        return (self['low_val'] == other['low_val']) and \
+               (self['high_val'] == other['high_val']) and \
                (self['step'] == other['step'])
     
     
