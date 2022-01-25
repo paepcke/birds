@@ -43,7 +43,7 @@ class QuadSigCalibrationTester(unittest.TestCase):
                                        experiment=experiment)
 
         start_time = time.time()
-        templates = calibrator.calibrate_species()
+        templates = calibrator.make_species_templates()
         end_time = time.time()
         
         print(timedelta(seconds=end_time - start_time))

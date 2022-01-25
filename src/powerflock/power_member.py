@@ -85,7 +85,7 @@ class PowerMember:
                  spectral_template_info=None,
                  the_slide_width_time=None,
                  experiment=None,
-                 apply_bandpass=False,
+                 apply_bandpass=True,
                  template_selection=TemplateSelection.SIMILAR_LEN,
                  ):
         '''
@@ -339,16 +339,24 @@ class PowerMember:
         '''
         Given a PowerResult computed by compute_probabilities()
         across an entire recording, mark an estimate of the center 
-        time of each call, plus a lower and upper time bound
+        time of each vocalization, plus a lower and upper time bound
         of each call. 
         
-        Return a df:
-              peak_prob   low_bound       high_bound
-        t0      0.123     t0 - some_num     t0 + some_num
-        t8      0.543     t8 - some_num     t8 + some_num
-                   ...
+        Return two dfs:
+                  peak_prob   low_bound       high_bound
+            t0      0.123     t0 - some_num     t0 + some_num
+            t8      0.543     t8 - some_num     t8 + some_num
+                       ...
+        and:
+        
+            peak_times_by_sig_id
+                        1.0    2.0    3.0    4.0    5.0  ...
+            1.056508   False  True  False  False  False  ...
+            1.149388   False  False  True  False  False  ...
+                       ...
+        
         The prominence_threshold specifies how 'important'
-        a probability peak is in the context of probabilities
+        a probability peak must be in the context of probabilities
         neighboring in time. See scipy.signal.find_peaks and
         Wikipedia 'Topographic prominence' for details. Default
         is set in the class variable DEFAULT_PROMINENCE_THRESHOLD. 
@@ -360,9 +368,10 @@ class PowerMember:
         :param prominence_threshold: importance of probability
             peak in context
         :rtype prominence_threshold: {None | float} 
-        :result center time and probability of each call, plus
-            estimates of low and high time bounds of the calls
-        :rtype pd.DataFrame
+        :result 1. center time and probability of each call, plus
+            estimates of low and high time bounds of the calls.
+                2. for each time, which signature detected a peak
+        :rtype [pd.DataFrame pd.DataFrame]
         '''
 
         if prominence_threshold is None:
@@ -385,12 +394,24 @@ class PowerMember:
         all_sig_probs['match_prob'] = probs_normed
         
         prob_peaks_by_sig_list = []
+        # For the result df showing the times of discovered
+        # peaks as a boolean matrix:
+        nrows = len(all_sig_probs)
+        ncols = len(sig_ids)
+        peak_times_by_sig_id = pd.DataFrame(np.array([False]*nrows*ncols).reshape(nrows, ncols),
+                                            index=pd.core.indexes.numeric.NumericIndex(all_sig_probs.index.values),
+                                            columns=sig_ids
+                                            )
         for sig_id in sig_ids:
             probs = all_sig_probs[all_sig_probs.sig_id == sig_id].match_prob
             peak_indices, properties = scipy.signal.find_peaks(probs,
                                                                prominence=prominence_threshold)
             peak_probs = properties['prominences']
+            # Time when a peak occurred:
             times = probs.index[peak_indices]
+            # Mark as True the times where peaks were found
+            # in the column for this sig_id:
+            peak_times_by_sig_id.loc[peak_times_by_sig_id.index[peak_indices], sig_id] = True
             prob_peaks = pd.Series(peak_probs, index=times, name=sig_id)
             prob_peaks_by_sig_list.append(prob_peaks)
         
@@ -457,7 +478,7 @@ class PowerMember:
         # based on the width of the 'winning' sig:
         
         all_sigs = self.spectral_template.signatures
-        sig_widths = pd.Series({sig.sig_id : sig.as_walltime().index[-1] - sig.as_walltime().index[0]
+        sig_widths = pd.Series({sig.sig_id : sig.duration()
                                 for sig
                                 in all_sigs
                                 })
@@ -475,7 +496,7 @@ class PowerMember:
         # Add a column that repeats the prominence_threshold
         # for each row; redundant, but easy:
         peaks['prominence_threshold'] = [prominence_threshold]*len(peaks)
-        return peaks
+        return peaks, peak_times_by_sig_id
 
     #------------------------------------
     # score_call_level

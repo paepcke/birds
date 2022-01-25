@@ -8,34 +8,35 @@ import argparse
 from bisect import bisect_left
 from datetime import datetime, timedelta
 from enum import Enum
+import json
 import os
 from pathlib import Path
 import sys
-import time
 
-from experiment_manager.experiment_manager import ExperimentManager
+from experiment_manager.experiment_manager import ExperimentManager, \
+    JsonDumpableMixin
 from logging_service.logging_service import LoggingService
 from matplotlib.patches import Rectangle
 
 from birdsong.utils.utilities import FileUtils
-from data_augmentation.utils import Utils, Interval, RavenSelectionTable
+from data_augmentation.utils import Interval, RavenSelectionTable
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from powerflock.matplotlib_crosshair_cursor import CrosshairCursor
 from powerflock.power_member import PowerMember, PowerQuantileClassifier, \
     PowerResult
-from powerflock.quad_sig_calibration import QuadSigCalibrator
 from powerflock.signal_analysis import SignalAnalyzer
 from powerflock.signatures import SpectralTemplate
 from result_analysis.charting import Charter
 
 
 class Action(Enum):
-    UNITTEST = 0
+    UNITTEST = -1
+    NOOP = 0
     ANALYSIS = 1
     SCORE = 2
-    VIZ_PROBS = 3,
+    VIZ_PROBS = 3
     GRID_SEARCH = 4
 
 class PowerEvaluator:
@@ -67,7 +68,7 @@ class PowerEvaluator:
 
 
     def __init__(self,
-                 experiment_name,
+                 experiment_info,
                  species, 
                  actions,
                  templates=None,
@@ -104,9 +105,14 @@ class PowerEvaluator:
         # Map audioFile to Raven spectrogram df
         self.spectro_dict = {}
         
-        experiment_root = os.path.abspath(os.path.join(self.experiment_dir, 
-                                                         experiment_name))
-        self.experiment = ExperimentManager(experiment_root)
+        if type(experiment_info) == str: 
+            experiment_root = os.path.abspath(os.path.join(self.experiment_dir, 
+                                                             experiment_info))
+            self.experiment = ExperimentManager(experiment_root)
+        else:
+            if type(experiment_info) != ExperimentManager:
+                raise TypeError(f"Experiment info must be a string (name) or ExperimentManager, not {type(experiment_info)}")
+            self.experiment = experiment_info
         
         # Was a PowerResult computed, and stored as json either
         # in experiment, or elsewhere on the file system, materialize
@@ -119,12 +125,15 @@ class PowerEvaluator:
             if pwr_res is not None:
                 self.log.info(f"Using PowerResult {repr(pwr_res)} ({pwr_res.name})")
 
+        # Make accessible outside:
+        self.pwr_res = pwr_res
+
         if templates is None:
             # Does the experiment have templates from a
             # prior quad_sig_calibration run?
             try:
-                templates = self.experiment.read('templates', QuadSigCalibrator)
-                template = templates[species]
+                templates_dict = self.experiment.read('templates', TemplatesDict)
+                template = templates_dict[species]
             except FileNotFoundError:
                 # One last try: does the experiment have
                 # single template for the species under analysis?
@@ -136,7 +145,8 @@ class PowerEvaluator:
         else:
             # Path to signatures json file stored by QuadSigCalibrator
             # somewhere outside the experiment:
-            templates_dict = QuadSigCalibrator.json_load(templates)
+            jsonized_templates_dict = json.load(templates)
+            templates_dict = self._json_load_templates_dict(jsonized_templates_dict)
             template = templates_dict[species]
 
         self.template = template
@@ -181,6 +191,8 @@ class PowerEvaluator:
             elif action == Action.GRID_SEARCH:
                 grid_res = self.grid_search()
                 
+            elif action == Action.NOOP:
+                return
             else:
                 raise ValueError(f"Unknown action: {action}")
 
@@ -195,7 +207,8 @@ class PowerEvaluator:
                      rec_path,
                      probability_thres=None,
                      percentage_agreement=None,
-                     prominence_thres=None
+                     prominence_thres=None,
+                     pwr_res=None
                      ):
                  
         '''
@@ -234,6 +247,7 @@ class PowerEvaluator:
         
         
         Saves PowerResult instance in experiment as json.
+        Key will start with PwrRes.
         
         :param pwr_member: PowerMember instance to use
             for computing the PowerResult
@@ -247,6 +261,9 @@ class PowerEvaluator:
         :param prominence_thres: the importance of a probability
             peak to be considered a vocalization.
         :type prominence_thres: {None | float}
+        :param pwr_res: if pwr_res is not given, the probabilities
+            are computed, else those in the PowerResult are used.
+        :type pwr_res: {None | PowerResult}
         '''
 
         if probability_thres is None:
@@ -257,20 +274,22 @@ class PowerEvaluator:
             prominence_thres = PowerEvaluator.DEFAULT_PROMINENCE_THRESHOLD
 
         species = pwr_member.species_name
-        self.log.info(f"Analyzing recording to detect {species} vocalizatoins...")
-        #************
-        pwr_res = pwr_member.compute_probabilities(rec_path)
-        #pwr_res = self.experiment.read('PwrRes_2022-01-09T18_30_03', PowerResult)
-        #pwr_res.name = 'PwrRes_2022-01-09T18_30_03'
-        # Save in experiment:
-        self.log.info(f"Done analyzing recording to detect {species} vocalizations.") 
-        pwr_res_fname = self._make_experiment_key(
-            species=pwr_res.species,
-            prefix='PwrRes'
-            )
-        self.experiment.save(pwr_res_fname, pwr_res)
-        self.log.info(f"Power result saved in experiment under '{pwr_res_fname}' PowerResult")
+        
+        if pwr_res is None:
+            self.log.info(f"Analyzing recording to detect {species} vocalizatoins...")
+            pwr_res = pwr_member.compute_probabilities(rec_path)
+            self.log.info(f"Done analyzing recording to detect {species} vocalizations.") 
 
+            pwr_res_fname = self._make_experiment_key(
+                species=pwr_res.species,
+                prefix='PwrRes'
+                )
+            self.experiment.save(pwr_res_fname, pwr_res)
+            self.log.info(f"Power result saved in experiment under '{pwr_res_fname}' PowerResult")
+
+        # Make accessible to the outside:
+        self.pwr_res = pwr_res
+        
         # Make the per-timeframe decisions based on
         timeframe_scores = []
         for sig_id in pwr_res.sig_ids():
@@ -341,7 +360,8 @@ class PowerEvaluator:
               probability_thresholds=None,
               prominence_thresholds=None
               ):
-        '''        Once a PowerResult has been computed via the
+        '''
+        Once a PowerResult has been computed via the
         'analyze' action, this method computes success
         scores for two levels of detail: at each spectrogram
         timeframe, and at the level of 'detected call'. Computed
@@ -360,12 +380,34 @@ class PowerEvaluator:
         
         Results are saved in self.experiment under keys with
         prefix:
-            'scores_frames...' for timeframe level
             'scores_calls...'  for call level
-        the string '...' will be information about the probability
-        or prominence thresholds that yielded the score.
+            'scores_frames...' for timeframe level
+        the string '...' will be information about the PowerResult
+        used (pr), the species (sp), and the date of the score computation:
+
+            scores_calls_2022-01-21T18_03_49_sp_BANAS_pr_PwrRes_2022-01-21T18_03_40
+            frames_calls_2022-01-21T18_03_49_sp_BANAS_pr_PwrRes_2022-01-21T18_03_40            
+
+        Returns a dict with two entries, one with scores for calls,
+        another for scores by timeframes. 
+        
+            {'call_level' : scores, 
+             'timeframe_level' : res_df
+            }
+
+        Examples of result dicts:
+            Call level:
+                                   bal_acc       acc  ...      f0.5  prom_thres
+            prominence_thres_0.3  0.509723  0.470501  ...  0.299982         0.3
             
-                   
+            Timeframe level:
+                                        bal_acc       acc  ...  sig_id  threshold
+            score_sig_id1.0_thres0.6   0.521159  0.513554  ...     1.0        0.6
+            score_sig_id2.0_thres0.6   0.534896  0.527988  ...     2.0        0.6
+            score_sig_id3.0_thres0.6   0.343388  0.337368  ...     3.0        0.6
+                              ... <more signature results>
+        
+
         :param sel_tbl: Raven selection table with truth 
         :type sel_tbl: str
         :param pwr_member: the PowerMember instance for the species
@@ -414,7 +456,7 @@ class PowerEvaluator:
                 score = quantile_evaluator.score(None, None, name=score_name)
                 score['sig_id'] = sig_id
                 score['threshold'] = threshold
-                res_df = res_df.append(score)
+                res_df = pd.concat([res_df, score])
         
         pwr_res_nm_date = Path(pwr_res.name).stem
         exp_key = self._make_experiment_key(
@@ -423,7 +465,7 @@ class PowerEvaluator:
             prefix='scores_frames'
             )
         self.experiment.save(exp_key, res_df)
-        self.log.info(f"Scores saved in experiment under '{exp_key}, 'tabular")
+        self.log.info(f"Timeframe-level scores saved in experiment under '{exp_key}, 'tabular")
         
         # On to scores of finding calls, as opposed to 
         # predicting every time frame:
@@ -449,7 +491,10 @@ class PowerEvaluator:
             )
 
         self.experiment.save(exp_key, scores)
-        return scores
+        self.log.info(f"Call-level scores saved in experiment under '{exp_key}, 'tabular")
+        return {'call_level' : scores, 
+                'timeframe_level' : res_df
+                }
         #input("Press any key to quit: ")
 
         #call_intervals = Utils.get_call_intervals(sel_tbl_path)
@@ -695,8 +740,6 @@ class PowerEvaluator:
 
         return exp_key
 
-
-
     #------------------------------------
     # _latest_power_result
     #-------------------
@@ -780,6 +823,22 @@ class PowerEvaluator:
     
         self.sel_tbl_cmto_xc3 = os.path.join(self.cur_dir, 'tests/selection_tables/XenoCanto/cmto3.selections.txt')
         self.sel_rec_cmto_xc3 = os.path.join(self.xc_sound_data, 'CMTOG/SONG_Black-mandibled_Toucan2011-1-24-1.mp3')
+
+# ---------------- Class TemplatesDict --------
+
+class TemplatesDict(JsonDumpableMixin):
+
+    @classmethod
+    def json_load(cls, fname):
+        with open(fname, 'r') as fd:
+            dict_of_jsonized_templates = json.load(fd)
+
+        new_dict = {species : SpectralTemplate.json_loads(jstr)
+                    for species, jstr
+                    in dict_of_jsonized_templates.items()
+                    }
+
+        return new_dict
 
 # ---------------- Class PowerInfoCursor --------
 

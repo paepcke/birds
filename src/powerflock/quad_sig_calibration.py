@@ -8,19 +8,23 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import sys
 
 from experiment_manager.experiment_manager import JsonDumpableMixin, \
-    ExperimentManager
+    ExperimentManager, Datatype
 from logging_service import LoggingService
 
-from data_augmentation.utils import Utils, Interval
+from data_augmentation.utils import Utils, Interval, RavenSelectionTable
 import numpy as np
 import pandas as pd
+from powerflock.power_evaluation import PowerEvaluator, Action
+from powerflock.power_member import PowerResult, PowerMember
 from powerflock.signal_analysis import SignalAnalyzer
 from powerflock.signatures import Signature, SpectralTemplate
 
+from result_analysis.charting import Charter
 
 class QuadSigCalibrator(JsonDumpableMixin):
     '''
@@ -145,16 +149,15 @@ class QuadSigCalibrator(JsonDumpableMixin):
             self.species_list = [species]
         else:
             self.species_list = species
-
-    #------------------------------------
-    # calibrate_species 
-    #-------------------
-
-    def calibrate_species(self):
-
-        # Place to hold the results for each species:
-        templates = {}
-
+            
+        # For remembering the call samples and selection table files;
+        # will be like:
+        #     {species : {'sound'   : <full soundfilepath>,
+        #                 'sel_tbl' : <full select table path>
+        #         ...
+        #     }
+        self.cal_files = {species : {} for species in self.species_list}
+        # Fill the dict:
         for species in self.species_list:
             # The subdir with species sound and selection table file:
             species_dir = os.path.join(self.cal_data_root, species)
@@ -163,20 +166,35 @@ class QuadSigCalibrator(JsonDumpableMixin):
             # selection table and the sound file;
             # Sanity check: should only have two files in
             # species calibrations data dir: a sound file and a sel tbl:
- 
+     
             for file_no, fname in enumerate(os.listdir(species_dir)):
                 if file_no > 1:
                     raise ValueError(f"Should only have one sound file and one selection table file in {species_dir}")
                 self.log.info(f"Checking samples for {fname}")
                 if fname.endswith('.txt'):
                     sel_tbl_file = os.path.join(species_dir, fname)
+                    # Remember the sel file path for later:
+                    self.cal_files[species]['sel_tbl'] = sel_tbl_file
                 else:
                     sound_file = os.path.join(species_dir, fname)
-                    
-             
+                    # Remember the sound file path for later:
+                    self.cal_files[species]['sound'] = sound_file
+
+    #------------------------------------
+    # make_species_templates 
+    #-------------------
+
+    def make_species_templates(self):
+
+        # Place to hold the results for each species:
+        templates = {}
+
+        for species in self.species_list:
             # Calibrate the four per-timeframe power spectrum values:
-            templates[species] = self.calibrate_one_species(sound_file, sel_tbl_file)
-            
+            sound_file = self.cal_files[species]['sound']
+            sel_tbl_file = self.cal_files[species]['sel_tbl']
+            templates[species] = self.template_for_one_species(sound_file, sel_tbl_file)
+
         # If cal_data_root already has a species signature 
         # json file, load it, and update it with the current
         # run's result:
@@ -209,17 +227,17 @@ class QuadSigCalibrator(JsonDumpableMixin):
         self.json_dump(signatures_fname)
         # Additionally, save in experiment if one was provided:
         if self.experiment is not None:
-            self.log.info(f"Saving/updating all sigs to 'signatures' in experiment")
+            self.log.info(f"Saving/updating all sigs to 'templates' in experiment")
             self.experiment.save('templates', self)
         
         self.signatures_fname = signatures_fname
         return cur_templates
 
     #------------------------------------
-    # calibrate_one_species
+    # template_for_one_species
     #-------------------
     
-    def calibrate_one_species(self, sound_file, sel_tbl_file, extract=True):
+    def template_for_one_species(self, sound_file, sel_tbl_file, extract=True):
         '''
         Go through each call of one species, and create
         a Signature instance. Wrap the Signature instances
@@ -385,18 +403,210 @@ class QuadSigCalibrator(JsonDumpableMixin):
         return template
 
     #------------------------------------
-    # calibration_template
+    # calibrate_templates
     #-------------------
     
-    def calibration_template(self, species):
+    def calibrate_templates(self, species_list):
         '''
-        For each example call in the examples soundfile of
-        one species, reference the four spectral measures  
-        :param species:
-        :type species:****** HERE
+        For each template, run an audio file
+        analysis of the audio from which its 
+        signatures were created. Then, for each
+        signature, find the probability and prominence
+        thresholds that yield best results for that
+        signature's vocalization.
+        
+        This step is required because while probability
+        spikes are clear, the scales of the peaks vary
+        as much as 0.00123 to 0.5 among calls.
+        
+        :param species_list: if provided, a single, or a list
+            of species which to calibrate. If None, all in
+            self.cur_templates will be calibrated.
+        :type species_list: {None | str | [str]}
         '''
         
+        if type(species_list) != list:
+            species_list = [species_list]
+            
+        for species, template in self.cur_templates.items():
+            # Skip any unwanted species:
+            if species_list is not None and species not in species_list:
+                continue
+            self._calibrate_one_template(species, template)
+            
+    #------------------------------------
+    # _calibrate_one_template
+    #-------------------
+    
+    def _calibrate_one_template(self, species, template):
 
+        samples_sound_file = self.cal_files[species]['sound']
+        sel_tbl_file = self.cal_files[species]['sel_tbl']
+
+        # Is there already a PowerResult for a self test
+        # of this species? Files look like:
+        #    PwrRes_2022-01-21T16_41_54_species_BANAS.json
+        pwr_res_info = None
+        pattern = re.compile(r"PwrRes_[^s]*species_([a-zA-Z]{5}).*")
+        for fname in self.experiment.listdir(PowerResult):
+            match_obj = pattern.match(fname)
+            if match_obj is not None:
+                # Found the power result:
+                if match_obj.group(1).upper() == species.upper():
+                    pwr_res_info = fname
+                    break
+        # No existing power result was found, create
+        # one by setting the action to ANALYSIS. Else,
+        # just initialize a PowerEvaluator instance:
+        evaluator = PowerEvaluator(self.experiment,
+                                   species,
+                                   Action.ANALYSIS if pwr_res_info is None else Action.NOOP,
+                                   power_result_info=pwr_res_info,
+                                   test_recording=samples_sound_file,
+                                   test_sel_tbl=sel_tbl_file
+                                   )
+        pwr_member = PowerMember(
+            species,
+            spectral_template_info=template,
+            experiment = self.experiment
+            )         
+
+        pwr_res = evaluator.pwr_res
+        sel_tbl = RavenSelectionTable(sel_tbl_file)
+        pwr_res.add_truth(sel_tbl)
+        
+        # Get time intervals of known vocalizations
+        # from the selection table:
+        true_vocalization_intervals = [sel_tbl_entry.time_interval 
+                                       for sel_tbl_entry 
+                                       in sel_tbl.entries]
+        # Number of true vocalizations 
+        num_true_vocalizations = len(true_vocalization_intervals)
+        
+        # Go through each signature...
+        for sig_idx, sig in enumerate(template.signatures):
+            sig_id = sig.sig_id
+            # The time interval from which this signature
+            # was created:
+            sig_time_interval = sel_tbl.entries[sig_idx].time_interval
+            # So far we have not found the peak generated
+            # by this signature:
+            found_this_sig_peak = False
+            
+            # Go through progressive prominences till we find
+            # the first that finds this signature's peak. The
+            # prominences vary in scale among signatures. Some
+            # are around 0.002, others around 0.5. To speed the
+            # search, find the order of magnitude in which to 
+            # search for this sig:
+            for trial_prom in [0.001, 0.01, 0.25, 0.5, 0.95]:
+                _consensus_peaks, sig_peak_times = \
+                   pwr_member.find_calls(pwr_res,prominence_threshold=trial_prom)
+                if sig_peak_times[sig_id].sum().sum() == 0:
+                    # Best prominence is below trial_prom:
+                    upper_limit = trial_prom
+                    if trial_prom < 0.002:
+                        step_size = 0.0005
+                    elif trial_prom < 0.5:
+                        step_size = 0.001
+                    else:
+                        step_size = 0.1
+                    break
+                
+            for prominence_threshold in np.arange(upper_limit, 0, step=-step_size):
+                _consensus_peaks, sig_peak_times = pwr_member.find_calls(
+                    pwr_res, 
+                    prominence_threshold=prominence_threshold)
+                # Get the rows of sig_peak_times where the truth
+                # values for the current sig are stored. Their values
+                # will be True where a peak was found, and False elsewhere:
+                # Columns are sig ids, the index are times:
+                #
+                #     sig_peak_times
+                #                 1.0    2.0    3.0    4.0    5.0 
+                #     1.056508   True  False  False  False  False
+                #     1.149388   False  False  True  False  False
+                #        ...               ...                      
+                peak_times_this_sig = sig_peak_times[sig_id][sig_peak_times[sig_id]]
+
+                # Now have an empty Series if no peaks found
+                # for this sig, or like:
+                #     peak_times_this_sig
+                #         14.988481    True
+                #         14.988481    True
+                #         16.135464    True    
+
+                # Are we being to restrictive to find any peak?
+                if len(peak_times_this_sig) == 0:
+                    # No peak at all at this prominence:
+                    # next prominence for same sig:
+                    continue
+                # Were any of the peaks for *this* sig? (That's
+                # what we are looking for):
+                for center_time in peak_times_this_sig.index:
+                    if center_time in sig_time_interval:
+                        found_this_sig_peak = True
+                        break
+                if not found_this_sig_peak:
+                    # Using the current prominence did not
+                    # find this signature's peak (even though
+                    # it may have found others, which is fine):
+                    continue
+                
+                # Finally: found this sig's peak, and maybe others;
+                # compute precision at this prominence:
+                
+                tps = 0
+                for found_peak_time in peak_times_this_sig.index:
+                    for true_time_interval in true_vocalization_intervals:
+                        if found_peak_time in true_time_interval:
+                            tps += 1
+
+                precision = tps / len(peak_times_this_sig)
+                if precision == 1.0:
+                    # We are looking for break of
+                    # precision down from 1.0, so we are
+                    # maximizing recall. So, allow another
+                    # change in the prominence. Remember tps
+                    # so we won't need to recompute when we
+                    # back off:
+                    prev_tps = tps
+                    prev_precision = precision
+                    prev_prominence_thres = prominence_threshold
+                    continue
+                else:
+                    # Found prominence where precision drops.
+                    # Back off the prominence to the most permissive
+                    # value that still yields precision == 1:
+                    final_tps = prev_tps
+                    final_precision = prev_precision
+                    final_prominence_threshold = prev_prominence_thres
+                
+                sig.prominence_threshold = final_prominence_threshold
+                sig.precision = final_precision
+                sig.recall    = final_tps / num_true_vocalizations
+                
+                # Next signature:
+                break
+            if not found_this_sig_peak:
+                raise RuntimeError(f"Peak for sig {sig_id} not found")
+
+        #************* REMOVE
+        # scores_dict = evaluator.score(
+        #     sel_tbl,
+        #     pwr_member,
+        #     pwr_res_info=pwr_res,
+        #     probability_thresholds=None,
+        #     prominence_thresholds=np.arange(0.1, 0.95, 0.05)
+        #     )
+        # scores_timeframes = scores_dict['timeframe_level']
+        # scores_calls      = scores_dict['call_level']
+        #*****************
+        
+        #***** SIG6 Does NOT HAVE ANY PROMINENCE THRESHOLD
+        for sig in template.signatures:
+            print(f"prominence {sig.sig_id}: {sig.prominence_threshold}")
+        print('foo')
 
     # ---------------------- Utilities ---------------
     
@@ -502,7 +712,7 @@ if __name__ == '__main__':
     
     parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
                                      formatter_class=argparse.RawTextHelpFormatter,
-                                     description="Create signatures for one or more species"
+                                     description="Create signature templates for one or more species"
                                      )
 
     parser.add_argument('-s', '--species',
@@ -521,15 +731,21 @@ if __name__ == '__main__':
                         default=None)
     
     parser.add_argument('-o', '--outdir',
-                        help='where to place the json files with calibration numbers; \n' +\
-                             "default: subdirectory of this file's dir: species_calibration_results.",
+                        help=("where to place the template(s); \n"
+                              "default: if experiment given, then its json_files,\n"
+                              "else subdirectory of this \n"
+                              "file's dir: species_calibration_results."),
                         default=None)
 
     args = parser.parse_args()
 
-    QuadSigCalibrator(args.species,
-                      cal_data_root=args.data,
-                      cal_outdir=args.outdir,
-                      experiment=args.experiment
-                      ).calibrate_species()
-    
+    calibrator = QuadSigCalibrator(args.species,
+                                   cal_data_root=args.data,
+                                   cal_outdir=args.outdir,
+                                   experiment=args.experiment
+                                   )
+    #********
+    #calibrator.make_species_templates()
+    calibrator.cur_templates = calibrator.experiment.read('templates', QuadSigCalibrator)
+    #********
+    calibrator.calibrate_templates('BANAS')
