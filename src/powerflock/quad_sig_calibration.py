@@ -489,124 +489,90 @@ class QuadSigCalibrator(JsonDumpableMixin):
             # The time interval from which this signature
             # was created:
             sig_time_interval = sel_tbl.entries[sig_idx].time_interval
-            # So far we have not found the peak generated
-            # by this signature:
-            found_this_sig_peak = False
             
             # Go through progressive prominences till we find
-            # the first that finds this signature's peak. The
-            # prominences vary in scale among signatures. Some
-            # are around 0.002, others around 0.5. To speed the
-            # search, find the order of magnitude in which to 
-            # search for this sig:
-            for trial_prom in [0.001, 0.01, 0.25, 0.5, 0.95]:
-                _consensus_peaks, sig_peak_times = \
-                   pwr_member.find_calls(pwr_res,prominence_threshold=trial_prom)
-                if sig_peak_times[sig_id].sum().sum() == 0:
-                    # Best prominence is below trial_prom:
-                    upper_limit = trial_prom
-                    if trial_prom < 0.002:
-                        step_size = 0.0005
-                    elif trial_prom < 0.5:
-                        step_size = 0.001
-                    else:
-                        step_size = 0.1
-                    break
-                
-            for prominence_threshold in np.arange(upper_limit, 0, step=-step_size):
-                _consensus_peaks, sig_peak_times = pwr_member.find_calls(
-                    pwr_res, 
-                    prominence_threshold=prominence_threshold)
-                # Get the rows of sig_peak_times where the truth
-                # values for the current sig are stored. Their values
-                # will be True where a peak was found, and False elsewhere:
-                # Columns are sig ids, the index are times:
-                #
-                #     sig_peak_times
-                #                 1.0    2.0    3.0    4.0    5.0 
-                #     1.056508   True  False  False  False  False
-                #     1.149388   False  False  True  False  False
-                #        ...               ...                      
-                peak_times_this_sig = sig_peak_times[sig_id][sig_peak_times[sig_id]]
-
-                # Now have an empty Series if no peaks found
-                # for this sig, or like:
-                #     peak_times_this_sig
-                #         14.988481    True
-                #         14.988481    True
-                #         16.135464    True    
-
-                # Are we being to restrictive to find any peak?
-                if len(peak_times_this_sig) == 0:
-                    # No peak at all at this prominence:
-                    # next prominence for same sig:
-                    continue
-                # Were any of the peaks for *this* sig? (That's
-                # what we are looking for):
-                for center_time in peak_times_this_sig.index:
-                    if center_time in sig_time_interval:
-                        found_this_sig_peak = True
-                        break
-                if not found_this_sig_peak:
-                    # Using the current prominence did not
-                    # find this signature's peak (even though
-                    # it may have found others, which is fine):
-                    continue
-                
-                # Finally: found this sig's peak, and maybe others;
-                # compute precision at this prominence:
-                
-                tps = 0
-                for found_peak_time in peak_times_this_sig.index:
-                    for true_time_interval in true_vocalization_intervals:
-                        if found_peak_time in true_time_interval:
-                            tps += 1
-
-                precision = tps / len(peak_times_this_sig)
-                if precision == 1.0:
-                    # We are looking for break of
-                    # precision down from 1.0, so we are
-                    # maximizing recall. So, allow another
-                    # change in the prominence. Remember tps
-                    # so we won't need to recompute when we
-                    # back off:
-                    prev_tps = tps
-                    prev_precision = precision
-                    prev_prominence_thres = prominence_threshold
-                    continue
+            # the first that finds this signature's peak, while 
+            # still just maintaining a precision of 1.0
+            lo_prom = 0.
+            hi_prom = 1.
+            while hi_prom - lo_prom > 0.001:
+                mid_prom = lo_prom + (hi_prom - lo_prom) / 2.0
+                precision, true_positives = self._try_prominence(
+                            mid_prom,
+                            pwr_res, 
+                            pwr_member, 
+                            sig_id,
+                            sig_time_interval, 
+                            true_vocalization_intervals)
+                if precision in [-1, 1]:
+                    # Did not find the peak at all,
+                    # or precision was 
+                    # Need to lower the prominence
+                    hi_prom = mid_prom
                 else:
-                    # Found prominence where precision drops.
-                    # Back off the prominence to the most permissive
-                    # value that still yields precision == 1:
-                    final_tps = prev_tps
-                    final_precision = prev_precision
-                    final_prominence_threshold = prev_prominence_thres
+                    # Precision was less than 1, need
+                    # to up the prominence a bit:
+                    lo_prom = mid_prom + 0.001
+            if true_positives is None:
+                sig.usable = False
+            else:
+                sig.usable = True
+                sig.prominence_threshold = hi_prom
+                sig.recall    = true_positives / num_true_vocalizations
+                sig.precision = precision
                 
-                sig.prominence_threshold = final_prominence_threshold
-                sig.precision = final_precision
-                sig.recall    = final_tps / num_true_vocalizations
-                
-                # Next signature:
-                break
-            if not found_this_sig_peak:
-                raise RuntimeError(f"Peak for sig {sig_id} not found")
+            # Loop for next sig
 
-        #************* REMOVE
-        # scores_dict = evaluator.score(
-        #     sel_tbl,
-        #     pwr_member,
-        #     pwr_res_info=pwr_res,
-        #     probability_thresholds=None,
-        #     prominence_thresholds=np.arange(0.1, 0.95, 0.05)
-        #     )
-        # scores_timeframes = scores_dict['timeframe_level']
-        # scores_calls      = scores_dict['call_level']
-        #*****************
-        
-        #***** SIG6 Does NOT HAVE ANY PROMINENCE THRESHOLD
         for sig in template.signatures:
-            print(f"prominence {sig.sig_id}: {sig.prominence_threshold}")
+            if sig.usable:
+                print(f"prom {sig.sig_id}: {sig.prominence_threshold}; prec: {sig.precision}; rec: {sig.recall}")
+            else:
+                print(f"prom {sig.sig_id}: not usable") 
         print('foo')
+
+    #------------------------------------
+    # _try_prominence
+    #-------------------
+    
+    def _try_prominence(self, 
+                        prominence, 
+                        pwr_res, 
+                        pwr_member, 
+                        sig_id,
+                        sig_time_interval, 
+                        true_vocalization_intervals):
+    
+        _consensus_peaks, sig_peak_times = \
+           pwr_member.find_calls(pwr_res,prominence_threshold=prominence)
+    
+        peak_times_this_sig = sig_peak_times[sig_id][sig_peak_times[sig_id]]
+        if sig_peak_times[sig_id].sum().sum() == 0:
+            # No peaks found at all
+            return -1, None
+    
+        # Were any of the peaks for *this* sig? (That's
+        # what we are looking for):
+        found_this_sig_peak = False
+        for center_time in peak_times_this_sig.index:
+            if center_time in sig_time_interval:
+                found_this_sig_peak = True
+                break
+        if not found_this_sig_peak:
+            # Found some peaks, but not the one
+            # for this sig; need to lower prominence
+            # threshold:
+            return -1, None
+    
+        # Found peak for this sig; compute precision:
+        tps = 0
+        for found_peak_time in peak_times_this_sig.index:
+            for true_time_interval in true_vocalization_intervals:
+                if found_peak_time in true_time_interval:
+                    tps += 1
+    
+        precision = tps / len(peak_times_this_sig)
+        return precision, tps
+
 
     # ---------------------- Utilities ---------------
     
