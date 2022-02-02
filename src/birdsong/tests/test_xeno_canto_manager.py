@@ -328,12 +328,12 @@ class XenoCantoProcessorTester(unittest.TestCase):
         vocalization_type = rec.type.upper()
         with tempfile.NamedTemporaryFile(suffix='.mp3', 
                                          prefix=f"{vocalization_type}_xeno_canto_tst", 
-                                         dir='/tmp',
+                                         dir='/tmp/CMTO',
                                          delete=True) as fd:
             fname = fd.name
             rec.full_name = fname
             rec._filename = os.path.basename(fname)
-            go_ahead = rec.download(dest_root=os.path.dirname(fname),
+            go_ahead = rec.download(dest_root='/tmp',
                                     overwrite_existing=overwrite_existing, 
                                     testing=True)
             self.assertEqual(go_ahead, expected_go_ahead)
@@ -356,7 +356,9 @@ class XenoCantoProcessorTester(unittest.TestCase):
             'file-name' :  'bluebell.mp3',
             'type'      :  'call',
             'q'         :  'A',
-            'url'       :  'http://my_server/file_ingo'
+            'url'       :  'http://my_server/file_ingo',
+            'four_code' :  'CMTO',
+            'six_code'  :  'RAMSWA'
             }
         rec = XenoCantoRecording(recording_metadata, load_dir)
         return rec
