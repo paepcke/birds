@@ -8,13 +8,11 @@ import argparse
 from bisect import bisect_left
 from datetime import datetime, timedelta
 from enum import Enum
-import json
 import os
 from pathlib import Path
 import sys
 
-from experiment_manager.experiment_manager import ExperimentManager, \
-    JsonDumpableMixin
+from experiment_manager.experiment_manager import ExperimentManager
 from logging_service.logging_service import LoggingService
 from matplotlib.patches import Rectangle
 
@@ -27,7 +25,7 @@ from powerflock.matplotlib_crosshair_cursor import CrosshairCursor
 from powerflock.power_member import PowerMember, PowerQuantileClassifier, \
     PowerResult
 from powerflock.signal_analysis import SignalAnalyzer
-from powerflock.signatures import SpectralTemplate
+from powerflock.signatures import SpectralTemplate, TemplateCollection
 from result_analysis.charting import Charter
 
 
@@ -41,8 +39,28 @@ class Action(Enum):
 
 class PowerEvaluator:
     '''
-    classdocs
+    Use an instance of this class to:
+        o Analyze an audio file and find vocalizations of
+          one species
+        o Get the information retrieval scores for
+          the result of an analysis
+        o Visualize the probabilities that were computed
+          in an analysis as a line chart
+
+    Before doing any of these, quad_sig_calibration must be
+    run once to compute SpectralTemplates for the species of
+    interest.
+    
+    The output of an analysis is a PowerResult, which is then
+    used for any of the other actions above.
+    
+    The class uses ExperimentManager to store and retrieve
+    results.
     '''
+    
+    DEFAULT_EXPERIMENT_DIR = 'experiments/PowerSignatures'
+    '''Root of ExperimentManager instances relative to project root'''
+    
     # Probability thresholds for use in result_analysis
     THRESHOLDS = [0.6, 0.7, 0.8, 0.9]
     PROMINENCE_THRESHOLDS = [0.1, 0.2, 0.3, 0.4, 0.5]
@@ -71,15 +89,86 @@ class PowerEvaluator:
                  experiment_info,
                  species, 
                  actions,
-                 templates=None,
+                 templates_info=None,
                  power_result_info=None,
                  test_recording=None,
                  test_sel_tbl=None,
-                 apply_bandpass=False,
                  prominence_thresholds=None,
                  probability_thresholds=None,
                  outfigs=False
                  ):
+        '''
+        
+        Notes on some parameters:
+        
+        The EXPERIMENT_INFO will result in an ExperimentManager instance.
+        Either a new one, or the result of loading an existing one from
+        disk. Options for experiment_info:
+           o A ready-made ExperimentManager instance
+           o A path relative to PowerEvaluator.DEFAULT_EXPERIMENT_DIR
+           
+        The TEMPLATES_INFO arg will result in a SpectralTemplate instance.
+        Options for templates_info:
+        
+           o A ready-made SpectralTemplate instance
+           o None, in which case attempts to read a template from 
+             the given experiment. Tries these keys in order:
+                 * 'templates_calibrated' for the result of a prior\
+                   run of quad_sig_calibration.
+                 * 'templates_info' for non-calibrated template
+             Uses one of these keys to pull a TemplateCollection from
+             the experiment. TemplateCollection instances behave like
+             a dict mapping species to a SpectralTemplate.
+           o String: 
+                 * if the string is the path to a json-encoded TemplateCollection, 
+                   that TemplateCollection is materialized, and the focus species' 
+                   template is extracted.
+                 * else the string is taken as an experiment root relative
+                   to PowerEvaluator.DEFAULT_EXPERIMENT_DIR. A TemplateCollection
+                   is extracted from that experiment as in second option above.
+
+        The POWER_RESULT_INFO will result in a PowerResult instance that
+        was the output of a prior analysis action. For analysis actions
+        the power_result_info is left at None, b/c that action generates
+        the instance in the first place. Options:
+        
+           o 'latest': the latest PowerResult by date of its key is
+             retrieved from the experiment, if available. Else, the
+             value is set to None.
+           o A key (string) to use for extracting the PowerResult from
+             the experiment. Keys are created by the analysis. The strings
+             begin with 'PwrRes', followed by the date, and the species:
+                PwrRes_2022-01-21T16_41_54_species_BANAS 
+        
+        :param experiment_info: either an ExperimentManager instance,
+            or the path to the root of an experiment from which an
+            ExperimentManager will then be created. The path is relative
+            to PowerEvaluator.DEFAULT_EXPERIMENT_DIR
+        :type experiment_info: {str | ExperimentManager}
+        :param species: the species on which evaluations will focus.
+            A given PowerEvaluator instance only deals with one species. 
+        :type species: str
+        :param actions: one or more actions to perform
+        :type actions: Action
+        :param templates_info: info on how to obtain a SpectralTemplate instance 
+            for the given species
+        :type templates_info: {str | SpectralTemplate | None}
+        :param power_result_info: if provided, a PowerResult that was produced
+            by an earlier analysis. If None, attempts to retrieve one from
+            the experiment 
+        :type power_result_info: {None | PowerResult}
+        :param test_recording: the recording to be analyized if action is 
+            Action.ANALYSIS
+        :type test_recording: {None | str}
+        :param test_sel_tbl: a Raven selection table 
+        :type test_sel_tbl:
+        :param prominence_thresholds:
+        :type prominence_thresholds:
+        :param probability_thresholds:
+        :type probability_thresholds:
+        :param outfigs:
+        :type outfigs:
+        '''
         '''
         Constructor
         '''
@@ -105,9 +194,13 @@ class PowerEvaluator:
         # Map audioFile to Raven spectrogram df
         self.spectro_dict = {}
         
-        if type(experiment_info) == str: 
+        if type(experiment_info) == str:
+            # The _init_data_paths() bound self.experiment_dir to 
+            # the root of ExperimentManager roots. Assume that
+            # experiment_info is relative to that path:  
             experiment_root = os.path.abspath(os.path.join(self.experiment_dir, 
-                                                             experiment_info))
+                                                           experiment_info))
+            # Create from existing, or create new:
             self.experiment = ExperimentManager(experiment_root)
         else:
             if type(experiment_info) != ExperimentManager:
@@ -117,37 +210,21 @@ class PowerEvaluator:
         # Was a PowerResult computed, and stored as json either
         # in experiment, or elsewhere on the file system, materialize
         # that PowerResult instance:
-        if power_result_info is not None:
-            pwr_res = self.experiment.read(power_result_info, PowerResult)
-        else:
+        if power_result_info == 'latest':
             # See whether the experiment has PowerResult instances:
             pwr_res = self._latest_power_result(self.experiment)
             if pwr_res is not None:
                 self.log.info(f"Using PowerResult {repr(pwr_res)} ({pwr_res.name})")
+        elif power_result_info is not None:
+            pwr_res = self.experiment.read(power_result_info, PowerResult)
+        else:
+            # Will be computed
+            pwr_res = None
 
         # Make accessible outside:
         self.pwr_res = pwr_res
 
-        if templates is None:
-            # Does the experiment have templates from a
-            # prior quad_sig_calibration run?
-            try:
-                templates_dict = self.experiment.read('templates', TemplatesDict)
-                template = templates_dict[species]
-            except FileNotFoundError:
-                # One last try: does the experiment have
-                # single template for the species under analysis?
-                try:
-                    template = self.experiment.read(f"template_{species}", SpectralTemplate)
-                except FileNotFoundError:
-                    # The templates remains at None
-                    pass
-        else:
-            # Path to signatures json file stored by QuadSigCalibrator
-            # somewhere outside the experiment:
-            jsonized_templates_dict = json.load(templates)
-            templates_dict = self._json_load_templates_dict(jsonized_templates_dict)
-            template = templates_dict[species]
+        template = self._template_from_template_info(species, templates_info)
 
         self.template = template
         
@@ -155,8 +232,7 @@ class PowerEvaluator:
             species_name=species, 
             spectral_template_info=template,
             the_slide_width_time=self.SLIDE_WIDTH,
-            experiment=self.experiment,
-            apply_bandpass=apply_bandpass
+            experiment=self.experiment
             )
         self.power_member.power_result = pwr_res
         
@@ -168,6 +244,7 @@ class PowerEvaluator:
                 self.log.info("Running action 'analysis'...")
                 pwr_res = self.run_analysis(pwr_member=self.power_member,
                                             rec_path=self.test_recording,
+                                            pwr_res=self.pwr_res
                                             )
                 self.log.info("Done running action 'analysis'.")
                  
@@ -197,6 +274,65 @@ class PowerEvaluator:
                 raise ValueError(f"Unknown action: {action}")
 
         print("Done")
+
+    #------------------------------------
+    # _template_from_template_info
+    #-------------------
+
+    def _template_from_template_info(self, species, template_info):
+        '''
+        Given one of the possibilities callers have for 
+        specifying a SpectralTemplate when instantiating
+        a PowerEvaluator, this method tries to find a template,
+        and returns it. If it fails, None is returned
+        
+        :param species: species of interest
+        :type species: str
+        :param template_info: see header comment of Constructor
+        :type template_info: 
+        '''
+        if template_info is None: # Does the experiment have template_info from a
+            # prior quad_sig_calibration run?
+            try:
+                templates_coll = self.experiment.read('templates_calibrated', TemplateCollection)
+                template = templates_coll[species]
+            except FileNotFoundError:
+                # Calibrated signatures are required only for
+                # scoring, so, accept non-calibrated ones if
+                # not scoring:
+                if Action.SCORE not in self.actions:
+                    try:
+                        templates_coll = self.experiment.read('template_info', TemplateCollection)
+                        template = templates_coll[species]
+                    except FileNotFoundError:
+                        template = None
+                else:
+                    template = None
+        elif isinstance(template_info, SpectralTemplate):
+            template = template_info
+        else:
+            try:
+                template_coll = TemplateCollection.json_load(template_info)
+                template = template_coll[species]
+            except FileNotFoundError:
+                # String could be a path to an experiment that
+                # contains templates_calibrated or template_info:
+                experiment_root = os.path.abspath(os.path.join(self.experiment_dir, template_info))
+                if os.path.exists(experiment_root) and os.path.isdir(experiment_root):
+                    template_exp = ExperimentManager(experiment_root)
+                    try:
+                        template_coll = template_exp.read('templates_calibrated', TemplateCollection)
+                        template = template_coll[species]
+                    except KeyError:
+                        raise KeyError(f"Found template collection at {experiment_root}, but no species {species} in collection")
+                    except FileNotFoundError:
+                        try:
+                            template_coll = template_exp.read('template_info', TemplateCollection)
+                            template = template_coll['species']
+                        except FileNotFoundError:
+                            template = None # See whether template_info is the path to signatures json file
+        # stored by QuadSigCalibrator somewhere outside the experiment:
+        return template
 
     #------------------------------------
     # run_analysis
@@ -270,13 +406,11 @@ class PowerEvaluator:
             probability_thres = PowerEvaluator.DEFAULT_PROBABILITY_THRESHOLD
         if percentage_agreement is None:
             percentage_agreement = PowerEvaluator.DEFAULT_PERCENTAGE_AGREEMENT
-        if prominence_thres is None:
-            prominence_thres = PowerEvaluator.DEFAULT_PROMINENCE_THRESHOLD
 
         species = pwr_member.species_name
         
         if pwr_res is None:
-            self.log.info(f"Analyzing recording to detect {species} vocalizatoins...")
+            self.log.info(f"Analyzing recording to detect {species} vocalizations...")
             pwr_res = pwr_member.compute_probabilities(rec_path)
             self.log.info(f"Done analyzing recording to detect {species} vocalizations.") 
 
@@ -285,7 +419,7 @@ class PowerEvaluator:
                 prefix='PwrRes'
                 )
             self.experiment.save(pwr_res_fname, pwr_res)
-            self.log.info(f"Power result saved in experiment under '{pwr_res_fname}' PowerResult")
+            self.log.info(f"Power result saved in experiment {self.experiment.root} under '{pwr_res_fname}' PowerResult")
 
         # Make accessible to the outside:
         self.pwr_res = pwr_res
@@ -789,7 +923,7 @@ class PowerEvaluator:
         
         self.cur_dir = os.path.dirname(__file__)
         proj_root = os.path.join(self.cur_dir, '../..')
-        self.experiment_dir = os.path.join(proj_root, 'experiments/PowerSignatures')
+        self.experiment_dir = os.path.join(proj_root, self.DEFAULT_EXPERIMENT_DIR)
 
         self.sound_data = os.path.join(self.cur_dir, 'tests/signal_processing_sounds')
         self.xc_sound_data = os.path.join(self.cur_dir, 'tests/signal_processing_sounds/XenoCanto')
@@ -823,22 +957,6 @@ class PowerEvaluator:
     
         self.sel_tbl_cmto_xc3 = os.path.join(self.cur_dir, 'tests/selection_tables/XenoCanto/cmto3.selections.txt')
         self.sel_rec_cmto_xc3 = os.path.join(self.xc_sound_data, 'CMTOG/SONG_Black-mandibled_Toucan2011-1-24-1.mp3')
-
-# ---------------- Class TemplatesDict --------
-
-class TemplatesDict(JsonDumpableMixin):
-
-    @classmethod
-    def json_load(cls, fname):
-        with open(fname, 'r') as fd:
-            dict_of_jsonized_templates = json.load(fd)
-
-        new_dict = {species : SpectralTemplate.json_loads(jstr)
-                    for species, jstr
-                    in dict_of_jsonized_templates.items()
-                    }
-
-        return new_dict
 
 # ---------------- Class PowerInfoCursor --------
 
@@ -1028,15 +1146,12 @@ if __name__ == '__main__':
                                      description="Evaluate or calibrate the power signature approach"
                                      )
 
-    parser.add_argument('--templates',
-                        help='path to already computed templates',
+    parser.add_argument('--templates_info',
+                        help='path to already computed templates, or path to experiment root',
                         default=None)
-    # parser.add_argument('--sig_rec',
-    #                     help='path to recording from which signatures are to be computed',
-    #                     default=None)
-    # parser.add_argument('--sig_sel',
-    #                     help='path to selection table for signature',
-    #                     default=None)
+    parser.add_argument('--prior_result',
+                        help="optional: experiment key to previously computed power result, or 'latest'",
+                        default=None)
     parser.add_argument('--test_rec',
                         help='path to recording that is to be tested against a given signature',
                         default=None)
@@ -1053,11 +1168,6 @@ if __name__ == '__main__':
                         action='store_true',
                         help='write figures to disk: into experiment if given, or ask outfile',
                         default=False)
-    parser.add_argument('-b', '--bandpass',
-                        action='store_true',
-                        help='apply bandpass filters to sigs and inferenced audio with the freq range of signatures default: True',
-                        default=True)
-
     parser.add_argument('--prominence_thres',
                         type=float,
                         nargs='+',
@@ -1080,9 +1190,6 @@ if __name__ == '__main__':
 
     #if args.templates is None:
     #    default_templates_path = os.path.join(cur_dir, 'species_calibration_data/signatures.json')
-
-    if args.templates is not None and not os.path.exists(args.templates):
-        raise FileNotFoundError(f"Templates file not found ({args.templates})")
 
     if args.test_rec is not None and not os.path.exists(args.test_rec):
         raise FileNotFoundError(f"Audio file for testing not found ({args.test_rec})")
@@ -1109,10 +1216,10 @@ if __name__ == '__main__':
     PowerEvaluator(args.experiment_name,
                    args.species,
                    actions,
-                   args.templates,
+                   args.templates_info,
+                   power_result_info=args.prior_result,
                    test_recording=args.test_rec,
                    test_sel_tbl=args.test_sel,
-                   apply_bandpass=args.bandpass,
                    prominence_thresholds=args.prominence_thres,
                    probability_thresholds=args.probability_thres,
                    outfigs=args.outfigs
