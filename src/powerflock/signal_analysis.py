@@ -22,17 +22,7 @@ import pandas as pd
 from powerflock.signatures import Signature
 from result_analysis.charting import Charter
 
-
-class TemplateSelection(Enum):
-    '''How to select results from templates with multiple signatures'''
-    SIMILAR_LEN = 0
-    MAX_PROB    = 1
-    MIN_PROB    = 2
-    MED_PROB    = 3
-    MEAN_PROB   = 4
-
 ClipInfo = namedtuple("ClipInfo", "clip start_idx end_idx fname sr")
-
 
 class SpectralAggregation(Enum):
     '''Method for creating a signature entry from a time slice across FFT frequencies'''
@@ -124,6 +114,8 @@ class SignalAnalyzer:
                           color=None,
                           ax=None):
         '''
+        NO LONGER USED.
+        
         Chart the frequencies of maximum energy along the time
         of one or more bird call(s).
 
@@ -1310,8 +1302,8 @@ class SignalAnalyzer:
             from frequencies of a single time frame. See SpectralAggregation
             enum. Default is set in DEFAULT_SPECTRAL_AGGREGATION.
         :type aggregation: SpectralAggregation
-        :return all probabilities, and a summary of results
-        :rtype (pd.DataFrame, pd.Series)
+        :return: all probabilities
+        :rtype: pd.DataFrame
         '''
 
         if slide_width_time_fraction is None:
@@ -1370,7 +1362,6 @@ class SignalAnalyzer:
 
         sig_id = sig.sig_id
         _num_freqs, num_frames = power_df.shape
-        res_df = pd.DataFrame()
         
         cls.log.info(f"Matching against sig-{sig_id}")
         passband = sig.bandpass_filter
@@ -1390,6 +1381,7 @@ class SignalAnalyzer:
         # that we don't slide beyond the spectrogram:
         last_idx = num_frames - sig_width_samples - 1
         percentage_reported = 0
+        result_series_list = []
         for start_idx in np.arange(0, last_idx, slide_width_samples):
             # Take snippet of same width as the current sig each time:
             end_idx = start_idx + sig_width_samples
@@ -1408,19 +1400,19 @@ class SignalAnalyzer:
                     )
                 # Probability for one subclip on one signature:
                 sig_dist = clip_sig.match_probabilities(sig)
-                res_df = res_df.append({
+                result_series_list.append(pd.Series(
+                    {
                     'start_idx'  : start_idx,
                     'stop_idx'   : end_idx,
                     'n_samples'  : sig_width_samples,
                     'match_prob' : sig_dist, 
                     'sig_id': sig_id
-                    }, 
-                    ignore_index=True)
+                    }))
             except IndexError:
                 # No more subclips to match against current sig.
                 # Process next signature
                 break
-
+        res_df = pd.DataFrame(result_series_list)
         cls.log.info(f"Done matching snippets against signature {sig_id}")
 
         return res_df

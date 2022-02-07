@@ -5,38 +5,46 @@ Created on Oct 1, 2021
 '''
 import copy
 import os
-from pathlib import Path
 import unittest
 
+from experiment_manager.experiment_manager import ExperimentManager
 import librosa
 
 from data_augmentation.sound_processor import SoundProcessor
-from data_augmentation.utils import Utils, Interval
+from data_augmentation.utils import Utils, RavenSelectionTable
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from powerflock.power_member import PowerMember, PowerResult, PowerQuantileClassifier
-from powerflock.signal_analysis import SignalAnalyzer, TemplateSelection
-from powerflock.signatures import SpectralTemplate
+from powerflock.signal_analysis import SignalAnalyzer
+from powerflock.signatures import SpectralTemplate, TemplateCollection
 from result_analysis.charting import Charter
 
 
-#*********TEST_ALL = True
-TEST_ALL = False
+TEST_ALL = True
+#TEST_ALL = False
 
 class SignalAnalysisTester(unittest.TestCase):
 
 
     @classmethod
     def setUpClass(cls):
+        
         cls.cur_dir = os.path.dirname(__file__)
         cls.sound_data = os.path.join(cls.cur_dir, 'signal_processing_sounds')
         cls.xc_sound_data = os.path.join(cls.cur_dir, 'signal_processing_sounds/XenoCanto')
+
+        cls.experiment = ExperimentManager(os.path.join(cls.cur_dir, 
+                                                        'quad_sig_calibrator_experiment')) 
+
 
         # Test recordings:
         cls.triangle440 = os.path.join(cls.sound_data, 'artificial/triangle440.wav')
         cls.triangle440Declining = os.path.join(cls.sound_data, 'artificial/triangle2000Declining.wav')
         
+        # PowerResult to play with:
+        cls.pwr_res = PowerResult.json_load(os.path.join(cls.cur_dir, 
+                                                         'data/pwr_res.json'))
         
         # Field Recordings
         cls.BAFFG_data = os.path.join(cls.sound_data, 'BAFFG')
@@ -70,11 +78,8 @@ class SignalAnalysisTester(unittest.TestCase):
         # Create a signature template to work with:
         cls.recordings = [cls.sel_rec_cmto_xc1, cls.sel_rec_cmto_xc2, cls.sel_rec_cmto_xc3]
         cls.sel_tbls   = [cls.sel_tbl_cmto_xc1, cls.sel_tbl_cmto_xc2, cls.sel_tbl_cmto_xc3]
-        # INSTEAD: read templates from file, or 
-        #          use calibration method
-        templates_json_file = os.path.join(cls.cur_dir, 
-                                           'species_calibration_data/signatures.json')
-        cls.templates = SpectralTemplate.json_load(templates_json_file)
+        
+        cls.templates = cls.experiment.read('templates', TemplateCollection)
         
         # Computing the probability of CMTOG on
         # recording 1 takes a few minutes. So those
@@ -129,7 +134,7 @@ class SignalAnalysisTester(unittest.TestCase):
             species = row_dict['species']
             # Selection duration in sel tbl:
             dur = row_dict['End Time (s)'] - row_dict['Begin Time (s)']
-            clip = species_clips_dicts[species][row_num]
+            clip = species_clips_dicts[species][row_num]['clip']
             # Duration of the extracted clip
             clip_dur = SoundProcessor.recording_len(clip, sr)
             self.assertEqual(round(clip_dur,2), round(dur,2)) 
@@ -153,10 +158,10 @@ class SignalAnalysisTester(unittest.TestCase):
         # for clip_dict in cmtog_clips_xc1['CMTOG']:
         #     flatness = SignalAnalyzer.spectral_flatness(audio=clip_dict['clip'])
         #     print(flatness)
-        flatness = SignalAnalyzer.spectral_flatness(audio=self.sel_rec_cmto_xc1)
+        flatness = SignalAnalyzer.spectral_flatness(spec_src=self.sel_rec_cmto_xc1)
         
         spectro = SignalAnalyzer.raven_spectrogram(self.sel_rec_cmto_xc1)
-        mesh = plt.pcolormesh(spectro.columns, list(spectro.index), spectro, cmap='jet', shading='flat')
+        mesh = plt.pcolormesh(spectro.columns, list(spectro.index), spectro, cmap='jet', shading='auto')
         ax = mesh.axes
         
         # Add the flatness curve to to the spectrogram.
@@ -204,9 +209,9 @@ class SignalAnalysisTester(unittest.TestCase):
         long_contours, continuity = SignalAnalyzer.spectral_continuity(audio=self.sel_rec_cmto_xc1)
 
         # A few spot checks:
-        self.assertTupleEqual(continuity.shape, (1589,))
-        self.assertTupleEqual(long_contours.shape, (513, 1589))
-        self.assertEqual(round(continuity[36.86167800453515], 4), 87.3294)
+        self.assertTupleEqual(continuity.shape, (3180,))
+        self.assertTupleEqual(long_contours.shape, (1025, 3180))
+        self.assertEqual(round(continuity[36.86167800453515], 4), 50.0488)
 
     #------------------------------------
     # test_harmonic_pitch
@@ -272,253 +277,139 @@ class SignalAnalysisTester(unittest.TestCase):
     #     input("Hit Enter to continue: ")
 
     #------------------------------------
-    # test_spectral_centroid_each_timeframe
-    #-------------------
-
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    def test_spectral_centroid_each_timeframe(self):
-
-        # For test recording, sr is 22050
-        # There will be 17 calls in this recording,
-        # each one about 2.5s long. The clip of 11 calls
-        # is ~36.5sec.
-        cmtog_clips_xc1, sr = SignalAnalyzer.audio_from_selection_table(self.sel_tbl_cmto_xc1,
-                                                                        self.sel_rec_cmto_xc1,
-                                                                        'cmto')
-        spectral_centroids = pd.DataFrame([])
-        
-        for clip in cmtog_clips_xc1['CMTOG']:
-            centroid = SignalAnalyzer.spectral_measures_each_timeframe(clip, sr)
-            spectral_centroids = spectral_centroids.append(centroid, ignore_index=True)
-
-        # Replace the nan from unequal
-        # clip lengths with 0s:
-        spectral_centroids.fillna(0, inplace=True)
-        
-        _num_rows, num_cols = spectral_centroids.shape
-        time_step = int(10**6 * 1/sr)
-
-        # For plotting lines, need each freq
-        # series over time to be columns.
-        spectral_centroids_T = spectral_centroids.transpose()
-        # Index of xposed df is time, which will
-        # end up on the x-axis labels: 
-        spectral_centroids_T.index = np.arange(0,time_step*num_cols,time_step)
-        spectral_centroids_T.columns = [f"Call{i}" for i in spectral_centroids.index]
-        
-        
-        color_group = {'black' : spectral_centroids_T.columns} 
-        ax = Charter.linechart(spectral_centroids_T, 
-                               ylabel='center frequency (Hz)', 
-                               xlabel=u'time (ms??? or \u03bcs)',
-                               rotation=45,
-                               color_groups=color_group,
-                               title="Each line is one call"
-                               )
-        ax.figure.show()
-        print("Put breakpoint here to view")
-
-
-    #------------------------------------
-    # test_plot_center_freqs
-    #-------------------
-    
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    def test_plot_center_freqs(self):
-        
-        # One selection table/recording pair:
-        
-        # ax = SignalAnalyzer.plot_center_freqs(self.sel_tbl_cmto_xc1,
-        #                                       self.sel_rec_cmto_xc1,
-        #                                       'CMTOG')
-        # ax.figure.close()
-        
-        # Two selection table/recording pairs
-        
-        # All lines will be blue
-        # ax = SignalAnalyzer.plot_center_freqs([self.sel_tbl_cmto_xc1, self.sel_tbl_cmto_xc2],
-        #                                       [self.sel_rec_cmto_xc1, self.sel_rec_cmto_xc2],
-        #                                       'CMTOG')
-        
-        # Two selection table/recording pairs,
-        # different colors for calls from different
-        # selection tables, but same species:
-        
-        ax = SignalAnalyzer.plot_center_freqs(self.sel_tbl_cmto_xc1, 
-                                              self.sel_rec_cmto_xc1, 
-                                              'CMTOG',
-                                              color='mediumblue')
-                                              
-        ax = SignalAnalyzer.plot_center_freqs(self.sel_tbl_cmto_xc2, 
-                                              self.sel_rec_cmto_xc2,
-                                              'CMTOG',
-                                              color='black',
-                                              ax=ax)
-        ax.figure.show()
-        print("Put breakpoint here to view")
-
-
-    #------------------------------------
     # test_match_probabilty
     #-------------------
     
-    #******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_match_probabilty(self):
-        # NOTE: truth values for final and intermediate
-        #       steps for all three templates are in the
-        #       giant comment at the end:
-        
-
-        #clip,_sr = SoundProcessor.load_audio(self.sel_rec_cmto_xc1)
         xc1_template = self.templates['CMTOG']
-        clip,_sr = SoundProcessor.load_audio(xc1_template.recording_fname)
-        #self.assertEqual(xc1_template.recording_fname,
-        #                 Path(self.sel_rec_cmto_xc1).name
-        #                 ) 
-        df, summary = SignalAnalyzer.match_probability(clip, xc1_template)
-        self.assertTupleEqual(df.shape, (293,5))
+        recording = os.path.join(self.cur_dir, xc1_template.recording_fname)
+        clip,_sr = SoundProcessor.load_audio(recording)
         
-        expected_1st_row = pd.Series({
-            'n_samples'   :   43264.000000,
-            'probability' :      0.602503,
-            'sig_id'      :       1.000000,
-            'start'       :      0.000000,
-            'stop'        :   43264.000000,
-            })
+        # To save time, only test with 2 sigs:
+        small_template = SpectralTemplate(xc1_template.signatures[:2])
+        df = SignalAnalyzer.match_probability(clip, small_template)
+        self.assertTupleEqual(df.shape, (510,5))
         
         # Check the first row:
         first_row = df.iloc[0]
-        first_row.probability = round(first_row.probability, 6)
-        self.assertTrue((first_row == expected_1st_row).all())
-
-        expected_summary = pd.Series ({
-            'min_prob'      :   0.000000,
-            'max_prob'      :   0.927716,
-            'med_prob'      :   0.319931,
-            'best_fit_prob' :   0.747894
-            })
+        expected = pd.Series([0.0, 115.0, 115.0, 0.000004, 1.0],
+                             index=['start_idx', 'stop_idx', 'n_samples', 'match_prob', 'sig_id'],
+                             name=0)
+        Utils.assertSeriesEqual(first_row, expected, decimals=2)
         
-        self.assertTrue((summary.round(6) == expected_summary.round(6)).all())
-       
-        # MULTIPLE TEMPLATES:
-        
-        df, summary = SignalAnalyzer.match_probability(clip, self.templates)
-        
-        self.assertTupleEqual(df.shape, (891, 5))
-        num_sigs = sum([len(template.signatures) for template in self.templates])
-        self.assertEqual(df.sig_id.max(), num_sigs)
-
     #------------------------------------
     # test_xc_templates_xc_in_template_clips
     #-------------------
     
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    def test_xc_templates_xc_in_template_clips(self):
+    # @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    # def test_xc_templates_xc_in_template_clips(self):
+    #
+    #     # Clips used in templates and to test 
+    #     # for similarity to those templates.
+    #     # Expect high match probs
+    #
+    #     # Templates from 3 CMTOG recordings:
+    #     recordings = [self.sel_rec_cmto_xc1, self.sel_rec_cmto_xc2, self.sel_rec_cmto_xc3]
+    #     sel_tbls   = [self.sel_tbl_cmto_xc1, self.sel_tbl_cmto_xc2, self.sel_tbl_cmto_xc3]
+    #     templates = SignalAnalyzer.compute_species_templates('CMTOG', 
+    #                                                          recordings, 
+    #                                                          sel_tbls)
+    #
+    #     # Clips from one of the three recordings:
+    #     clip_dict_in_sample, sr = SignalAnalyzer.audio_from_selection_table(
+    #         sel_tbl_path=self.sel_tbl_cmto_xc1,
+    #         recording_path=self.sel_rec_cmto_xc1,
+    #         requested_species='CMTOG')
+    #
+    #     all_probs = []
+    #     for clip in clip_dict_in_sample['CMTOG']:
+    #         prob = SignalAnalyzer.match_probability(clip, templates, sr)
+    #         all_probs.append(prob)
+    #         #self.assertEqual(round(prob,2), 0.35)
+    #     print(f"Templates CTMOG (3 XC recordings); {len(all_probs)} clips XC CMTOGs: {all_probs}")
+    #
+    # #------------------------------------
+    # # test_xc_templates_xc_outof_template_clips
+    # #-------------------
+    #
+    # @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    # def test_xc_templates_xc_outof_template_clips(self):
+    #
+    #     # XC clips NOT used when creating templates:
+    #     #
+    #     recordings = [self.sel_rec_cmto_xc1, self.sel_rec_cmto_xc2]
+    #     sel_tbls   = [self.sel_tbl_cmto_xc1, self.sel_tbl_cmto_xc2]
+    #     templates = SignalAnalyzer.compute_species_templates('CMTOG', 
+    #                                                          recordings, 
+    #                                                          sel_tbls)
+    #     clip_dict_in_sample, sr = SignalAnalyzer.audio_from_selection_table(
+    #         # Recording not involved in template creation:
+    #         sel_tbl_path=self.sel_tbl_cmto_xc3,
+    #         recording_path=self.sel_rec_cmto_xc3,
+    #         requested_species='CMTOG')
+    #
+    #     all_probs = []
+    #     for test_clip in clip_dict_in_sample['CMTOG']:
+    #         all_probs.append(SignalAnalyzer.match_probability(test_clip, templates, sr))
+    #
+    #     print(f"Templates CTMOG (2 XC recordings); {len(all_probs)} clips XC CMTOGs: {all_probs}")
+    #
 
-        # Clips used in templates and to test 
-        # for similarity to those templates.
-        # Expect high match probs
-        
-        # Templates from 3 CMTOG recordings:
-        recordings = [self.sel_rec_cmto_xc1, self.sel_rec_cmto_xc2, self.sel_rec_cmto_xc3]
-        sel_tbls   = [self.sel_tbl_cmto_xc1, self.sel_tbl_cmto_xc2, self.sel_tbl_cmto_xc3]
-        templates = SignalAnalyzer.compute_species_templates('CMTOG', 
-                                                             recordings, 
-                                                             sel_tbls)
-        
-        # Clips from one of the three recordings:
-        clip_dict_in_sample, sr = SignalAnalyzer.audio_from_selection_table(
-            sel_tbl_path=self.sel_tbl_cmto_xc1,
-            recording_path=self.sel_rec_cmto_xc1,
-            requested_species='CMTOG')
-        
-        all_probs = []
-        for clip in clip_dict_in_sample['CMTOG']:
-            prob = SignalAnalyzer.match_probability(clip, templates, sr)
-            all_probs.append(prob)
-            #self.assertEqual(round(prob,2), 0.35)
-        print(f"Templates CTMOG (3 XC recordings); {len(all_probs)} clips XC CMTOGs: {all_probs}")
-        
-    #------------------------------------
-    # test_xc_templates_xc_outof_template_clips
-    #-------------------
-    
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    def test_xc_templates_xc_outof_template_clips(self):
-        
-        # XC clips NOT used when creating templates:
-        #
-        recordings = [self.sel_rec_cmto_xc1, self.sel_rec_cmto_xc2]
-        sel_tbls   = [self.sel_tbl_cmto_xc1, self.sel_tbl_cmto_xc2]
-        templates = SignalAnalyzer.compute_species_templates('CMTOG', 
-                                                             recordings, 
-                                                             sel_tbls)
-        clip_dict_in_sample, sr = SignalAnalyzer.audio_from_selection_table(
-            # Recording not involved in template creation:
-            sel_tbl_path=self.sel_tbl_cmto_xc3,
-            recording_path=self.sel_rec_cmto_xc3,
-            requested_species='CMTOG')
-        
-        all_probs = []
-        for test_clip in clip_dict_in_sample['CMTOG']:
-            all_probs.append(SignalAnalyzer.match_probability(test_clip, templates, sr))
-        
-        print(f"Templates CTMOG (2 XC recordings); {len(all_probs)} clips XC CMTOGs: {all_probs}")
-        
 
-    #------------------------------------
-    # test_xc_templates_field_clip
-    #-------------------
-
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-
-    def test_xc_templates_field_clips_positive(self):
-        # Templates from C 
-        recordings = [self.sel_rec_cmto_xc1, self.sel_rec_cmto_xc2, self.sel_rec_cmto_xc3]
-        sel_tbls   = [self.sel_tbl_cmto_xc1, self.sel_tbl_cmto_xc2, self.sel_tbl_cmto_xc3]
-        templates = SignalAnalyzer.compute_species_templates('CMTOG', 
-                                                             recordings, 
-                                                             sel_tbls)
+    # #------------------------------------
+    # # test_xc_templates_field_clip
+    # #-------------------
+    #
+    # @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #
+    # def test_xc_templates_field_clips_positive(self):
+    #     # Templates from C 
+    #     recordings = [self.sel_rec_cmto_xc1, self.sel_rec_cmto_xc2, self.sel_rec_cmto_xc3]
+    #     sel_tbls   = [self.sel_tbl_cmto_xc1, self.sel_tbl_cmto_xc2, self.sel_tbl_cmto_xc3]
+    #     templates = SignalAnalyzer.compute_species_templates('CMTOG', 
+    #                                                          recordings, 
+    #                                                          sel_tbls)
+    #
+    #     clip_dict_outof_template, sr = SignalAnalyzer.audio_from_selection_table(
+    #         sel_tbl_path=self.sel_tbl_fld,
+    #         recording_path=self.sel_recording_fld,
+    #         requested_species='CMTOG')
+    #
+    #     all_probs = []
+    #     for test_clip in clip_dict_outof_template['CMTOG']:
+    #         prob = SignalAnalyzer.match_probability(test_clip, templates, sr)
+    #         all_probs.append(prob)
+    #
+    #     print(f"Templates CTMOG; {len(all_probs)} clips FIELD CMTOGs: {all_probs}")
         
-        clip_dict_outof_template, sr = SignalAnalyzer.audio_from_selection_table(
-            sel_tbl_path=self.sel_tbl_fld,
-            recording_path=self.sel_recording_fld,
-            requested_species='CMTOG')
-
-        all_probs = []
-        for test_clip in clip_dict_outof_template['CMTOG']:
-            prob = SignalAnalyzer.match_probability(test_clip, templates, sr)
-            all_probs.append(prob)
-            
-        print(f"Templates CTMOG; {len(all_probs)} clips FIELD CMTOGs: {all_probs}")
-        
-    #------------------------------------
-    # test_xc_templates_field_clips_negative
-    #-------------------
-
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
-    def test_xc_templates_field_clips_negative(self):
-
-        # Make the template from CMTOC:
-        recordings = [self.sel_rec_cmto_xc1, self.sel_rec_cmto_xc2, self.sel_rec_cmto_xc3]
-        sel_tbls   = [self.sel_tbl_cmto_xc1, self.sel_tbl_cmto_xc2, self.sel_tbl_cmto_xc3]
-        templates = SignalAnalyzer.compute_species_templates('CMTOG', 
-                                                             recordings, 
-                                                             sel_tbls)
-        clip_dict_outof_species, sr = SignalAnalyzer.audio_from_selection_table(
-            sel_tbl_path=self.DCFLC_sel_tbl_fld,
-            recording_path=self.DCFLC_rec_fld,
-            requested_species='DCFLC')
-
-        all_probs = []
-        for test_clip in clip_dict_outof_species['DCFLC']:
-        
-            prob = SignalAnalyzer.match_probability(test_clip, templates, sr)
-            # Clips not used in templating:
-            #*****self.assertEqual(round(prob, 2), 0.27)
-            all_probs.append(prob)
-        
-        print(f"Templates CTMOG; {len(all_probs)} clips FIELD DCFLCs: {all_probs}")
+    # #------------------------------------
+    # # test_xc_templates_field_clips_negative
+    # #-------------------
+    #
+    # @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    # def test_xc_templates_field_clips_negative(self):
+    #
+    #     # Make the template from CMTOC:
+    #     recordings = [self.sel_rec_cmto_xc1, self.sel_rec_cmto_xc2, self.sel_rec_cmto_xc3]
+    #     sel_tbls   = [self.sel_tbl_cmto_xc1, self.sel_tbl_cmto_xc2, self.sel_tbl_cmto_xc3]
+    #     templates = SignalAnalyzer.compute_species_templates('CMTOG', 
+    #                                                          recordings, 
+    #                                                          sel_tbls)
+    #     clip_dict_outof_species, sr = SignalAnalyzer.audio_from_selection_table(
+    #         sel_tbl_path=self.DCFLC_sel_tbl_fld,
+    #         recording_path=self.DCFLC_rec_fld,
+    #         requested_species='DCFLC')
+    #
+    #     all_probs = []
+    #     for test_clip in clip_dict_outof_species['DCFLC']:
+    #
+    #         prob = SignalAnalyzer.match_probability(test_clip, templates, sr)
+    #         # Clips not used in templating:
+    #         #*****self.assertEqual(round(prob, 2), 0.27)
+    #         all_probs.append(prob)
+    #
+    #     print(f"Templates CTMOG; {len(all_probs)} clips FIELD DCFLCs: {all_probs}")
 
 
     #------------------------------------
@@ -527,8 +418,12 @@ class SignalAnalysisTester(unittest.TestCase):
     
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_power_grid_search(self):
-        
-        pwr_member = PowerMember('CMTOG', self.templates[0])
+        '''
+        Takes about 3 minutes:
+        '''
+        # To save time, only test with 2 sigs:
+        small_template = SpectralTemplate(self.templates['CMTOG'].signatures[:2])
+        pwr_member = PowerMember('CMTOG', small_template)
         
         # pr_disp = sklearn.metrics.PrecisionRecallDisplay.from_estimator(
         #     clf,
@@ -544,12 +439,17 @@ class SignalAnalysisTester(unittest.TestCase):
             pwr_member,
             audio_file=self.sel_rec_cmto_xc1,
             selection_tbl_file=self.sel_tbl_cmto_xc1,
-            sig_ids=np.arange(1.0, len(self.templates[0].signatures)), 
-            quantile_thresholds=[0.80, 0.85, 0.90, 0.99]
+            quantile_thresholds=[0.80, 0.85],
+            slide_widths=[0.2]
             )
         end = timer()
         print(end - start)
-        print(grid_res)
+        f1_col = grid_res.f1
+        expected = pd.Series([0.388889, 0.463768],
+                              name='f1', 
+                              index=[(1, 0.85, 0.2),
+                                     (2, 0.85, 0.2)])
+        Utils.assertSeriesEqual(f1_col, expected, decimals=3)
 
     #------------------------------------
     # test_powermember_compute_probabilities_single_ccall
@@ -558,33 +458,34 @@ class SignalAnalysisTester(unittest.TestCase):
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_PowerQuantileClassifier(self):
 
-        power_res = self.prep_one_sig_result()
+        power_res = self.pwr_res.copy()
         df = power_res.prob_df
         
-        self.assertTupleEqual(df.shape, (76, 8))
+        #**** WAS:self.assertTupleEqual(df.shape, (76, 8))
+        self.assertTupleEqual(df.shape, (256,7))
         first_row = df.iloc[0]
-        first_row_expected = pd.Series({
-            'n_samples'    :      43136.0,
-            'probability'  :      0.7119,
-            'sig_id'       :      1.0000,
-            'start'        :      0.0000,
-            'stop'         :      43136.0000,
-            'start_time'   :      0.0000,
-            'stop_time'    :      1.9563,
-            'center_time'  :      0.9781
-        })
-        
-        self.assertTrue((first_row.round(4) == first_row_expected).all())
-        power_res.add_truth(self.sel_tbl_cmto_xc1)
+        expected = pd.Series({
+            'start_idx'   :    0.000000,
+            'stop_idx'    :  115.000000,
+            'n_samples'   :  115.000000,
+            'match_prob'  :    0.000004,
+            'sig_id'      :    1.000000,
+            'start_time'  :    0.000000,
+            'stop_time'   :    1.335147},
+            name=0.6675736961451247)
+        Utils.assertSeriesEqual(first_row, expected, 3)
+
+        sel_tbl = RavenSelectionTable(self.sel_tbl_cmto_xc1)
+        power_res.add_truth(sel_tbl)
         
         clf = PowerQuantileClassifier(1.0,        # sig_id, 
                                       0.75        # threshold_quantile)
                                       )
         clf.fit(power_res)
-        self.assertFalse(clf.decision_function(0.543))
+        self.assertTrue(clf.decision_function(0.543))
         self.assertFalse(clf.decision_function(-4))
         self.assertTrue(clf.decision_function(0.61))
-        expected = [True, False, False, True]
+        expected = [True, True, False, True]
         self.assertTrue((clf.decision_function([0.61, 0.4, 0.0, 0.98]) == expected).all())
 
     #------------------------------------
@@ -638,9 +539,6 @@ class SignalAnalysisTester(unittest.TestCase):
                 # Slid past end of given audio:
                 break
 
-        
-
-
     #------------------------------------
     # test_powermember_compute_probabilities
     #-------------------
@@ -648,35 +546,33 @@ class SignalAnalysisTester(unittest.TestCase):
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_powermember_compute_probabilities(self):
 
-        pwr_member = PowerMember('CMTOG', self.templates[0])
+        # To save time, only test with 2 sigs:
+        small_template = SpectralTemplate(self.templates['CMTOG'].signatures[:2])
+        
+        pwr_member = PowerMember('CMTOG', small_template)
         rec1_arr, rec1_sr = SoundProcessor.load_audio(self.sel_rec_cmto_xc1)
         
-        power_result = pwr_member.compute_probabilities(rec1_arr, rec1_sr)
+        power_result = pwr_member.compute_probabilities(rec1_arr, sr=rec1_sr)
         
-        probs = power_result.truth_df['Probability'] 
-        subsampled_probs = probs[0:len(probs):100]
-
-        expected = pd.Series([0.2514, 0.4600, 0.2234, 0.2161],
-                             index=[0.000,
-                                    0.082,
-                                    0.164,
-                                    0.245,
-                                    ],
-                             name='Probability')
-        observed = subsampled_probs.iloc[:4].round(4)
-        observed.index = [round(idx,3) for idx in observed.index]
-        self.assertTrue((observed == expected).all())
+        probs = power_result.prob_df.match_prob
+        subsampled_probs = probs.iloc[0:len(probs):100]
+        expected = pd.Series([3.81311763e-06, 6.45077848e-04, 1.59876707e-03, 3.03562669e-03,
+                              1.80539105e-03, 5.95967358e-03],
+                             index=[0.6675736961451247,  14.59954648526077, 28.531519274376414,
+                                    6.9137414965986395, 20.845714285714287,  34.77768707482993],
+                             name='match_prob')
+        Utils.assertSeriesEqual(subsampled_probs, expected, decimals=3)
         
-        ax = Charter.barchart_over_timepoints(
-               subsampled_probs,
-               xlabel='Time (s)',
-               ylabel='Probability of CMTO',
-               title='Probability of CMTO Over Time',
-               round_times=1
-               )
-
-        ax.figure.show()
-        print("Place breakpoint in test_powermember_compute_probabilities to see chart.")
+        # ax = Charter.barchart_over_timepoints(
+        #        subsampled_probs,
+        #        xlabel='Time (s)',
+        #        ylabel='Probability of CMTO',
+        #        title='Probability of CMTO Over Time',
+        #        round_times=1
+        #        )
+        #
+        # ax.figure.show()
+        # print("Place breakpoint in test_powermember_compute_probabilities to see chart.")
 
     #------------------------------------
     # test_add_truth_to_power_result
@@ -685,20 +581,19 @@ class SignalAnalysisTester(unittest.TestCase):
     @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_add_truth_to_power_result(self):
 
-        pwr_res = PowerResult(self.probs_rec1_series, 'CMTOG')
-        rec1_sel_tbl = self.sel_tbls[0]
+        pwr_res = self.pwr_res.copy()
+        rec1_sel_tbl = RavenSelectionTable(self.sel_tbls[0])
         pwr_res.add_truth(rec1_sel_tbl)
         
-        # First line of df should be: 0.00040816326530612246,0.2514283069254051
-        self.assertEqual(round(pwr_res.truth_df.index[0], 4), 0.0004)
-        self.assertEqual(round(pwr_res.truth_df['Probability'].iloc[0], 2), 0.25)
-        self.assertFalse(pwr_res.truth_df['Truth'].iloc[0])
+        # There should be 97 timeframe entries with
+        # call being True:
+        self.assertEqual(pwr_res.prob_df.truth.sum(), 97) 
 
     #------------------------------------
     # test_plot_pr_curve_power_result
     #-------------------
 
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_plot_pr_curve_power_result(self):
 
         # SIMILAR_LENGTH: AP: 0.42
@@ -706,21 +601,17 @@ class SignalAnalysisTester(unittest.TestCase):
         
         # MED_PROB: 0.42
         # pwr_member = PowerMember('CMTOG', 
-        #                          self.templates[0],
-        #                          TemplateSelection.MED_PROB)
+        #                          self.templates[0])
 
         # MAX_PROB: 0.42
         # pwr_member = PowerMember('CMTOG', 
-        #                          self.templates[0],
-        #                          TemplateSelection.MAX_PROB)
+        #                          self.templates[0])
 
         # MIN_PROB: 0.42
-        pwr_member = PowerMember('CMTOG', 
-                                 self.templates[0],
-                                 TemplateSelection.MIN_PROB)
-        
-        pwr_res    = PowerResult(self.probs_rec1_series, 'CMTOG')
-        pwr_res.add_truth(self.sel_tbls[0])
+        pwr_member = PowerMember('CMTOG', self.templates['CMTOG'])
+        pwr_res    = self.pwr_res.copy()
+        sel_tbl    = RavenSelectionTable(self.sel_tbls[0])
+        pwr_res.add_truth(sel_tbl)
         
         pwr_member.plot_pr_curve(pwr_res)
         
@@ -745,7 +636,7 @@ class SignalAnalysisTester(unittest.TestCase):
         # Get the 11-call template and surgically
         # remove all but the first call from it.
         # (Not something to do for regular use):
-        onecall_tmplt = copy.deepcopy(self.templates[0])
+        onecall_tmplt = copy.deepcopy(self.templates['CMTOG'])
         onecall_tmplt.signatures = [onecall_tmplt.signatures[0]]
         # Force re-calc of mean sig:
         onecall_tmplt.cached_mean_sig = None
@@ -754,7 +645,7 @@ class SignalAnalysisTester(unittest.TestCase):
 
         rec1_arr, rec1_sr = SoundProcessor.load_audio(self.sel_rec_cmto_xc1)
 
-        power_res = pwr_member.compute_probabilities(rec1_arr, rec1_sr)
+        power_res = pwr_member.compute_probabilities(rec1_arr, sr=rec1_sr)
         return power_res
     
     

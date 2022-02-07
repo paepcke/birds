@@ -209,43 +209,6 @@ class SpectralTemplate(JsonDumpableMixin):
         return template
 
     #------------------------------------
-    # json_load_templates
-    #-------------------
-    
-    @classmethod
-    def json_load_templates(cls, fname):
-        '''
-        Sometimes a dict with values that are jsonized SpectralTemplate
-        instances is stored on disk. This happens in
-        quad_sig_calibration(). This method recovers
-        such a file. The code is a convenience duplicate
-        of the method json_load() in quad_sig_calibration.py.
-
-        Reconstruct a dict of templates from
-        the given json file. All SpectralTemplate
-        instances will be reconstructed.
-        The result will look like:
-        
-            {'CMTOG' : template_cmtog,
-             'OtherSpec' : template_other_spec
-             }
-
-        :param fname: json file to load
-        :type fname: str
-        :return dict of SpectralTemplate
-        :rtype {str : SpectralTemplate}
-        '''
-        with open(fname, 'r') as fd:
-            dict_of_templates = json.load(fd)
-        
-        new_dict = {species : SpectralTemplate.json_loads(jstr)
-                    for species, jstr
-                    in dict_of_templates.items()
-                    }
-
-        return new_dict
-
-    #------------------------------------
     # mean_sig
     #-------------------
 
@@ -403,6 +366,26 @@ class SpectralTemplate(JsonDumpableMixin):
     def n_fft(self):
         return self._n_fft
 
+    #------------------------------------
+    # get_sig
+    #-------------------
+    
+    def get_sig(self, sig_id):
+        '''
+        Return member signature, given signature id
+        
+        :param sig_id: desired signatature's ID
+        :type sig_id: Any
+        :return: the requested signature
+        :rtype: Signature
+        :raise IndexError if no signature of given name is found
+        '''
+        try:
+            return self.sig_dict[sig_id]
+        except AttributeError:
+            # First call to this method; build the dict:
+            self.sig_dict = {sig.sig_id : sig for sig in self.signatures}
+            return self.sig_dict[sig_id]
 
     #------------------------------------
     # __eq__
@@ -912,7 +895,11 @@ class Signature(JsonDumpableMixin):
             "freq_span" : self.freq_span,
             "bandpass_filter" : None if self.bandpass_filter is None else self.bandpass_filter.json_dumps()
             }
-
+        if hasattr(self, 'usable'):
+            recovery_dict['usable'] = self.usable
+        if hasattr(self, 'prominence_threshold'):
+            recovery_dict['prominence_threshold'] = self.prominence_threshold
+            
         return json.dumps(recovery_dict)
 
     #------------------------------------
@@ -979,7 +966,15 @@ class Signature(JsonDumpableMixin):
         sig_instance.scale_info = scale_info
         if not normalized:
             sig_instance.normalize_self(scale_info)
-        
+            
+        # Was the sig calibrated?
+        try:
+            sig_instance.usable = jdict['usable']
+            sig_instance.prominence_threshold = jdict['prominence_threshold']
+        except KeyError:
+            # No, it wasn't; fine:
+            pass
+
         return sig_instance
 
 
@@ -1103,3 +1098,87 @@ class Signature(JsonDumpableMixin):
         a pd.DataFrame by adding this roperty.
         '''
         return self.sig.columns
+    
+# ------------------------ TemplateCollection --------------
+
+class TemplateCollection(dict, JsonDumpableMixin):
+    '''
+    Simple dict mapping species names to a SpectralTemplate 
+    instance:
+             {'CMTOG' : <template for CMTOG>,
+              'BANAS' : <template for BANAS>
+                 ...
+             }
+    An instance of this class is created by quad_sig_calibration,
+    and usually stored in an experiment's json directory under the
+    key 'templates'. 
+    
+    Use instances like a dict. But json storage management is 
+    an additional functionality. The class provides the:
+        json_dump()
+        json_load()
+    methods used to store and retrieve instances in experiments
+    (i.e. instances of ExperimentManager).
+    '''
+    
+    #------------------------------------
+    # Constructor
+    #-------------------
+    
+    def __init__(self, templates_dict):
+        
+        # This instance is itself a dict:
+        self.update(templates_dict)
+        
+    #------------------------------------
+    # json_load
+    #-------------------
+    
+    @classmethod
+    def json_load(cls, fname):
+        '''
+        Workhorse for reading a jsonized instance from file
+        such a file.
+        
+        Reconstruct a dict of templates from
+        the given json file. All SpectralTemplate
+        instances will be reconstructed.
+        The result be an instance of TemplateCollection,
+        and will thus look like:
+        
+            {'CMTOG' : template_cmtog,
+             'OtherSpec' : template_other_spec
+             }
+
+        :param fname: json file to load
+        :type fname: str
+        :return TemplateCollection instance
+        :rtype TemplateCollection
+        :raise FileNotFoundError
+        '''
+        with open(fname, 'r') as fd:
+            dict_of_templates = json.load(fd)
+        
+        new_dict = {species : SpectralTemplate.json_loads(jstr)
+                    for species, jstr
+                    in dict_of_templates.items()
+                    }
+
+        return TemplateCollection(new_dict)
+
+    #------------------------------------
+    # json_dump
+    #-------------------
+    
+    def json_dump(self, fname):
+        '''
+        Individually json encode each SpectralTemplate
+        in self.values(), and write the entire dict to fname 
+        as a json file.
+        
+        :param fname: destination path
+        :type fname: str
+        '''
+        with open(fname, 'w') as fd:
+            json.dump({key : val.json_dumps() for key,val in self.items()}, fd)
+

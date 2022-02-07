@@ -257,7 +257,7 @@ class Interval(dict, JsonDumpableMixin):
         :param lo: lower index slice bound if only subset of list 
             is to be searched. Default: entire list
         :type lo: int
-        :param hi: uppoer index slice bound if only subset
+        :param hi: upper index slice bound if only subset
             of list is to be searched. Default: entire list
         :type hi: int
         :returns index of interval that contains value, 
