@@ -26,12 +26,12 @@ from sklearn.exceptions import NotFittedError
 
 from birdsong.utils.utilities import FileUtils
 from data_augmentation.sound_processor import SoundProcessor
-from data_augmentation.utils import Utils, Interval, RavenSelectionTable
+from data_augmentation.utils import Interval, RavenSelectionTable
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from powerflock.signal_analysis import SignalAnalyzer, TemplateSelection
-from powerflock.signatures import SpectralTemplate
+from powerflock.signal_analysis import SignalAnalyzer
+from powerflock.signatures import SpectralTemplate, TemplateCollection
 from result_analysis.charting import Charter
 
 
@@ -73,7 +73,7 @@ class PowerMember:
     a window of time, such as a few milliseconds.
     '''
     
-    PROMINENCE_THRES = 0.4
+    DEFAULT_PROMINENCE_THRES = 0.4
     '''Minimum cutoff for call to find_peaks(); higher is more discriminative'''
     
     #------------------------------------
@@ -84,36 +84,35 @@ class PowerMember:
                  species_name, 
                  spectral_template_info=None,
                  the_slide_width_time=None,
-                 experiment=None,
-                 apply_bandpass=True,
-                 template_selection=TemplateSelection.SIMILAR_LEN,
+                 experiment=None
                  ):
         '''
         Initialize a member of a species recognition
         ensemble. SpectralTemplate instance(s) are either created
         from the file names passed in spectral_template_info, or may 
-        be passed in as an individual, or list of templates.
+        be passed in ready made. The argument may be:
         
-        NOTE: even though multiple templates may be passed in, the
-              current implementation only uses the first. Passing
-              in more will currently raise a NotImplementedError
+           o A SpectralTemplate instance
+           o A TemplateCollection
+           o A zip object that pairs a Raven selection table
+             file with the recording file that the table annotates:
         
-        If spectral_template_info is not an individual, or list of SpectralTemplate
-        it is expected to be a zip object that pairs a Raven selection table
-        file with the recording file that the table annotates:
-        
-          Zip:
-                recording1-file   selection-table1-file
-                recording2-file   selection-table2-file
-                      ...
+	             Zip:
+	                   recording1-file   selection-table1-file
+	                   recording2-file   selection-table2-file
+	                         ...
+
+        NOTE: it is the caller's responsibility to pass an 
+              appropriate template. For example, if it is important
+              that a template is calibrated, pass a calibrated
+              template. Else a default prominence_threshold is
+              used. After running quad_sig_calibration, the experiment
+              will contain calibrated templates_info in key 'templates_calibrated'
 
         The slide width is the number of fractional seconds by
         which a signature is passed across audio files. 
         
         If an ExperimentManager is passed in, results are stored there.
-        
-        The template_selection names a policy for selecting among
-        the tmplates. See the TemplateSelection enumeration.
         
         NOTE: after initialization the PowerMember is ready to accept
               an audio recording, and to generate probabilities from
@@ -132,12 +131,6 @@ class PowerMember:
         :type the_slide_width_time:
         :param experiment:
         :type experiment:
-        :param apply_bandpass: whether or not to create signatures
-            with a bandpass filter derived from the selection table,
-            or not. Only relevant if spectral_template_info is a
-            zip for creating signatures, rather than the already-made
-            templates.
-        :type apply_bandpass: bool
         :param template_selection:
         :type template_selection:
         '''
@@ -156,48 +149,23 @@ class PowerMember:
         # Figure out what client passed for spectral template(s):
         if type(spectral_template_info) == SpectralTemplate:
             # A ready-made single template:
-            self.spectral_templates = [spectral_template_info]
-        elif type(spectral_template_info) == list:
-            for maybe_tmplt in spectral_template_info:
-                if type(maybe_tmplt) != SpectralTemplate:
-                    raise TypeError(f"Template info {maybe_tmplt} is not a SpectralTemplate")
-            # A list of ready-made templates
-            self.spectral_templates = spectral_template_info
+            self.spectral_template = spectral_template_info
+        elif type(spectral_template_info) == TemplateCollection:
+            # A dict-like of ready-made templates_info, one for each
+            # of several species. Pick out the one for the
+            # species of this PowerMember:
+            self.spectral_template = spectral_template_info[species_name]
         elif type(spectral_template_info) == str:
-            # Path to json file:
+            # Path to json file of template:
             try:
-                self.spectral_templates = \
-                    [SpectralTemplate.json_load(spectral_template_info)[species_name]]
+                self.spectral_template = SpectralTemplate.json_load(spectral_template_info)
             except KeyError:
                 raise ValueError(f"No template for {species_name} in file {spectral_template_info}")
         else:
-            # Must be a zip of recording/RavenTable pairs:
-            if not isinstance(spectral_template_info, zip):
-                raise TypeError(f"Template info {spectral_template_info} is not of any acceptable type")
-
-            call_files, sel_tbl_files = list(zip(*spectral_template_info))
-            
-            for file in call_files + sel_tbl_files:
-                if not os.path.exists(file):
-                    raise FileNotFoundError(f"Could not find {file}")
-
-            self.spectral_templates = []
-            for call_file, sel_tbl_file in zip(call_files, sel_tbl_files):
-                self.spectral_templates.extend(self.compute_spectral_templates(species_name, 
-                                                                               call_file, 
-                                                                               sel_tbl_file,
-                                                                               apply_bandpass)
-                                                                               )
+            raise FileNotFoundError(f"Cannot find template for {species_name} from {spectral_template_info}")
 
         self.species_name = species_name
-        self.template_selection = template_selection
-        
-        # NOTE: From here on out we only consider first spectral template:
-        
-        if len(self.spectral_templates) != 1:
-            raise NotImplementedError(f"Current implementation only supports a single SpectralTemplate instance")
 
-        self.spectral_template = self.spectral_templates[0]
         # Preserve the template in the experiment:
         if self.experiment is not None:
             self.experiment.save(f"template_{species_name}", self.spectral_template)
@@ -359,7 +327,7 @@ class PowerMember:
         a probability peak must be in the context of probabilities
         neighboring in time. See scipy.signal.find_peaks and
         Wikipedia 'Topographic prominence' for details. Default
-        is set in the class variable DEFAULT_PROMINENCE_THRESHOLD. 
+        is set in the class variable DEFAULT_PROMINENCE_THRES. 
         Values must be in [0,1]
         
         :param pwr_res: the probabilities for each timeframe
@@ -374,8 +342,6 @@ class PowerMember:
         :rtype [pd.DataFrame pd.DataFrame]
         '''
 
-        if prominence_threshold is None:
-            prominence_threshold = self.DEFAULT_PROMINENCE_THRESHOLD
         sig_ids = pd.Series(pwr_res.sig_ids())
         
         prob_df = pwr_res.prob_df
@@ -403,6 +369,16 @@ class PowerMember:
                                             columns=sig_ids
                                             )
         for sig_id in sig_ids:
+            sig = self.spectral_template.get_sig(sig_id)
+            try:
+                if not sig.usable:
+                    continue
+                prominence_threshold = sig.prominence_threshold
+            except AttributeError:
+                # Not a calibrated sig:
+                self.log.warn(f"Sig {sig_id} is not calibrated; using {self.DEFAULT_PROMINENCE_THRES}")
+                prominence_threshold = self.DEFAULT_PROMINENCE_THRES
+
             probs = all_sig_probs[all_sig_probs.sig_id == sig_id].match_prob
             peak_indices, properties = scipy.signal.find_peaks(probs,
                                                                prominence=prominence_threshold)
@@ -581,44 +557,6 @@ class PowerMember:
         self.output_ready = True
 
     # ------------------------- Utilities ------------
-    
-    #------------------------------------
-    # compute_spectral_templates
-    #-------------------
-    
-    def compute_spectral_templates(self, 
-                                   species, 
-                                   call_files, 
-                                   sel_tbl_files,
-                                   apply_bandpass=False
-                                   ):
-        '''
-        DEPRECATED: use the separate quad_sig_calibration.py.
-        
-        Compute templates of call signatures from 
-        the call files and associated selection table files.
-        
-        :param species: birds species that produced the calls
-        :type species: str
-        :param call_files: path(s) to recordings of bird calls
-        :type call_files: {str | [str]}
-        :param sel_tbl_files: Raven selection table files that
-            one-to-one correspond to the recording files
-        :type sel_tbl_files: {str | [str]}
-        :param apply_bandpass: whether or not to 
-            apply a  bandpass filter during signature creation
-            as per the low/high frequency spec in the Raven
-            selection table.
-        :type apply_bandpass: {bool | Interval}
-
-        :return a list of SpectralTemplate instances
-        :rtype [SpectralTemplate]
-        '''
-        templates = SignalAnalyzer.compute_species_templates(species, 
-                                                             call_files, 
-                                                             sel_tbl_files,
-                                                             apply_bandpass=apply_bandpass)
-        return templates
 
     #------------------------------------
     # _right_size_sr
@@ -705,7 +643,7 @@ class CallLevelScorer:
         # Note the (constant) step size of the truth
         # intervals, and create a list of Interval instances
         # for the predictions: 
-        step_size = true_time_intervals[0]['step']
+        step_size = true_time_intervals[0]['step']  # @UnusedVariable
         # Each interval denotes the estimated start and stop
         # of one call. The low_bound/high_bound were computed
         # as center time +/ half the width of the signature that
@@ -989,7 +927,9 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
         :param slide_widths: fraction the samples in the shortest call
             that are to be tried in the search
         :type slide_widths: [float]
-        :returns: dataframe with columns ['bal_acc', 'recall', 'precision', 'f1']
+        :returns: dataframe with columns 
+           ['threshold', 'slide_fraction', 'sig_id', 'bal_acc', 'acc', 'recall',
+            'precision', 'f1', 'f0.5']
         :rtype: pd.DataFrame
         '''
 
@@ -1006,11 +946,8 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
         # DF with schema:
         #                                 prob0    prob1    ...
         #  (sig_id, thres, slide_width)
-        all_probs = pd.DataFrame()
-        
-        res_df = pd.DataFrame([],
-                              columns=['bal_acc', 'recall', 'precision', 'f1']
-                              )
+        all_prob_series = []
+
         from timeit import default_timer as timer
         start = timer()
         for thres in quantile_thresholds:
@@ -1022,7 +959,10 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
                 cls.log.info(f"Compute probabilities for thres {thres}/{len(quantile_thresholds)}, slide fraction {slide_width}/{len(slide_widths)}...")
                 power_res = power_member.compute_probabilities(rec_arr, sr=rec_sr)
                 cls.log.info(f"Done compute probabilities for thres {thres}, slide fraction {slide_width}...")
-                power_res.add_truth(selection_tbl_file)
+                power_res.add_truth(RavenSelectionTable(selection_tbl_file))
+                all_truths = power_res.prob_df.truth
+                
+                scores = []
 
                 for sig_id in sig_ids:
                     cls.log.info(f"Compute score for sig-{sig_id}/{len(sig_ids)}...")
@@ -1030,7 +970,7 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
                     clf.fit(power_res)
                     probs  = clf.probabilities
                     preds  = clf.decision_function(probs)
-                    truths = clf.truth
+                    truths = all_truths[probs.index]
                     score = pd.Series({
                         'threshold'  : thres,
                         'slide_fraction': slide_width,
@@ -1044,11 +984,10 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
                         }, name=(sig_id, thres, slide_width)
                         )
     
-                    res_df = res_df.append(score)
-                    
+                    scores.append(score)
                     new_probs = probs.copy()
                     new_probs.name = (sig_id, thres, slide_width)
-                    all_probs = all_probs.append(new_probs)
+                    all_prob_series.append(new_probs)
                     # Save the best f1's probabilities and truths
                     if score.f1 > cls.best_f1:
                         cls.best_f1 = score.f1
@@ -1056,8 +995,11 @@ class PowerQuantileClassifier(BaseEstimator, ClassifierMixin):
                         cls.best_f1_truths = truths
                         cls.best_f1_preds  = preds
         end = timer()
-        experiment.save('all_probs', all_probs)
-        experiment.save('res_scores', res_df)
+        res_df = pd.DataFrame(scores)
+        all_probs = pd.DataFrame(all_prob_series)
+        if experiment is not None:
+            experiment.save('all_probs', all_probs)
+            experiment.save('res_scores', res_df)
         print(f"Grid search duration: {str(datetime.timedelta(seconds=(end-start)))}")
         return res_df
 
@@ -1158,7 +1100,7 @@ class PowerResult(JsonDumpableMixin):
     # add_truth
     #-------------------
     
-    def add_truth(self, truth_sel_tbl):
+    def add_truth(self, truth_sel_tbl_info):
         '''
         Add two new columns: 'Overlap' and 'Truth' to the matching results
         df. For each row the Truth column is 1 or 0, depending
@@ -1169,10 +1111,21 @@ class PowerResult(JsonDumpableMixin):
         
         The prob_df will permanently contain the columns.
         
-        :param truth_sel_tbl: a RavenSelectionTable instance
-        :type RavenSelectionTable
+        :param truth_sel_tbl_info: a RavenSelectionTable instance
+            or path to a Raven selection table
+        :type {str | RavenSelectionTable}
         '''
-        
+
+        if type(truth_sel_tbl_info) == str:
+            # Given path to Raven selection table:
+            if not os.path.exists(truth_sel_tbl_info):
+                raise FileNotFoundError(f"Selection table file {truth_sel_tbl_info} not found")
+            truth_sel_tbl = RavenSelectionTable(truth_sel_tbl_info)
+        elif not isinstance(truth_sel_tbl_info, RavenSelectionTable):
+            raise TypeError(f"The truth_sel_tbl_info must be path to table, or a RavenSelectionTable, not {type(truth_sel_tbl_info)}")
+        else:
+            truth_sel_tbl = truth_sel_tbl_info
+             
         call_intervals = truth_sel_tbl.species_times(self.species)
         # Find all rows shows timestamp (i.e. index)
         # lies within any of the call intervals:
@@ -1279,6 +1232,43 @@ class PowerResult(JsonDumpableMixin):
         return len(self.sig_ids())
 
     #------------------------------------
+    # __deepcopy__
+    #-------------------
+    
+    def __deepcopy__(self):
+        '''
+        Called by copy module when its deepcopy()
+        method is called. Also called from this class'
+        copy() method
+        
+        :return: copy of self without any references back
+            to the original
+        :rtype PowerResult
+        '''
+        new_pwr_res = PowerResult(self.prob_df.copy(deep=True),
+                                  self.species,
+                                  sr=self.sr,
+                                  name=self.name
+                                  )
+        return new_pwr_res
+
+    #------------------------------------
+    # copy
+    #-------------------
+    
+    def copy(self):
+        '''
+        Returns a deep copy of self. I.e. no references
+        of the copy's instance variables point back to
+        the self's instance vars. 
+        
+        :return: copy of self without any references back
+            to the original
+        :rtype PowerResult
+        '''
+        return self.__deepcopy__()
+
+    #------------------------------------
     # truths
     #-------------------
     
@@ -1361,7 +1351,7 @@ class PowerResult(JsonDumpableMixin):
         prob_df = pd.read_json(as_dict['prob_df'], orient='table')
         # Remove the auxiliary column 'time' that
         # was added by the pr.dump():
-        prob_df.drop(labels='time', axis='columns', inplace=True)
+        #prob_df.drop(labels='time', axis='columns', inplace=True)
         pwr_res = PowerResult(prob_df, as_dict['species'], as_dict['sr'])
         return pwr_res
 
@@ -1467,7 +1457,6 @@ if __name__ == '__main__':
         
     pwr_member = PowerMember(species_name=args.species, 
                              spectral_template_info=args.template, 
-                             apply_bandpass=args.bandpass
                              )
     
     pwr_result = pwr_member.compute_probabilities(args.recording, outfile=args.outfile)
