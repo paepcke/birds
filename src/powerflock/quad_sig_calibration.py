@@ -13,7 +13,7 @@ import shutil
 import sys
 
 from experiment_manager.experiment_manager import JsonDumpableMixin, \
-    ExperimentManager, Datatype
+    ExperimentManager
 from logging_service import LoggingService
 
 from data_augmentation.utils import Utils, Interval, RavenSelectionTable
@@ -22,9 +22,10 @@ import pandas as pd
 from powerflock.power_evaluation import PowerEvaluator, Action
 from powerflock.power_member import PowerResult, PowerMember
 from powerflock.signal_analysis import SignalAnalyzer
-from powerflock.signatures import Signature, SpectralTemplate
-
+from powerflock.signatures import Signature, SpectralTemplate, \
+    TemplateCollection
 from result_analysis.charting import Charter
+
 
 class QuadSigCalibrator(JsonDumpableMixin):
     '''
@@ -82,11 +83,11 @@ class QuadSigCalibrator(JsonDumpableMixin):
              The json files will have the same name as the species subdirectories. 
 
         The result is saved in one or two places:
-            o A json representation of the templates dict is
+            o A json representation of the templates_info dict is
               saved in <dir-of-this-file>/species_calibration_data/signatures.json
               Recover as QuadSigCalibrator.json_load(<...signatures.json>)
             o If an experiment instance is provided, the result
-              is additionally saved as experiment.save('templates') as
+              is additionally saved as experiment.save('templates_info') as
               json. Recover using experiment.read('signatures', QuadSigCalibrator)
         
         If an experiment is provided, the signatures stored
@@ -170,7 +171,6 @@ class QuadSigCalibrator(JsonDumpableMixin):
             for file_no, fname in enumerate(os.listdir(species_dir)):
                 if file_no > 1:
                     raise ValueError(f"Should only have one sound file and one selection table file in {species_dir}")
-                self.log.info(f"Checking samples for {fname}")
                 if fname.endswith('.txt'):
                     sel_tbl_file = os.path.join(species_dir, fname)
                     # Remember the sel file path for later:
@@ -179,6 +179,7 @@ class QuadSigCalibrator(JsonDumpableMixin):
                     sound_file = os.path.join(species_dir, fname)
                     # Remember the sound file path for later:
                     self.cal_files[species]['sound'] = sound_file
+                self.log.info(f"Found samples and selection table for {fname}")
 
     #------------------------------------
     # make_species_templates 
@@ -193,7 +194,9 @@ class QuadSigCalibrator(JsonDumpableMixin):
             # Calibrate the four per-timeframe power spectrum values:
             sound_file = self.cal_files[species]['sound']
             sel_tbl_file = self.cal_files[species]['sel_tbl']
+            self.log.info(f"Creating template for {species}...")
             templates[species] = self.template_for_one_species(sound_file, sel_tbl_file)
+            self.log.info(f"Done creating template for {species}.")
 
         # If cal_data_root already has a species signature 
         # json file, load it, and update it with the current
@@ -203,32 +206,28 @@ class QuadSigCalibrator(JsonDumpableMixin):
         if self.experiment is None:
             if os.path.exists(signatures_fname):
                 try:
-                    cur_templates = self.json_load(signatures_fname)
+                    cur_templates = TemplateCollection.json_load(signatures_fname)
                 except Exception as e:
                     self.log.err(f"Loading current sigs from {signatures_fname} failed: {repr(e)}...")
                     self.log.err(f"    ... Moving that file to .bak")
                     shutil.move(signatures_fname, signatures_fname+'.bak')
-                    cur_templates = {}
+                    cur_templates = TemplateCollection({})
             else:
-                cur_templates = {}
+                cur_templates = TemplateCollection({})
         else:
             # Look in the experiment for the dict of
             # templates
             try:
-                cur_templates = self.experiment.read('templates', QuadSigCalibrator)
+                cur_templates = self.experiment.read('templates', TemplateCollection)
             except FileNotFoundError:
-                cur_templates = {}
+                cur_templates = TemplateCollection({})
 
-        # Update current sigs with results from this run:
-        self.log.info(f"Saving/updating all sigs to {signatures_fname}")
         cur_templates.update(templates)
         self.cur_templates = cur_templates
-        # Save the template:
-        self.json_dump(signatures_fname)
-        # Additionally, save in experiment if one was provided:
+        # Save all templates in experiment in experiment if one was provided:
         if self.experiment is not None:
             self.log.info(f"Saving/updating all sigs to 'templates' in experiment")
-            self.experiment.save('templates', self)
+            self.experiment.save('templates', cur_templates)
         
         self.signatures_fname = signatures_fname
         return cur_templates
@@ -295,7 +294,7 @@ class QuadSigCalibrator(JsonDumpableMixin):
         sig_instance_list = []
 
         #************
-        # To shorten testing cycle, 
+        # To shorten debugging cycle, 
         # can use the [0:2] version here.
         for call_num, selection in enumerate(selection_dicts):
         #for call_num, selection in enumerate(selection_dicts[0:2]):
@@ -406,7 +405,7 @@ class QuadSigCalibrator(JsonDumpableMixin):
     # calibrate_templates
     #-------------------
     
-    def calibrate_templates(self, species_list):
+    def calibrate_templates(self, species_list=None):
         '''
         For each template, run an audio file
         analysis of the audio from which its 
@@ -419,26 +418,49 @@ class QuadSigCalibrator(JsonDumpableMixin):
         spikes are clear, the scales of the peaks vary
         as much as 0.00123 to 0.5 among calls.
         
+        The calibrated templates dict is saved in experiment
+        key 'calibrated_templates'.
+        
         :param species_list: if provided, a single, or a list
             of species which to calibrate. If None, all in
             self.cur_templates will be calibrated.
         :type species_list: {None | str | [str]}
         '''
         
-        if type(species_list) != list:
+        if species_list is None:
+            species_list = self.species_list
+        elif type(species_list) != list:
             species_list = [species_list]
             
         for species, template in self.cur_templates.items():
             # Skip any unwanted species:
             if species_list is not None and species not in species_list:
                 continue
+            self.log.info(f"Calibrating template {species}...")
             self._calibrate_one_template(species, template)
+            self.log.info(f"Done calibrating template {species}.")
+        self.log.info(f"Saving calibrated templates to key 'templates_calibrated' in {self.experiment.root}")
+        self.experiment.save('templates_calibrated', self.cur_templates)
             
     #------------------------------------
     # _calibrate_one_template
     #-------------------
     
     def _calibrate_one_template(self, species, template):
+        '''
+        Runs calibration for one species, and updates
+        each member's signatures' prominence_threshold.
+        Updates are done in place. Returns the template.
+    
+        :param species: species whose template is being
+            calibrated
+        :type species: str
+        :param template: template whose signatures are
+            to be calibrated
+        :type template: SpectralTemplate
+        :return: modified template
+        :rtype: SpectralTemplate
+        '''
 
         samples_sound_file = self.cal_files[species]['sound']
         sel_tbl_file = self.cal_files[species]['sel_tbl']
@@ -461,6 +483,7 @@ class QuadSigCalibrator(JsonDumpableMixin):
         evaluator = PowerEvaluator(self.experiment,
                                    species,
                                    Action.ANALYSIS if pwr_res_info is None else Action.NOOP,
+                                   templates_info=template,
                                    power_result_info=pwr_res_info,
                                    test_recording=samples_sound_file,
                                    test_sel_tbl=sel_tbl_file
@@ -523,12 +546,12 @@ class QuadSigCalibrator(JsonDumpableMixin):
                 
             # Loop for next sig
 
-        for sig in template.signatures:
-            if sig.usable:
-                print(f"prom {sig.sig_id}: {sig.prominence_threshold}; prec: {sig.precision}; rec: {sig.recall}")
-            else:
-                print(f"prom {sig.sig_id}: not usable") 
-        print('foo')
+        # for sig in template.signatures:
+        #     if sig.usable:
+        #         print(f"prom {sig.sig_id}: {sig.prominence_threshold}; prec: {sig.precision}; rec: {sig.recall}")
+        #     else:
+        #         print(f"prom {sig.sig_id}: not usable") 
+        return template
 
     #------------------------------------
     # _try_prominence
@@ -575,62 +598,6 @@ class QuadSigCalibrator(JsonDumpableMixin):
 
 
     # ---------------------- Utilities ---------------
-    
-    #------------------------------------
-    # json_dump
-    #-------------------
-    
-    def json_dump(self, fname):
-        '''
-        Given that self.cur_templates is a dict of 
-        SpectralTemplate values like:
-            {'CMTOG' : template_cmtog,
-             'OtherSpec' : template_other_spec
-             },
-             
-        ensure that all values are individually turned 
-        into json, and then write the entire dict to fname 
-        as a json file.
-        
-        :param sigs: nested dict of signatures
-        :type sigs: {str : {str : ANY}}
-        :param fname: destination path
-        :type fname: str
-        '''
-        with open(fname, 'w') as fd:
-            json.dump({key : val.json_dumps() for key,val in self.cur_templates.items()}, fd)
-
-    #------------------------------------
-    # json_load 
-    #-------------------
-    
-    @classmethod
-    def json_load(cls, fname):
-        '''
-        Reconstruct a dict of templates from
-        the given json file. All SpectralTemplate
-        instances will be reconstructed.
-        The result will look like:
-        
-            {'CMTOG' : template_cmtog,
-             'OtherSpec' : template_other_spec
-             }
-        
-        :param fname: json file to load
-        :type fname: str
-        :return dict of SpectralTemplate
-        :rtype {str : SpectralTemplate}
-        '''
-        
-        with open(fname, 'r') as fd:
-            dict_of_templates = json.load(fd)
-        
-        new_dict = {species : SpectralTemplate.json_loads(jstr)
-                    for species, jstr
-                    in dict_of_templates.items()
-                    }
-
-        return new_dict
 
     #------------------------------------
     # safe_eval
@@ -710,8 +677,10 @@ if __name__ == '__main__':
                                    cal_outdir=args.outdir,
                                    experiment=args.experiment
                                    )
-    #********
-    #calibrator.make_species_templates()
-    calibrator.cur_templates = calibrator.experiment.read('templates', QuadSigCalibrator)
-    #********
-    calibrator.calibrate_templates('BANAS')
+
+    try:
+        calibrator.cur_templates = calibrator.experiment.read('templates', TemplateCollection)
+    except FileNotFoundError:
+        print(f"No templates exist in experiment yet; creating them...")
+        calibrator.make_species_templates()
+    calibrator.calibrate_templates()
