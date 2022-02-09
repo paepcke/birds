@@ -44,7 +44,8 @@ setup(
                         'skorch>=0.10.0',
                         'ml-experiment-manager>=0.1.13',
                         'mplcursors>=0.5',
-                        'tabulate>=0.8.9',
+                        #'tabulate>=0.8.9',
+                        'texttable>=1.6.4',
                         #'mtspec>=0.3.2',
                         ],
 

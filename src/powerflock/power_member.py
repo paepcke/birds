@@ -370,15 +370,16 @@ class PowerMember:
                                             )
         for sig_id in sig_ids:
             sig = self.spectral_template.get_sig(sig_id)
-            try:
-                if not sig.usable:
-                    continue
-                prominence_threshold = sig.prominence_threshold
-            except AttributeError:
-                # Not a calibrated sig:
-                self.log.warn(f"Sig {sig_id} is not calibrated; using {self.DEFAULT_PROMINENCE_THRES}")
-                prominence_threshold = self.DEFAULT_PROMINENCE_THRES
-
+            if prominence_threshold is None:
+                try:
+                    if not sig.usable:
+                        continue
+                    prominence_threshold = sig.prominence_threshold
+                except AttributeError:
+                    # Not a calibrated sig:
+                    self.log.warn(f"Sig {sig_id} is not calibrated; using {self.DEFAULT_PROMINENCE_THRES}")
+                    prominence_threshold = self.DEFAULT_PROMINENCE_THRES
+            
             probs = all_sig_probs[all_sig_probs.sig_id == sig_id].match_prob
             peak_indices, properties = scipy.signal.find_peaks(probs,
                                                                prominence=prominence_threshold)
