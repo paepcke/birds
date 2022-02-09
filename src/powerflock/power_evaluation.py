@@ -577,8 +577,6 @@ class PowerEvaluator:
 
         if probability_thresholds is None:
             probability_thresholds = [self.DEFAULT_PROBABILITY_THRESHOLD]
-        if prominence_thresholds is None:
-            prominence_thresholds = [self.DEFAULT_PROMINENCE_THRESHOLD]
 
         res_df = pd.DataFrame()
         for threshold in probability_thresholds:
@@ -605,6 +603,8 @@ class PowerEvaluator:
         # predicting every time frame:
 
         call_scores = []
+        if prominence_thresholds is None:
+            prominence_thresholds = [None]
         for prominence_threshold in prominence_thresholds:
             peaks = pwr_member.find_calls(pwr_res, prominence_threshold=prominence_threshold)
             score = pwr_member.score_call_level(peaks, self.test_sel_tbl)
