@@ -257,6 +257,7 @@ class PowerEvaluator:
                                     probability_thresholds=probability_thresholds
                                     )
                 self.log.info("Done running action 'score'.")
+                print(scores['call_level'].astype(float).round(2).to_string())
                 
             elif action == Action.VIZ_PROBS:
                 ax = self.viz_probs(self.power_member,
@@ -576,10 +577,12 @@ class PowerEvaluator:
             pwr_res.add_truth(sel_tbl)
 
         if probability_thresholds is None:
-            probability_thresholds = [self.DEFAULT_PROBABILITY_THRESHOLD]
+            prob_thresholds_to_try = [self.DEFAULT_PROBABILITY_THRESHOLD]
+        else:
+            prob_thresholds_to_try = probability_thresholds
 
         res_df = pd.DataFrame()
-        for threshold in probability_thresholds:
+        for threshold in prob_thresholds_to_try:
             for sig_id in pwr_res.sig_ids():
                 quantile_evaluator = PowerQuantileClassifier(sig_id=sig_id, 
                                                              threshold_quantile=threshold)
@@ -605,12 +608,19 @@ class PowerEvaluator:
         call_scores = []
         if prominence_thresholds is None:
             prominence_thresholds = [None]
+        if probability_thresholds is None:
+            probability_thresholds = [None]
         for prominence_threshold in prominence_thresholds:
-            peaks = pwr_member.find_calls(pwr_res, prominence_threshold=prominence_threshold)
-            score = pwr_member.score_call_level(peaks, self.test_sel_tbl)
-            score['prom_thres'] = prominence_threshold
-            score.name = f"prominence_thres_{prominence_threshold}"
-            call_scores.append(score)
+            for probability_threshold in probability_thresholds:
+                peaks, _peak_times_by_sig_id = pwr_member.find_calls(pwr_res,
+                                                                     probability_threshold=probability_threshold,
+                                                                     prominence_threshold=prominence_threshold,
+                                                                     )
+                score = pwr_member.score_call_level(peaks, self.test_sel_tbl)
+                score['prom_thres'] = prominence_threshold
+                score['prob_thres'] = probability_threshold
+                score.name = f"prominence_thres_{prominence_threshold}"
+                call_scores.append(score)
 
         # Get like:
         #                        bal_acc       acc  ...      f0.5  prom_thres

@@ -76,6 +76,9 @@ class PowerMember:
     DEFAULT_PROMINENCE_THRES = 0.4
     '''Minimum cutoff for call to find_peaks(); higher is more discriminative'''
     
+    DEFAULT_PROBABILITY_THRESHOLD = 0.6
+    '''Minumum probability at which a peak is accepted'''
+    
     #------------------------------------
     # Constructor
     #-------------------
@@ -303,7 +306,10 @@ class PowerMember:
     # find_calls
     #-------------------
     
-    def find_calls(self, pwr_res, prominence_threshold=None):
+    def find_calls(self, 
+                   pwr_res,
+                   probability_threshold=None, 
+                   prominence_threshold=None):
         '''
         Given a PowerResult computed by compute_probabilities()
         across an entire recording, mark an estimate of the center 
@@ -361,7 +367,7 @@ class PowerMember:
         
         prob_peaks_by_sig_list = []
         # For the result df showing the times of discovered
-        # peaks as a boolean matrix:
+        # peaks as a boolean matrix: n_timeframes x n_sigs:
         nrows = len(all_sig_probs)
         ncols = len(sig_ids)
         peak_times_by_sig_id = pd.DataFrame(np.array([False]*nrows*ncols).reshape(nrows, ncols),
@@ -375,10 +381,12 @@ class PowerMember:
                     if not sig.usable:
                         continue
                     prominence_threshold = sig.prominence_threshold
+                    probability_threshold = sig.mean_probability
                 except AttributeError:
                     # Not a calibrated sig:
                     self.log.warn(f"Sig {sig_id} is not calibrated; using {self.DEFAULT_PROMINENCE_THRES}")
-                    prominence_threshold = self.DEFAULT_PROMINENCE_THRES
+                    prominence_threshold  = self.DEFAULT_PROMINENCE_THRES
+                    probability_threshold = self.DEFAULT_PROBABILITY_THRESHOLD  
             
             probs = all_sig_probs[all_sig_probs.sig_id == sig_id].match_prob
             peak_indices, properties = scipy.signal.find_peaks(probs,
@@ -386,57 +394,29 @@ class PowerMember:
             peak_probs = properties['prominences']
             # Time when a peak occurred:
             times = probs.index[peak_indices]
-            # Mark as True the times where peaks were found
-            # in the column for this sig_id:
-            peak_times_by_sig_id.loc[peak_times_by_sig_id.index[peak_indices], sig_id] = True
-            prob_peaks = pd.Series(peak_probs, index=times, name=sig_id)
-            prob_peaks_by_sig_list.append(prob_peaks)
-        
-        # Get a df with rows for each time when a probability
-        # peak occurs. Each column is either a peak probability,
-        # or NaN if no peak occurred at the row's time. Like this,
-        # for 17 signatures:
-        #
-        #               1.0       2.0       3.0   ...      15.0      16.0      17.0
-        # time                                    ...                              
-        # 2.095601   0.41611       NaN       NaN  ...       NaN       NaN       NaN
-        # 5.183855       NaN  0.415394       NaN  ...       NaN       NaN       NaN
-        # 7.024036       NaN       NaN  0.371405  ...       NaN       NaN       NaN
-        #             ... 
-        peaks_by_time_all_sigs = pd.concat(prob_peaks_by_sig_list, axis=1)
-        
-        # For each timeframe that has a peak in
-        # at least one sig, get the max among the
-        # sigs, and the sig that provided the max. 
-        # That gives a series without nan vals:
-        #
-        # t0   prob1  sig3
-        # t1   prob2  sig6
-        #    ...
-        
-        col_idxs_with_max_prob = np.nanargmax(peaks_by_time_all_sigs, axis=1)
-        # Get col names from the idxs into columns:
-        sig_ids_with_max_prob = sig_ids[col_idxs_with_max_prob]
-        sig_ids_with_max_prob.index = peaks_by_time_all_sigs.index
-        
-        # Now twist and turn, following the ridiculously 
-        # complex recipe at https://pandas.pydata.org/docs/user_guide/indexing.html#indexing-lookup
-        # "Looking up values by index/column labels":
-        # Add the name of the column to select in a row
-        # to each row, arriving e.g. at:
-        #               1.0       2.0       3.0    'sig_pick'
-        # time                                  
-        # 2.095601   0.41611       NaN       NaN     1.0
-        # 5.183855       NaN  0.415394       NaN     2.0
-        # 7.024036   0.51234  0.371405       0.1     1.0
-        peaks_by_time_all_sigs['sig_pick'] = sig_ids_with_max_prob
 
-        # The 'magic': get:
-        #   idx: [0,1,0], and cols: Index([1.0, 2.0]):
-        idx, cols = pd.factorize(peaks_by_time_all_sigs['sig_pick'])
-        # Get just the max values: array([0.41611, 0.415394, 0.51234]):
-        peak_sigs_np = peaks_by_time_all_sigs.reindex(cols, axis=1)\
-                        .to_numpy()[np.arange(len(peaks_by_time_all_sigs)), idx]
+            # Remove peaks whose probability is below
+            # the prob threshold: produce list of tuples
+            # with time and prob for which prob is greater
+            # than threshold:
+            #   [(sig_id, good_time1, good_prob1), (sig_id, good_time2, good_prob2), ...]  
+            
+            for time, prob in zip(times, peak_probs):
+                if prob < probability_threshold:
+                    continue
+                else:
+                    prob_peaks_by_sig_list.append((time, sig_id, prob))
+
+        # Get a df with rows for each time when a probability
+        # peak occurs.
+        #   0  time1, sid1, prob1
+        #   1  time2, sid1, prob2
+        #   2  time1, sid2, prob3
+        #       ...
+        
+        prob_peaks_by_sig_df = pd.DataFrame(prob_peaks_by_sig_list, 
+                                            columns=['time', 'sig_id', 'match_prob'])
+        
         # Create df with maximum prob of peaks, and the IDs
         # of the sigs that contributed that max in each case,
         # like 
@@ -445,12 +425,8 @@ class PowerMember:
         #     t12       0.3125        2
         #     t22            ...
 
-        peak_sig_col = pd.Series(peak_sigs_np, 
-                                 index=peaks_by_time_all_sigs.index,
-                                 name='peak_prob')
-        peaks = pd.concat([peak_sig_col, peaks_by_time_all_sigs['sig_pick']], axis=1)
-        peaks.columns = ['peak_prob', 'sig_id']
-        
+        peaks = prob_peaks_by_sig_df.groupby('time').max()
+
         # Add estimated width of the call simply
         # based on the width of the 'winning' sig:
         
