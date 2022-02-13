@@ -5,7 +5,6 @@ Created on Dec 20, 2021
 @author: paepcke
 '''
 import argparse
-import json
 import os
 from pathlib import Path
 import re
@@ -520,7 +519,7 @@ class QuadSigCalibrator(JsonDumpableMixin):
             hi_prom = 1.
             while hi_prom - lo_prom > 0.001:
                 mid_prom = lo_prom + (hi_prom - lo_prom) / 2.0
-                precision, true_positives = self._try_prominence(
+                precision, true_positives, mean_prob = self._try_prominence(
                             mid_prom,
                             pwr_res, 
                             pwr_member, 
@@ -541,6 +540,7 @@ class QuadSigCalibrator(JsonDumpableMixin):
             else:
                 sig.usable = True
                 sig.prominence_threshold = hi_prom
+                sig.mean_probability = mean_prob
                 sig.recall    = true_positives / num_true_vocalizations
                 sig.precision = precision
                 
@@ -564,14 +564,47 @@ class QuadSigCalibrator(JsonDumpableMixin):
                         sig_id,
                         sig_time_interval, 
                         true_vocalization_intervals):
+        '''
+        Compute how well peaks are found with the given
+        prominence threshold value for the given signature.
+        
+        Returns:
+           o The precision
+           o Number of true positives
+           o The mean of probabilities at which
+             calls were found
+        Returns (-1, None, None) if no peak was found by the
+        given signature for the given prominence level.
+        
+        :param prominence: minimum prominence of wave peak
+            to be considered a true peak
+        :type prominence: float
+        :param pwr_res: a PowerResult containing the relevant
+            prob_df of probabilities
+        :type pwr_res: PowerResult
+        :param pwr_member: PowerMember to use for calculations
+        :type pwr_member: PowerMember
+        :param sig_id: the ID of the signature for which prominence
+            is to be tested
+        :type sig_id: Any
+        :param sig_time_interval: the time interval in which the given
+            signature's call occurred
+        :type sig_time_interval: Interval
+        :param true_vocalization_intervals: list of bona fide time intervals
+            in which any call occurred.
+        :type true_vocalization_intervals: [Interval]
+        :return: (precision, number of true positives, and mean probability
+            at which given signature's call was detected.
+        :rtype: [float, {None | int}, {None | float} 
+        '''
     
-        _consensus_peaks, sig_peak_times = \
+        consensus_peaks, sig_peak_times = \
            pwr_member.find_calls(pwr_res,prominence_threshold=prominence)
     
         peak_times_this_sig = sig_peak_times[sig_id][sig_peak_times[sig_id]]
         if sig_peak_times[sig_id].sum().sum() == 0:
             # No peaks found at all
-            return -1, None
+            return -1, None, None
     
         # Were any of the peaks for *this* sig? (That's
         # what we are looking for):
@@ -584,7 +617,7 @@ class QuadSigCalibrator(JsonDumpableMixin):
             # Found some peaks, but not the one
             # for this sig; need to lower prominence
             # threshold:
-            return -1, None
+            return -1, None, None
     
         # Found peak for this sig; compute precision:
         tps = 0
@@ -594,7 +627,10 @@ class QuadSigCalibrator(JsonDumpableMixin):
                     tps += 1
     
         precision = tps / len(peak_times_this_sig)
-        return precision, tps
+        # Mean of the probabilities for peak found
+        # at given prominence:
+        mean_prob = consensus_peaks[consensus_peaks['sig_id']==1.0].match_prob.mean()
+        return precision, tps, mean_prob 
 
 
     # ---------------------- Utilities ---------------
