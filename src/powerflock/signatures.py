@@ -899,6 +899,8 @@ class Signature(JsonDumpableMixin):
             recovery_dict['usable'] = self.usable
         if hasattr(self, 'prominence_threshold'):
             recovery_dict['prominence_threshold'] = self.prominence_threshold
+        if hasattr(self, 'mean_probability'):
+            recovery_dict['mean_probability'] = self.mean_probability
             
         return json.dumps(recovery_dict)
 
@@ -971,6 +973,7 @@ class Signature(JsonDumpableMixin):
         try:
             sig_instance.usable = jdict['usable']
             sig_instance.prominence_threshold = jdict['prominence_threshold']
+            sig_instance.mean_probability = jdict['mean_probability']
         except KeyError:
             # No, it wasn't; fine:
             pass
