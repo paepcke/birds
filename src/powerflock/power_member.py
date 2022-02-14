@@ -1084,10 +1084,10 @@ class PowerResult(JsonDumpableMixin):
         self.normed_sigs = None
 
     #------------------------------------
-    # normed_probs
+    # normalize_probs
     #-------------------
     
-    def normed_probs(self, probs):
+    def normalize_probs(self, probs):
         '''
         Takes a series of probabilities. Returns
         a new Series with the same index, but values
