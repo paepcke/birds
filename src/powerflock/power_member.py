@@ -1065,9 +1065,8 @@ class PowerResult(JsonDumpableMixin):
         # values in the match_prob col with normalized and
         # smoothed values:
         normed_probs = self.normalize_probs(prob_df['match_prob'])
-        new_prob_df  = prob_df.assign({'raw_prob'  : prob_df['match_prob'],
-                                       'match_prob': normed_probs
-                                       })
+        new_prob_df  = prob_df.assign(raw_probs=prob_df['match_prob'],
+                                      match_prob=normed_probs)
 
         # Add start, end, and middle wallclock times to the df:
         new_prob_df['start_time'] = SignalAnalyzer.hop_length  * new_prob_df.start_idx / sr
