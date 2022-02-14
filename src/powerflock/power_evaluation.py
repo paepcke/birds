@@ -132,9 +132,9 @@ class PowerEvaluator:
         the power_result_info is left at None, b/c that action generates
         the instance in the first place. Options:
         
-           o 'latest': the latest PowerResult by date of its key is
-             retrieved from the experiment, if available. Else, the
-             value is set to None.
+           o 'latest': the latest PowerResult by date and species name
+             encoded in its key is retrieved from the experiment, if 
+             available. Else, the value is set to None.
            o A key (string) to use for extracting the PowerResult from
              the experiment. Keys are created by the analysis. The strings
              begin with 'PwrRes', followed by the date, and the species:
@@ -212,7 +212,7 @@ class PowerEvaluator:
         # that PowerResult instance:
         if power_result_info == 'latest':
             # See whether the experiment has PowerResult instances:
-            pwr_res = self._latest_power_result(self.experiment)
+            pwr_res = self._latest_power_result(self.experiment, species)
             if pwr_res is not None:
                 self.log.info(f"Using PowerResult {repr(pwr_res)} ({pwr_res.name})")
         elif power_result_info is not None:
@@ -612,10 +612,10 @@ class PowerEvaluator:
             probability_thresholds = [None]
         for prominence_threshold in prominence_thresholds:
             for probability_threshold in probability_thresholds:
-                peaks, _peak_times_by_sig_id = pwr_member.find_calls(pwr_res,
-                                                                     probability_threshold=probability_threshold,
-                                                                     prominence_threshold=prominence_threshold,
-                                                                     )
+                peaks = pwr_member.find_calls(pwr_res,
+                                              probability_threshold=probability_threshold,
+                                              prominence_threshold=prominence_threshold,
+                                              )
                 score = pwr_member.score_call_level(peaks, self.test_sel_tbl)
                 score['prom_thres'] = prominence_threshold
                 score['prob_thres'] = probability_threshold
@@ -888,14 +888,24 @@ class PowerEvaluator:
     # _latest_power_result
     #-------------------
     
-    def _latest_power_result(self, exp):
+    def _latest_power_result(self, exp, species=None):
         '''
         Given an experiment check whether it contains
         PowerResult instances. If so, return the newest
-        instance.
+        instance. If species is provided, the file name
+        is checked for the presence of the species name.
+        Example file names:
+
+          PwrRes_2022-02-07T14_57_59_species_BANAS.json
+          
+        if species is None, the latest PowerResult is returned,
+        no matter the species.
         
         :param exp: experiment to check
         :type exp: ExperimentManager
+        :param species: if provided, species for which power
+            result was computed
+        :type species: {None | str}
         :return: newest power result or None if none available
         :rtype {None | PowerResult}
         '''
@@ -904,8 +914,14 @@ class PowerEvaluator:
         time_files = {}
         jfiles = exp.listdir(PowerResult)
         for jfile in jfiles:
+            if species is not None:
+                # Ignore any files that don't have the species
+                # name in lower or upper case:
+                if jfile.find(species.upper()) == -1 and jfile.find(species.lower()) == -1:
+                    continue
             # Jfile names are like PwrRes_2022-01-02T11_45_07.json
-            # Get the parts:
+            # with some additions. Get the parts to get
+            # the date portion:
             fparts = FileUtils.parse_filename(jfile)
             try:
                 if fparts['prefix'] != 'PwrRes':

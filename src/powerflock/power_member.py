@@ -357,6 +357,7 @@ class PowerMember:
         # will make changes to the probabilities:
         all_sig_probs = prob_df[['sig_id', 'match_prob']].copy()
         all_probs = all_sig_probs.match_prob
+        # Smooth probs a bit:
         probs_filtered = np.abs(pd.Series(scipy.signal.savgol_filter(all_probs, 
                                                                      window_length=51, 
                                                                      polyorder=11), 
@@ -366,14 +367,6 @@ class PowerMember:
         all_sig_probs['match_prob'] = probs_normed
         
         prob_peaks_by_sig_list = []
-        # For the result df showing the times of discovered
-        # peaks as a boolean matrix: n_timeframes x n_sigs:
-        nrows = len(all_sig_probs)
-        ncols = len(sig_ids)
-        peak_times_by_sig_id = pd.DataFrame(np.array([False]*nrows*ncols).reshape(nrows, ncols),
-                                            index=pd.core.indexes.numeric.NumericIndex(all_sig_probs.index.values),
-                                            columns=sig_ids
-                                            )
         for sig_id in sig_ids:
             sig = self.spectral_template.get_sig(sig_id)
             if prominence_threshold is None:
@@ -381,13 +374,18 @@ class PowerMember:
                     if not sig.usable:
                         continue
                     prominence_threshold = sig.prominence_threshold
-                    probability_threshold = sig.mean_probability
                 except AttributeError:
                     # Not a calibrated sig:
-                    self.log.warn(f"Sig {sig_id} is not calibrated; using {self.DEFAULT_PROMINENCE_THRES}")
-                    prominence_threshold  = self.DEFAULT_PROMINENCE_THRES
-                    probability_threshold = self.DEFAULT_PROBABILITY_THRESHOLD  
-            
+                    self.log.warn(f"Sig {sig_id} is not calibrated; no minimum prominence enforced")
+                    prominence_threshold  = 0.0
+
+            if probability_threshold is None:
+                try:
+                    probability_threshold = sig.mean_probability
+                except AttributeError:
+                    self.log.warn(f"Sig {sig_id} is not calibrated; no minimum probability enforced")
+                    probability_threshold = 0.0 
+
             probs = all_sig_probs[all_sig_probs.sig_id == sig_id].match_prob
             peak_indices, properties = scipy.signal.find_peaks(probs,
                                                                prominence=prominence_threshold)
@@ -426,6 +424,10 @@ class PowerMember:
         #     t22            ...
 
         peaks = prob_peaks_by_sig_df.groupby('time').max()
+        if len(peaks) == 0:
+            # At given probability and prominence
+            # thresholds no peak is found:
+            return peaks
 
         # Add estimated width of the call simply
         # based on the width of the 'winning' sig:
@@ -449,8 +451,8 @@ class PowerMember:
         # Add a column that repeats the prominence_threshold
         # for each row; redundant, but easy:
         peaks['prominence_threshold'] = [prominence_threshold]*len(peaks)
-        return peaks, peak_times_by_sig_id
-
+        return peaks
+    
     #------------------------------------
     # score_call_level
     #-------------------
@@ -611,6 +613,16 @@ class CallLevelScorer:
     
     def score(self):
         
+        # If no peaks at all: results are all zero:
+        if len(self.peaks) == 0:
+            return pd.Series({
+            'bal_acc'    : 0.0,
+            'acc'        : 0.0,
+            'recall'     : 0.0,
+            'precision'  : 0.0,
+            'f1'         : 0.0,
+            'f0.5'       : 0.0
+            }, name='score')
         # Pick out the true call Interval instances
         # from the selection table:
         true_time_intervals = self.sel_tbl.species_times(self.species) 

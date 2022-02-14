@@ -14,6 +14,7 @@ import sys
 from experiment_manager.experiment_manager import JsonDumpableMixin, \
     ExperimentManager
 from logging_service import LoggingService
+import sklearn
 
 from data_augmentation.utils import Utils, Interval, RavenSelectionTable
 import numpy as np
@@ -512,13 +513,22 @@ class QuadSigCalibrator(JsonDumpableMixin):
             # was created:
             sig_time_interval = sel_tbl.entries[sig_idx].time_interval
             
+            # Place to remember the probability threshold
+            # that will be associated with this signature.
+            # Will be updated as we inch towards tipping point
+            # where lowering prominence will lead to precision
+            # dropping from 1.0:
+            recent_prob_thres = None
+            
             # Go through progressive prominences till we find
             # the first that finds this signature's peak, while 
             # still just maintaining a precision of 1.0
             lo_prom = 0.
             hi_prom = 1.
+            mean_prob = None
             while hi_prom - lo_prom > 0.001:
                 mid_prom = lo_prom + (hi_prom - lo_prom) / 2.0
+                recent_prob_thres = mean_prob
                 precision, true_positives, mean_prob = self._try_prominence(
                             mid_prom,
                             pwr_res, 
@@ -526,10 +536,13 @@ class QuadSigCalibrator(JsonDumpableMixin):
                             sig_id,
                             sig_time_interval, 
                             true_vocalization_intervals)
+
                 if precision in [-1, 1]:
                     # Did not find the peak at all,
-                    # or precision was 
+                    # or precision was 1.0
                     # Need to lower the prominence
+                    # to find tipping point where precision
+                    # drops from 1.0:
                     hi_prom = mid_prom
                 else:
                     # Precision was less than 1, need
@@ -540,7 +553,7 @@ class QuadSigCalibrator(JsonDumpableMixin):
             else:
                 sig.usable = True
                 sig.prominence_threshold = hi_prom
-                sig.mean_probability = mean_prob
+                sig.mean_probability = recent_prob_thres if recent_prob_thres is not None else mean_prob
                 sig.recall    = true_positives / num_true_vocalizations
                 sig.precision = precision
                 
@@ -598,11 +611,19 @@ class QuadSigCalibrator(JsonDumpableMixin):
         :rtype: [float, {None | int}, {None | float} 
         '''
     
-        consensus_peaks, sig_peak_times = \
-           pwr_member.find_calls(pwr_res,prominence_threshold=prominence)
+        # Get mean of probs so we can do mean normalization
+        # on the found peaks:
+        all_probs = pwr_res.prob_df.match_prob
+        all_probs_normed = pd.Series(sklearn.preprocessing.minmax_scale(all_probs), 
+                                                      index=all_probs.index)
+        all_probs_normed_mean = all_probs_normed.mean()
+        
+        # Find the peaks using the given prominence
+        # and no theshold on resulting probability:
+        consensus_peaks = pwr_member.find_calls(pwr_res,prominence_threshold=prominence)
     
-        peak_times_this_sig = sig_peak_times[sig_id][sig_peak_times[sig_id]]
-        if sig_peak_times[sig_id].sum().sum() == 0:
+        peak_times_this_sig = consensus_peaks[consensus_peaks['sig_id'] == sig_id]
+        if len(consensus_peaks) == 0:
             # No peaks found at all
             return -1, None, None
     
@@ -629,7 +650,8 @@ class QuadSigCalibrator(JsonDumpableMixin):
         precision = tps / len(peak_times_this_sig)
         # Mean of the probabilities for peak found
         # at given prominence:
-        mean_prob = consensus_peaks[consensus_peaks['sig_id']==1.0].match_prob.mean()
+        mean_prob_peaks = consensus_peaks[consensus_peaks['sig_id']==sig_id].match_prob.mean()
+        mean_prob = mean_prob_peaks - all_probs_normed_mean
         return precision, tps, mean_prob 
 
 

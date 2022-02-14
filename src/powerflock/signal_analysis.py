@@ -1363,7 +1363,7 @@ class SignalAnalyzer:
         sig_id = sig.sig_id
         _num_freqs, num_frames = power_df.shape
         
-        cls.log.info(f"Matching against sig-{sig_id}")
+        cls.log.info(f"Matching against {sig.species} sig-{sig_id}")
         passband = sig.bandpass_filter
         if passband is not None:
             cls.log.info(f"Applying bandpass [{passband['low_val']},{passband['high_val']}]")
@@ -1388,7 +1388,7 @@ class SignalAnalyzer:
             # Time for sign of life? Do that about every 10% done: 
             perc_done = 100*start_idx/last_idx
             if perc_done > percentage_reported + 10:
-                cls.log.info(f"... done {int(perc_done)}% of sig-{sig_id}")
+                cls.log.info(f"... done {int(perc_done)}% of {sig.species} sig-{sig_id}")
                 percentage_reported = perc_done
 
             try:
@@ -1413,7 +1413,7 @@ class SignalAnalyzer:
                 # Process next signature
                 break
         res_df = pd.DataFrame(result_series_list)
-        cls.log.info(f"Done matching snippets against signature {sig_id}")
+        cls.log.info(f"Done matching snippets against signature {sig.species} {sig_id}")
 
         return res_df
 
