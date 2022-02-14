@@ -378,7 +378,7 @@ class SpectralTemplate(JsonDumpableMixin):
         :type sig_id: Any
         :return: the requested signature
         :rtype: Signature
-        :raise IndexError if no signature of given name is found
+        :raise KeyError if no signature of given name is found
         '''
         try:
             return self.sig_dict[sig_id]
@@ -899,8 +899,8 @@ class Signature(JsonDumpableMixin):
             recovery_dict['usable'] = self.usable
         if hasattr(self, 'prominence_threshold'):
             recovery_dict['prominence_threshold'] = self.prominence_threshold
-        if hasattr(self, 'mean_probability'):
-            recovery_dict['mean_probability'] = self.mean_probability
+        if hasattr(self, 'prob_threshold'):
+            recovery_dict['prob_threshold'] = self.prob_threshold
             
         return json.dumps(recovery_dict)
 
@@ -973,7 +973,7 @@ class Signature(JsonDumpableMixin):
         try:
             sig_instance.usable = jdict['usable']
             sig_instance.prominence_threshold = jdict['prominence_threshold']
-            sig_instance.mean_probability = jdict['mean_probability']
+            sig_instance.prob_threshold = jdict['prob_threshold']
         except KeyError:
             # No, it wasn't; fine:
             pass
