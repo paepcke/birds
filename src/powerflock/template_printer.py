@@ -60,10 +60,11 @@ class TemplatePrinter:
         print(f"\tRecording:\t{templ.recording_fname}")
         
         tab = texttable.Texttable()
-        headings = ['sig_id', 'usable','duration']
+        headings = ['sig_id', 'usable', 'mean_probability', 'duration']
         tab.header(headings)
         ids       = [sig.sig_id for sig in templ.signatures]
         usability = []
+        mean_probability = []
         durations = []
         for sig in templ.signatures:
             try:
@@ -71,9 +72,14 @@ class TemplatePrinter:
             except AttributeError:
                 usable = 'n/a'
             usability.append(usable)
+            try:
+                mean_prob = sig.mean_probability
+            except AttributeError:
+                mean_prob = 'n/a'
+            mean_probability.append(mean_prob if type(mean_prob) == str else round(mean_prob,4))
             durations.append(f"{round(sig.duration(), 1)}sec")
         
-        for row in zip(ids, usability, durations):
+        for row in zip(ids, usability, mean_probability, durations):
             tab.add_row(row)
         
         s = tab.draw()
