@@ -352,19 +352,9 @@ class PowerMember:
         
         prob_df = pwr_res.prob_df
         
-        # Pull out a copy of sig id and their match probabilities
-        # Need to copy, because filtering and normalizing
-        # will make changes to the probabilities:
-        all_sig_probs = prob_df[['sig_id', 'match_prob']].copy()
-        all_probs = all_sig_probs.match_prob
-        # Smooth probs a bit:
-        probs_filtered = np.abs(pd.Series(scipy.signal.savgol_filter(all_probs, 
-                                                                     window_length=51, 
-                                                                     polyorder=11), 
-                                          index=all_probs.index))
-        probs_normed = pd.Series(sklearn.preprocessing.minmax_scale(probs_filtered), 
-                                 index=probs_filtered.index)
-        all_sig_probs['match_prob'] = probs_normed
+        # Pull out sig id and their smoothed and normalized
+        # match probabilities:
+        all_sig_probs = prob_df[['sig_id', 'match_prob']]
         
         prob_peaks_by_sig_list = []
         for sig_id in sig_ids:
@@ -381,7 +371,7 @@ class PowerMember:
 
             if probability_threshold is None:
                 try:
-                    probability_threshold = sig.mean_probability
+                    probability_threshold = sig.prob_threshold
                 except AttributeError:
                     self.log.warn(f"Sig {sig_id} is not calibrated; no minimum probability enforced")
                     probability_threshold = 0.0 
@@ -514,6 +504,22 @@ class PowerMember:
                 ))
         fig.show()
         return pred_displays
+
+    #------------------------------------
+    # get_sig
+    #-------------------
+    
+    def get_sig(self, sig_id):
+        '''
+        Return a signature instance, given a sig_id.
+        Return None if no matching sig exists.
+        
+        :param sig_id: ID of signature instance to find
+        :type sig_id: Any
+        :return Signature
+        :raise KeyError if signature of given sig_id is unknown
+        '''
+        return self.spectral_template.get_sig(sig_id)
 
     #------------------------------------
     # power_result
@@ -1027,15 +1033,11 @@ class PowerResult(JsonDumpableMixin):
             6        100.0         0.65     3.0    0.0  1    00.0
             7        100.0         0.55     3.0  101.0  2    00.0
              
+        In the constructor, a new column is added: raw_prob, which will
+        contain the given match_prob. The values in match_prob are
+        replaced with slightly smoothed, and then min-max normed values.
+        Also added are start_time and stop_time columns.
 
-        Example summary_ser:
-        
-            min_prob        lowest probability among all matches
-            max_prob        highest probability among all matches
-            med_prob        the median of the probabilities among all matches
-            best_fit_prob   max probability among matches with the 
-                            longest signature
-                            
         The name argument allows assignment of a client
         determined name for the new instance. No attempt
         is made to verify uniqueness. The name can be set any
@@ -1059,15 +1061,52 @@ class PowerResult(JsonDumpableMixin):
             name = f"PwrRes_{FileUtils.file_timestamp()}"
         self.name = name
         
-        # Add start, end, and middle wallclock times to the df:
-        prob_df['start_time'] = SignalAnalyzer.hop_length  * prob_df.start_idx / sr
-        prob_df['stop_time']  = SignalAnalyzer.hop_length  * prob_df.stop_idx / sr
-        center_time = prob_df.start_time + (prob_df.stop_time - prob_df.start_time)/2. 
+        # Save match_prob col as 'raw_probs', and replace
+        # values in the match_prob col with normalized and
+        # smoothed values:
+        normed_probs = self.normalize_probs(prob_df['match_prob'])
+        new_prob_df  = prob_df.assign({'raw_prob'  : prob_df['match_prob'],
+                                       'match_prob': normed_probs
+                                       })
 
-        self.prob_df = prob_df
+        # Add start, end, and middle wallclock times to the df:
+        new_prob_df['start_time'] = SignalAnalyzer.hop_length  * new_prob_df.start_idx / sr
+        new_prob_df['stop_time']  = SignalAnalyzer.hop_length  * new_prob_df.stop_idx / sr
+        center_time = new_prob_df.start_time + (new_prob_df.stop_time - new_prob_df.start_time)/2. 
+
+        self.prob_df = new_prob_df
         self.prob_df.index = center_time
         self.prob_df.index.name = 'time'
         self.species  = species
+        
+        # Cache for normalized probabilities
+        # (see method normalized_sigs())
+        self.normed_sigs = None
+
+    #------------------------------------
+    # normed_probs
+    #-------------------
+    
+    def normed_probs(self, probs):
+        '''
+        Takes a series of probabilities. Returns
+        a new Series with the same index, but values
+        slightly smoothed, and then min-max normalized.
+        
+        :param probs: probabilities to smooth and normalize
+        :type probs: pd.Series
+        :return: new Series with normalized and smoothed values
+        :rtype: pd.Series
+        '''
+        
+        # Smooth probs a bit:
+        probs_filtered = np.abs(pd.Series(scipy.signal.savgol_filter(probs, 
+                                                                     window_length=51, 
+                                                                     polyorder=11), 
+                                          index=probs.index))
+        probs_normed = pd.Series(sklearn.preprocessing.minmax_scale(probs_filtered),
+                                                                    index=probs_filtered.index)
+        return probs_normed 
 
     #------------------------------------
     # knows_truth

@@ -778,7 +778,15 @@ class PowerEvaluator:
         for i, probs in enumerate(pwr_res):
             Charter.linechart(probs, ax=ax_probs, color_groups={'red' : ['match_prob']})
             sig_id = pwr_res.sig_ids()[i]
-            ax_probs.set_title(f"Signature {sig_id}", fontsize=self.AX_LBL_FONTSIZE - 2)
+            sig = power_member.get_sig(sig_id)
+            prob_thres = sig.prob_threshold
+            #*******************
+            power_member.find_calls(pwr_res)
+            #*******************
+            if type(prob_thres) == float:
+                prob_thres = round(prob_thres, 4)
+            ax_probs.set_title(f"Signature {sig_id}; prob_threshold: {prob_thres}", 
+                               fontsize=self.AX_LBL_FONTSIZE - 2)
             
             if save_figs:
                 fname  = f"{species}_sig{sig_id}_xparent.png"

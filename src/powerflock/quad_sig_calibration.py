@@ -525,11 +525,11 @@ class QuadSigCalibrator(JsonDumpableMixin):
             # still just maintaining a precision of 1.0
             lo_prom = 0.
             hi_prom = 1.
-            mean_prob = None
+            prob_thres = None
             while hi_prom - lo_prom > 0.001:
                 mid_prom = lo_prom + (hi_prom - lo_prom) / 2.0
-                recent_prob_thres = mean_prob
-                precision, true_positives, mean_prob = self._try_prominence(
+                recent_prob_thres = prob_thres
+                precision, true_positives, prob_thres = self._try_prominence(
                             mid_prom,
                             pwr_res, 
                             pwr_member, 
@@ -553,7 +553,7 @@ class QuadSigCalibrator(JsonDumpableMixin):
             else:
                 sig.usable = True
                 sig.prominence_threshold = hi_prom
-                sig.mean_probability = recent_prob_thres if recent_prob_thres is not None else mean_prob
+                sig.prob_threshold = recent_prob_thres if recent_prob_thres is not None else prob_thres
                 sig.recall    = true_positives / num_true_vocalizations
                 sig.precision = precision
                 
@@ -613,9 +613,7 @@ class QuadSigCalibrator(JsonDumpableMixin):
     
         # Get mean of probs so we can do mean normalization
         # on the found peaks:
-        all_probs = pwr_res.prob_df.match_prob
-        all_probs_normed = pd.Series(sklearn.preprocessing.minmax_scale(all_probs), 
-                                                      index=all_probs.index)
+        all_probs_normed = pwr_res.prob_df.match_prob
         all_probs_normed_mean = all_probs_normed.mean()
         
         # Find the peaks using the given prominence
@@ -653,7 +651,6 @@ class QuadSigCalibrator(JsonDumpableMixin):
         mean_prob_peaks = consensus_peaks[consensus_peaks['sig_id']==sig_id].match_prob.mean()
         mean_prob = mean_prob_peaks - all_probs_normed_mean
         return precision, tps, mean_prob 
-
 
     # ---------------------- Utilities ---------------
 
