@@ -1045,8 +1045,13 @@ class Signature(JsonDumpableMixin):
     #-------------------
     
     def __eq__(self, other):
+
+        # Number of attributes must match:
+        if set(self.__dict__.keys()) != set(other.__dict__.keys()):
+            return False 
         
-        # First check equality of corresponding scalars:
+        # First check equality of corresponding scalars that are
+        # guaranteed to be present:
         if [self.fname, self.sr,self.start_idx, self.end_idx, self.species,
             self.sig_id, self.audio, self.freq_span] != \
            [other.fname, other.sr,other.start_idx, other.end_idx, other.species,
