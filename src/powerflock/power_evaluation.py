@@ -780,9 +780,6 @@ class PowerEvaluator:
             sig_id = pwr_res.sig_ids()[i]
             sig = power_member.get_sig(sig_id)
             prob_thres = sig.prob_threshold
-            #*******************
-            power_member.find_calls(pwr_res)
-            #*******************
             if type(prob_thres) == float:
                 prob_thres = round(prob_thres, 4)
             ax_probs.set_title(f"Signature {sig_id}; prob_threshold: {prob_thres}", 

@@ -1061,11 +1061,11 @@ class PowerResult(JsonDumpableMixin):
             name = f"PwrRes_{FileUtils.file_timestamp()}"
         self.name = name
         
-        # Save match_prob col as 'raw_probs', and replace
+        # Save match_prob col as 'raw_prob', and replace
         # values in the match_prob col with normalized and
         # smoothed values:
         normed_probs = self.normalize_probs(prob_df['match_prob'])
-        new_prob_df  = prob_df.assign(raw_probs=prob_df['match_prob'],
+        new_prob_df  = prob_df.assign(raw_prob=prob_df['match_prob'],
                                       match_prob=normed_probs)
 
         # Add start, end, and middle wallclock times to the df:

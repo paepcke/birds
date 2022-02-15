@@ -14,7 +14,6 @@ import sys
 from experiment_manager.experiment_manager import JsonDumpableMixin, \
     ExperimentManager
 from logging_service import LoggingService
-import sklearn
 
 from data_augmentation.utils import Utils, Interval, RavenSelectionTable
 import numpy as np
@@ -550,20 +549,62 @@ class QuadSigCalibrator(JsonDumpableMixin):
                     lo_prom = mid_prom + 0.001
             if true_positives is None:
                 sig.usable = False
-            else:
-                sig.usable = True
-                sig.prominence_threshold = hi_prom
-                sig.prob_threshold = recent_prob_thres if recent_prob_thres is not None else prob_thres
-                sig.recall    = true_positives / num_true_vocalizations
-                sig.precision = precision
+                # Next signature
+                continue
+
+            final_sig_prominence = hi_prom
+            
+            # Now find a good probability threshold for this
+            # signature: we know the true number n_calls of calls
+            # in the calibration recording. Holding constant the 
+            # prominence we found above, find the highest probability
+            # theshold that will result in a number of 'found-peaks'
+            # such that:
+            #     n_peaks <= n_calls
+            # We won't know whether the calls found are correct, but
+            # for this signature the combination of prominence and
+            # probability threshold will be optimal:
+
+            final_prob_thres = 0
+            recent_prob_thres = None
+            lo_prob_thres = 0.
+            hi_prob_thres = 1.
+            # Binary search to resolution of probability 0.001:
+            while hi_prob_thres - lo_prob_thres > 0.001:
+                mid_prob_thres = lo_prob_thres + (hi_prob_thres - lo_prob_thres) / 2.0
+                peaks_all = pwr_member.find_calls(pwr_res,
+                                                  prominence_threshold=final_sig_prominence,
+                                                  probability_threshold=mid_prob_thres)
+
+                # Only interested in peaks attributed
+                # to current sig:
+                peaks = peaks_all[peaks_all.sig_id == sig_id]
+                if len(peaks) > len(sel_tbl):
+                    # Prob threshold is too permissive;
+                    # raise it:
+                    lo_prob_thres = mid_prob_thres
+                else:
+                    # Found fewer peaks than should be
+                    # found: lower probability threshold:
+                    hi_prob_thres = mid_prob_thres
+
+                # Remember current threshold in case
+                # we need to back off:
+                recent_prob_thres = mid_prob_thres
+
+            # If last time through loop gave correct, or
+            # fewer peaks, use its threshold, else use the
+            # one from the prior loop:
+            final_prob_thres = mid_prob_thres if len(peaks) <= len(sel_tbl) else recent_prob_thres
+
+            sig.usable = True
+            sig.prominence_threshold = final_sig_prominence
+            sig.prob_threshold = final_prob_thres
+            sig.recall    = true_positives / num_true_vocalizations
+            sig.precision = precision
                 
             # Loop for next sig
 
-        # for sig in template.signatures:
-        #     if sig.usable:
-        #         print(f"prom {sig.sig_id}: {sig.prominence_threshold}; prec: {sig.precision}; rec: {sig.recall}")
-        #     else:
-        #         print(f"prom {sig.sig_id}: not usable") 
         return template
 
     #------------------------------------
