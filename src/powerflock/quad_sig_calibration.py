@@ -525,6 +525,8 @@ class QuadSigCalibrator(JsonDumpableMixin):
             lo_prom = 0.
             hi_prom = 1.
             prob_thres = None
+            # Binary search till search space
+            # is small enough:
             while hi_prom - lo_prom > 0.001:
                 mid_prom = lo_prom + (hi_prom - lo_prom) / 2.0
                 recent_prob_thres = prob_thres
@@ -541,12 +543,14 @@ class QuadSigCalibrator(JsonDumpableMixin):
                     # or precision was 1.0
                     # Need to lower the prominence
                     # to find tipping point where precision
-                    # drops from 1.0:
+                    # drops from 1.0: pick lower half of search
+                    # space:
                     hi_prom = mid_prom
                 else:
                     # Precision was less than 1, need
-                    # to up the prominence a bit:
-                    lo_prom = mid_prom + 0.001
+                    # to up the prominence a bit: pick
+                    # upper half of search space:
+                    lo_prom = mid_prom
             if true_positives is None:
                 sig.usable = False
                 # Next signature

@@ -438,10 +438,52 @@ class PowerMember:
         peaks['high_bound'] = peaks['high_bound'].where(peaks['high_bound'] <= peaks.index[-1], 
                                                         peaks.index[-1])
 
+        # Next: coalesce overlapping peak discoveries by multiple signatures
+        
+        # For sets of peak times that should be coalesced:
+        peak_bundles = []
+        cur_peaks = set()
+        for row_num, time in enumerate(peaks.index):
+            # Center time of currently examined peak:
+            cur_peaks.add(time)
+            try:
+                # Does the current peak's center time lie
+                # below the next peak's start?
+                nxt_peak_low_bound = peaks.iloc[row_num + 1].low_bound
+                nxt_peak_time      = peaks.index[row_num + 1]
+            except IndexError:
+                # Current row is the last one:
+                break
+            if time > nxt_peak_low_bound:
+                # Yes, current peak's center is in the
+                # next peak: bundle the peaks' infos into
+                # a set of peaks rows:
+                cur_peaks.add(nxt_peak_time)
+            else:
+                # No, next peak is beyond current center time.
+                # New set of peaks:
+                if len(cur_peaks) > 0:
+                    peak_bundles.append(cur_peaks)
+                cur_peaks = set()
+                
+        # For each each set of peaks, select the one
+        # from the signature with the highest probability,
+        # and ignore the others:
+        rows = []
+        for peak_bundle in peak_bundles:
+            # Best choice of row in peaks. Pandas 
+            # wants lists for indexes, not sets, so
+            # turn peak_bundle into a sorted list of
+            # times:
+            max_prob = peaks.loc[sorted(list(peak_bundle))].match_prob.max()
+            rows.append(peaks[peaks.match_prob == max_prob])
+        # Create a df of the final choice of peaks:
+        peaks_merged = pd.concat(rows)
+
         # Add a column that repeats the prominence_threshold
         # for each row; redundant, but easy:
-        peaks['prominence_threshold'] = [prominence_threshold]*len(peaks)
-        return peaks
+        peaks_merged['prominence_threshold'] = [prominence_threshold]*len(peaks_merged)
+        return peaks_merged
     
     #------------------------------------
     # score_call_level
