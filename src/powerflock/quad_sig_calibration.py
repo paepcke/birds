@@ -496,6 +496,7 @@ class QuadSigCalibrator(JsonDumpableMixin):
         pwr_res = evaluator.pwr_res
         sel_tbl = RavenSelectionTable(sel_tbl_file)
         pwr_res.add_truth(sel_tbl)
+        truths = pwr_res.prob_df.truth
         
         # Get time intervals of known vocalizations
         # from the selection table:
@@ -512,25 +513,16 @@ class QuadSigCalibrator(JsonDumpableMixin):
             # was created:
             sig_time_interval = sel_tbl.entries[sig_idx].time_interval
             
-            # Place to remember the probability threshold
-            # that will be associated with this signature.
-            # Will be updated as we inch towards tipping point
-            # where lowering prominence will lead to precision
-            # dropping from 1.0:
-            recent_prob_thres = None
-            
             # Go through progressive prominences till we find
             # the first that finds this signature's peak, while 
             # still just maintaining a precision of 1.0
             lo_prom = 0.
             hi_prom = 1.
-            prob_thres = None
             # Binary search till search space
             # is small enough:
             while hi_prom - lo_prom > 0.001:
                 mid_prom = lo_prom + (hi_prom - lo_prom) / 2.0
-                recent_prob_thres = prob_thres
-                precision, true_positives, prob_thres = self._try_prominence(
+                precision, true_positives, detection_prob = self._try_prominence(
                             mid_prom,
                             pwr_res, 
                             pwr_member, 
@@ -570,11 +562,12 @@ class QuadSigCalibrator(JsonDumpableMixin):
             # probability threshold will be optimal:
 
             final_prob_thres = 0
-            recent_prob_thres = None
             lo_prob_thres = 0.
             hi_prob_thres = 1.
+            mid_prob_thres = 1.
             # Binary search to resolution of probability 0.001:
-            while hi_prob_thres - lo_prob_thres > 0.001:
+            #while hi_prob_thres - lo_prob_thres > 0.001:
+            while mid_prob_thres > detection_prob:
                 mid_prob_thres = lo_prob_thres + (hi_prob_thres - lo_prob_thres) / 2.0
                 peaks_all = pwr_member.find_calls(pwr_res,
                                                   prominence_threshold=final_sig_prominence,
@@ -583,7 +576,13 @@ class QuadSigCalibrator(JsonDumpableMixin):
                 # Only interested in peaks attributed
                 # to current sig:
                 peaks = peaks_all[peaks_all.sig_id == sig_id]
-                if len(peaks) > len(sel_tbl):
+                try:
+                    truths.loc[peaks.index]
+                    all_peaks_true = True
+                except KeyError:
+                    all_peaks_true = False
+                    
+                if len(peaks) > len(sel_tbl) or not all_peaks_true:
                     # Prob threshold is too permissive;
                     # raise it:
                     lo_prob_thres = mid_prob_thres
@@ -592,14 +591,11 @@ class QuadSigCalibrator(JsonDumpableMixin):
                     # found: lower probability threshold:
                     hi_prob_thres = mid_prob_thres
 
-                # Remember current threshold in case
-                # we need to back off:
-                recent_prob_thres = mid_prob_thres
-
             # If last time through loop gave correct, or
             # fewer peaks, use its threshold, else use the
             # one from the prior loop:
-            final_prob_thres = mid_prob_thres if len(peaks) <= len(sel_tbl) else recent_prob_thres
+            #final_prob_thres = mid_prob_thres if len(peaks) <= len(sel_tbl) else recent_prob_thres
+            final_prob_thres = mid_prob_thres
 
             sig.usable = True
             sig.prominence_threshold = final_sig_prominence
@@ -651,19 +647,24 @@ class QuadSigCalibrator(JsonDumpableMixin):
         :param true_vocalization_intervals: list of bona fide time intervals
             in which any call occurred.
         :type true_vocalization_intervals: [Interval]
-        :return: (precision, number of true positives, and mean probability
+        :return: (precision, number of true positives, and probability
             at which given signature's call was detected.
         :rtype: [float, {None | int}, {None | float} 
         '''
     
+        prob_df = pwr_res.prob_df
+        
         # Get mean of probs so we can do mean normalization
         # on the found peaks:
-        all_probs_normed = pwr_res.prob_df.match_prob
-        all_probs_normed_mean = all_probs_normed.mean()
+        #all_probs_normed = pwr_res.prob_df.match_prob
+        #all_probs_normed_mean = all_probs_normed.mean()
         
         # Find the peaks using the given prominence
         # and no theshold on resulting probability:
-        consensus_peaks = pwr_member.find_calls(pwr_res,prominence_threshold=prominence)
+        consensus_peaks = pwr_member.find_calls(pwr_res,
+                                                prominence_threshold=prominence,
+                                                probability_threshold=0. # No prob constraint
+                                                )
     
         peak_times_this_sig = consensus_peaks[consensus_peaks['sig_id'] == sig_id]
         if len(consensus_peaks) == 0:
@@ -676,6 +677,10 @@ class QuadSigCalibrator(JsonDumpableMixin):
         for center_time in peak_times_this_sig.index:
             if center_time in sig_time_interval:
                 found_this_sig_peak = True
+                detection_prob = prob_df.loc[center_time].match_prob
+                # If multiple results, pick the highest:
+                if type(detection_prob) != float:
+                    detection_prob = detection_prob.max()
                 break
         if not found_this_sig_peak:
             # Found some peaks, but not the one
@@ -693,9 +698,10 @@ class QuadSigCalibrator(JsonDumpableMixin):
         precision = tps / len(peak_times_this_sig)
         # Mean of the probabilities for peak found
         # at given prominence:
-        mean_prob_peaks = consensus_peaks[consensus_peaks['sig_id']==sig_id].match_prob.mean()
-        mean_prob = mean_prob_peaks - all_probs_normed_mean
-        return precision, tps, mean_prob 
+        #mean_prob_peaks = consensus_peaks[consensus_peaks['sig_id']==sig_id].match_prob.mean()
+        #mean_prob = mean_prob_peaks - all_probs_normed_mean
+        #return precision, tps, mean_prob 
+        return precision, tps, detection_prob
 
     # ---------------------- Utilities ---------------
 
