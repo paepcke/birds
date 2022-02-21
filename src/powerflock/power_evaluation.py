@@ -354,53 +354,63 @@ class PowerEvaluator:
         granularity of calls. Use before running score()
         No labels are used/required in this method.
         
-        Runs through a recording, generating a PowerResult instance
+        Unless given a pre-existing PowerResult instance, 
+        runs through given recording, generating a PowerResult instance
         that holds probabilities at each timeframe of the recording
         containing a vocalization by the power member's species.
         
-        Also generates decision, both at the timeframe and call level.
-        For timeframe level decisions the probability_threshold and 
-        percentage_agreement are relevant:
-           
-           o probability_threshold is the probability of a class
-             during one timeframe above which class membership is
-             concluded.
-           o percentage_agreement is the percentage of signatures
-             that must have decided positively on class membership
-             during a given timeframe to conclude as a final decision
-             that a class is positive during the timeframe
-             
-        For call level decisions the prominence of probability peaks
-        are used to determine whether a peak is distinguished enough
-        from surrounding noise that the associated timeframe can be 
-        considered the center time of a vocalization. Value are 
-        in [0,1]
-        
+        Given the PowerResult's raw probs at each timeframe for each 
+        signature of the species, generates classification decision 
+        probabilities for the given PowerMember's species using three 
+        methods:
+
+         First, compute at each timeframe a decision separately for each signature.
+              The decision is based on whether that sig's probability at the timeframe
+              is in or above the given quantile_threshold among the probs of the 
+              sig across the entire recording. I.e. given quantile threshold 0.6 and
+              all of a signature's probabilities p_t1, p_t2, ..., test whether
+              p_tx is >= [p_t1, p_t2, ...,].quantile(0.6). The computation results
+              in True/False for each timeframe for each signature.
+              
+         Next, 
+             Method 1: Decide on True at time t if a percentage_agreement percent of 
+                 all signatures voted True.
+             Method 2: Find contiguous sequences of timeframes during which at least
+                 one signature voted Yes. A small number of 'drop outs' is allowed.
+                 I.e. timeframes in the middle of a sequence where no sig voted Yes.
+                 The hard-coded number is 1.
+            Method 3: Identify peaks from all signatures' probabilities using 
+                 the signal prominence method. See scipy.signal.find_peaks() and
+                 power_member.py's PowerMember.find_peaks() method 
+                 The method determines whether a peak is distinguished enough
+                 among the surrounding peaks and valleys to be significant.
+
         For all three quantities, class variables are used if None
         is passed in:
            o cls.DEFAULT_PROMINENCE_THRESHOLD 
            o cls.DEFAULT_PERCENTAGE_AGREEMENT
-           o cls.DEFAULT_PROMINENCE_THRESHOLD
+           o cls.DEFAULT_PROBABILITY_THRESHOLD
         
-        
-        Saves PowerResult instance in experiment as json.
-        Key will start with PwrRes.
+        Saves new PowerResult instance in experiment as json if not provided in 
+        the call (key will start with 'PwrRes'.). Also saves the result of 
+        all three methods as CSV under key 'AllGranularitiesDecisions_<timestamp>_<species>'
         
         :param pwr_member: PowerMember instance to use
             for computing the PowerResult
         :type pwr_member: PowerMember
-        :param rec_path: path to the recording to analyze
+        :param rec_path: path to the recording to analyze. Not required
+            if pwr_res is provided
         :type rec_path: str
         :param quantile_threshold: quantile among a signature's
             match probability above which match probability must
-            lie to be counted a Yes
+            lie to be counted a Yes. Default: cls.DEFAULT_PROBABILITY_THRESHOLD
         :type quantile_threshold:{None | float}
         :param percentage_agreement: percentage of signatures that
             must have voted True to conclude that a timeframe contains
-            a vocalization of the focus species.
+            a vocalization of the focus species. Default cls.DEFAULT_PERCENTAGE_AGREEMENT
         :type percentage_agreement: {None | float}
         :param prominence_thres: the importance of a probability
-            peak to be considered a vocalization.
+            peak to be considered a vocalization. Default: cls.DEFAULT_PROMINENCE_THRESHOLD 
         :type prominence_thres: {None | float}
         :param pwr_res: if pwr_res is not given, the probabilities
             are computed, else those in the PowerResult are used.
@@ -672,6 +682,11 @@ class PowerEvaluator:
             prob_thresholds_to_try = [self.DEFAULT_PROBABILITY_THRESHOLD]
         else:
             prob_thresholds_to_try = probability_thresholds
+
+        
+
+
+=====
 
         res_df = pd.DataFrame()
         for threshold in prob_thresholds_to_try:
