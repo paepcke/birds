@@ -66,7 +66,7 @@ class PowerEvaluator:
     PROMINENCE_THRESHOLDS = [0.1, 0.2, 0.3, 0.4, 0.5]
     
     DEFAULT_PROBABILITY_THRESHOLD = 0.6
-    DEFAULT_PERCENTAGE_AGREEMENT  = .5
+    DEFAULT_PERCENTAGE_AGREEMENT  = .1
     DEFAULT_PROMINENCE_THRESHOLD  = 0.3
     SLIDE_WIDTH = 0.05 # fraction of signature
     SIG_ID = 3
@@ -260,15 +260,15 @@ class PowerEvaluator:
                 print(scores['call_level'].astype(float).round(2).to_string())
                 
             elif action == Action.VIZ_PROBS:
-                ax = self.viz_probs(self.power_member,
-                                    self.test_recording,
-                                    self.test_sel_tbl,
-                                    self.SIG_ID,
-                                    outfigs
-                                    )
+                _ax = self.viz_probs(self.power_member,
+                                     self.test_recording,
+                                     self.test_sel_tbl,
+                                     self.SIG_ID,
+                                     outfigs
+                                     )
             elif action == Action.GRID_SEARCH:
-                grid_res = self.grid_search()
-                
+                _grid_res = self.grid_search()
+
             elif action == Action.NOOP:
                 return
             else:
@@ -342,7 +342,7 @@ class PowerEvaluator:
     def run_analysis(self, 
                      pwr_member, 
                      rec_path,
-                     probability_thres=None,
+                     quantile_threshold=None,
                      percentage_agreement=None,
                      prominence_thres=None,
                      pwr_res=None
@@ -391,10 +391,14 @@ class PowerEvaluator:
         :type pwr_member: PowerMember
         :param rec_path: path to the recording to analyze
         :type rec_path: str
+        :param quantile_threshold: quantile among a signature's
+            match probability above which match probability must
+            lie to be counted a Yes
+        :type quantile_threshold:{None | float}
         :param percentage_agreement: percentage of signatures that
             must have voted True to conclude that a timeframe contains
             a vocalization of the focus species.
-        :type percentage: {None | float}
+        :type percentage_agreement: {None | float}
         :param prominence_thres: the importance of a probability
             peak to be considered a vocalization.
         :type prominence_thres: {None | float}
@@ -403,8 +407,8 @@ class PowerEvaluator:
         :type pwr_res: {None | PowerResult}
         '''
 
-        if probability_thres is None:
-            probability_thres = PowerEvaluator.DEFAULT_PROBABILITY_THRESHOLD
+        if quantile_threshold is None:
+            quantile_threshold = PowerEvaluator.DEFAULT_PROBABILITY_THRESHOLD
         if percentage_agreement is None:
             percentage_agreement = PowerEvaluator.DEFAULT_PERCENTAGE_AGREEMENT
 
@@ -424,13 +428,23 @@ class PowerEvaluator:
 
         # Make accessible to the outside:
         self.pwr_res = pwr_res
+        prob_df = pwr_res.prob_df
         
-        # Make the per-timeframe decisions based on
+        # First method for making class decisions:
+        # For each timeframe, see whether the probability
+        # of True is above a given quantile: Example:
+        # if the the passed-in probabilty_threshold is 0.6,
+        # then for each signature, a Yes probability must be 
+        # in the 60th percentile among the probabilities provided
+        # by that signature. Thus for this method, the absolute
+        # probability_threshold is different for each signature: 
+        # If the probability_threshold passed into this method
+
         timeframe_scores = []
         for sig_id in pwr_res.sig_ids():
             pwr_classifier = PowerQuantileClassifier(
                 sig_id=sig_id, 
-                threshold_quantile=probability_thres
+                threshold_quantile=quantile_threshold
                 )
             pwr_classifier.fit(pwr_res)
             decision = pwr_classifier.predict(pwr_res.probabilities(sig_id))
@@ -453,34 +467,112 @@ class PowerEvaluator:
         timeframe_vote_result = timeframe_votes[timeframe_votes.sum(axis=1) >= required_agreement]
         
         # Prepare the final data structure as a 
-        # Series that will have True where a class is
-        # concluded, and has as many elements as 
-        # the num of timeframes:
-        timeframe_decision = pd.Series([False]*len(timeframe_votes), 
-                                       index=timeframe_votes.index,
-                                       name=f"is-{self.species}-call")
+        # df as long as all timeframes with cols:
+        #
+        #        at_least_one_vote      by_percentage           is_in_call          call_center
+        # time     True if at least      True if at least        True if timeframe   True if time
+        #          one sig votes Yes     percentage_agreement    is part of a call   is a call center
+        #                                percent of sigs vote    via call-leval 
+        #                                yes                     analysis
         
-        timeframe_decision.loc[timeframe_vote_result.index] = True
+        match_probs = pwr_res.prob_df
+        res_cols = ['at_least_one_vote',
+                    'by_agreement',
+                    'is_in_call',
+                    'call_center'
+                    ]
+        decisions = pd.DataFrame([[0.0]*len(res_cols)] * len(match_probs),
+                                 index=match_probs.index,
+                                 columns=res_cols)
         
-        exp_key = self._make_experiment_key(
-            sp=self.species,
-            prefix='TmFrmDecisions'
-            )
-        self.experiment.save(exp_key, timeframe_decision)
-        self.log.info(f"Saved timeframe level decisions to {exp_key} tabular")
+        # Group probabilities by time for the times
+        # where the percentage-agreement based method
+        # yielded a Yes. We can then get the maximum
+        # (or min, or median, etc.) of probabilities among
+        # all sigs during a given time. Like:
+        #
+        #     gb_time.max()[gb_time.max().index == 0.8591383219954648]
+        # 
+        #           sig_id  match_prob
+        # time                        
+        # 0.859138    13.0    0.027862
+
+        gb_time = prob_df.loc[timeframe_vote_result.index][['sig_id', 'match_prob']].groupby('time')
         
+        # Note max of sig probs at each time for the "percentage agreement" 
+        # among sigs computation in column 'by_percentage':
+        decisions.loc[timeframe_vote_result.index, 'by_percentage'] = \
+            gb_time.max().loc[timeframe_vote_result.index].match_prob
+            
+        
+        # Next, count as call each moment in time
+        # when at least one signature votes Yes as
+        # being part of a call. Find 'streaks' (sequences)
+        # of continguous time frames with a Yes vote. 
+        # Declare the middle of that streak a call 'center'. 
+        # Do allow up to drop_outs_tolerance times of No votes
+        # in a streak. As long as the streak picks up again, 
+        # consider the streak unbroken. 
+        #
+        # Accept a streak as a call only if it is at least as
+        # long as the shortest signature's call duration:
+        #
+        # Calls must be at least as long as the shortest signature: 
+        min_call_dur = min([sig.duration() for sig in self.template.signatures])
+        times = timeframe_votes.index.values
+        call_centers = []
+        drop_outs_tolerance = 1
+        tolerance_counter = drop_outs_tolerance
+        cur_streak = []
+        for i, template_row in enumerate(timeframe_votes.values):
+            votes = np.nansum(template_row)
+            if votes > 0:
+                cur_streak.append(times[i])
+            else:
+                # No vote from any sig; if not in a streak, ignore row:
+                if len(cur_streak) == 0:
+                    continue
+                # In a streak: tolerate this dropout?
+                tolerance_counter -= 1
+                if tolerance_counter < 0:
+                    # End of streak. Is streak at least as long as the
+                    # minimum call length?
+                    if cur_streak[-1] - cur_streak[0] >= min_call_dur:
+                        call_centers.append(cur_streak[int(len(cur_streak)/2)])
+                    tolerance_counter = drop_outs_tolerance
+                    cur_streak = []
+                else:
+                    # Had a drop-out, but is within tolerance:
+                    cur_streak.append(times[i])
+                    
+        # Note max of sig probs at each time for the "one_vote_streaks" 
+        # among sigs computation in column '':
+        
+        gb_gt_one_vote = prob_df.loc[timeframe_votes.index][['sig_id', 'match_prob']].groupby('time')
+        
+        
+        decisions.loc[call_centers, 'at_least_one_vote'] = \
+            gb_gt_one_vote.max().loc[call_centers].match_prob
+
         # Now the analysis at call level (which also saves the result
         # to the experiment):
         peaks = pwr_member.find_calls(pwr_res, prominence_threshold=prominence_thres)
         
+        decisions.loc[peaks.index, 'call_center'] = peaks.match_prob
+        
+        # Next, add best prob of being part of a call
+        # to the right and left of each peak (i.e. in
+        # the rows above and below each peak):
+        
+        
+        
+        # Save results of this percentage-based voting:
         exp_key = self._make_experiment_key(
             sp=self.species,
-            pr=pwr_res.name,
-            promThres=prominence_thres,
-            prefix='CallDecisions'
-        )
-        self.experiment.save(exp_key, peaks)
-        self.log.info(f"Saved call level decisions to {exp_key} tabular")
+            prefix='AllGranularitiesDecisions'
+            )
+        self.experiment.save(exp_key, decisions)
+        self.log.info(f"Saved timeframe level decisions to {exp_key} tabular")
 
         return pwr_res
 
@@ -705,13 +797,13 @@ class PowerEvaluator:
             pwr_res = power_member.power_result
 
         try:
-            truths = pwr_res.truths(sig_id)
+            _truths = pwr_res.truths(sig_id)
         except IndexError:
             # Nobody has told this power result about
             # what is true: 
             # Add a Truth column to the result:
             pwr_res.add_truth(test_sel_tbl)
-            truths = pwr_res.truths(sig_id)
+            _truths = pwr_res.truths(sig_id)
         
         try:
             spectro = self.spectro_dict[test_recording]
