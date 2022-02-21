@@ -440,23 +440,36 @@ class PowerMember:
 
         # Next: coalesce overlapping peak discoveries by multiple signatures
         
-        # For sets of peak times that should be coalesced:
+        # Find sets of peak times that are likely part of
+        # a single peak, found by multiple signatures. We
+        # look for successive peak times that are further
+        # apart from each other than the time resolution of
+        # the spectrogram:
         peak_bundles = []
         cur_peaks = set()
+        # Because Pandas messes up floating point 
+        # comparisons, limit time comparisons to 
+        # some number of digits  after decimal pt: 
+        time_resolution_significance = 7
+        time_resolution = round((prob_df.index[1] - prob_df.index[0]), 7)
+        # Compare timestamp of each row and next-row.
+        # Could be done but subtracting shifted time,
+        # but this is clear, and there won't be too
+        # expensive:
         for row_num, time in enumerate(peaks.index):
+            # Rounded version of current row's time:
+            time_rnd = round(time, time_resolution_significance)
             # Center time of currently examined peak:
             cur_peaks.add(time)
             try:
-                # Does the current peak's center time lie
-                # below the next peak's start?
-                nxt_peak_low_bound = peaks.iloc[row_num + 1].low_bound
-                nxt_peak_time      = peaks.index[row_num + 1]
+                nxt_peak_time     = peaks.index[row_num + 1]
+                nxt_peak_time_rnd = round(nxt_peak_time, time_resolution_significance)
             except IndexError:
                 # Current row is the last one:
                 break
-            if time > nxt_peak_low_bound:
-                # Yes, current peak's center is in the
-                # next peak: bundle the peaks' infos into
+            if nxt_peak_time_rnd - time_rnd <= time_resolution:
+                # Yes, current peak's center is part of the
+                # same peak: bundle the peaks' infos into
                 # a set of peaks rows:
                 cur_peaks.add(nxt_peak_time)
             else:
@@ -465,7 +478,7 @@ class PowerMember:
                 if len(cur_peaks) > 0:
                     peak_bundles.append(cur_peaks)
                 cur_peaks = set()
-                
+
         # For each each set of peaks, select the one
         # from the signature with the highest probability,
         # and ignore the others:
@@ -1240,16 +1253,21 @@ class PowerResult(JsonDumpableMixin):
     # probabilities
     #-------------------
     
-    def probabilities(self, sig_id):
+    def probabilities(self, sig_id=None):
         '''
         Return a series with all the probabilities
+        of the given sig_id. If None, a Series of all
+        probabilities (i.e. probs of all sigs) is returned.
+        
         :param sig_id: identifyer of signature whose
             probability results are to be returned
-        :type sig_id: {int | float}
+        :type sig_id: {None | int | float}
         :return: pd.Series of probabilities yielded using 
             that signature; the index are the recording times
         :rtype pd.Series(float)
         '''
+        if sig_id is None:
+            return self.prob_df.match_prob
         probs = self.prob_df[self.prob_df.sig_id == sig_id].match_prob
         probs.index = self.prob_df[self.prob_df.sig_id == sig_id].index
         return probs 
