@@ -242,19 +242,20 @@ class PowerEvaluator:
             elif action == Action.ANALYSIS:
                 # Analysis of a recording (~ 20min processing for 1min recording):
                 self.log.info("Running action 'analysis'...")
-                pwr_res = self.run_analysis(pwr_member=self.power_member,
-                                            rec_path=self.test_recording,
-                                            pwr_res=self.pwr_res
-                                            )
+                _decisions = self.run_analysis(pwr_member=self.power_member,
+                                               rec_path=self.test_recording,
+                                               pwr_res=self.pwr_res
+                                               )
                 self.log.info("Done running action 'analysis'.")
                  
             elif action == Action.SCORE:
                 self.log.info("Running action 'score'...")
+                #***** Check call sig after done with score:
                 scores = self.score(self.test_sel_tbl,
                                     pwr_res_info=pwr_res,
                                     pwr_member=self.power_member,
-                                    prominence_thresholds=prominence_thresholds,
-                                    probability_thresholds=probability_thresholds
+                                    prominence_threshold=prominence_thresholds,
+                                    probability_threshold=probability_thresholds
                                     )
                 self.log.info("Done running action 'score'.")
                 print(scores['call_level'].astype(float).round(2).to_string())
@@ -341,13 +342,13 @@ class PowerEvaluator:
     
     def run_analysis(self, 
                      pwr_member, 
-                     rec_path,
+                     rec_path=None,
                      quantile_threshold=None,
                      percentage_agreement=None,
-                     prominence_thres=None,
+                     prominence_threshold=None,
                      pwr_res=None
                      ):
-                 
+
         '''
         Used to compute decisions on the presence of one
         species' articulation both by timeframe and at the
@@ -395,6 +396,15 @@ class PowerEvaluator:
         the call (key will start with 'PwrRes'.). Also saves the result of 
         all three methods as CSV under key 'AllGranularitiesDecisions_<timestamp>_<species>'
         
+        Returns a df with decisions:
+        
+                at_least_one_vote      by_agreement            call_center
+         time     True if at least      True if at least        True if time
+                  one sig votes Yes     percentage_agreement    is a call center
+                                        percent of sigs vote   
+                                        yes                    
+            
+        
         :param pwr_member: PowerMember instance to use
             for computing the PowerResult
         :type pwr_member: PowerMember
@@ -409,13 +419,18 @@ class PowerEvaluator:
             must have voted True to conclude that a timeframe contains
             a vocalization of the focus species. Default cls.DEFAULT_PERCENTAGE_AGREEMENT
         :type percentage_agreement: {None | float}
-        :param prominence_thres: the importance of a probability
+        :param prominence_threshold: the importance of a probability
             peak to be considered a vocalization. Default: cls.DEFAULT_PROMINENCE_THRESHOLD 
-        :type prominence_thres: {None | float}
+        :type prominence_threshold: {None | float}
         :param pwr_res: if pwr_res is not given, the probabilities
             are computed, else those in the PowerResult are used.
         :type pwr_res: {None | PowerResult}
+        :raise ValueError for bad arguments
+        :raise KeyError for invalid experiment keys
         '''
+        
+        if rec_path is None and pwr_res is None:
+            raise ValueError("Either recording path (rec_path) or a PowerResult instance (pwr_res) must be provided")
 
         if quantile_threshold is None:
             quantile_threshold = PowerEvaluator.DEFAULT_PROBABILITY_THRESHOLD
@@ -479,16 +494,15 @@ class PowerEvaluator:
         # Prepare the final data structure as a 
         # df as long as all timeframes with cols:
         #
-        #        at_least_one_vote      by_percentage           is_in_call          call_center
-        # time     True if at least      True if at least        True if timeframe   True if time
-        #          one sig votes Yes     percentage_agreement    is part of a call   is a call center
-        #                                percent of sigs vote    via call-leval 
-        #                                yes                     analysis
+        #        at_least_one_vote      by_agreement            call_center
+        # time     True if at least      True if at least        True if time
+        #          one sig votes Yes     percentage_agreement    is a call center
+        #                                percent of sigs vote   
+        #                                yes                    
         
         match_probs = pwr_res.prob_df
         res_cols = ['at_least_one_vote',
                     'by_agreement',
-                    'is_in_call',
                     'call_center'
                     ]
         decisions = pd.DataFrame([[0.0]*len(res_cols)] * len(match_probs),
@@ -510,11 +524,10 @@ class PowerEvaluator:
         gb_time = prob_df.loc[timeframe_vote_result.index][['sig_id', 'match_prob']].groupby('time')
         
         # Note max of sig probs at each time for the "percentage agreement" 
-        # among sigs computation in column 'by_percentage':
-        decisions.loc[timeframe_vote_result.index, 'by_percentage'] = \
+        # among sigs computation in column 'by_agreement':
+        decisions.loc[timeframe_vote_result.index, 'by_agreement'] = \
             gb_time.max().loc[timeframe_vote_result.index].match_prob
-            
-        
+
         # Next, count as call each moment in time
         # when at least one signature votes Yes as
         # being part of a call. Find 'streaks' (sequences)
@@ -566,7 +579,7 @@ class PowerEvaluator:
 
         # Now the analysis at call level (which also saves the result
         # to the experiment):
-        peaks = pwr_member.find_calls(pwr_res, prominence_threshold=prominence_thres)
+        peaks = pwr_member.find_calls(pwr_res, prominence_threshold=prominence_threshold)
         
         decisions.loc[peaks.index, 'call_center'] = peaks.match_prob
         
@@ -584,7 +597,7 @@ class PowerEvaluator:
         self.experiment.save(exp_key, decisions)
         self.log.info(f"Saved timeframe level decisions to {exp_key} tabular")
 
-        return pwr_res
+        return decisions
 
     #------------------------------------
     # score
@@ -592,10 +605,11 @@ class PowerEvaluator:
 
     def score(self, 
               sel_tbl, 
-              pwr_member, 
               pwr_res_info=None,
-              probability_thresholds=None,
-              prominence_thresholds=None
+              prominence_threshold=None,
+              quantile_threshold=None,
+              percentage_agreement=None,
+              prior_analysis_res=None
               ):
         '''
         Once a PowerResult has been computed via the
@@ -644,6 +658,10 @@ class PowerEvaluator:
             score_sig_id3.0_thres0.6   0.343388  0.337368  ...     3.0        0.6
                               ... <more signature results>
         
+        If providing the result of a prior call to run_analysis,
+        i.e. if prior_analysis_res is not None, do not also specify
+        prominence_threshold, quantile_threshold, or percentage_agreement.
+        A ValueError is raised in that case.
 
         :param sel_tbl: Raven selection table with truth 
         :type sel_tbl: str
@@ -652,20 +670,36 @@ class PowerEvaluator:
         :param pwr_res_info: the PowerResult from the prior 'analysis'
             action. If None, the PowerResult is pulled from the experiment.
         :type pwr_res_info: {None | PowerResult}
-        :param probability_thresholds: optionally, a list of probability
-            thresholds under which to compute the timeframe level results
+        :param quantile_threshold: optionally, threshold under which 
+            to compute the timeframe level results
             Default: self.DEFAULT_PROBABILITY_THRESHOLD
-        :type {None | [float]}
-        :param prominence_thresholds: probability_thresholds: optionally, a list of prominence
-            thresholds under which to compute the call level results
+        :type quantile_threshold: {None | float}
+        :param prominence_threshold: probability_threshold: optionally, prominence
+            threshold under which to compute the call level results
             Default: self.DEFAULT_PROMINENCE_THRESHOLD
-        :type prominence_thresholds: {None | [float]}
+        :type prominence_threshold: {None | [float]}
+        :param percentage_agreement: optionally, the percentage of signatures
+            that must agree the a call has occurred to conclude that a call
+            did indeed occur. Default: self.DEFAULT_PERCENTAGE_AGREEMENT
+        :type percentage_agreement: {None | float}
+        :param prior_analysis_res: if provided this is the key to
+            the decisions from a prior analysis, stored in self.experiment.
+            If None, an analysis is run to generate the decisions
+        :type prior_analysis_res: {None | str}
         :return: the timeframe level and call level scores
         :rtype: [pd.DataFrame, pd.DataFrame]
+        :raises KeyError if a key into experiment is not found
+        :raises KeyError if inconsistent arguments
         '''
         
-        # Make final decisions about timeframe level, and
-        # call level classification:
+        # If the result of a prior call to run_analysis is given
+        # in prior_analysis_res, and thresholds are also provided,
+        # raise an error to avoid confusion about which analysis
+        # is used to score:
+        if prior_analysis_res is not None and None in [prominence_threshold,
+                                                       quantile_threshold,
+                                                       percentage_agreement]:
+            raise ValueError("Specify either prior_analysis_res, or thresholds; not both")
 
         if pwr_res_info is None:
             pwr_res = self._latest_power_result(self.experiment)
@@ -673,79 +707,65 @@ class PowerEvaluator:
             pwr_res = pwr_res_info
         else:
             # Must be a string that's the key into the experiment:
+            # Throws KeyError:
             pwr_res = self.experiment.read(pwr_res_info, PowerResult)
 
         if not pwr_res.knows_truth():
             pwr_res.add_truth(sel_tbl)
 
-        if probability_thresholds is None:
-            prob_thresholds_to_try = [self.DEFAULT_PROBABILITY_THRESHOLD]
+        if prior_analysis_res is not None:
+            decisions = self.experiment.read(prior_analysis_res, 'tabular')
         else:
-            prob_thresholds_to_try = probability_thresholds
+            decisions = self.run_analysis(self.power_member, 
+                                          quantile_threshold=quantile_threshold, 
+                                          percentage_agreement=percentage_agreement, 
+                                          prominence_threshold=prominence_threshold, 
+                                          pwr_res=pwr_res)
 
+        # We now have a df like:
+        #            at_least_one_vote  by_agreement  call_center
+        # time                                                   
+        # 0.859138                 0.0           0.0     0.000000
+        # 0.893968                 0.0           0.0     0.000000
+        # 0.928798                 0.0           0.0     0.000000
+        #                     ...
+        # 2.217506            0.084838      0.084838     0.000000
+        # 4.411791            0.041090      0.041090     0.000000
+        # 6.222948            0.042641      0.042641     0.000000
+        #                     ...
+        # 40.663946           0.081389      0.081389     0.057976
+        # 3.871927            0.066425      0.066425     0.041618
+        # 67.297234           0.489805      0.000000     0.009244
+        # 3.871927            0.066425      0.066425     0.041618
         
-
-
-=====
-
-        res_df = pd.DataFrame()
-        for threshold in prob_thresholds_to_try:
-            for sig_id in pwr_res.sig_ids():
-                quantile_evaluator = PowerQuantileClassifier(sig_id=sig_id, 
-                                                             threshold_quantile=threshold)
-                quantile_evaluator.fit(pwr_res)
-                score_name = f"score_sig_id{sig_id}_thres{threshold}" 
-                score = quantile_evaluator.score(None, None, name=score_name)
-                score['sig_id'] = sig_id
-                score['threshold'] = threshold
-                res_df = pd.concat([res_df, score])
+        #TODO: Create scores from combinations of these methods: 
         
-        pwr_res_nm_date = Path(pwr_res.name).stem
-        exp_key = self._make_experiment_key(
-            sp=pwr_res.species,
-            pr=pwr_res_nm_date,
-            prefix='scores_frames'
-            )
-        self.experiment.save(exp_key, res_df)
-        self.log.info(f"Timeframe-level scores saved in experiment under '{exp_key}, 'tabular")
-        
-        # On to scores of finding calls, as opposed to 
-        # predicting every time frame:
-
-        call_scores = []
-        if prominence_thresholds is None:
-            prominence_thresholds = [None]
-        if probability_thresholds is None:
-            probability_thresholds = [None]
-        for prominence_threshold in prominence_thresholds:
-            for probability_threshold in probability_thresholds:
-                peaks = pwr_member.find_calls(pwr_res,
-                                              probability_threshold=probability_threshold,
-                                              prominence_threshold=prominence_threshold,
-                                              )
-                score = pwr_member.score_call_level(peaks, self.test_sel_tbl)
-                score['prom_thres'] = prominence_threshold
-                score['prob_thres'] = probability_threshold
-                score.name = f"prominence_thres_{prominence_threshold}"
-                call_scores.append(score)
+        #
+        #        at_least_one_vote      by_agreement             call_center
+        # time     True if at least      True if at least        True if time
+        #          one sig votes Yes     percentage_agreement    is a call center
+        #                                percent of sigs vote   
+        #                                yes                    
+        # ******** Add:
 
         # Get like:
         #                        bal_acc       acc  ...      f0.5  prom_thres
         # prominence_thres_0.3  0.578212  0.606010  ...  0.686055         0.3
         # prominence_thres_0.6  0.551401  0.412645  ...  0.386556         0.6
         
-        scores = pd.concat(call_scores, axis=1).T
-        exp_key = self._make_experiment_key(
-            sp=pwr_res.species,
-            pr=pwr_res_nm_date,
-            prefix='scores_calls'
-            )
-
-        self.experiment.save(exp_key, scores)
-        self.log.info(f"Call-level scores saved in experiment under '{exp_key}, 'tabular")
-        return {'call_level' : scores, 
-                'timeframe_level' : res_df
-                }
+        # *********REDO
+        # scores = pd.concat(call_scores, axis=1).T
+        # exp_key = self._make_experiment_key(
+        #     sp=pwr_res.species,
+        #     pr=pwr_res_nm_date,
+        #     prefix='scores_calls'
+        #     )
+        #
+        # self.experiment.save(exp_key, scores)
+        # self.log.info(f"Call-level scores saved in experiment under '{exp_key}, 'tabular")
+        # return {'call_level' : scores, 
+        #         'timeframe_level' : res_df
+        #         }
         #input("Press any key to quit: ")
 
         #call_intervals = Utils.get_call_intervals(sel_tbl_path)

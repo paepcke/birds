@@ -520,7 +520,7 @@ class Signature(JsonDumpableMixin):
                    None, and call method normalize_self() with the
                    scale_info on the instance.
                    
-        If provicded, the scale_info consists of a dict with four entries,
+        If provided, the scale_info consists of a dict with four entries,
         one each for flatness, continuity, pitch, and freq_mod.
         Each of the corresponding values is a nested dict holding
         the mean of the vocalizations across all calibration samples,
@@ -541,7 +541,7 @@ class Signature(JsonDumpableMixin):
         may or may not include hostname.
         
         :param sig_values: spectral measures flatness,
-            continuity, pitch, and frequency modulationb.
+            continuity, pitch, and frequency modulation.
         :type sig_values: pd.DataFrame
         :param scale_info: scale factors derived from median
             distance from mean of pitch, frequency modulation,
@@ -721,11 +721,16 @@ class Signature(JsonDumpableMixin):
         
                     val - overall_mean
                     -------------------
-                   median_dist_from_mean 
-        
+                    mean_dist_from_mean 
+
         Where overall_mean is the mean of values across all
         calibration vocalizations, and median_dist_from_mean is
         also computed across all calbration samples.
+        
+        The median distance from the mean is what is used in
+        Ofer Tchernichovski, Fernando Nottebohm, Ching Elizabeth Ho, Bijan Pesaran &
+        Partha Pratim Mitra: "A procedure for an automated measurement of song similarity"
+        One can use mean distance from the mean instead, i.e. the standard deviation.
         
         The measure_type must be one of 'flatness', 'continuity', 
         'pitch', or 'freq_mod'. The value is used to select the

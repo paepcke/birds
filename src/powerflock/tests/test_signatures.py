@@ -14,8 +14,8 @@ from powerflock.signal_analysis import SignalAnalyzer
 from powerflock.signatures import Signature, SpectralTemplate
 
 
-#*******TEST_ALL = True
-TEST_ALL = False
+TEST_ALL = True
+#TEST_ALL = False
 
 class Test(unittest.TestCase):
 

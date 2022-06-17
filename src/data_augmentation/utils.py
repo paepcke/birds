@@ -1,4 +1,5 @@
 from bisect import bisect_left, bisect_right
+from copy import deepcopy
 from csv import DictReader
 import datetime
 from enum import Enum
@@ -10,15 +11,16 @@ import re
 import shutil
 import warnings
 
+from birdsong.utils.species_name_converter import SpeciesNameConverter, DIRECTION, ConversionError
 from experiment_manager.experiment_manager import JsonDumpableMixin
 from experiment_manager.neural_net_config import NeuralNetConfig
 import librosa
 from matplotlib import MatplotlibDeprecationWarning
 from natsort import natsorted
+from seaborn.matrix import heatmap
 from torch import cuda
 import torch
 
-from birdsong.utils.species_name_converter import SpeciesNameConverter, DIRECTION, ConversionError
 import matplotlib.pyplot as plt
 import multiprocessing as mp
 import numpy as np
@@ -40,11 +42,11 @@ class WhenAlreadyDone(Enum):
 # with the most number of available
 # samples.
 # Meaning: 
-#    TENTH: all species will have at least a 				  
+#    TENTH: all species will have at least a                   
 #           10th of samples in the most populous 
-#           species 	  
+#           species       
 #   MEDIAN: all species will have at least the median
-#    	    number of samples in the species populations
+#            number of samples in the species populations
 #      MAX: all species will end up with the number of
 #           species of the most populously represented species
 #           in the training set: 
@@ -1046,6 +1048,44 @@ class Utils:
             elif intervals[mid][low_key] > interval_start:
                 high = mid - 1
 
+    #------------------------------------
+    # nearest_in_array
+    #-------------------
+    
+    @classmethod
+    def nearest_in_array(cls, arr, val, is_sorted=False):
+        '''
+        Given an array and a value, return the array entry
+        that is closest to val.
+
+        If is_sorted is True it is assumed that arr is sorted, 
+        in which case a speed improvement is used. For small arrays
+        that makes no difference; it's more expensive to sort the
+        array just to prep for a call to this method. For large
+        arrays the speedup is significant.
+
+        :param arr: array whose elements are to be matched 
+        :type arr: np.array
+        :param val: value for which nearest array element is to be found
+        :type val: {int | float}
+        :param is_sorted: whether or not the given array is sorted
+        :type is_sorted: bool
+        :return array element nearest val
+        :rtype {int | float} 
+        '''
+        
+        if is_sorted:
+            idx = np.searchsorted(arr, val, side="left")
+            if idx > 0 and \
+                (idx == len(arr) or \
+                 np.fabs(val - arr[idx-1]) < np.fabs(val - arr[idx])):
+                return arr[idx-1]
+            else:
+                return arr[idx]
+        else:
+            # Array not sorted:
+            idx = (np.abs(arr - val)).argmin()
+            return arr[idx]            
 
     #------------------------------------
     # set_seed  
@@ -2035,6 +2075,13 @@ class RavenSelectionTable:
     #-------------------
     
     def __init__(self, tbl_path):
+        '''
+        Note: if additional env vars are created, need to 
+              modify __deepcopy__accordingly.
+              
+        :param tbl_path: path to Raven selection table csv file
+        :type tbl_path: str
+        '''
         
         dict_list = Utils.read_raven_selection_table(tbl_path)
         # Simple list of sel tbl entry records: 
@@ -2044,19 +2091,9 @@ class RavenSelectionTable:
         
         # Sort by time:
         self.entries = sorted(self.entries)
-        
-        # Lookup of entries by species:
-        #    {species1 : [entry4, entry 11],
-        #     species2 : [entry4, entry 2]
-        #    }
-        self.entries_by_species = {}
-        for tbl_entry in self.entries:
-            for species in tbl_entry.species_list:
-                try:
-                    self.entries_by_species[species].append(tbl_entry)
-                except KeyError:
-                    # First encounter:
-                    self.entries_by_species[species] = [tbl_entry]
+        self.entries_by_species = self._make_entry_lookup(self.entries)
+
+
 
     #------------------------------------
     # species_times
@@ -2173,6 +2210,74 @@ class RavenSelectionTable:
         return self.__str__()
 
 
+    #------------------------------------
+    # _eq__
+    #-------------------
+    
+    def __eq__(self, other_raven_sel_tbl):
+        
+        for my_entry, other_entry in zip(self.entries, other_raven_sel_tbl.entries):
+            if my_entry != other_entry:
+                return False
+        return True
+
+    #------------------------------------
+    # __deepcopy__
+    #-------------------
+    
+    def __deepcopy__(self, memo):
+        the_copy = RavenSelectionTable.__new__(RavenSelectionTable)
+        entries_copy = [deepcopy(entry, memo) for entry in self.entries]
+        entries_by_species = self._make_entry_lookup(entries_copy)
+        
+        the_copy.entries = entries_copy
+        the_copy.entries_by_species = entries_by_species
+        return the_copy
+
+    #------------------------------------
+    # __del__
+    #-------------------
+    
+    def remove(self, sel_entry_obj):
+        
+        # Remove the entry from the time-sorted list
+        # of selection table entry objects:
+        self.entries.remove(sel_entry_obj)
+        
+        # The entries_by_species is a dict mapping species
+        # names to lists of table entry objects. Remove the
+        # object from all such lists:
+        
+        for entry_list in self.entries_by_species.values():
+            try:
+                entry_list.remove(sel_entry_obj)
+            except ValueError:
+                # Entry to be deleted was not in the
+                # species list of the entries_by_species
+                # variable:
+                pass
+
+    #------------------------------------
+    # _make_entry_lookup
+    #-------------------
+    
+    def _make_entry_lookup(self, entries):
+
+        # Lookup of entries by species:
+        #    {species1 : [entry4, entry 11],
+        #     species2 : [entry4, entry 2]
+        #    }
+        entries_by_species = {}
+        for tbl_entry in entries:
+            for species in tbl_entry.species_list:
+                try:
+                    entries_by_species[species].append(tbl_entry)
+                except KeyError:
+                    # First encounter:
+                    entries_by_species[species] = [tbl_entry]
+                    
+        return entries_by_species
+
 # --------------------- Class RavenSelectionTableEntry -----
 
 class RavenSelectionTableEntry:
@@ -2202,7 +2307,7 @@ class RavenSelectionTableEntry:
         self.type          = entry_dict['type']
         self.time_interval = entry_dict['time_interval']
         self.freq_interval = entry_dict['freq_interval']
-        
+
     #------------------------------------
     # start_time
     #-------------------
@@ -2237,7 +2342,8 @@ class RavenSelectionTableEntry:
     #-------------------
     
     def __eq__(self, other):
-        return (self.time_interval == other.time_interval)
+        return (self.time_interval == other.time_interval) and \
+                (self.freq_interval == other.freq_interval)
                 
     #------------------------------------
     # __lt__
@@ -2246,6 +2352,24 @@ class RavenSelectionTableEntry:
     def __lt__(self, other):
         
         return (self.time_interval < other.time_interval)
+
+    #------------------------------------
+    # __deepcopy__ 
+    #-------------------
+
+    def __deepcopy__(self, memo):
+        entry_dict = {'Selection'      : self.sel_id,
+                      'Begin Time (s)' : self.start_time,
+                      'End Time (s)'   : self.stop_time,
+                      'Low Freq (Hz)'  : self.low_freq,
+                      'High Freq (Hz)' : self.high_freq,
+                      'mix'            : deepcopy(self.species_list[1:], memo),
+                      'species'        : self.species_list[0],   # a string
+                      'type'           : self.type,
+                      'time_interval'  : deepcopy(self.time_interval, memo),
+                      'freq_interval'  : deepcopy(self.freq_interval, memo),
+                      }
+        return RavenSelectionTableEntry(entry_dict)
 
 # -------------------- Class ProcessWithoutWarnings ----------
 
@@ -2290,4 +2414,3 @@ class ProcessWithoutWarnings(mp.Process):
         if not type(new_val) == mp.sharedctypes.Synchronized:
             raise TypeError(f"The ret_val instance var must be multiprocessing shared C-type, not {new_val}")
         self._ret_val = new_val
-

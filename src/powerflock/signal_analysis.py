@@ -341,7 +341,7 @@ class SignalAnalyzer:
         a Series of spectral continuity values, one value for each timeframe.
         
         Each element (i.e. information about one timeframe) in the returned Series 
-        is the percentage of frequencies at the time what participate in a ridge. 
+        is the percentage of frequencies at the time that participate in a ridge. 
 
         :param spec_df:
         :type spec_df:
@@ -405,10 +405,18 @@ class SignalAnalyzer:
             fig.show()
             input(f"Contours for spectrogram; press ENTER to continue: ")
         
+        
+        # Width of spectrogram time in msec:
+        timeframe_width = 1000 * cls.raven_spectro_timeframe_width(extra_granularity=False)
+        
         # Obtain new df with spurious contours removed:
         # keep only the contours longer than continuity_time_thres
         # milliseconds:
-        long_contours_df = cls.contour_length_filter(contour_df, continuity_time_thres)
+        
+        
+        long_contours_df = cls.contour_length_filter(contour_df, 
+                                                     continuity_time_thres, 
+                                                     timeframe_width=timeframe_width)
         
         if plot_contours:
             _ax = Charter.draw_contours(long_contours_df,
@@ -729,7 +737,7 @@ class SignalAnalyzer:
     #-------------------
 
     @classmethod
-    def contour_length_filter(cls, contour_df, continuity_time_thres=50):
+    def contour_length_filter(cls, contour_df, continuity_time_thres=50, timeframe_width=None):
         '''
         Given a boolean df whose True cells indicate the presence of a 
         a horizontal spectrum contour along one frequency row, set contour
@@ -787,9 +795,6 @@ class SignalAnalyzer:
         :rtype: pd.DataFrame([bool])
         '''
 
-        # Compute the number of spectrum time frames required
-        # to consider an energy contour long enough (in milliseconds):
-        timeframe_width = (contour_df.columns[1] - contour_df.columns[0]) * 1000
         num_rows, _num_cols = contour_df.shape
         num_contour_frames = int(round((continuity_time_thres / timeframe_width), 0))
         long_contours = contour_df.copy() 
@@ -1012,6 +1017,35 @@ class SignalAnalyzer:
         return spec_df
 
     #------------------------------------
+    # raven_spectro_timeframe_width
+    #-------------------
+    
+    @classmethod
+    def raven_spectro_timeframe_width(cls, extra_granularity=False):
+        '''
+        Compute duration of one spectrogram time slice.
+        The spectrogram is assumed to have been computed
+        via STFT parameters used in raven_spectrogram().
+        
+        The extra_granularity argument must match the one used
+        when the spectrogram was created.
+        
+        :param extra_granularity: whether or not the time
+            granularity was enhanced when the spectrogram
+            was created
+        :type extra_granularity: bool
+        :return: time in fractional seconds
+        :rtype: float
+        '''
+        
+        if extra_granularity:
+            hop_length = 256
+        else:
+            hop_length = 512
+
+        return hop_length / 22050 
+
+    #------------------------------------
     # raven_spectro_duration
     #-------------------
     
@@ -1020,7 +1054,7 @@ class SignalAnalyzer:
         '''
         Compute time duration of a given spectrogram.
         The spectrogram is assumed to have been computed
-        via STFT parameters used in raven_spectro_duration().
+        via STFT parameters used in raven_spectrogram().
         
         The extra_granularity argument must match the one used
         when the spectrogram was created.
