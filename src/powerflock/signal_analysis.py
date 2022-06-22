@@ -5,23 +5,25 @@ Created on Oct 1, 2021
 '''
 from collections import namedtuple
 from enum import Enum
-import multiprocessing as mp
 import os
 import warnings
 
-import librosa
-from logging_service.logging_service import LoggingService
-from scipy.signal import argrelextrema
-
 from data_augmentation.sound_processor import SoundProcessor
 from data_augmentation.utils import Utils, Interval
-import matplotlib.pyplot as plt
-#from multitaper.multitaper_spectrogram_python import MultitaperSpectrogrammer
-import numpy as np
-import pandas as pd
+import librosa
+from logging_service.logging_service import LoggingService
 from powerflock.signatures import Signature
 from result_analysis.charting import Charter
+from scipy.signal import argrelextrema
+import statsmodels.api as sm
 
+import matplotlib.pyplot as plt
+import multiprocessing as mp
+import numpy as np
+import pandas as pd
+
+
+#from multitaper.multitaper_spectrogram_python import MultitaperSpectrogrammer
 ClipInfo = namedtuple("ClipInfo", "clip start_idx end_idx fname sr")
 
 class SpectralAggregation(Enum):
@@ -237,7 +239,7 @@ class SignalAnalyzer:
            spectro is a multitaper spectro, leave the default, and the
            values will be used as is.
         
-        :param spec_src: pectrogram computed as with raven_spectrogram(),
+        :param spec_src: spectrogram computed as with raven_spectrogram(),
             or path to audio file
         :type spec_src: {str | pd.DataFrame}
         :param bandpass: if provided, the specification of a bandpass filter
@@ -407,7 +409,7 @@ class SignalAnalyzer:
         
         
         # Width of spectrogram time in msec:
-        timeframe_width = 1000 * cls.raven_spectro_timeframe_width(extra_granularity=False)
+        timeframe_width = 1000 * cls.spectro_timeframe_width(extra_granularity=False)
         
         # Obtain new df with spurious contours removed:
         # keep only the contours longer than continuity_time_thres
@@ -874,6 +876,69 @@ class SignalAnalyzer:
         return filtered_spec
 
     #------------------------------------
+    # autocorrelation
+    #-------------------
+    
+    @classmethod
+    def autocorrelation(cls, time_series, nlags=None):
+        '''
+        Given any time sequence, return its autocorrelation
+        sequence and an equal-length sequence of low/high
+        confidence interval pairs.
+        
+        If nlags is None, nlag is set to:
+               min(10*np.log10(len(time_series)), 
+                   len(time_series)-1)
+        This convention follows the statsmodels acf() function.
+
+        If nlags is an int, the parameter is the number of lags for
+        which to compute results.
+
+        Returns a three-column dataframe: autoregression, low_ci_bound,
+        high_ci_bound
+        
+        Returns NaN if autocorrelation fails (e.g. nlags too large).
+        
+        :param time_series: time series for which autocorrelation
+            is to be computed.
+        :type time_series: { pd.Series[{float | int} | np.ndarray[{float | int}] | array[{float | int}] }
+        :param nlags: number of time lags for which to compute the autocorrelation 
+        :type nlags: {int | None}
+        :return: the autocorrelation coefficients and corresponding
+            confidence intervals in one 3-column df
+        :rtype:  pd.DataFrame
+        '''
+
+        if type(time_series) != pd.Series:
+            time_series = pd.Series(time_series)
+            
+        # If time series contains NaNs, fill them with their
+        # predecessor element values:
+        if pd.isna(time_series).sum() > 0:
+            time_series = time_series.fillna(method='ffill')
+        
+        # Passing alpha (the threshold p value) causes the confidence
+        # intervals to be included in the return. Setting zero to False
+        # prevents lag == 0 to be included (it is always 1):
+        all_rhos, conf_intervals = sm.tsa.stattools.acf(time_series,
+                                                        nlags=nlags,
+                                                        alpha=0.05)
+        # Leave out row0, which is the trivial lag==0 --> acorr==1:
+        all_rhos = pd.Series(all_rhos)[1:]
+        
+        # Get the mean of all the low/high confidence bounds:
+        # Start by separating the low and high bounds into Series.
+        # Again: the [1:] removes the trivial lag==0 result:
+        low_conf_list, high_conf_list = list(zip(*conf_intervals))
+        low_bounds_mean     = pd.Series(low_conf_list)[1:].mean()
+        high_bounds_mean    =  pd.Series(high_conf_list)[1:].mean()
+        
+        is_significant = np.logical_or(all_rhos < low_bounds_mean, all_rhos > high_bounds_mean) 
+
+        res = pd.DataFrame({'rho' : all_rhos, 'is_significant' : is_significant})
+        return res
+
+    #------------------------------------
     # spectral_measures_each_timeframe
     #-------------------
 
@@ -885,16 +950,16 @@ class SignalAnalyzer:
         '''
         Return a dataframe 
         
-                    'flatness', 'continuity', 'pitch', 'freq_mod'
+                    'flatness', 'continuity', 'pitch', 'freq_mod', 'energy_sum'
           t0
           t1                    ...
         
         The df will have as many rows as spec_snip
         has timeframes.
         
-        :param spec_df: spectrogram, usually several
+        :param spec_snip: spectrogram, usually several
             frames of a larger spectrogram
-        :type spec_df: pd.DataFrame
+        :type spec_snip: pd.DataFrame
         :param sig: a Signature from which to take 
             information such as bandpass filtering
         :type sig: Signature
@@ -913,9 +978,12 @@ class SignalAnalyzer:
                                                                            ) 
         pitch = SignalAnalyzer.harmonic_pitch(spec_snip)
         freq_mod = SignalAnalyzer.freq_modulations(spec_snip)
+        
+        energy_sum = spec_snip.sum(axis=0)
+        energy_sum.name = 'energy_sum'
 
         # Each measure makes a col:
-        snip_results = pd.concat([flatness, continuity, pitch, freq_mod], axis=1)
+        snip_results = pd.concat([flatness, continuity, pitch, freq_mod, energy_sum], axis=1)
         
         field_recording_sig = Signature(
             sig.species,
@@ -1017,19 +1085,25 @@ class SignalAnalyzer:
         return spec_df
 
     #------------------------------------
-    # raven_spectro_timeframe_width
+    # spectro_timeframe_width
     #-------------------
     
     @classmethod
-    def raven_spectro_timeframe_width(cls, extra_granularity=False):
+    def spectro_timeframe_width(cls, hop_length=512, sample_rate=22050, extra_granularity=False):
         '''
         Compute duration of one spectrogram time slice.
-        The spectrogram is assumed to have been computed
-        via STFT parameters used in raven_spectrogram().
+        The default parameters assume that the spectrogram was computed
+        via STFT parameters used in raven_spectrogram() and the 
+        Raven labeling tool.
         
         The extra_granularity argument must match the one used
         when the spectrogram was created.
         
+        :param hop_length: with in sample of the slide used
+            when creating the spectrogram (an FFT parameter)
+        :type hop_length: int
+        :param sample_rate: originating audio's sampling rage
+        :type sample_rate: int
         :param extra_granularity: whether or not the time
             granularity was enhanced when the spectrogram
             was created
@@ -1037,13 +1111,11 @@ class SignalAnalyzer:
         :return: time in fractional seconds
         :rtype: float
         '''
-        
-        if extra_granularity:
-            hop_length = 256
-        else:
-            hop_length = 512
 
-        return hop_length / 22050 
+        if extra_granularity:
+            hop_length = int(hop_length / 2)
+
+        return hop_length / sample_rate 
 
     #------------------------------------
     # raven_spectro_duration

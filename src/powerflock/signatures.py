@@ -739,7 +739,7 @@ class Signature(JsonDumpableMixin):
         :param val: value to be normalized
         :type val: {number | pd.Series | pd.DataFrame | np.ndarray}
         :param measure_type: which kind of measure is to be normalized
-        :type measure_type: str
+        :type measure_type: {'flatness', 'continuity', 'pitch', 'freq_mod', 'energy_sum'}
         :return element-wise normalized value
         :rtype {number | pd.Series | pd.DataFrame | np.ndarray}
         '''
@@ -747,7 +747,7 @@ class Signature(JsonDumpableMixin):
         try:
             measure_info = self.scale_info[measure_type]
         except KeyError:
-            raise ValueError(f"Measure type must be one of 'flatness', 'continuity', 'pitch', or 'freq_mod', not {measure_type}")
+            raise ValueError(f"Measure type must be one of 'flatness', 'continuity', 'pitch', 'freq_mod', or 'energy_sum', not {measure_type}")
         res = (val - measure_info['mean']) / measure_info['standard_measure']
         return res
         
@@ -768,11 +768,13 @@ class Signature(JsonDumpableMixin):
         normed_continuity = self.norm_to_sig(self.sig['continuity'], measure_type='continuity')
         normed_pitch      = self.norm_to_sig(self.sig['pitch'], measure_type='pitch')
         normed_freq_mod   = self.norm_to_sig(self.sig['freq_mod'], measure_type='freq_mod')
+        normed_energy_sum = self.norm_to_sig(self.sig['energy_sum'], measure_type='energy_sum')
         
         new_sig = pd.DataFrame({'flatness' : normed_flatness,
                                 'continuity' : normed_continuity,
                                 'pitch' : normed_pitch,
-                                'freq_mod' : normed_freq_mod
+                                'freq_mod' : normed_freq_mod,
+                                'energy_sum' : normed_energy_sum
                                 })
         self.sig = new_sig
         self.normalized = True
@@ -836,7 +838,7 @@ class Signature(JsonDumpableMixin):
     
     def plot(self, ax=None):
         '''
-        Plot the signature as four lines. The x axis 
+        Plot the signature as five lines. The x axis 
         will be labeled with time into signature.
         
         The y axis will be unitless, since the values

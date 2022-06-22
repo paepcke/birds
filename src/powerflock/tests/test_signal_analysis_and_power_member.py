@@ -20,9 +20,27 @@ from powerflock.signal_analysis import SignalAnalyzer
 from powerflock.signatures import SpectralTemplate, TemplateCollection
 from result_analysis.charting import Charter
 
+# If a column is added to signature df, then:
+#   o run to just past
+#      cls.templates = cls.experiment.read('templates', TemplateCollection)
+#   o Then update all test templates' signatures dataframes and
+#     associated scale_info structs with these two loops:
+#
+# for tmpl in cls.templates.values():
+#     for sig in tmpl.signatures:
+#         num_rows = len(sig.sig)
+#         sig.sig['energy_sum'] = [0.0]*num_rows
 
-TEST_ALL = True
-#TEST_ALL = False
+# for tmpl in cls.templates.values():
+#     for sig in tmpl.signatures:
+#         sig.scale_info['energy_sum'] = {'mean' : 0.0, 'standard_measure' : 0.0}
+#
+# Then save back to the test template:
+# cls.experiment.save('templates', cls.templates)
+
+
+#*****TEST_ALL = True
+TEST_ALL = False
 
 class SignalAnalysisTester(unittest.TestCase):
 
@@ -416,7 +434,7 @@ class SignalAnalysisTester(unittest.TestCase):
     # test_power_grid_search 
     #-------------------
     
-    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    #********@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_power_grid_search(self):
         '''
         Takes about 3 minutes:
@@ -462,16 +480,17 @@ class SignalAnalysisTester(unittest.TestCase):
         df = power_res.prob_df
         
         #**** WAS:self.assertTupleEqual(df.shape, (76, 8))
-        self.assertTupleEqual(df.shape, (256,7))
+        self.assertTupleEqual(df.shape, (256,8))
         first_row = df.iloc[0]
         expected = pd.Series({
             'start_idx'   :    0.000000,
             'stop_idx'    :  115.000000,
             'n_samples'   :  115.000000,
-            'match_prob'  :    0.000004,
+            'match_prob'  :    0.062621,
             'sig_id'      :    1.000000,
             'start_time'  :    0.000000,
-            'stop_time'   :    1.335147},
+            'stop_time'   :    1.335147,
+            'raw_prob'    :    0.072951},
             name=0.6675736961451247)
         Utils.assertSeriesEqual(first_row, expected, 3)
 
@@ -593,7 +612,7 @@ class SignalAnalysisTester(unittest.TestCase):
     # test_plot_pr_curve_power_result
     #-------------------
 
-    #*****@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_plot_pr_curve_power_result(self):
 
         # SIMILAR_LENGTH: AP: 0.42
@@ -617,6 +636,64 @@ class SignalAnalysisTester(unittest.TestCase):
         
         print("Place breakpoint in test_plot_pr_curve_power_result to see chart.")
         
+    #------------------------------------
+    # test_autocorrelation
+    #-------------------
+    
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    def test_autocorrelation(self):
+        
+        # Very simple series:
+        s = pd.Series([1,2,3])
+        rho, p_value = SignalAnalyzer.autocorrelation(s, nlags=0)
+        self.assertEqual(round(rho, 2), 1.0)
+        self.assertEqual(round(p_value, 2), 0.0)
+        
+        # Sine wave:
+        rads_in_circ = np.arange(0,2*np.pi, np.pi/180)
+        sin_s = pd.Series(np.sin(rads_in_circ))
+
+        # Sign wave lag of 0 should be corr of 1, with p_value of 0.0
+        rho, p_value = SignalAnalyzer.autocorrelation(sin_s, 0)
+        self.assertTupleEqual((round(rho, 2), round(p_value, 2)), (1, 0.0))
+        
+        # Shifting sin by 90deg should give a perfect
+        # correlation:
+        lag = int(np.pi/2)
+        rho, p_value = SignalAnalyzer.autocorrelation(sin_s, lag)
+        self.assertTupleEqual((round(rho, 2), round(p_value,2)), (1.0, 0.0))
+        
+        # Test autocorrelation for all lags:
+        df = SignalAnalyzer.autocorrelation(sin_s, [0, int(np.pi/2)])
+        expected = pd.DataFrame([[1.0, 0.0],
+                                 [1.0, 0.0]],
+                                 columns=['rho', 'p_value'],
+                                 index=[0, int(np.pi/2)]
+                                 )
+        Utils.df_eq(df, expected, decimals=2)
+        
+        # Test lag given as Python range:
+        df = SignalAnalyzer.autocorrelation(sin_s, range(1,3))
+        expected = pd.DataFrame([[1.0, 0.0],
+                                 [1.0, 0.0]],
+                                 columns=['rho', 'p_value'],
+                                 index=[1, 2]
+                                 )
+        Utils.df_eq(df, expected, decimals=2)
+        
+        # Test lag given as np array:
+        df = SignalAnalyzer.autocorrelation(sin_s, np.array([1,2]))
+        expected = pd.DataFrame([[1.0, 0.0],
+                                 [1.0, 0.0]],
+                                 columns=['rho', 'p_value'],
+                                 index=[1, 2]
+                                 )
+        Utils.df_eq(df, expected, decimals=2)
+        
+        with self.assertRaises(TypeError):
+            SignalAnalyzer.autocorrelation(sin_s, 1.24)
+        with self.assertRaises(TypeError):
+            SignalAnalyzer.autocorrelation(sin_s, np.ndarray([1,2,3]))
 
 # -------------- Utilities -------------
 

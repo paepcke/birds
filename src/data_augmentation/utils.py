@@ -1984,6 +1984,36 @@ class Utils:
         return res
 
     #------------------------------------
+    # roll
+    #-------------------
+    
+    @classmethod
+    def roll(cls, series_to_roll, num=1):
+        '''
+        Takes a pandas Series and returns a 
+        new series with the same name,
+        but shifted, with the dropped element fed back
+        into the other end.
+        
+            Ex for num=1: 
+                [1,2,3] -> [3,1,2]
+                
+               for num=-1:
+                [1,2,3] -> [2,3,1]
+
+        :param series_to_roll: the Series to roll 
+        :type series_to_roll: pd.Series
+        :param num: number of places to roll. Can be negative
+        :type num: int
+        :returns a new Series with all elements rolled
+        :rtype pd.Series
+        '''
+
+        series_rolled = pd.Series(np.roll(series_to_roll, num))
+        series_rolled.name = series_to_roll.name
+        return series_rolled
+
+    #------------------------------------
     # timestamp_from_exp_path 
     #-------------------
     
