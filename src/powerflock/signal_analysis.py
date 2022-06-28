@@ -955,10 +955,9 @@ class SignalAnalyzer:
         res_df['is_significant'] = np.logical_or(res_df.acorr < res_df.ci_low, res_df.acorr > res_df.ci_high)
         
         # Add the time for each lag from the input time series:
-        # The first time value is dropped as it corresponds to 
-        # lag 0. The last is dropped b/c no more shifting is 
-        # possible:
-        res_df.insert(0, 'time', time_series.index[1:-1])
+        # We pull the time series' index (the times) from the
+        # rows that correspond to the acorr results:
+        res_df.insert(0, 'time', time_series.iloc[res_df.index].index)
         res_df.index = res_df.time
         
         return res_df
