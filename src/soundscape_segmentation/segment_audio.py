@@ -4,20 +4,26 @@ Created on May 30, 2022
 @author: paepcke
 '''
 from copy import deepcopy
+from enum import Enum
+import json
 import os
-from pathlib import Path
 
+from birdsong.utils.utilities import FileUtils
 from data_augmentation.utils import RavenSelectionTable, Utils, Interval
-from experiment_manager.experiment_manager import ExperimentManager
+from experiment_manager.experiment_manager import ExperimentManager, \
+    JsonDumpableMixin
 from logging_service import LoggingService
 from powerflock.signal_analysis import SignalAnalyzer
 from powerflock.signatures import Signature
-from birdsong.utils.utilities import FileUtils
 from result_analysis.charting import Charter
 
 import numpy as np
 import pandas as pd
 
+
+class PatternLookbackDurationUnits(Enum):
+    LAGS = 0
+    SECONDS = 1
 
 #from result_analysis.charting import Charter
 CUR_DIR    = os.path.dirname(__file__)
@@ -44,36 +50,45 @@ class AudioSegmenter:
 
     proj_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
 
-    def __init__(self, 
-                 experimenter, 
-                 spectro_path, 
-                 audio_path=None, 
-                 selection_tbl_path=None):
+    def __init__(self, experimenter, settings):
         '''
         Constructor
         '''
 
-        self.experimenter = experimenter
-        self.spectro_path = spectro_path
-        self.audio_path   = Path(audio_path)
+        self.experimenter  = experimenter
+        self.spectro_path  = settings.spectro_path
+        self.audio_path    = settings.Path(settings.audio_path) if settings.audio_path is not None else None
+        selection_tbl_path = settings.selection_tbl_path
+        self.round_to      = settings.round_to
+        raw_lookback_duration = settings.pattern_lookback_dur
+        
+            
+        
         
         self.log = LoggingService()
         
         # Get the time for one autocorrelation lag:
         self.lag_duration = SignalAnalyzer.spectro_timeframe_width()
 
-        self.exp_root = os.path.join(AudioSegmenter.proj_root, 'experiment')
+        # Need number of lags to compute for each autocorrelation.
+        # The lag may be given in seconds, or directly in lags:
+        if settings.pattern_lookback_dur_units == PatternLookbackDurationUnits.LAGS:
+            # Given in lags:
+            self.num_lags = raw_lookback_duration
+        else:
+            # Lookback duration given in number of seconds:
+            self.num_lags = int(raw_lookback_duration / self.lag_duration) 
 
-        if not os.path.exists(spectro_path):
-            self.spectro = self.make_test_spectro(audio_path)
+        if not os.path.exists(self.spectro_path):
+            self.spectro = self.make_test_spectro(self.audio_path)
         else:
             self.log.info("Reading spectrogram from .csv file...")
-            self.spectro = pd.read_csv(spectro_path,
+            self.spectro = pd.read_csv(self.spectro_path,
                                        index_col='freq',
                                        header=0
                                        )
         # Get the spectrogram times as np array of rounded floats:
-        spectro_times_rounded = self.spectro.columns.to_numpy(dtype=float).round(self.ROUND_TO)
+        spectro_times_rounded = self.spectro.columns.to_numpy(dtype=float).round(self.round_to)
         self.spectro_times = pd.Series(spectro_times_rounded, 
                                        index=spectro_times_rounded, 
                                        name='spectro_times')
@@ -117,10 +132,6 @@ class AudioSegmenter:
         
         self.log.info(f"Slicing spectro into {int((high_freq - low_freq) / slice_height)} freq bands: {slice_height} high [{low_freq}, {high_freq}]")
         slice_arr = []
-        
-        # Get /foo/bar  from /foo/bar.wav
-        #out_path_root = Path.joinpath(self.audio_path.parent, self.audio_path.stem)
-        out_key_root = self.audio_path.stem
         freqs = pd.Series(self.spectro.index, name='freqs')
         
         for target_freq_low in np.arange(low_freq, high_freq, slice_height):
@@ -131,10 +142,12 @@ class AudioSegmenter:
             #    slice = spectro.loc[low_freq:high_freq,:] 
             spectro_slice = self.spectro[(self.spectro.index >= low_freq) & (self.spectro.index <= high_freq)]
             # Round the time columns to 5 places:
-            spectro_slice.columns = pd.Series(spectro_slice.columns.astype(float)).round(self.ROUND_TO)
+            spectro_slice.columns = pd.Series(spectro_slice.columns.astype(float)).round(self.round_to)
             
             slice_arr.append(SpectroSlice(low_freq, high_freq, slice_height, spectro_slice)) 
-            self.experimenter.save(f"{out_key_root}_{target_freq_low}Hz", spectro_slice)
+            
+            # Uncomment to save all spectro slices separately:
+            #self.experimenter.save(f"{self.recording_id}_{target_freq_low}Hz", spectro_slice)
 
         return slice_arr
 
@@ -156,7 +169,7 @@ class AudioSegmenter:
         # four signatures across the whole spectro: ******
         sig_for_whole_spectro = Signature('test_species', 
                                           spectro, 
-                                          fname=AUDIO_PATH, 
+                                          fname=self.audio_path,
                                           sig_id=0)
         sig = SignalAnalyzer.spectral_measures_each_timeframe(spectro, sig_for_whole_spectro)
         
@@ -355,14 +368,12 @@ class AudioSegmenter:
         #    ]
         res_df = pd.DataFrame(index=self.spectro_times)
         
-        # Number of lags: PATTERN_LOOKBACK_DURATION seconds:
-        num_lags  = int(lookback_duration / SignalAnalyzer.spectro_timeframe_width())
         stop_time = max(sig_measure.index)
         
         self.log.info(f"Autocorrelations for measure {sig_measure.name}: [0,{stop_time}] sec")
 
         # Do autocorrelation every lookback_duration seconds:
-        for spectro_start_time in sig_measure.index[::num_lags]:
+        for spectro_start_time in sig_measure.index[::self.num_lags]:
             
             # Start autocorrelation at current start time,
             # and compute it down twice the lookback_duration
@@ -382,22 +393,11 @@ class AudioSegmenter:
             measures = sig_measure.loc[spectro_start_time:spectro_end_time]
             
             # Get df w/ cols like 'flatness', 'is_significant':
-            acorr_res = SignalAnalyzer.autocorrelation(measures, nlags=num_lags)
-            #*********** REMOVE
-            # How many autocorrelations in this time period
-            # were significant?
-            #num_significant_acorrs = sum(acorr_res.is_significant)
-            #row_name = f"{start_time}_{freq_low}Hz_{freq_high}Hz"
-            #col_res_arr.append([spectro_start_time, num_significant_acorrs])
-            #********** END REMOVE
+            acorr_res = SignalAnalyzer.autocorrelation(measures, nlags=self.num_lags)
             
             # Add a signature type column ('flatness' or 'pitch', etc.)
             acorr_res.insert(1, 'sig_type', [sig_measure.name]*len(acorr_res))
-            #*********Remove
-            #*******res_df.loc[acorr_res.index] = acorr_res
-            #res_df = res_df.merge(acorr_res, left_index=True, right_index=True)
-            #res_df = pd.concat([res_df, acorr_res])
-            #*********End Remove
+            
             res_df.loc[acorr_res.index, acorr_res.columns] = acorr_res
 
         return res_df
@@ -451,7 +451,7 @@ class AudioSegmenter:
         # Start times snapped to the spectrogram time frames. Selection tables
         # don't have massive numbers of entries, so loop is fine:
         
-        sig_vals_df.index = sig_vals_df.index.astype(float).to_series().round(self.ROUND_TO)
+        sig_vals_df.index = sig_vals_df.index.astype(float).to_series().round(self.round_to)
         sig_vals_df['is_sel_start'] = False
         sig_vals_df['is_sel_stop'] = False
         
@@ -461,13 +461,13 @@ class AudioSegmenter:
         for start, stop in zip(start_times, stop_times):
 
             snapped_start = Utils.nearest_in_array(sig_vals_df.index,
-                                                   round(start,self.ROUND_TO),
+                                                   round(start,self.round_to),
                                                    is_sorted=True)
             snapped_starts[start] = snapped_start
             sig_vals_df.loc[snapped_start, 'is_sel_start'] = True
     
             snapped_stop = Utils.nearest_in_array(sig_vals_df.index,
-                                                  round(stop,self.ROUND_TO),
+                                                  round(stop,self.round_to),
                                                   is_sorted=True)
             snapped_stops[stop] = snapped_stop
             sig_vals_df.loc[snapped_stop, 'is_sel_stop'] = True
@@ -552,10 +552,10 @@ class AudioSegmenter:
         # Get list of true start/stop times from selection table,
         # rounded to our standard ROUND_TO decimal places:
         
-        true_start_times = pd.Series([np.round(sel_entry.start_time, self.ROUND_TO)
+        true_start_times = pd.Series([np.round(sel_entry.start_time, self.round_to)
                                  for sel_entry
                                  in self.sel_tbl], name='true_sel_starts')
-        true_stop_times = pd.Series([np.round(sel_entry.stop_time, self.ROUND_TO)
+        true_stop_times = pd.Series([np.round(sel_entry.stop_time, self.round_to)
                                 for sel_entry
                                 in self.sel_tbl], name='true_sel_stops')
         
@@ -656,13 +656,156 @@ class SpectroSlice:
     def __repr__(self):
         return self.__str__()
 
+# -------------------------- Class SoundSegmentationSettings --------------
+
+class SoundSegmentationSetting(JsonDumpableMixin):
+    
+    #------------------------------------
+    # Constructor
+    #-------------------
+    
+    def __init__(self,
+                 pattern_lookback_dur,
+                 pattern_lookback_dur_units,
+                 spectro_path=None,
+                 audio_path=None,
+                 selection_tbl_path=None,
+                 recording_id=None,
+                 round_to=5
+                 ):
+        '''
+        Holds parameters for a soundscape segmentation run.
+        Lookback duration may be specified either in fractional
+        seconds, or in a number of lags. The pattern_lookback_dur_units
+        parameter must specify which it is. The spectrogram time frame
+        times are used to convert from one to the other.
+        
+        Either spectrogram path or audio path may be specified. If
+        spectrogram path is provided, it is used, and the audio path
+        is ignored. Else a spectrogram is created from the audio.
+        
+        If a Raven selection is provided, its selection start and end
+        times will be available in the final result dataframe.  
+        
+        The recording_id is an optional string that identifies the soundscape
+        recording indpendent of file location. Ex: AM02_20190717_052958
+        If provided it is used when creating file names. 
+         
+        :param pattern_lookback_dur: number of fractional seconds, or
+            number of lags to use for autocorrelation
+        :type pattern_lookback_dur: {float | int}
+        :param pattern_lookback_dur_units: whether pattern_lookback_dur is
+            in units of seconds or of lags
+        :type pattern_lookback_dur_units: PatternLookbackDurationUnits
+        :param spectro_path: path to an already created spectrogram 
+        :type spectro_path: {str | None}
+        :param audio_path: path to a soundscape audio file
+        :type audio_path: {str | None}
+        :param selection_tbl_path: path to Raven selection table, if one
+            is available
+        :type selection_tbl_path: {str | None}
+        :param recording_id: optional string that identifies the soundscape
+            recording indpendent of file location.
+        :type recording_id: {None | str}
+        :param round_to: number of decimal places to which all time 
+            measurements are to be rounded. 
+        :type round_to: int
+        '''
+        self.pattern_lookback_dur = pattern_lookback_dur
+        self.pattern_lookback_dur_units = pattern_lookback_dur_units
+        self.spectro_path = spectro_path
+        self.audio_path = audio_path
+        self.selection_tbl_path = selection_tbl_path
+        self.recording_id = recording_id
+        self.round_to = round_to
+
+    #------------------------------------
+    # json_dumps
+    #-------------------
+    
+    def json_dumps(self):
+        
+        # Create a dict with the instance vars.
+        return json.dumps(self.__dict__)
+    
+    #------------------------------------
+    # json_loads
+    #-------------------
+    
+    @classmethod
+    def json_loads(cls, jstr):
+        '''
+        Given a json string created by
+        json_dumps(), materialize a SoundSegmentationSetting
+        instance filled with the proper instance
+        var values.
+        
+        :param jstr: json string created via json_dumps()
+        :type jstr: str
+        :return: new instance of SoundSegmentationSetting
+        :rtype SoundSegmentationSetting
+        '''
+        
+        as_dict = json.loads(jstr)
+        res = SoundSegmentationSetting(
+            as_dict['pattern_lookback_dur'],
+            as_dict['pattern_lookback_dur_units'],
+            as_dict['spectro_path'],
+            as_dict['audio_path'],
+            as_dict['selection_tbl_path'],
+            as_dict['recording_id'],
+            as_dict['round_to']
+            )
+        return res
+
+    #------------------------------------
+    # json_dump 
+    #-------------------
+    
+    def json_dump(self, fpath):
+        '''
+        Render self onto disk, json encoded.
+        Recoverable via SoundSegmentationSetting.json_load()
+        
+        :param fpath: destination path
+        :type fpath: str
+        '''
+        with open(fpath, 'w') as fd:
+            fd.write(self.json_dumps())
+            
+    #------------------------------------
+    # json_load 
+    #-------------------
+
+    @classmethod
+    def json_load(cls, fpath):
+        '''
+        Return a SoundSegmentationSetting instance materialized
+        from a previously stored, json encoded file.
+        This method is the inverse of json_dump() 
+
+        :param fpath: file with json-rendered SoundSegmentationSetting instance
+        :type fpath: str
+        :return new SoundSegmentationSetting instance
+        :rtype SoundSegmentationSetting
+        '''
+        with open(fpath, 'r') as fd:
+            jstr = fd.read()
+        return cls.json_loads(jstr)
+
 # ------------------------ Main ------------
 if __name__ == '__main__':
-    exp = ExperimentManager(EXP_ROOT)
-    segmenter = AudioSegmenter(exp,
-                               SPECTRO_PATH,
-                               AUDIO_PATH,
-                               selection_tbl_path=TEST_SEL_TBL)
+    #exp_root = os.path.join(EXP_ROOT, 'ExpAM02_20190717_052958_HalfSecondLags')
+    exp_root = os.path.join(EXP_ROOT, 'ExpAM02_20190717_052958_OneLag')
+    exp = ExperimentManager(exp_root)
+    settings = SoundSegmentationSetting(
+        1, # One lag only
+        PatternLookbackDurationUnits.LAGS,
+        spectro_path = SPECTRO_PATH,
+        selection_tbl_path=TEST_SEL_TBL,
+        recording_id = 'AM02_20190717_052958'
+        )
+    segmenter = AudioSegmenter(exp, settings)
     
     acorrs = segmenter.compute_autocorrelations(['flatness', 'continuity', 'pitch', 'freq_mod', 'energy_sum'])
         
