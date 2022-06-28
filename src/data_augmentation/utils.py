@@ -1074,6 +1074,8 @@ class Utils:
         :rtype {int | float} 
         '''
         
+        if type(arr) == pd.Series:
+            arr = arr.to_numpy()
         if is_sorted:
             idx = np.searchsorted(arr, val, side="left")
             if idx > 0 and \

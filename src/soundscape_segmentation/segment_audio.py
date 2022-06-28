@@ -9,14 +9,14 @@ from pathlib import Path
 
 from data_augmentation.utils import RavenSelectionTable, Utils, Interval
 from experiment_manager.experiment_manager import ExperimentManager
+from logging_service import LoggingService
 from powerflock.signal_analysis import SignalAnalyzer
 from powerflock.signatures import Signature
+from birdsong.utils.utilities import FileUtils
 from result_analysis.charting import Charter
 
 import numpy as np
 import pandas as pd
-
-from logging_service import LoggingService
 
 
 #from result_analysis.charting import Charter
@@ -27,7 +27,7 @@ AUDIO_PATH =  os.path.join(TEST_DATA, 'kelleyRecommendedFldRec_AM02_20190717_052
 TEST_SEL_TBL = os.path.join(TEST_DATA, 'DS_AM02_20190717_052958.Table.1.selections.txt')
 SPECTRO_PATH = os.path.join(TEST_DATA, 'am02_spectro.csv')
 
-EXP_ROOT = os.path.join(PROJ_ROOT, 'experiment')
+EXP_ROOT = os.path.join(PROJ_ROOT, 'experiments/SoundscapeSegmentation')
 
 #from data_augmentation.sound_processor import SoundProcessor 
 
@@ -36,12 +36,19 @@ class AudioSegmenter:
     
     '''
     
-    PATTERN_LOOKBACK_DURATION = 3 # sec
+    PATTERN_LOOKBACK_DURATION = 0.5 # sec
     '''Number of seconds to consider during autocorrelation computations for detecting patterns'''
+
+    ROUND_TO = 5
+    '''Number of digits to which time floats are rounded throughout'''
 
     proj_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
 
-    def __init__(self, experimenter, spectro_path, audio_path=None, selection_tbl_path=None):
+    def __init__(self, 
+                 experimenter, 
+                 spectro_path, 
+                 audio_path=None, 
+                 selection_tbl_path=None):
         '''
         Constructor
         '''
@@ -60,13 +67,31 @@ class AudioSegmenter:
         if not os.path.exists(spectro_path):
             self.spectro = self.make_test_spectro(audio_path)
         else:
+            self.log.info("Reading spectrogram from .csv file...")
             self.spectro = pd.read_csv(spectro_path,
                                        index_col='freq',
                                        header=0
                                        )
+        # Get the spectrogram times as np array of rounded floats:
+        spectro_times_rounded = self.spectro.columns.to_numpy(dtype=float).round(self.ROUND_TO)
+        self.spectro_times = pd.Series(spectro_times_rounded, 
+                                       index=spectro_times_rounded, 
+                                       name='spectro_times')
+        
         if selection_tbl_path is not None:
-            self.sel_tbl = RavenSelectionTable(selection_tbl_path)
+            self.selections_df = self._process_selection_tbl(self.spectro_times, selection_tbl_path)
             experimenter.save('sel_tbl', self.sel_tbl)
+        else:
+            # No selection table available:
+            is_sel_start = pd.Series([np.nan]*len(self.spectro_times), 
+                                     name='is_sel_start',
+                                     index=self.spectro_times)
+            is_sel_stop  = pd.Series([np.nan]*len(self.spectro_times), 
+                                     name='is_sel_stop',
+                                     index=self.spectro_times)
+            self.selections_df = pd.DataFrame({'true_sel_start' : is_sel_start,
+                                               'true_sel_stop'  : is_sel_stop
+                                               }) 
 
     #------------------------------------
     # slice_spectro
@@ -90,7 +115,7 @@ class AudioSegmenter:
         :rtype [SpectroSlice]
         '''
         
-        self.log.info(f"Slicing spectro into {high_freq - low_freq} freq bands: {slice_height} high [{low_freq}, {high_freq}]")
+        self.log.info(f"Slicing spectro into {int((high_freq - low_freq) / slice_height)} freq bands: {slice_height} high [{low_freq}, {high_freq}]")
         slice_arr = []
         
         # Get /foo/bar  from /foo/bar.wav
@@ -106,7 +131,7 @@ class AudioSegmenter:
             #    slice = spectro.loc[low_freq:high_freq,:] 
             spectro_slice = self.spectro[(self.spectro.index >= low_freq) & (self.spectro.index <= high_freq)]
             # Round the time columns to 5 places:
-            spectro_slice.columns = pd.Series(spectro_slice.columns.astype(float)).round(5)
+            spectro_slice.columns = pd.Series(spectro_slice.columns.astype(float)).round(self.ROUND_TO)
             
             slice_arr.append(SpectroSlice(low_freq, high_freq, slice_height, spectro_slice)) 
             self.experimenter.save(f"{out_key_root}_{target_freq_low}Hz", spectro_slice)
@@ -120,7 +145,7 @@ class AudioSegmenter:
     def compute_sig_whole_spectro(self, spectro_slice_or_spectro):
         
         if type(spectro_slice_or_spectro) == SpectroSlice:
-            slice_desc = f"slice spectro_slice.name"
+            slice_desc = f"slice {spectro_slice_or_spectro.name}"
             spectro = spectro_slice_or_spectro.spectro
         else:
             slice_desc = f"spectro {min(spectro.index)}Hz to {max(spectro.index)}Hz"
@@ -163,25 +188,220 @@ class AudioSegmenter:
     # compute_autocorrelations
     #-------------------
     
-    def compute_autocorrelations(self, sig, col_names):
+    def compute_autocorrelations(self, col_names, lookback_duration=0.5):
+        '''
+        Given a signature and a list of signature column names: ['flatness', 'pitch', ...],
+        apply autocorrelation to each column every lookback_duration seconds.
         
-        res_df = pd.DataFrame()
-        sig_df = sig.sig
-        # Number of lags: PATTERN_LOOKBACK_DURATION seconds:
-        num_lags = int(AudioSegmenter.PATTERN_LOOKBACK_DURATION / SignalAnalyzer.spectro_timeframe_width())
+        Return:
+                   flatness_rho, flatness_sum_significant, pitch_rho, pitch_sum_significant, ...
+            time
+              0          ...               True/False         ...          True/False
+              0.0232
+                ...
+        
+        Time is in seconds of true spectrogram time. The xxx_sum_significant
+        is the number of autocorrelation measures that are significant during
+        the lookback_duration. 
+        
+        The lookback_duration is converted to lags for the purpose of autocorrelation.
+        
+        Time is in seconds
+        :param col_names:
+        :type col_names:
+        :param lookback_duration:
+        :type lookback_duration:
+        '''
+        
+        slice_arr = self.slice_spectro()
+        
+        # For each horizontal one_slice, compute signatures separately:
+        for spectro_slice in slice_arr:
+            exp_key = f"slice_sig_{spectro_slice.low_freq}_{spectro_slice.high_freq}"
+            try:
+                slice_sig = self.experimenter.read(exp_key, Signature)
+            except FileNotFoundError:
+                slice_sig = segmenter.compute_sig_whole_spectro(spectro_slice)
+                self.experimenter.save(exp_key, slice_sig)
+                
+            spectro_slice.sig = slice_sig
 
-        for col_name in col_names:
+        final_res_arr = []
+        
+        for one_slice in slice_arr:
+
+            freq_low  = one_slice.low_freq
+            freq_high = one_slice.high_freq
+            sig_df    = one_slice.sig.sig
             
-            self.log.info(f"Autocorrelation for {col_name}")
+            self.log.info(f"Starting frequency band {round(freq_low,2)}-{round(freq_high,2)}")
+            # Treat each signature measure separately: one requested
+            # df col after the other:
+            for col_name in col_names:
+                
+                #self.log.info(f"Autocorrelation for {col_name}")
+                one_measure_res = self._one_measure_acorr_significance(sig_df[col_name],
+                                                                          lookback_duration)
+                # Add cols for the current frequency low and high:
+                one_measure_res.insert(2, 
+                                          'freq_low', 
+                                          pd.Series([freq_low]*len(one_measure_res), index=one_measure_res.index))
+                one_measure_res.insert(3, 
+                                          'freq_high', 
+                                          pd.Series([freq_high]*len(one_measure_res), index=one_measure_res.index))
+                
+                final_res_arr.append(one_measure_res)
+        
+        # Turn the list of dataframes into one large df.
+        # The index of that big df will be repeating the
+        # the index of the constituent correlation dfs, which
+        # is not useful; so reset the index to simple row nums:
+        final_res_df = pd.concat(final_res_arr).reset_index()
+        
+        # Add boolean columns is_sel_start and is_sel_top.
+        # Remember: each time occurs several times, once for
+        # each frequency band:
+        
+        is_sel_start_col = pd.Series([False]*len(final_res_df), index=final_res_df.time, name='is_sel_start')
+        is_sel_stop_col = pd.Series([False]*len(final_res_df), index=final_res_df.time, name='is_sel_start')
+        
+        # Get all the true selection start times:
+        true_start_times = self.selections_df[self.selections_df.true_sel_start].index.to_numpy(dtype=float)
+        true_stop_times  = self.selections_df[self.selections_df.true_sel_stop].index.to_numpy(dtype=float)
+        
+        # In the new is_sel_start and is_sel_stop columns
+        # that will go into the final_res_df, set to true
+        # the times when true selection starts/stops happen
+        is_sel_start_col.loc[is_sel_start_col.index.isin(true_start_times)] = True
+        is_sel_stop_col.loc[is_sel_stop_col.index.isin(true_stop_times)] = True
+        
+        # Must harmonize index between final_res_df and
+        # the two new columns to add the cols to
+        # final_res_df:
+        is_sel_start_col.index = final_res_df.index
+        is_sel_stop_col.index = final_res_df.index
+
+        # Add the cols to final_res_df:
+        final_res_df['is_sel_start'] = is_sel_start_col
+        final_res_df['is_sel_stop'] = is_sel_stop_col
+
+        exp_key = f"significant_acorrs_{FileUtils.file_timestamp()}"
+        self.experimenter.save(exp_key, final_res_df)
+        
+        return final_res_df
+
+    #------------------------------------
+    # _one_measure_acorr_significance
+    #-------------------
+    
+    def _one_measure_acorr_significance(self, sig_measure, lookback_duration):
+        '''
+        Return:
+			        time   flatness_sum_acorr_cnts
+			0    0.00000                         2
+			1    1.99692                         2
+			2    3.99383                         0
+			        
+        where xxx_sum_acorr_cnts is a count of statistically significant
+        autocorrelation values when repeatedly looking back up to lookback_duration seconds.
+        The number of lags that correspond to lookback_duration are computed
+        from the spectrogram timeframe width. The autocorrelation is computed
+        repeatedly every lookback_duration seconds along the measure value
+        time series.
+        
+            Example o flatness measure values, assuming a measure
+                      every second:
+                      1  2  3  4  5  6  7
+                    o lookback_duration: 2 seconds
+                    o assume lags that corrend to 2 seconds is 2
+                    
+          Step1      1     2     3     4     5     6     7
+            	 acorr(2)
+            	 Count number of significant autocorrelations 
+            	 
+          Step2      1     2     3     4     5     6     7
+            	               acorr(2)
+            	               Count number of significant autocorrelations 
+            	 
+          Step3      1     2     3     4     5     6     7
+            	                           acorr(2)
+            	                           Count number of significant autocorrelations 
+            	                           
+            	          ...
+            	          
+        Result is the series of counts.
+        
+        The sig_measure is a time series, in this context one of the quad sigs measures: 
+        flatness or pitch, or, etc. ...
+        
+        An autocorrelation with the computed lag is performed repeatedly, starting 
+        every lookback_duration seconds along the sig_measure Series. Each time the
+        number of autocorrelation coefficients that are statistically significant
+        are counted and noted. 
+        
+        :param sig_measure: time series along which autocorrelations
+            are to be performed
+        :type sig_measure: pd.Series
+        :param lookback_duration: number of seconds up to which to
+            slide the time series.
+        :type lookback_duration:
+        '''
+        
+        # Build as array:
+        #            RowName            NumSignificantAcorrs
+        #   [[0.0230_434.12Hz_640.34Hz,    4],
+        #    [0.0460_434.12Hz_640.34Hz,    2],
+        #         ...
+        #    ]
+        res_df = pd.DataFrame(index=self.spectro_times)
+        
+        # Number of lags: PATTERN_LOOKBACK_DURATION seconds:
+        num_lags  = int(lookback_duration / SignalAnalyzer.spectro_timeframe_width())
+        stop_time = max(sig_measure.index)
+        
+        self.log.info(f"Autocorrelations for measure {sig_measure.name}: [0,{stop_time}] sec")
+
+        # Do autocorrelation every lookback_duration seconds:
+        for spectro_start_time in sig_measure.index[::num_lags]:
             
-            measures = sig_df[col_name]
+            # Start autocorrelation at current start time,
+            # and compute it down twice the lookback_duration
+            # elements. To find the precise time that is about
+            # lookback_duration seconds beyond spectro_start_time,
+            # consider that the sig_measure.index are the times. We
+            # find the closes index value to spectro_start_time
+            # plus lookback_duration. We find all the indexes that are
+            # greater than that value, and grab the first:
+            
+            try:
+                spectro_end_time = sig_measure[sig_measure.index >= spectro_start_time + lookback_duration].index[0]
+            except IndexError:
+                # Went through the whole series:
+                break
+            
+            measures = sig_measure.loc[spectro_start_time:spectro_end_time]
+            
+            # Get df w/ cols like 'flatness', 'is_significant':
             acorr_res = SignalAnalyzer.autocorrelation(measures, nlags=num_lags)
-            acorr_res.columns = [f"{col_name}_{acorr_col}"
-                                 for acorr_col
-                                 in acorr_res.columns]
-            res_df = pd.concat([res_df, acorr_res], axis=1)
+            #*********** REMOVE
+            # How many autocorrelations in this time period
+            # were significant?
+            #num_significant_acorrs = sum(acorr_res.is_significant)
+            #row_name = f"{start_time}_{freq_low}Hz_{freq_high}Hz"
+            #col_res_arr.append([spectro_start_time, num_significant_acorrs])
+            #********** END REMOVE
             
-        return res_df 
+            # Add a signature type column ('flatness' or 'pitch', etc.)
+            acorr_res.insert(1, 'sig_type', [sig_measure.name]*len(acorr_res))
+            #*********Remove
+            #*******res_df.loc[acorr_res.index] = acorr_res
+            #res_df = res_df.merge(acorr_res, left_index=True, right_index=True)
+            #res_df = pd.concat([res_df, acorr_res])
+            #*********End Remove
+            res_df.loc[acorr_res.index, acorr_res.columns] = acorr_res
+
+        return res_df
+
 
     #------------------------------------
     # save_sel_tbl_and_sigs
@@ -231,7 +451,7 @@ class AudioSegmenter:
         # Start times snapped to the spectrogram time frames. Selection tables
         # don't have massive numbers of entries, so loop is fine:
         
-        sig_vals_df.index = sig_vals_df.index.astype(float).to_series().round(5)
+        sig_vals_df.index = sig_vals_df.index.astype(float).to_series().round(self.ROUND_TO)
         sig_vals_df['is_sel_start'] = False
         sig_vals_df['is_sel_stop'] = False
         
@@ -241,13 +461,13 @@ class AudioSegmenter:
         for start, stop in zip(start_times, stop_times):
 
             snapped_start = Utils.nearest_in_array(sig_vals_df.index,
-                                                   round(start,5),
+                                                   round(start,self.ROUND_TO),
                                                    is_sorted=True)
             snapped_starts[start] = snapped_start
             sig_vals_df.loc[snapped_start, 'is_sel_start'] = True
     
             snapped_stop = Utils.nearest_in_array(sig_vals_df.index,
-                                                  round(stop,5),
+                                                  round(stop,self.ROUND_TO),
                                                   is_sorted=True)
             snapped_stops[stop] = snapped_stop
             sig_vals_df.loc[snapped_stop, 'is_sel_stop'] = True
@@ -306,6 +526,105 @@ class AudioSegmenter:
                        )
         return spectro
 
+    #------------------------------------
+    # _process_selection_tbl
+    #-------------------
+    
+    def _process_selection_tbl(self, spectro_times, selection_tbl_path):
+        '''
+        Imports a Raven selection table and the time frames
+        in seconds of a spectrogram. Returns a two-column
+        boolean df with columns is_sel_start and is_sel_stop.
+        
+        :param spectro_times: times in seconds of spectrogram
+            time frames
+        :type spectro_times: [float]
+        :param selection_tbl_path: path to a Raven selection table.
+        :type selection_tbl_path: str
+        :return for each time, whether or not it is the start or
+            end of a Raven selection.
+        :rtype pd.DataFrame
+        '''
+        
+        self.log.info("Reading selection table from file...")
+        self.sel_tbl = RavenSelectionTable(selection_tbl_path)
+        
+        # Get list of true start/stop times from selection table,
+        # rounded to our standard ROUND_TO decimal places:
+        
+        true_start_times = pd.Series([np.round(sel_entry.start_time, self.ROUND_TO)
+                                 for sel_entry
+                                 in self.sel_tbl], name='true_sel_starts')
+        true_stop_times = pd.Series([np.round(sel_entry.stop_time, self.ROUND_TO)
+                                for sel_entry
+                                in self.sel_tbl], name='true_sel_stops')
+        
+        # Two Series with values all False, one False for each
+        # spectrogram time frame. One series for start, one
+        # for stop times: 
+        is_sel_start = pd.Series([False]*len(self.spectro_times), 
+                                 name='is_sel_start',
+                                 index=self.spectro_times)
+        is_sel_stop  = pd.Series([False]*len(self.spectro_times), 
+                                 name='is_sel_stop',
+                                 index=self.spectro_times)
+        
+        for start_time in true_start_times:
+            # For this selection table start time,
+            # find the nearest spectrogram time frame:
+            snapped_start_time = Utils.nearest_in_array(spectro_times,
+                                                        start_time,
+                                                        is_sorted=True)
+            # Indicate the time among all spectro timeframes
+            # that is a selection start:
+            is_sel_start.loc[snapped_start_time] = True
+        
+        for stop_time in true_stop_times:
+            # For this selection table stop time,
+            # find the nearest spectrogram time frame:
+            snapped_stop_time = Utils.nearest_in_array(spectro_times,
+                                                       stop_time,
+                                                       is_sorted=True)
+            # Indicate the time among all spectro timeframes
+            # that is a selection stop:
+            is_sel_stop.loc[snapped_stop_time] = True
+
+        true_selections_df = pd.DataFrame({'true_sel_start' : is_sel_start,
+                                           'true_sel_stop'  : is_sel_stop
+                                           })
+        
+        return true_selections_df
+    
+    #------------------------------------
+    # _nearest_spectro_times
+    #-------------------
+    
+    def _nearest_spectro_times(self, arr_like):
+        '''
+        Given an array of time floats, look up for each
+        time the closest spectrogram time.
+        
+        Assumption: self.spectro_time is a sorted list of
+        spectrogram times.
+        
+        Returns an np array of new times the same length
+        as arr_like.
+        
+        :param arr_like: times for which to find closest
+            spectro times
+        :type arr_like: {[float] | pd.Series([float])
+        :return list of nearest spectrogram times
+        :rtype np.ndarray
+        '''
+        
+        spectro_times = []
+        for one_time in arr_like:
+            spectro_times.append(Utils.nearest_in_array(self.spectro_times,
+                                                        one_time,
+                                                        is_sorted=True))
+        return np.array(spectro_times)
+
+
 # ------------------------ Class SpectroSlice ----------
 
 class SpectroSlice:
@@ -322,7 +641,20 @@ class SpectroSlice:
         self.slice_height = slice_height
         self.spectro = spectro
         self.sig = sig
+        
+    #------------------------------------
+    # __repr__
+    #-------------------
 
+    def __str__(self):
+        return f"<Spectro Slice {round(self.low_freq,2)}Hz to {round(self.high_freq, 2)}Hz {hex(id(self))}>"
+
+    #------------------------------------
+    # __repr__
+    #-------------------
+
+    def __repr__(self):
+        return self.__str__()
 
 # ------------------------ Main ------------
 if __name__ == '__main__':
@@ -331,19 +663,6 @@ if __name__ == '__main__':
                                SPECTRO_PATH,
                                AUDIO_PATH,
                                selection_tbl_path=TEST_SEL_TBL)
-    # Slice spectro into horizontal bands:
-    slice_arr = segmenter.slice_spectro()
-    # For each horizontal slice, compute signatures separately:
-    for spectro_slice in slice_arr:
-        slice_sig = segmenter.compute_sig_whole_spectro(spectro_slice)
-        spectro_slice.sig = slice_sig
-        #*********
-        #acorr = segmenter.compute_autocorrelations(spectro_slice.sig, ['flatness'])
-        acorr = segmenter.compute_autocorrelations(spectro_slice.sig, ['flatness', 'pitch'])
-        #*********
-        segmenter.save_sel_tbl_and_sigs(spectro_slice, segmenter.sel_tbl)
-        acorrs = segmenter.compute_autocorrelations(spectro_slice.sig, 
-                                                    ['flatness', 'continuity', 'pitch', 'freq_mod', 'energy_sum'])
-        acorr_key = f"autocorrelations_{spectro_slice.name}"  
-        exp.save(acorr_key, acorrs, index_col='lag')
+    
+    acorrs = segmenter.compute_autocorrelations(['flatness', 'continuity', 'pitch', 'freq_mod', 'energy_sum'])
         

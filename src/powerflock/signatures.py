@@ -880,16 +880,16 @@ class Signature(JsonDumpableMixin):
         has_inf     = self.sig[self.sig == np.inf].any().any()
         has_neg_inf = self.sig[self.sig == -np.inf].any().any()
         if has_inf or has_neg_inf:
-            sig_df = self.sig.copy()
+            sig_measure = self.sig.copy()
         else:
-            sig_df = self.sig
+            sig_measure = self.sig
         if has_inf:
-            sig_df.replace(np.inf, self.JSON_INF, inplace=True)
+            sig_measure.replace(np.inf, self.JSON_INF, inplace=True)
         if has_neg_inf:
-            sig_df.replace(-np.inf, self.JSON_NEG_INF, inplace=True)
+            sig_measure.replace(-np.inf, self.JSON_NEG_INF, inplace=True)
 
         recovery_dict = {
-            "sig" : sig_df.to_json(),
+            "sig" : sig_measure.to_json(),
             "scale_info" : self.scale_info,
             "sr" : self.sr,
             "fname" : self.fname,

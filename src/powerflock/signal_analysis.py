@@ -894,8 +894,8 @@ class SignalAnalyzer:
         If nlags is an int, the parameter is the number of lags for
         which to compute results.
 
-        Returns a three-column dataframe: autoregression, low_ci_bound,
-        high_ci_bound
+        Returns a dataframe: 
+          lag, autocorrelation, ci_low, ci_high, is_significant
         
         Returns NaN if autocorrelation fails (e.g. nlags too large).
         
@@ -905,7 +905,7 @@ class SignalAnalyzer:
         :param nlags: number of time lags for which to compute the autocorrelation 
         :type nlags: {int | None}
         :return: the autocorrelation coefficients and corresponding
-            confidence intervals in one 3-column df
+            confidence intervals in a df
         :rtype:  pd.DataFrame
         '''
 
@@ -924,19 +924,44 @@ class SignalAnalyzer:
                                                         nlags=nlags,
                                                         alpha=0.05)
         # Leave out row0, which is the trivial lag==0 --> acorr==1:
-        all_rhos = pd.Series(all_rhos)[1:]
+        all_rhos = pd.Series(all_rhos[1:], name='acorrs')
         
-        # Get the mean of all the low/high confidence bounds:
-        # Start by separating the low and high bounds into Series.
-        # Again: the [1:] removes the trivial lag==0 result:
-        low_conf_list, high_conf_list = list(zip(*conf_intervals))
-        low_bounds_mean     = pd.Series(low_conf_list)[1:].mean()
-        high_bounds_mean    =  pd.Series(high_conf_list)[1:].mean()
+        # Start building the result df with the confidence
+        # intervals, again, dropping the first lag-0 row:
+        res_df = pd.DataFrame(conf_intervals[1:], columns=['ci_low', 'ci_high'])
         
-        is_significant = np.logical_or(all_rhos < low_bounds_mean, all_rhos > high_bounds_mean) 
-
-        res = pd.DataFrame({'rho' : all_rhos, 'is_significant' : is_significant})
-        return res
+        # Put the acorr values as the first column:
+        res_df.insert(0, 'acorr', all_rhos)
+        
+        # The confidence intervals are centered around each acorr value.
+        # All the plot_acf() functions (statsmodels and scypi) show
+        # the conf intervals around zero to assess significance.
+        # So: subtract the acorr value from each conf interval to
+        # get the conf intervals centered around zero:
+        
+        res_df['ci_low'] -= res_df.acorr
+        res_df['ci_high'] -= res_df.acorr
+        # Make the df index reflect the acorr lags,
+        # i.e. start at 1:
+        res_df.index += 1
+        
+        # ... and add a column 'lag' that replicates
+        # the index:
+        res_df.insert(0, 'lag', res_df.index)
+        
+        # Finally, add the convenience col indicating
+        # whether the acorr lies outside the conf interval,
+        # i.e. whether it is significant:
+        res_df['is_significant'] = np.logical_or(res_df.acorr < res_df.ci_low, res_df.acorr > res_df.ci_high)
+        
+        # Add the time for each lag from the input time series:
+        # The first time value is dropped as it corresponds to 
+        # lag 0. The last is dropped b/c no more shifting is 
+        # possible:
+        res_df.insert(0, 'time', time_series.index[1:-1])
+        res_df.index = res_df.time
+        
+        return res_df
 
     #------------------------------------
     # spectral_measures_each_timeframe
