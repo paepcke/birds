@@ -918,17 +918,15 @@ class SignalAnalyzer:
             time_series = time_series.fillna(method='ffill')
         
         # Passing alpha (the threshold p value) causes the confidence
-        # intervals to be included in the return. Setting zero to False
-        # prevents lag == 0 to be included (it is always 1):
+        # intervals to be included in the return.:
         all_rhos, conf_intervals = sm.tsa.stattools.acf(time_series,
                                                         nlags=nlags,
                                                         alpha=0.05)
-        # Leave out row0, which is the trivial lag==0 --> acorr==1:
-        all_rhos = pd.Series(all_rhos[1:], name='acorrs')
+        all_rhos = pd.Series(all_rhos, name='acorrs')
         
         # Start building the result df with the confidence
         # intervals, again, dropping the first lag-0 row:
-        res_df = pd.DataFrame(conf_intervals[1:], columns=['ci_low', 'ci_high'])
+        res_df = pd.DataFrame(conf_intervals, columns=['ci_low', 'ci_high'])
         
         # Put the acorr values as the first column:
         res_df.insert(0, 'acorr', all_rhos)
@@ -937,28 +935,30 @@ class SignalAnalyzer:
         # All the plot_acf() functions (statsmodels and scypi) show
         # the conf intervals around zero to assess significance.
         # So: subtract the acorr value from each conf interval to
-        # get the conf intervals centered around zero:
+        # get the conf intervals centered around zero (exclude the
+        # lag==0 row to keep those ci values at 1:
         
-        res_df['ci_low'] -= res_df.acorr
-        res_df['ci_high'] -= res_df.acorr
-        # Make the df index reflect the acorr lags,
-        # i.e. start at 1:
-        res_df.index += 1
-        
-        # ... and add a column 'lag' that replicates
+        res_df['ci_low'][1:]  -= res_df.acorr
+        res_df['ci_high'][1:] -= res_df.acorr
+
+        # Add a column 'lag' that replicates
         # the index:
-        res_df.insert(0, 'lag', res_df.index)
+        res_df.insert(0, 'lag', list(res_df.index))
         
         # Finally, add the convenience col indicating
         # whether the acorr lies outside the conf interval,
         # i.e. whether it is significant:
         res_df['is_significant'] = np.logical_or(res_df.acorr < res_df.ci_low, res_df.acorr > res_df.ci_high)
+        # Set the special lag-0 is_significant to True,
+        # because it is true:
+        res_df.loc[0, 'is_significant'] = True
         
         # Add the time for each lag from the input time series:
         # We pull the time series' index (the times) from the
         # rows that correspond to the acorr results:
         res_df.insert(0, 'time', time_series.iloc[res_df.index].index)
-        res_df.index = res_df.time
+        
+        res_df.index = res_df.time.to_numpy()
         
         return res_df
 

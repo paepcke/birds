@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 '''
 Created on May 30, 2022
 
@@ -7,6 +8,9 @@ from copy import deepcopy
 from enum import Enum
 import json
 import os
+
+import multiprocessing as mp
+from functools import partial
 
 from birdsong.utils.utilities import FileUtils
 from data_augmentation.utils import RavenSelectionTable, Utils, Interval
@@ -75,9 +79,11 @@ class AudioSegmenter:
         if settings.pattern_lookback_dur_units == PatternLookbackDurationUnits.LAGS:
             # Given in lags:
             self.num_lags = raw_lookback_duration
+            self.lookback_duration = raw_lookback_duration * self.lag_duration
         else:
             # Lookback duration given in number of seconds:
-            self.num_lags = int(raw_lookback_duration / self.lag_duration) 
+            self.num_lags = int(raw_lookback_duration / self.lag_duration)
+            self.lookback_duration = raw_lookback_duration 
 
         if not os.path.exists(self.spectro_path):
             self.spectro = self.make_test_spectro(self.audio_path)
@@ -228,48 +234,35 @@ class AudioSegmenter:
         
         slice_arr = self.slice_spectro()
         
-        # For each horizontal one_slice, compute signatures separately:
-        for spectro_slice in slice_arr:
-            exp_key = f"slice_sig_{spectro_slice.low_freq}_{spectro_slice.high_freq}"
-            try:
-                slice_sig = self.experimenter.read(exp_key, Signature)
-            except FileNotFoundError:
-                slice_sig = segmenter.compute_sig_whole_spectro(spectro_slice)
-                self.experimenter.save(exp_key, slice_sig)
-                
-            spectro_slice.sig = slice_sig
-
-        final_res_arr = []
-        
-        for one_slice in slice_arr:
-
-            freq_low  = one_slice.low_freq
-            freq_high = one_slice.high_freq
-            sig_df    = one_slice.sig.sig
+        # Leave one CPU core for others:
+        pool = mp.Pool(mp.cpu_count() - 1)
             
-            self.log.info(f"Starting frequency band {round(freq_low,2)}-{round(freq_high,2)}")
-            # Treat each signature measure separately: one requested
-            # df col after the other:
-            for col_name in col_names:
-                
-                #self.log.info(f"Autocorrelation for {col_name}")
-                one_measure_res = self._one_measure_acorr_significance(sig_df[col_name],
-                                                                          lookback_duration)
-                # Add cols for the current frequency low and high:
-                one_measure_res.insert(2, 
-                                          'freq_low', 
-                                          pd.Series([freq_low]*len(one_measure_res), index=one_measure_res.index))
-                one_measure_res.insert(3, 
-                                          'freq_high', 
-                                          pd.Series([freq_high]*len(one_measure_res), index=one_measure_res.index))
-                
-                final_res_arr.append(one_measure_res)
+        res_objs = [pool.apply_async(self._process_one_freq_slice,
+                                     (one_slice, col_names, lookback_duration)) 
+                    for one_slice in slice_arr]
+
+        final_res_arrs = [res_obj.get() for res_obj in res_objs]
+        pool.close()
+        pool.join()
+        
+        # final_res_arrs is a list of list of dataframes.
+        # Each sublist has a dataframe for one of the time
+        # series (sig values). E.g. 5 dfs for flatness, pitch,
+        # etc. There are as many of these df lists as there are
+        # frequency bands. For 15 bands that would be be
+        # 15*5 == 75 sublists.
+        # We must flatten this list into a simple list
+        # of dfs, and then concat them into one big result:
+        
+        final_res_arrs_flat = []
+        for several_res_dfs in final_res_arrs:
+            final_res_arrs_flat.extend(several_res_dfs)
         
         # Turn the list of dataframes into one large df.
         # The index of that big df will be repeating the
         # the index of the constituent correlation dfs, which
         # is not useful; so reset the index to simple row nums:
-        final_res_df = pd.concat(final_res_arr).reset_index()
+        final_res_df = pd.concat(final_res_arrs_flat).reset_index()
         
         # Add boolean columns is_sel_start and is_sel_top.
         # Remember: each time occurs several times, once for
@@ -297,11 +290,119 @@ class AudioSegmenter:
         # Add the cols to final_res_df:
         final_res_df['is_sel_start'] = is_sel_start_col
         final_res_df['is_sel_stop'] = is_sel_stop_col
-
+        
+        # Add a column in_selection, which is true if a time falls
+        # within a selection from the selection table:
+        # Get a list of Interval objects, one for each start/stop
+        # time pair in the selection table:
+        start_stop_intervals = [Interval(sel.start_time, sel.stop_time) 
+                                for sel in self.sel_tbl.entries]
+        # Create a partial (curried) function that 'knows' about
+        # the list of intervals. It will act like the binary_search_contains()
+        # method of the Interval class, but does not need a list of Interval
+        # instances as an argument:
+        time_in_selection = partial(Interval.binary_search_contains, start_stop_intervals)
+        
+        # Get a map object with results of calling the
+        # time_in_selection() function with each of the
+        # spectro times. Results of each call is the index
+        # of the Interval instance in the start_stop_intervals
+        # list that contains the time, or -1 if none of the
+        # selection table time intervals contains the spectro
+        # time:
+        map_obj = map(time_in_selection, final_res_df.time)
+        
+        # Finally the result: list of boolean whether or not
+        # each spectro time is inside one of the selection table
+        # start/end times:
+        is_in_selection = [interval_search_res > -1 for interval_search_res in map_obj]
+        final_res_df['is_in_selection'] = pd.Series(is_in_selection, name='in_selection')
+        
         exp_key = f"significant_acorrs_{FileUtils.file_timestamp()}"
         self.experimenter.save(exp_key, final_res_df)
         
         return final_res_df
+
+    #------------------------------------
+    # __getstate__ and __setstate__
+    #-------------------
+    
+    def __getstate__(self):
+        '''
+        Called when this object is pickled. Returns a dict
+        with the instance attributes that are to be saved.
+        
+        :returns attributes and their values to be saved
+        :rtype dict
+        '''
+        return {'round_to' : self.round_to,
+                'lag_duration' : self.lag_duration,
+                'num_lags' : self.num_lags,
+                'spectro_times' : self.spectro_times,
+                'sel_tbl' : self.sel_tbl,
+                'selections_df' : self.selections_df,
+                'experimenter_root' : self.experimenter.root
+                }
+        
+    def __setstate__(self, state):
+        '''
+        Called during unpickling. The state parameter is
+        the dict that was saved with instructions of __getstate__()
+        
+        :param state: attributes to initialize in the initially
+            empty self instance
+        :type state: dict
+        '''
+        # Initialize instance vars
+        
+        self.__dict__.update(state)
+        self.log = LoggingService()
+        # Create an ExperimentManager, but prevent it from
+        # modifying its experiment.json file. Else the multiple
+        # processes will mix up the content:
+        self.experimenter = ExperimentManager(state['experimenter_root'], freeze_state_file=True)
+
+    #------------------------------------
+    # _process_one_freq_slice
+    #-------------------
+    
+    def _process_one_freq_slice(self, spectro_freq_slice, col_names, lookback_duration):
+        
+        final_res_arr = []
+
+        exp_key = f"slice_sig_{spectro_freq_slice.low_freq}_{spectro_freq_slice.high_freq}"
+        try:
+            slice_sig = self.experimenter.read(exp_key, Signature)
+        except FileNotFoundError:
+            slice_sig = segmenter.compute_sig_whole_spectro(spectro_freq_slice)
+            self.experimenter.save(exp_key, slice_sig)
+            
+        spectro_freq_slice.sig = slice_sig
+        
+        freq_low  = spectro_freq_slice.low_freq
+        freq_high = spectro_freq_slice.high_freq
+        sig_df    = spectro_freq_slice.sig.sig
+        
+        self.log.info(f"Starting frequency band {round(freq_low,2)}-{round(freq_high,2)}")
+        # Treat each signature measure separately: one requested
+        # df col after the other:
+        for col_name in col_names:
+            
+            #self.log.info(f"Autocorrelation for {col_name}")
+            one_measure_res = self._one_measure_acorr_significance(sig_df[col_name],
+                                                                      lookback_duration)
+            # Add cols for the current frequency low and high:
+            one_measure_res.insert(2, 
+                                      'freq_low', 
+                                      pd.Series([freq_low]*len(one_measure_res), index=one_measure_res.index))
+            one_measure_res.insert(3, 
+                                      'freq_high', 
+                                      pd.Series([freq_high]*len(one_measure_res), index=one_measure_res.index))
+            
+            final_res_arr.append(one_measure_res)
+
+        # Return array of dataframes:
+        return final_res_arr
 
     #------------------------------------
     # _one_measure_acorr_significance
@@ -366,14 +467,15 @@ class AudioSegmenter:
         #    [0.0460_434.12Hz_640.34Hz,    2],
         #         ...
         #    ]
-        res_df = pd.DataFrame(index=self.spectro_times)
+        res_df = pd.DataFrame()
         
         stop_time = max(sig_measure.index)
         
         self.log.info(f"Autocorrelations for measure {sig_measure.name}: [0,{stop_time}] sec")
 
-        # Do autocorrelation every lookback_duration seconds:
-        for spectro_start_time in sig_measure.index[::self.num_lags]:
+        # Do autocorrelation for every timeframe:
+        #for spectro_start_time in sig_measure.index[::self.num_lags]:
+        for spectro_start_time in sig_measure.index:
             
             # Start autocorrelation at current start time,
             # and compute it down twice the lookback_duration
@@ -397,8 +499,9 @@ class AudioSegmenter:
             
             # Add a signature type column ('flatness' or 'pitch', etc.)
             acorr_res.insert(1, 'sig_type', [sig_measure.name]*len(acorr_res))
-            
-            res_df.loc[acorr_res.index, acorr_res.columns] = acorr_res
+
+            # Append the new results:
+            res_df = pd.concat([res_df, acorr_res], axis=0)
 
         return res_df
 
@@ -799,8 +902,8 @@ if __name__ == '__main__':
     exp_root = os.path.join(EXP_ROOT, 'ExpAM02_20190717_052958_OneLag')
     exp = ExperimentManager(exp_root)
     settings = SoundSegmentationSetting(
-        1, # One lag only
-        PatternLookbackDurationUnits.LAGS,
+        0.5, # 0.5 seconds worth of timeframes
+        PatternLookbackDurationUnits.SECONDS,
         spectro_path = SPECTRO_PATH,
         selection_tbl_path=TEST_SEL_TBL,
         recording_id = 'AM02_20190717_052958'
