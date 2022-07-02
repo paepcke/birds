@@ -705,6 +705,37 @@ class FileUtils:
         return timestamp
 
     #------------------------------------
+    # extract_file_timestamp
+    #-------------------
+    
+    @classmethod
+    def extract_file_timestamp(cls, fname):
+        '''
+        Given a string---usually a filename---,
+        try to find an embedded timestamp formatted
+        the way the file_timestamp() method outputs.
+        
+        Return the timestamp string if found, else None.
+        
+        :param fname: name to search
+        :type fname: str
+        :return the timestamp if found, else None
+        :rtype {None | str}
+        '''
+        
+        # Regex to find substrings created by
+        # the file_timestamp() method embedded
+        # in a string:
+        pat = re.compile(r'.*([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}_[0-9]{2}_[0-9]{2}).*')
+        
+        the_match = pat.match(fname)
+        if the_match is None:
+            return None
+        
+        # Return the extracted timestamp:
+        return the_match[1]
+
+    #------------------------------------
     # load_preds_and_labels
     #-------------------
     
