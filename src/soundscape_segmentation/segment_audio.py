@@ -26,6 +26,11 @@ import pandas as pd
 
 
 class PatternLookbackDurationUnits(Enum):
+    '''
+    Distinguish between numbers that indicate
+    lag, vs. seconds (the two are roughtly 
+    interchangabe.
+    '''
     LAGS = 0
     SECONDS = 1
 
@@ -64,7 +69,8 @@ class AudioSegmenter:
         self.audio_path    = Path(settings.audio_path) if settings.audio_path is not None else None
         selection_tbl_path = settings.selection_tbl_path
         self.round_to      = settings.round_to
-        raw_lookback_duration = settings.pattern_lookback_dur
+        raw_lookback_duration  = settings.pattern_lookback_dur
+        remove_long_selections = settings.remove_long_selections
 
         self.log = LoggingService()
         
@@ -97,7 +103,9 @@ class AudioSegmenter:
                                        name='spectro_times')
         
         if selection_tbl_path is not None:
-            self.selections_df = self._process_selection_tbl(self.spectro_times, selection_tbl_path)
+            self.selections_df = self._process_selection_tbl(self.spectro_times, 
+                                                             selection_tbl_path,
+                                                             remove_long_selections)
             experimenter.save('sel_tbl', self.sel_tbl)
         else:
             # No selection table available:
@@ -302,8 +310,10 @@ class AudioSegmenter:
             stop_time_snapped  = Utils.nearest_in_array(final_res_df.time, sel_tbl_entry.stop_time)
             sel_id  = sel_tbl_entry.sel_id
             sel_dur = sel_tbl_entry.delta_time
-            final_res_df.loc[final_res_df['time'].between(start_time_snapped, stop_time_snapped), 'is_in_selection'] = sel_id
-            final_res_df.loc[final_res_df['time'].between(start_time_snapped, stop_time_snapped), 'sel_dur'] = sel_dur
+            final_res_df.loc[final_res_df['time'].between(start_time_snapped, 
+                                                          stop_time_snapped), 'is_in_selection'] = sel_id
+            final_res_df.loc[final_res_df['time'].between(start_time_snapped, 
+                                                          stop_time_snapped), 'sel_dur'] = sel_dur
         
         exp_key = f"significant_acorrs_{FileUtils.file_timestamp()}"
         self.experimenter.save(exp_key, final_res_df)
@@ -376,21 +386,37 @@ class AudioSegmenter:
         
         peaks_df_arr = []
         for df_extract in fband_sig_type_dfs:
+            # Isolate the acorr values that are significant,
+            # and are not the trivial value of 1 that occurs
+            # with lag==0. Note: its index will be fragmented,
+            # showing the chosen indexes of df_extract:
+            extract_acorrs = df_extract[np.logical_and(df_extract.is_significant, 
+                                                       df_extract.lag > 0)].acorr.abs()
+            # Get the indexes in *extract_acorrs* (not directly
+            # those in df_extract) that are peaks:
             peak_idxs, peak_stats = find_peaks(
-                df_extract.acorr[df_extract.is_significant],
+                extract_acorrs,
                 height=(None, None), 
-                width=(2, None), 
+                width=(None, None), 
                 prominence=(None, None), 
                 plateau_size=(None,None))
 
-            peaks_df = df_extract.iloc[peak_idxs][['time', 
-                                                   'sig_type', 
-                                                   'freq_low', 
-                                                   'freq_high', 
-                                                   'is_in_selection', 
-                                                   'lag', 
-                                                   'sel_dur', 
-                                                   'acorr']]
+            # To get the indexes in the original df_extract,
+            # that are peaks, first get the rows from extract_acorrs
+            # that are peaks. Then get the index entries of those
+            # rows. Those indexes point into df_extract:
+            df_extract_idxs = extract_acorrs.iloc[peak_idxs].index
+            peaks_df = df_extract.iloc[df_extract_idxs][['time', 
+                                                         'sig_type', 
+                                                         'freq_low', 
+                                                         'freq_high', 
+                                                         'is_in_selection', 
+                                                         'sel_dur',
+                                                         'is_sel_start',
+                                                         'is_sel_stop', 
+                                                         'lag', 
+                                                         'acorr']]
+
             # Time column needs to match the significant-digits
             # convention to match other dataframes:
             peaks_df['time'] = peaks_df['time'].round(self.round_to)
@@ -403,6 +429,9 @@ class AudioSegmenter:
             peaks_df_arr.append(peaks_df)
             
         peaks_df = pd.concat(peaks_df_arr)
+        # Flip the negative correlations to the top
+        # of the acorr == 0 line:
+        peaks_df['acorr'] = np.abs(peaks_df['acorr'])
         
         if in_fname_timestamp is not None:
             # Match the input df's timestamp:
@@ -503,11 +532,11 @@ class AudioSegmenter:
     def _one_measure_acorr_significance(self, sig_measure, lookback_duration):
         '''
         Return:
-			        time   flatness_sum_acorr_cnts
-			0    0.00000                         2
-			1    1.99692                         2
-			2    3.99383                         0
-			        
+                    time   flatness_sum_acorr_cnts
+            0    0.00000                         2
+            1    1.99692                         2
+            2    3.99383                         0
+                    
         where xxx_sum_acorr_cnts is a count of statistically significant
         autocorrelation values when repeatedly looking back up to lookback_duration seconds.
         The number of lags that correspond to lookback_duration are computed
@@ -522,19 +551,19 @@ class AudioSegmenter:
                     o assume lags that corrend to 2 seconds is 2
                     
           Step1      1     2     3     4     5     6     7
-            	 acorr(2)
-            	 Count number of significant autocorrelations 
-            	 
+                 acorr(2)
+                 Count number of significant autocorrelations 
+                 
           Step2      1     2     3     4     5     6     7
-            	               acorr(2)
-            	               Count number of significant autocorrelations 
-            	 
+                               acorr(2)
+                               Count number of significant autocorrelations 
+                 
           Step3      1     2     3     4     5     6     7
-            	                           acorr(2)
-            	                           Count number of significant autocorrelations 
-            	                           
-            	          ...
-            	          
+                                           acorr(2)
+                                           Count number of significant autocorrelations 
+                                           
+                          ...
+                          
         Result is the series of counts.
         
         The sig_measure is a time series, in this context one of the quad sigs measures: 
@@ -619,7 +648,11 @@ class AudioSegmenter:
     # _process_selection_tbl
     #-------------------
     
-    def _process_selection_tbl(self, spectro_times, selection_tbl_path):
+    def _process_selection_tbl(self, 
+                               spectro_times,
+                               selection_tbl_path,
+                               remove_long_selections=False
+                               ):
         '''
         Imports a Raven selection table and the time frames
         in seconds of a spectrogram. Returns a two-column
@@ -630,6 +663,9 @@ class AudioSegmenter:
         :type spectro_times: [float]
         :param selection_tbl_path: path to a Raven selection table.
         :type selection_tbl_path: str
+        :param remove_long_selections: remove selections that span
+            95% or more of the entire spectrogram
+        :type remove_long_selections: bool
         :return for each time, whether or not it is the start or
             end of a Raven selection.
         :rtype pd.DataFrame
@@ -638,15 +674,25 @@ class AudioSegmenter:
         self.log.info("Reading selection table from file...")
         self.sel_tbl = RavenSelectionTable(selection_tbl_path)
         
+        # If requested, only keep selections that are less
+        # than 95% of the total spectrogram in length:
+        if remove_long_selections:
+            removal_threshold = spectro_times.max() * 95/100
+            sel_entries = list(filter(lambda entry, removal_threshold=removal_threshold: 
+                                      entry.stop_time - entry.start_time < removal_threshold, 
+                                      self.sel_tbl.entries))
+        else:
+            sel_entries = self.sel_tbl.entries
+        
         # Get list of true start/stop times from selection table,
         # rounded to our standard ROUND_TO decimal places:
         
         true_start_times = pd.Series([np.round(sel_entry.start_time, self.round_to)
                                  for sel_entry
-                                 in self.sel_tbl], name='true_sel_starts')
+                                 in sel_entries], name='true_sel_starts')
         true_stop_times = pd.Series([np.round(sel_entry.stop_time, self.round_to)
                                 for sel_entry
-                                in self.sel_tbl], name='true_sel_stops')
+                                in sel_entries], name='true_sel_stops')
         
         # Two Series with values all False, one False for each
         # spectrogram time frame. One series for start, one
@@ -682,12 +728,12 @@ class AudioSegmenter:
             sel_id.loc[snapped_start_time] = \
                 int(next(filter(lambda entry, 
                                 start_time=start_time: round(entry.start_time,self.round_to) == start_time,
-                           self.sel_tbl.entries)).sel_id)
+                                sel_entries)).sel_id)
             # Set corresponding length of selection:
             sel_duration.loc[snapped_start_time] = \
                 next(filter(lambda entry, 
                             start_time=start_time: round(entry.start_time, self.round_to) == start_time,
-                       self.sel_tbl.entries)).delta_time
+                            sel_entries)).delta_time
         for stop_time in true_stop_times:
             # For this selection table stop time,
             # find the nearest spectrogram time frame:
@@ -702,12 +748,12 @@ class AudioSegmenter:
             sel_id.loc[snapped_stop_time] = \
                 int(next(filter(lambda entry, 
                                 stop_time=stop_time: round(entry.stop_time,self.round_to) == stop_time,
-                                self.sel_tbl.entries)).sel_id)
+                                sel_entries)).sel_id)
             # Set corresponding length of selection:
             sel_duration.loc[snapped_stop_time] = \
                 next(filter(lambda entry, 
                             stop_time=stop_time: round(entry.stop_time, self.round_to) == stop_time,
-                            self.sel_tbl.entries)).delta_time
+                            sel_entries)).delta_time
 
         true_selections_df = pd.DataFrame({'true_sel_sel_id': sel_id,
                                            'true_sel_start' : is_sel_start,
@@ -793,7 +839,8 @@ class SoundSegmentationSetting(JsonDumpableMixin):
                  audio_path=None,
                  selection_tbl_path=None,
                  recording_id=None,
-                 round_to=5
+                 round_to=5,
+                 remove_long_selections=False
                  ):
         '''
         Holds parameters for a soundscape segmentation run.
@@ -840,6 +887,7 @@ class SoundSegmentationSetting(JsonDumpableMixin):
         self.selection_tbl_path = selection_tbl_path
         self.recording_id = recording_id
         self.round_to = round_to
+        self.remove_long_selections = remove_long_selections
 
     #------------------------------------
     # json_dumps
@@ -876,7 +924,8 @@ class SoundSegmentationSetting(JsonDumpableMixin):
             as_dict['audio_path'],
             as_dict['selection_tbl_path'],
             as_dict['recording_id'],
-            as_dict['round_to']
+            as_dict['round_to'],
+            as_dict['remove_long_selections']
             )
         return res
 
@@ -927,10 +976,11 @@ if __name__ == '__main__':
         audio_path = AUDIO_PATH,
         selection_tbl_path=TEST_SEL_TBL,
         recording_id = 'AM02_20190717_052958',
-        round_to = AudioSegmenter.ROUND_TO
+        round_to = AudioSegmenter.ROUND_TO,
+        remove_long_selections = True
         )
     segmenter = AudioSegmenter(exp, settings)
     
-    #******acorrs = segmenter.compute_autocorrelations(['flatness', 'continuity', 'pitch', 'freq_mod', 'energy_sum'])
+    #*******acorrs = segmenter.compute_autocorrelations(['flatness', 'continuity', 'pitch', 'freq_mod', 'energy_sum'])
     res = segmenter.peak_positions('/Users/paepcke/EclipseWorkspacesNew/birds/experiments/SoundscapeSegmentation/ExpAM02_20190717_052958_AllData/csv_files/significant_acorrs_2022-07-01T12_45_10.csv')
         
