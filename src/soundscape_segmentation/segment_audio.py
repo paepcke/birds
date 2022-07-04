@@ -4,12 +4,12 @@ Created on May 30, 2022
 
 @author: paepcke
 '''
+import warnings
+
 from enum import Enum
 import json
 import os
 from pathlib import Path
-
-from scipy.signal import find_peaks
 
 from birdsong.utils.utilities import FileUtils
 from data_augmentation.utils import RavenSelectionTable, Utils
@@ -19,20 +19,45 @@ from logging_service import LoggingService
 from powerflock.signal_analysis import SignalAnalyzer
 from powerflock.signatures import Signature
 from result_analysis.charting import Charter
+from scipy.signal import find_peaks
 
 import multiprocessing as mp
 import numpy as np
 import pandas as pd
 
+#************
+#def raise_error_on_warning():
+#    raise 
+#************
 
-class PatternLookbackDurationUnits(Enum):
+class PatternLookbackDurationUnits(str, Enum):
     '''
     Distinguish between numbers that indicate
     lag, vs. seconds (the two are roughtly 
-    interchangabe.
+    interchangabe. Note: the values are chosen
+    to be strings to make conversion to and 
+    from json work without a special encoder.
+    Same for the addition of str to the inheritance.
     '''
-    LAGS = 0
-    SECONDS = 1
+    LAGS = 'lags'
+    SECONDS = 'time'
+
+    @classmethod
+    def from_value(self, val):
+        '''
+        Given the 'value side' of an instance
+        return an corresponding instance. Used
+        when recreating from Json string
+         
+        :param val: either 'lags' or 'time'
+        :type val: str
+        :return fresh instance of PatternLookbackDurationUnits
+        :rtype PatternLookbackDurationUnits
+        '''
+        if val == 'lags':
+            return PatternLookbackDurationUnits.LAGS
+        else:
+            return PatternLookbackDurationUnits.SECONDS
 
 #from result_analysis.charting import Charter
 CUR_DIR    = os.path.dirname(__file__)
@@ -40,7 +65,7 @@ PROJ_ROOT  = os.path.abspath(os.path.join(CUR_DIR, '../../'))
 TEST_DATA  = os.path.join(PROJ_ROOT, 'data')
 AUDIO_PATH =  os.path.join(TEST_DATA, 'kelleyRecommendedFldRec_AM02_20190717_052958.wav')
 TEST_SEL_TBL = os.path.join(TEST_DATA, 'DS_AM02_20190717_052958.Table.1.selections.txt')
-SPECTRO_PATH = os.path.join(TEST_DATA, 'am02_spectro.csv')
+SPECTRO_PATH = os.path.join(TEST_DATA, 'am02_20190717_052958_spectro.csv')
 
 EXP_ROOT = os.path.join(PROJ_ROOT, 'experiments/SoundscapeSegmentation')
 
@@ -65,17 +90,23 @@ class AudioSegmenter:
         '''
 
         self.experimenter  = experimenter
+        self.settings      = settings
         self.spectro_path  = settings.spectro_path
         self.audio_path    = Path(settings.audio_path) if settings.audio_path is not None else None
         selection_tbl_path = settings.selection_tbl_path
         self.round_to      = settings.round_to
+        self.freq_low, self.freq_high, self.freq_step = settings.freq_split
         raw_lookback_duration  = settings.pattern_lookback_dur
         remove_long_selections = settings.remove_long_selections
 
         self.log = LoggingService()
         
-        # Get the time for one autocorrelation lag:
-        self.lag_duration = SignalAnalyzer.spectro_timeframe_width()
+        # Get the time for one autocorrelation lag.
+        # The extra_granularity doubles the frequency
+        # range:
+        self.lag_duration = SignalAnalyzer.spectro_timeframe_width(sample_rate=settings.sample_rate,
+                                                                   extra_granularity=True
+                                                                   )
 
         # Need number of lags to compute for each autocorrelation.
         # The lag may be given in seconds, or directly in lags:
@@ -88,8 +119,15 @@ class AudioSegmenter:
             self.num_lags = int(raw_lookback_duration / self.lag_duration)
             self.lookback_duration = raw_lookback_duration 
 
+        # Add lag and lookback duration as seconds to the settings:
+        settings.num_lags = self.num_lags
+        settings.lookback_duration = self.lookback_duration
+        
+        # Save the settings of this run:
+        experimenter.save('exp_settings', settings)
+        
         if not os.path.exists(self.spectro_path):
-            self.spectro = self.make_test_spectro(self.audio_path)
+            self.spectro = self.make_test_spectro(self.audio_path, sr=self.settings.sample_rate)
         else:
             self.log.info("Reading spectrogram from .csv file...")
             self.spectro = pd.read_csv(self.spectro_path,
@@ -157,7 +195,7 @@ class AudioSegmenter:
         :rtype [SpectroSlice]
         '''
         
-        self.log.info(f"Slicing spectro into {int((high_freq - low_freq) / slice_height)} freq bands: {slice_height} high [{low_freq}, {high_freq}]")
+        self.log.info(f"Slicing spectro into {int((high_freq - low_freq) / slice_height)} freq bands: {slice_height}Hz high [{low_freq}KHz, {high_freq}KHz]")
         slice_arr = []
         freqs = pd.Series(self.spectro.index, name='freqs')
         
@@ -186,10 +224,22 @@ class AudioSegmenter:
         return slice_arr
 
     #------------------------------------
-    # compute_sig_whole_spectro 
+    # compute_sigs 
     #-------------------
     
-    def compute_sig_whole_spectro(self, spectro_slice_or_spectro):
+    def compute_sigs(self, spectro_slice_or_spectro):
+        '''
+        For the given spectrogram, or SpectroSlice instance,
+        compute the signature values ('continuity', 'pitch', etc)
+        
+        Returns a Signature instance in which all measures are
+        normalized.
+        
+        :param spectro_slice_or_spectro:
+        :type spectro_slice_or_spectro:
+        :return: signature holding df with requested values, all normalized
+        :rtype: pd.DataFrame
+        '''
         
         if type(spectro_slice_or_spectro) == SpectroSlice:
             slice_desc = f"slice {spectro_slice_or_spectro.name}"
@@ -205,7 +255,9 @@ class AudioSegmenter:
                                           spectro, 
                                           fname=self.audio_path,
                                           sig_id=0)
-        sig = SignalAnalyzer.spectral_measures_each_timeframe(spectro, sig_for_whole_spectro)
+        sig = SignalAnalyzer.spectral_measures_each_timeframe(spectro, 
+                                                              sig_for_whole_spectro,
+                                                              self.settings.sig_types)
         
         # Normalize the values using regular standardization, column by column:
         # Could do sig_normalized = (sig.sig - sig.sig.mean()) / sig.sig.std(). But
@@ -235,7 +287,7 @@ class AudioSegmenter:
     # compute_autocorrelations
     #-------------------
     
-    def compute_autocorrelations(self, col_names, lookback_duration=0.5):
+    def compute_autocorrelations(self, settings):
         '''
         Given a signature and a list of signature column names: ['flatness', 'pitch', ...],
         apply autocorrelation to each column up to number of lags equivalent
@@ -248,6 +300,9 @@ class AudioSegmenter:
               0          ...               True/False         ...          True/False
               0.0232
                 ...
+                
+        Assumption: the settings instance contains a lookback_duration attribute
+                    that specifies the length in seconds of the autocorrelations.
         
         :param col_names: name of measure(s) for which to compute autocorrelations
         :type col_names: {str | [str]}
@@ -256,7 +311,17 @@ class AudioSegmenter:
         :type lookback_duration: float
         '''
         
-        slice_arr = self.slice_spectro()
+        col_names = settings.sig_types
+        lookback_duration = settings.lookback_duration
+
+        low_freq, high_freq, slice_height = settings.freq_split
+        # The highest-freq slice can only be as high
+        # as the highest spectrogram frequency. Therefore
+        # the min(...) below:
+        slice_arr = self.slice_spectro(slice_height=slice_height,
+                                       low_freq=low_freq,
+                                       high_freq=min(high_freq, self.spectro.index.max())
+                                       )
         if type(col_names) != list:
             col_names = [col_names]
         
@@ -454,7 +519,8 @@ class AudioSegmenter:
         :returns attributes and their values to be saved
         :rtype dict
         '''
-        return {'round_to' : self.round_to,
+        return {'settings' : self.settings.json_dumps(),
+                'round_to' : self.round_to,
                 'lag_duration' : self.lag_duration,
                 'num_lags' : self.num_lags,
                 'spectro_times' : self.spectro_times,
@@ -482,6 +548,7 @@ class AudioSegmenter:
         # modifying its experiment.json file. Else the multiple
         # processes will mix up the content:
         self.experimenter = ExperimentManager(state['experimenter_root'], freeze_state_file=True)
+        self.settings = SoundSegmentationSetting.json_loads(state['settings'])
 
     #------------------------------------
     # _process_one_freq_slice
@@ -495,7 +562,7 @@ class AudioSegmenter:
         try:
             slice_sig = self.experimenter.read(exp_key, Signature)
         except FileNotFoundError:
-            slice_sig = self.compute_sig_whole_spectro(spectro_freq_slice)
+            slice_sig = self.compute_sigs(spectro_freq_slice)
             self.experimenter.save(exp_key, slice_sig)
             
         spectro_freq_slice.sig = slice_sig
@@ -616,7 +683,13 @@ class AudioSegmenter:
             measures = sig_measure.loc[spectro_start_time:spectro_end_time]
             
             # Get df w/ cols like 'flatness', 'is_significant':
+            #*********
             acorr_res = SignalAnalyzer.autocorrelation(measures, nlags=self.num_lags)
+            # with warnings.catch_warnings():
+            #     acorr_res = SignalAnalyzer.autocorrelation(measures, nlags=self.num_lags)
+            #     warnings.simplefilter('error')
+            #     raise_error_on_warning()
+            #*********
             
             # Add a signature type column ('flatness' or 'pitch', etc.)
             acorr_res.insert(1, 'sig_type', [sig_measure.name]*len(acorr_res))
@@ -630,13 +703,14 @@ class AudioSegmenter:
     # make_test_spectro
     #-------------------
     
-    def make_test_spectro(self, test_audio):
+    def make_test_spectro(self, test_audio, sr):
         
         self.log.info(f"Creating spectrogram for {test_audio}")
         
         spectro = SignalAnalyzer.raven_spectrogram(test_audio, 
-                                                   to_db=False, 
-                                                   extra_granularity=False)
+                                                   to_db=False,
+                                                   sr=sr,
+                                                   extra_granularity=True)
         spectro.to_csv(self.spectro_path,
                        header=spectro.columns,
                        index=True,
@@ -833,8 +907,11 @@ class SoundSegmentationSetting(JsonDumpableMixin):
     #-------------------
     
     def __init__(self,
-                 pattern_lookback_dur,
-                 pattern_lookback_dur_units,
+                 sig_types=['flatness', 'continuity', 'pitch', 'freq_mod', 'energy_sum'],
+                 sr=22050, # sampling rate
+                 pattern_lookback_dur=2,
+                 pattern_lookback_dur_units=PatternLookbackDurationUnits.LAGS,
+                 freq_split=(0,20,500), # 0KHz-20KHz in 500Hz increments
                  spectro_path=None,
                  audio_path=None,
                  selection_tbl_path=None,
@@ -848,6 +925,8 @@ class SoundSegmentationSetting(JsonDumpableMixin):
         seconds, or in a number of lags. The pattern_lookback_dur_units
         parameter must specify which it is. The spectrogram time frame
         times are used to convert from one to the other.
+        NOTE: the AudioSegmenter's __init__() adds two instances vars:
+              lookback_duration, and num_lags that disambiguate.
         
         Either spectrogram path or audio path may be specified. If
         spectrogram path is provided, it is used, and the audio path
@@ -859,13 +938,20 @@ class SoundSegmentationSetting(JsonDumpableMixin):
         The recording_id is an optional string that identifies the soundscape
         recording indpendent of file location. Ex: AM02_20190717_052958
         If provided it is used when creating file names. 
-         
+        
+        :param sig_types: list of signatures to compute ('continuity', 'pitch', etc)
+        :type sig_types: [str]
+        :param sr: desired sampling rate
+        :type sr: {float | int} 
         :param pattern_lookback_dur: number of fractional seconds, or
             number of lags to use for autocorrelation
         :type pattern_lookback_dur: {float | int}
         :param pattern_lookback_dur_units: whether pattern_lookback_dur is
             in units of seconds or of lags
         :type pattern_lookback_dur_units: PatternLookbackDurationUnits
+        :param freq_split: low/high/step of how spectrogram is partitioned
+            into frequency bands. low and high are in KHz, step is in Hz
+        :type freq_split: (number, number, number)
         :param spectro_path: path to an already created spectrogram 
         :type spectro_path: {str | None}
         :param audio_path: path to a soundscape audio file
@@ -880,8 +966,11 @@ class SoundSegmentationSetting(JsonDumpableMixin):
             measurements are to be rounded. 
         :type round_to: int
         '''
+        self.sig_types = sig_types
+        self.sample_rate = sr
         self.pattern_lookback_dur = pattern_lookback_dur
         self.pattern_lookback_dur_units = pattern_lookback_dur_units
+        self.freq_split = freq_split
         self.spectro_path = spectro_path
         self.audio_path = audio_path
         self.selection_tbl_path = selection_tbl_path
@@ -917,9 +1006,16 @@ class SoundSegmentationSetting(JsonDumpableMixin):
         '''
         
         as_dict = json.loads(jstr)
+        # Recover the PatternLookbackDurationUnits instance:
+        dur_units = as_dict['pattern_lookback_dur_units']
+        # Create a fresh PatternLookbackDurationUnits instance:
+        as_dict['pattern_lookback_dur_units'] = PatternLookbackDurationUnits.from_value(dur_units)
         res = SoundSegmentationSetting(
+            as_dict['sig_types'],
+            as_dict['sample_rate'],
             as_dict['pattern_lookback_dur'],
             as_dict['pattern_lookback_dur_units'],
+            as_dict['freq_split'],
             as_dict['spectro_path'],
             as_dict['audio_path'],
             as_dict['selection_tbl_path'],
@@ -963,16 +1059,68 @@ class SoundSegmentationSetting(JsonDumpableMixin):
         with open(fpath, 'r') as fd:
             jstr = fd.read()
         return cls.json_loads(jstr)
+    
+    #------------------------------------
+    # toJson
+    #-------------------
+    
+    def toJson(self):
+        return self.json_dumps()
+    
+    #------------------------------------
+    # __getstate__ and __setstate__
+    #-------------------
+    
+    def __getstate__(self):
+        '''
+        Called when this object is pickled. Returns a dict
+        with the instance attributes that are to be saved.
+        
+        :returns attributes and their values to be saved
+        :rtype dict
+        '''
+        return self.__dict__
+        
+    def __setstate__(self, state):
+        '''
+        Called during unpickling. The state parameter is
+        the dict that was saved with instructions of __getstate__()
+        
+        :param state: attributes to initialize in the initially
+            empty self instance
+        :type state: dict
+        '''
+        # Initialize instance vars
+        
+        self.__dict__.update(state)
+        # The PatternLookbackDurationUnits is still
+        # in json form. Turn into an instance of the
+        # Enum:
+        self.pattern_lookback_dur_units = PatternLookbackDurationUnits.from_value(state['pattern_lookback_dur_units'])
+
 
 # ------------------------ Main ------------
 if __name__ == '__main__':
     #exp_root = os.path.join(EXP_ROOT, 'ExpAM02_20190717_052958_HalfSecondLags')
-    exp_root = os.path.join(EXP_ROOT, 'ExpAM02_20190717_052958_AllData')
+    exp_root = os.path.join(EXP_ROOT, 'ExpAM02_20190717_052958_AllData1')
     exp = ExperimentManager(exp_root)
+    
+    # About number of lags: ~25ms and ~50ms seems to be a good times
+    # for look-back. The number of corresponding lags depends on
+    # the spectrogram timeframe width, which is correlated with
+    # the sampling frequency:
+    #
+    # At sr=22050; hop_len=512; timedelta~=23ms. ==> 2 lags at ~23ms each
+    # At sr=22050: hop_len=256; timedelta~=12ms. ==> 4 lags at ~.12ms (extra granulatity)
+    # At sr=31000: hop_len=256; timedelta~=8ms   ==> 6 lags at ~.8ms
+    
     settings = SoundSegmentationSetting(
-        10, # 10 lags at ~23ms each. No significatnt acorrs beyond that.
-        PatternLookbackDurationUnits.LAGS,
+        sig_types = ['flatness', 'continuity', 'pitch', 'freq_mod', 'energy_sum'],
+        sr = 32000, # sampling rate
+        pattern_lookback_dur=0.5, # up to 500ms lookback
+        pattern_lookback_dur_units=PatternLookbackDurationUnits.SECONDS,
         spectro_path = SPECTRO_PATH,
+        freq_split = (0,20000,500),
         audio_path = AUDIO_PATH,
         selection_tbl_path=TEST_SEL_TBL,
         recording_id = 'AM02_20190717_052958',
@@ -981,6 +1129,5 @@ if __name__ == '__main__':
         )
     segmenter = AudioSegmenter(exp, settings)
     
-    #*******acorrs = segmenter.compute_autocorrelations(['flatness', 'continuity', 'pitch', 'freq_mod', 'energy_sum'])
-    res = segmenter.peak_positions('/Users/paepcke/EclipseWorkspacesNew/birds/experiments/SoundscapeSegmentation/ExpAM02_20190717_052958_AllData/csv_files/significant_acorrs_2022-07-01T12_45_10.csv')
-        
+    acorrs = segmenter.compute_autocorrelations(settings)
+    #******res = segmenter.peak_positions('/Users/paepcke/EclipseWorkspacesNew/birds/experiments/SoundscapeSegmentation/ExpAM02_20190717_052958_AllData/csv_files/significant_acorrs_2022-07-01T12_45_10.csv')

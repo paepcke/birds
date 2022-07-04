@@ -21,6 +21,7 @@ import matplotlib.pyplot as plt
 import multiprocessing as mp
 import numpy as np
 import pandas as pd
+from pathlib import Path, PosixPath
 
 
 #from multitaper.multitaper_spectrogram_python import MultitaperSpectrogrammer
@@ -969,7 +970,12 @@ class SignalAnalyzer:
     @classmethod
     def spectral_measures_each_timeframe(cls, 
                                          spec_snip,
-                                         sig
+                                         sig,
+                                         measures_to_compute=['flatness', 
+                                                              'continuity', 
+                                                              'pitch', 
+                                                              'freq_mod', 
+                                                              'energy_sum']
                                          ):
         '''
         Return a dataframe 
@@ -987,27 +993,43 @@ class SignalAnalyzer:
         :param sig: a Signature from which to take 
             information such as bandpass filtering
         :type sig: Signature
+        :param measures_to_compute: list of signature types to 
+            compute. Types not listed won't have a column in
+            the returned Signature instance's sig dataframe.
+        :type measures_to_compute: [str]
         :return: a Signature instance containing for 
-            for each timeframe the measurements
-            'flatness', 'continuity', 'pitch', 'freq_mod'
+            for each timeframe the requested measurements
+            from among 'flatness', 'continuity', 'pitch', 'freq_mod'
         :rtype Signature
         '''
 
         # Compute the measures into one series each.
         # Each series covers all timeframes:
-        flatness = SignalAnalyzer.spectral_flatness(spec_snip, is_power=True)
-        _long_contours_df, continuity = SignalAnalyzer.spectral_continuity(spec_snip,
-                                                                           is_power=True,
-                                                                           plot_contours=False
-                                                                           ) 
-        pitch = SignalAnalyzer.harmonic_pitch(spec_snip)
-        freq_mod = SignalAnalyzer.freq_modulations(spec_snip)
         
-        energy_sum = spec_snip.sum(axis=0)
-        energy_sum.name = 'energy_sum'
+        measures = []
+        if 'flatness' in measures_to_compute:
+            measures.append(SignalAnalyzer.spectral_flatness(spec_snip, is_power=True))
+            
+        if 'continuity' in measures_to_compute:
+            _long_contours_df, continuity = SignalAnalyzer.spectral_continuity(spec_snip,
+                                                                               is_power=True,
+                                                                               plot_contours=False
+                                                                               )
+            measures.append(continuity)
+            
+        if 'pitch' in measures_to_compute:
+            measures.append(SignalAnalyzer.harmonic_pitch(spec_snip))
+            
+        if 'freq_mod' in measures_to_compute:
+            measures.append(SignalAnalyzer.freq_modulations(spec_snip))
+            
+        if 'energy_sum' in measures_to_compute:
+            energy_sum = spec_snip.sum(axis=0)
+            energy_sum.name = 'energy_sum'
+            measures.append(energy_sum)
 
         # Each measure makes a col:
-        snip_results = pd.concat([flatness, continuity, pitch, freq_mod, energy_sum], axis=1)
+        snip_results = pd.concat(measures, axis=1)
         
         field_recording_sig = Signature(
             sig.species,
@@ -1029,7 +1051,7 @@ class SignalAnalyzer:
     #-------------------
     
     @classmethod
-    def raven_spectrogram(cls, audio, to_db=True, extra_granularity=False):
+    def raven_spectrogram(cls, audio, to_db=True, sr=22050, extra_granularity=False):
         '''
         Returns a spectrogram as the default settings in 
         the Raven program would generate. Same frequency
@@ -1071,16 +1093,13 @@ class SignalAnalyzer:
             in its spectrogram display.
         :rtype: pd.DataFrame
         '''
-        sr = 22050
+
         if extra_granularity:
             hop_length = 256
         else:
             hop_length = 512
-        if type(audio) == str:
-            audio_arr, aud_sr = librosa.load(audio)
-            # Adjust sr if necessary:
-            if aud_sr != sr:
-                audio_arr = librosa.resample(audio_arr, aud_sr, sr)  
+        if type(audio) in [str, Path, PosixPath]:
+            audio_arr, _aud_sr = librosa.load(audio, sr)
         else:
             audio_arr = audio 
 
@@ -1097,7 +1116,7 @@ class SignalAnalyzer:
         time_ticks = librosa.core.frames_to_time(np.arange(num_cols + 1), 
                                                  sr=sr, 
                                                  hop_length=hop_length)[:-1]
-        freq_ticks = cls._freq_ticks(num_rows)[:-1]
+        freq_ticks = cls._freq_ticks(num_rows, sr=sr)[:-1]
         spec_df = pd.DataFrame(spec_values, columns=time_ticks, index=freq_ticks)
         # This df is ordered freq at zero at the top; reverse the order
         # of the rows:
