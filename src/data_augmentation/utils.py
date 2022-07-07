@@ -242,6 +242,17 @@ class Interval(dict, JsonDumpableMixin):
         '''
         return self['low_val'] < other['low_val']
 
+    def __le__(self, other):
+        '''
+        Enable use of numpy.minimal():
+        
+        :param other: Interval instance to compare
+        :type other: Interval
+        :returns whether or not self <= other
+        :rtype bool
+        '''
+        return self['high_val'] < other['high_val'] or self.__eq__(other)
+
     @classmethod
     def binary_search_contains(cls, interval_list, value, lo=0, hi=None):
         '''
@@ -249,8 +260,8 @@ class Interval(dict, JsonDumpableMixin):
         If no interval includes value, return -1.
         Interval list is assumed to be sorted.
         
-        Optional args lo (default 0) and hi (default len(a)) bound the
-        slice of a to be searched.
+        Optional args lo (default 0) and hi (default len(interval_list)) 
+        bound the slice of interval_list to be searched.
         
         :param interval_list: list of Interval instances
         :type interval_list: [Interval]
@@ -289,13 +300,18 @@ class Interval(dict, JsonDumpableMixin):
     @classmethod
     def binary_search_overlap(cls, interval_list, interval, lo=0, hi=None):
         '''
-        Return the index of the interval that overlaps the 
-        Interval instance interval.
+        Return the index of the first interval that overlaps the 
+        Interval object. 
+        
         If no interval overlaps interval, return -1.
         Interval list is assumed to be sorted.
         
-        Optional args lo (default 0) and hi (default len(a)) bound the
-        slice of a to be searched.
+        Optional args lo (default 0) and hi (default len(interval_list)) bound the
+        slice of interval_list to be searched. Note that the returned
+        index of the first overlapping Interval instance in the list
+        points into the full interval_list. I.e. if lo==4, and index 6
+        is returned as the first overlap, the overlap is element 
+        interval_list[6], not interval_list[4:][6].
         
         :param interval_list: list of Interval instances
         :type interval_list: [Interval]
@@ -325,8 +341,8 @@ class Interval(dict, JsonDumpableMixin):
         # __lt__() logic in list.sort() and in heapq.
         while lo < hi:
             mid = (lo + hi) // 2
-            if interval_list[mid].overlaps(interval):
-                return mid
+            if interval_list[lo].overlaps(interval):
+                return lo
             # right half?
             if interval_list[mid]['high_val'] <= interval['low_val']:
                 lo = mid + 1
@@ -1159,7 +1175,7 @@ class Utils:
     #-------------------
     
     @classmethod
-    def read_raven_selection_table(cls, tbl_path):
+    def read_raven_selection_table(cls, tbl_path, sr=None):
         '''
         NOTE: consider instantiating RavenSelectionTable
               instead of using this method directly. 
@@ -1203,6 +1219,8 @@ class Utils:
             of one selection table row
         :rtype [str : Any]
         '''
+        if sr is None:
+            sr = cls.DEFAULT_SAMPLE_RATE
         with open(tbl_path, 'r') as sel_tbl_fd:
             reader = DictReader(sel_tbl_fd, delimiter='\t')
             # The if clause checks each dict
@@ -1360,7 +1378,7 @@ class Utils:
 
             sel_dict['time_interval'] = Interval(sel_dict['Begin Time (s)'],
                                                  sel_dict['End Time (s)'],
-                                                 step=1/cls.DEFAULT_SAMPLE_RATE)
+                                                 step=1/sr)
             sel_dict['freq_interval'] = Interval(sel_dict['Low Freq (Hz)'],
                                                  sel_dict['High Freq (Hz)'],
                                                  step=1/cls.DEFAULT_SAMPLE_RATE)
@@ -2125,7 +2143,11 @@ class RavenSelectionTable:
         self.entries = sorted(self.entries)
         self.entries_by_species = self._make_entry_lookup(self.entries)
 
-
+        # Get another list of entries, this one sorted
+        # by starting frequency:
+        freq_sorted_entries = sorted(self.entries.copy(), key=lambda entry: entry.low_freq )
+        # And remember a sorted list of the entries' low_freq:
+        self.freq_intervals = [entry.freq_interval for entry in freq_sorted_entries]
 
     #------------------------------------
     # species_times
@@ -2267,7 +2289,7 @@ class RavenSelectionTable:
         return the_copy
 
     #------------------------------------
-    # __del__
+    # remove
     #-------------------
     
     def remove(self, sel_entry_obj):
@@ -2288,6 +2310,10 @@ class RavenSelectionTable:
                 # species list of the entries_by_species
                 # variable:
                 pass
+            
+        # Delete the entry's frequency interval from the
+        # list of frequency intervals:
+        self.freq_intervals.remove(sel_entry_obj.freq_interval)
 
     #------------------------------------
     # _make_entry_lookup
@@ -2359,7 +2385,7 @@ class RavenSelectionTableEntry:
     #-------------------
     
     def __str__(self):
-        times = f"{round(self.start_time, 2)}-{round(self.start_time, 2)}secs"
+        times = f"{round(self.start_time, 2)}-{round(self.stop_time, 2)}secs"
         return f"<RavenSelectionTableEntry {times} {hex(id(self))}>"
 
     #------------------------------------

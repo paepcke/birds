@@ -11,8 +11,14 @@ import json
 import os
 from pathlib import Path
 
+#************
+import sys
+#print(sys.path)
+sys.path.insert(0,'/Users/paepcke/EclipseWorkspacesNew/birds/src')
+#************
+
 from birdsong.utils.utilities import FileUtils
-from data_augmentation.utils import RavenSelectionTable, Utils
+from data_augmentation.utils import RavenSelectionTable, Utils, Interval
 from experiment_manager.experiment_manager import ExperimentManager, \
     JsonDumpableMixin
 from logging_service import LoggingService
@@ -24,11 +30,7 @@ from scipy.signal import find_peaks
 import multiprocessing as mp
 import numpy as np
 import pandas as pd
-
-#************
-#def raise_error_on_warning():
-#    raise 
-#************
+from scipy.signal._peak_finding_utils import PeakPropertyWarning
 
 class PatternLookbackDurationUnits(str, Enum):
     '''
@@ -46,7 +48,7 @@ class PatternLookbackDurationUnits(str, Enum):
     def from_value(self, val):
         '''
         Given the 'value side' of an instance
-        return an corresponding instance. Used
+        return a corresponding instance. Used
         when recreating from Json string
          
         :param val: either 'lags' or 'time'
@@ -96,6 +98,7 @@ class AudioSegmenter:
         selection_tbl_path = settings.selection_tbl_path
         self.round_to      = settings.round_to
         self.freq_low, self.freq_high, self.freq_step = settings.freq_split
+        self.num_freq_bands = int(self.freq_high / self.freq_step)
         raw_lookback_duration  = settings.pattern_lookback_dur
         remove_long_selections = settings.remove_long_selections
 
@@ -132,14 +135,26 @@ class AudioSegmenter:
             self.log.info("Reading spectrogram from .csv file...")
             self.spectro = pd.read_csv(self.spectro_path,
                                        index_col='freq',
-                                       header=0
+                                       header=0,
+                                       engine='pyarrow'  # Faster csv reader
                                        )
         # Get the spectrogram times as np array of rounded floats:
         spectro_times_rounded = self.spectro.columns.to_numpy(dtype=float).round(self.round_to)
         self.spectro_times = pd.Series(spectro_times_rounded, 
                                        index=spectro_times_rounded, 
                                        name='spectro_times')
+
+        # Freqs in low to high order:
+        self.spectro_freqs = pd.Series(self.spectro.index,
+                                       index=self.spectro.index, 
+                                       name='spectro_freqs').sort_values()
         
+        # Get frequency step size of the spectro. Any
+        # difference in successive spectro index values
+        # will do, except that the ones at the end 
+        # are half steps. Index runs highest-freq to 0:
+        self.freq_steps = self.spectro.index[-3] - self.spectro.index[-2]
+
         if selection_tbl_path is not None:
             self.selections_df = self._process_selection_tbl(self.spectro_times, 
                                                              selection_tbl_path,
@@ -157,6 +172,16 @@ class AudioSegmenter:
                                                'true_sel_stop'  : is_sel_stop,
                                                'true_sel_dur'   : sel_duration
                                                }) 
+
+        # Freq lookup tbl: human-marked freq to spectro freq
+        # in low to high order:
+        self.freqs_sel2spectro = {}
+        for freq_intval in self.sel_tbl.freq_intervals:
+            freq_low  = freq_intval['low_val']
+            freq_high = freq_intval['high_val']
+            
+            self.freqs_sel2spectro[freq_low]  = Utils.nearest_in_array(self.spectro_freqs, freq_low)
+            self.freqs_sel2spectro[freq_high] = Utils.nearest_in_array(self.spectro_freqs, freq_high)
 
     #------------------------------------
     # slice_spectro
@@ -250,7 +275,7 @@ class AudioSegmenter:
         self.log.info(f"Computing signatures for {slice_desc}")
         
         # Make an empty sig, and fill it with the
-        # four signatures across the whole spectro: ******
+        # four signatures across the whole spectro:
         sig_for_whole_spectro = Signature('test_species', 
                                           spectro, 
                                           fname=self.audio_path,
@@ -325,13 +350,25 @@ class AudioSegmenter:
         if type(col_names) != list:
             col_names = [col_names]
         
+        #*********
+        # Uncomment to do one at a time without parallelism:
+        #acorr_by_slice = []
+        #for one_slice in slice_arr:
+        #    acorr_by_slice.append(self._process_one_freq_slice(one_slice, col_names, lookback_duration))
+        #*********
+
+        #********* Read DF INSTEAD OF COMPUTING IT
+        #self.log.info("Temporary test: read acors df instead of computing it...")
+        #final_res_df = pd.read_csv('/Users/paepcke/EclipseWorkspacesNew/birds/experiments/SoundscapeSegmentation/ExpAM02_20190717_052958_AllData1/csv_files/significant_acorrs_2022-07-06T11_52_41.csv',
+        #                           engine='pyarrow')
+        
         # Leave one CPU core for others:
         pool = mp.Pool(mp.cpu_count() - 1)
-            
+
         res_objs = [pool.apply_async(self._process_one_freq_slice,
                                      (one_slice, col_names, lookback_duration)) 
                     for one_slice in slice_arr]
-
+        
         final_res_arrs = [res_obj.get() for res_obj in res_objs]
         pool.close()
         pool.join()
@@ -348,11 +385,11 @@ class AudioSegmenter:
         final_res_arrs_flat = []
         for several_res_dfs in final_res_arrs:
             final_res_arrs_flat.extend(several_res_dfs)
-        
-        # Turn the list of dataframes into one large df.
-        # The index of that big df will be repeating the
-        # the index of the constituent correlation dfs, which
-        # is not useful; so reset the index to simple row nums:
+        #
+        # # Turn the list of dataframes into one large df.
+        # # The index of that big df will be repeating the
+        # # the index of the constituent correlation dfs, which
+        # # is not useful; so reset the index to simple row nums:
         final_res_df = pd.concat(final_res_arrs_flat).reset_index()
         
         # Get all the true selection start times
@@ -365,21 +402,83 @@ class AudioSegmenter:
         final_res_df.loc[final_res_df.time.isin(true_stop_times), 'is_sel_stop'] = True
         final_res_df.is_sel_start.fillna(False, inplace=True)
         final_res_df.is_sel_stop.fillna(False, inplace=True)
-
-        # Add a column in_selection, which has the respective selection's ID
+        
+        # Add a column is_in_selection, which has the respective selection's ID
         # if a time falls within a selection from the selection table.
         # Also added: a column 'sel_dur' with the respective selection's 
         # time duration:
-        for sel_tbl_entry in self.sel_tbl.entries:
-            start_time_snapped = Utils.nearest_in_array(final_res_df.time, sel_tbl_entry.start_time)
-            stop_time_snapped  = Utils.nearest_in_array(final_res_df.time, sel_tbl_entry.stop_time)
-            sel_id  = sel_tbl_entry.sel_id
-            sel_dur = sel_tbl_entry.delta_time
-            final_res_df.loc[final_res_df['time'].between(start_time_snapped, 
-                                                          stop_time_snapped), 'is_in_selection'] = sel_id
-            final_res_df.loc[final_res_df['time'].between(start_time_snapped, 
-                                                          stop_time_snapped), 'sel_dur'] = sel_dur
+        # Collection of triplets: (low_freq, sel_id, sel_dur)
+        # for selection overlaps: 
+        overlaps = []
+        max_freq = final_res_df.freq_high.max()
+        for freq_slice in slice_arr:
+            # Exclude slices that cover the entire frequency spectrum;
+            # such a slice may be added as a baseline for testing performance
+            # compared to using freq bands. But including them below would
+            # indicate that all selections span all freqs:
+            if freq_slice.low_freq == 0 and freq_slice.high_freq == max_freq:
+                continue
+            # Freqency band of this slice:
+            spectro_freqband = Interval(freq_slice.low_freq, freq_slice.high_freq, step=self.freq_steps)
+            search_start_idx = 0
+            # Find every selection whose freqency range overlaps 
+            # this slice's band:
+            try:
+                # Fast search for freq overlap across all selections;
+                # the freq_intervals are freq-sorted by rising value 
+                # of lower bound. The while ensures that we find all,
+                # b/c the binary_search_overlap() returns the first
+                # index only:
+                while (found_idx := Interval.binary_search_overlap(self.sel_tbl.freq_intervals,
+                                                                   spectro_freqband,
+                                                                   lo=search_start_idx)) > -1:
+                    # Found a selection whose freqencies overlap 
+                    # those of current slice; get the sel tbl 
+                    # entry obj:
+                    entry = self.sel_tbl.entries[found_idx]
+                    overlaps.append((self.freqs_sel2spectro[entry.low_freq], 
+                                     int(entry.sel_id), 
+                                     entry.delta_time))
+                    
+                    # Next round for same slice, start search
+                    # past the selection entry we just found:
+                    search_start_idx = found_idx + 1
+            except IndexError:
+                pass
+
+        ids_and_durs = pd.DataFrame(overlaps, columns=['freq_low', 'is_in_selection', 'sel_dur'])
+        #**********
+        # No need to save in final version:
+        self.log.info("Saving ids_and_durs...")
+        self.exp.save('ids_and_durs', ids_and_durs)
+        #**********
         
+        #ids_and_durs.set_index('freq_low', drop=True, inplace=True)
+        
+        # Build df indexed with freq, with cols is_in_selection and sel_dur 
+# final_res_df.loc[ids_and_durs.freq_low, 'is_in_selection'] = ids_and_durs.is_in_selection
+            
+# for sel_tbl_entry in self.sel_tbl.entries:
+#     start_time_snapped = Utils.nearest_in_array(final_res_df.time, sel_tbl_entry.start_time)
+#     stop_time_snapped  = Utils.nearest_in_array(final_res_df.time, sel_tbl_entry.stop_time)
+#     freq_low_snapped   = Utils.nearest_in_array(final_res_df.freq_low, sel_tbl_entry.low_freq)
+#     freq_high_snapped  = Utils.nearest_in_array(final_res_df.freq_high, sel_tbl_entry.high_freq)
+#
+#     sel_id  = sel_tbl_entry.sel_id
+#     sel_dur = sel_tbl_entry.delta_time
+#
+#     final_res_df.loc[np.logical_and(final_res_df['time'].between(start_time_snapped, 
+#                                                                  stop_time_snapped),
+#                                     final_res_df['freq_low'].between(freq_low_snapped, 
+#                                                                      freq_high_snapped)), 
+#                                                                  'is_in_selection'] = sel_id
+#
+#     final_res_df.loc[np.logical_and(final_res_df['time'].between(start_time_snapped, 
+#                                                                  stop_time_snapped),
+#                                     final_res_df['freq_low'].between(freq_low_snapped, 
+#                                                                      freq_high_snapped)), 
+#                                                                  'sel_dur'] = sel_dur
+
         exp_key = f"significant_acorrs_{FileUtils.file_timestamp()}"
         self.experimenter.save(exp_key, final_res_df)
         
@@ -391,7 +490,7 @@ class AudioSegmenter:
     
     def peak_positions(self, df_or_path):
         '''
-        Given a df produced by compute_autocorrelations(), 
+        Given a acorr_df produced by compute_autocorrelations(), 
         find the peaks in each autocorrelation series. Of
         those there are [num-of-freq-bands] * [num-of-sig-types]
         where sig_types is 'flatness', 'pitch' etc.
@@ -399,7 +498,7 @@ class AudioSegmenter:
         Uses scypi.signal.find_peak(), which considers prominence
         relative to other peaks.
         
-        Saves and returns a df that includes:
+        Saves and returns a acorr_df that includes:
           'time' spectrogram time when peak occurred, 
           'sig_type'      over which signature values was the autocorrelation
                              computed, 
@@ -416,36 +515,41 @@ class AudioSegmenter:
           'plateau_width' width of the detected plateau 
           'prominence'    prominence of the peak
         
-        :param df_or_path: either a df created by compute_autocorrelations(),
-            or the file path to such a df stored as csv
+        :param df_or_path: either a acorr_df created by compute_autocorrelations(),
+            or the file path to such a acorr_df stored as csv
         :type df_or_path: {pd.DataFrame | str}
-        :returns a new df with peaks computed for every
+        :returns a new acorr_df with peaks computed for every
             freqband/sig_type pair
         :rtype pd.DataFrame
         '''
         
         if type(df_or_path) == str:
-            df = pd.read_csv(df_or_path)
+            fname = Path(df_or_path).name
+            self.log.info(f"Reading autocorrelations values from {fname}...")
+            acorr_df = pd.read_csv(df_or_path, engine='pyarrow') # pyarrow is a fast csv reader
+            self.log.info(f"Done reading autocorrelations values from {fname}.")
             in_fname_timestamp = FileUtils.extract_file_timestamp(df_or_path)
         else:
-            df = df_or_path
+            acorr_df = df_or_path
             in_fname_timestamp = None
             
-        # Partition the df by sig_type ('flatness', 'pitch' etc.),
-        # and frequency band. The number of df extracts in the group:
+        # Partition the acorr_df by sig_type ('flatness', 'pitch' etc.),
+        # and frequency band. The number of acorr_df extracts in the group:
         #    num_sig_types * num_freq_bands
-        df_grp = df.groupby(by=['sig_type', 'freq_low', 'freq_high'])
+        df_grp = acorr_df.groupby(by=['sig_type', 'freq_low'])
         
         # Get a list of dfs, each containing the original
-        # df rows for one combination sig_type/freq_band
-        # Each df in the arr will have some junk cols from 
+        # acorr_df rows for one combination sig_type/freq_band
+        # Each acorr_df in the arr will have some junk cols from 
         # the group multiindex, but otherwise have the same
-        # cols as the original df. 
+        # cols as the original acorr_df. 
+        self.log.info(f"Partitioning data into {self.num_freq_bands} bands...")
         fband_sig_type_dfs = [data.reset_index() 
                               for _grp_key, data 
                               in df_grp]
+        self.log.info(f"Partitioning data into {self.num_freq_bands} bands...")
         
-        # For each extract, build df:
+        # For each extract, build acorr_df:
         #    peak_idx   measure_name   measure_val  freq_low  freq_high   peak_height  peak_width  prominence  
         # time
         
@@ -459,12 +563,14 @@ class AudioSegmenter:
                                                        df_extract.lag > 0)].acorr.abs()
             # Get the indexes in *extract_acorrs* (not directly
             # those in df_extract) that are peaks:
-            peak_idxs, peak_stats = find_peaks(
-                extract_acorrs,
-                height=(None, None), 
-                width=(None, None), 
-                prominence=(None, None), 
-                plateau_size=(None,None))
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=PeakPropertyWarning)
+                peak_idxs, peak_stats = find_peaks(
+                    extract_acorrs,
+                    height=(None, None), 
+                    width=(None, None), 
+                    prominence=(None, None), 
+                    plateau_size=(None,None))
 
             # To get the indexes in the original df_extract,
             # that are peaks, first get the rows from extract_acorrs
@@ -499,7 +605,7 @@ class AudioSegmenter:
         peaks_df['acorr'] = np.abs(peaks_df['acorr'])
         
         if in_fname_timestamp is not None:
-            # Match the input df's timestamp:
+            # Match the input acorr_df's timestamp:
             exp_key = f"peaks_{in_fname_timestamp}"
         else:
             exp_key = f"peaks_{FileUtils.in_fname_timestamp()}"
@@ -683,13 +789,7 @@ class AudioSegmenter:
             measures = sig_measure.loc[spectro_start_time:spectro_end_time]
             
             # Get df w/ cols like 'flatness', 'is_significant':
-            #*********
             acorr_res = SignalAnalyzer.autocorrelation(measures, nlags=self.num_lags)
-            # with warnings.catch_warnings():
-            #     acorr_res = SignalAnalyzer.autocorrelation(measures, nlags=self.num_lags)
-            #     warnings.simplefilter('error')
-            #     raise_error_on_warning()
-            #*********
             
             # Add a signature type column ('flatness' or 'pitch', etc.)
             acorr_res.insert(1, 'sig_type', [sig_measure.name]*len(acorr_res))
@@ -748,6 +848,14 @@ class AudioSegmenter:
         self.log.info("Reading selection table from file...")
         self.sel_tbl = RavenSelectionTable(selection_tbl_path)
         
+        # By default each entry's freq_interval has 
+        # a standard step size, near-0 or 1. Correct
+        # those, because at this point we know the freq
+        # stepsize:
+        
+        for entry in self.sel_tbl.entries:
+            entry.freq_interval['step'] = self.freq_steps
+
         # If requested, only keep selections that are less
         # than 95% of the total spectrogram in length:
         if remove_long_selections:
@@ -1130,4 +1238,5 @@ if __name__ == '__main__':
     segmenter = AudioSegmenter(exp, settings)
     
     acorrs = segmenter.compute_autocorrelations(settings)
-    #******res = segmenter.peak_positions('/Users/paepcke/EclipseWorkspacesNew/birds/experiments/SoundscapeSegmentation/ExpAM02_20190717_052958_AllData/csv_files/significant_acorrs_2022-07-01T12_45_10.csv')
+    #****res = segmenter.peak_positions('/Users/paepcke/EclipseWorkspacesNew/birds/experiments/SoundscapeSegmentation/ExpAM02_20190717_052958_AllData1/csv_files/significant_acorrs_2022-07-04T11_18_43.csv')
+    print('Done')
