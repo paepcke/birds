@@ -359,12 +359,13 @@ class AudioSegmenter:
 
         #********* Read DF INSTEAD OF COMPUTING IT
         #self.log.info("Temporary test: read acors df instead of computing it...")
-        #final_res_df = pd.read_csv('/Users/paepcke/EclipseWorkspacesNew/birds/experiments/SoundscapeSegmentation/ExpAM02_20190717_052958_AllData1/csv_files/significant_acorrs_2022-07-06T11_52_41.csv',
+        #final_res_df = pd.read_csv('/Users/paepcke/EclipseWorkspacesNew/birds/experiments/SoundscapeSegmentation/ExpAM02_20190717_052958_AllData1/csv_files/significant_acorrs_2022-07-07T12_12_17.csv',
         #                           engine='pyarrow')
-        
+        #********* Read DF INSTEAD OF COMPUTING IT
+
         # Leave one CPU core for others:
         pool = mp.Pool(mp.cpu_count() - 1)
-
+        
         res_objs = [pool.apply_async(self._process_one_freq_slice,
                                      (one_slice, col_names, lookback_duration)) 
                     for one_slice in slice_arr]
@@ -402,83 +403,92 @@ class AudioSegmenter:
         final_res_df.loc[final_res_df.time.isin(true_stop_times), 'is_sel_stop'] = True
         final_res_df.is_sel_start.fillna(False, inplace=True)
         final_res_df.is_sel_stop.fillna(False, inplace=True)
+                
+        bands_high_freqs = final_res_df.freq_high.unique()
+        bands_high_freqs.sort()
+        bands_low_freqs = final_res_df.freq_low.unique()
+        bands_low_freqs.sort()
         
-        # Add a column is_in_selection, which has the respective selection's ID
-        # if a time falls within a selection from the selection table.
-        # Also added: a column 'sel_dur' with the respective selection's 
-        # time duration:
-        # Collection of triplets: (low_freq, sel_id, sel_dur)
-        # for selection overlaps: 
-        overlaps = []
-        max_freq = final_res_df.freq_high.max()
-        for freq_slice in slice_arr:
-            # Exclude slices that cover the entire frequency spectrum;
-            # such a slice may be added as a baseline for testing performance
-            # compared to using freq bands. But including them below would
-            # indicate that all selections span all freqs:
-            if freq_slice.low_freq == 0 and freq_slice.high_freq == max_freq:
-                continue
-            # Freqency band of this slice:
-            spectro_freqband = Interval(freq_slice.low_freq, freq_slice.high_freq, step=self.freq_steps)
-            search_start_idx = 0
-            # Find every selection whose freqency range overlaps 
-            # this slice's band:
-            try:
-                # Fast search for freq overlap across all selections;
-                # the freq_intervals are freq-sorted by rising value 
-                # of lower bound. The while ensures that we find all,
-                # b/c the binary_search_overlap() returns the first
-                # index only:
-                while (found_idx := Interval.binary_search_overlap(self.sel_tbl.freq_intervals,
-                                                                   spectro_freqband,
-                                                                   lo=search_start_idx)) > -1:
-                    # Found a selection whose freqencies overlap 
-                    # those of current slice; get the sel tbl 
-                    # entry obj:
-                    entry = self.sel_tbl.entries[found_idx]
-                    overlaps.append((self.freqs_sel2spectro[entry.low_freq], 
-                                     int(entry.sel_id), 
-                                     entry.delta_time))
-                    
-                    # Next round for same slice, start search
-                    # past the selection entry we just found:
-                    search_start_idx = found_idx + 1
-            except IndexError:
-                pass
+        # Get selection table frequency bounds, and
+        # get final_res_df index values that designate
+        # rows with freq_low/freq_high ranges that include
+        # each sel tbl entry's freq range:
+        rows_to_update = []
+        for entry in self.sel_tbl.entries:
+            sel_low_freq  = entry.low_freq
+            sel_high_freq = entry.high_freq
+            # Selection freq bounds are hand drawn, so the
+            # freqs don't necessary collate with spectrogram
+            # freqs. Snap the bounds to the closest frequencies
+            # in the df:
+            bands_upper_bound = Utils.nearest_in_array(bands_high_freqs, sel_high_freq, is_sorted=True)
+            bands_lower_bound = Utils.nearest_in_array(bands_low_freqs,  sel_low_freq, is_sorted=True)
+            rows_to_update.append([bands_lower_bound,
+                                   bands_upper_bound,
+                                   int(entry.sel_id),
+                                   round(entry.delta_time,2)])
+        # [[low_freq, high_freq, sel_id, sel_dur], [], ...]
+        update_specs = pd.DataFrame(rows_to_update, columns=['bands_lower_bound',
+                                                             'bands_upper_bound',
+                                                             'sel_id',
+                                                             'sel_dur'])
+        
+        # For each selection, fill the is_in_selection and selection duration
+        # columns
+        # Use groupby to collect all selection entries for the
+        # same freq_low/freq_high in the result df:
 
-        ids_and_durs = pd.DataFrame(overlaps, columns=['freq_low', 'is_in_selection', 'sel_dur'])
-        #**********
-        # No need to save in final version:
-        self.log.info("Saving ids_and_durs...")
-        self.exp.save('ids_and_durs', ids_and_durs)
-        #**********
-        
-        #ids_and_durs.set_index('freq_low', drop=True, inplace=True)
-        
-        # Build df indexed with freq, with cols is_in_selection and sel_dur 
-# final_res_df.loc[ids_and_durs.freq_low, 'is_in_selection'] = ids_and_durs.is_in_selection
+        update_freqs_grp = update_specs.groupby(by=['bands_lower_bound', 'bands_upper_bound'])
+
+        sel_id_assignments = {}
+        for grp_tuple in update_freqs_grp:
+            # grp_tuple looks like: 
+            #     bands_lower_bound  bands_upper_bound  sel_id  sel_dur
+            # 12          5492.1875          8992.1875      29     1.23
             
-# for sel_tbl_entry in self.sel_tbl.entries:
-#     start_time_snapped = Utils.nearest_in_array(final_res_df.time, sel_tbl_entry.start_time)
-#     stop_time_snapped  = Utils.nearest_in_array(final_res_df.time, sel_tbl_entry.stop_time)
-#     freq_low_snapped   = Utils.nearest_in_array(final_res_df.freq_low, sel_tbl_entry.low_freq)
-#     freq_high_snapped  = Utils.nearest_in_array(final_res_df.freq_high, sel_tbl_entry.high_freq)
-#
-#     sel_id  = sel_tbl_entry.sel_id
-#     sel_dur = sel_tbl_entry.delta_time
-#
-#     final_res_df.loc[np.logical_and(final_res_df['time'].between(start_time_snapped, 
-#                                                                  stop_time_snapped),
-#                                     final_res_df['freq_low'].between(freq_low_snapped, 
-#                                                                      freq_high_snapped)), 
-#                                                                  'is_in_selection'] = sel_id
-#
-#     final_res_df.loc[np.logical_and(final_res_df['time'].between(start_time_snapped, 
-#                                                                  stop_time_snapped),
-#                                     final_res_df['freq_low'].between(freq_low_snapped, 
-#                                                                      freq_high_snapped)), 
-#                                                                  'sel_dur'] = sel_dur
+            grp_name = grp_tuple[0]
+            grp = update_freqs_grp.get_group(grp_name)
+            # Pull out sel_id and sel_dur for each group.
+            # There maybe be several such pairs, i.e. several
+            # selections overlapping each freqband:
+            sel_ids  = grp.sel_id.to_numpy()
+            sel_ids_ser = pd.Series(sel_ids, name='sel_ids')
+            sel_durs = grp.sel_dur.to_numpy()
+            sel_durs = grp.sel_dur.to_numpy()
+            sel_durs_ser = pd.Series(sel_durs, name='sel_durs')
+            
+            # Construct a df:
+            #     sel_id    sel_dur
+            #       2        3.09
+            #       6        0.7
+            #       32       3.2
+            # The df combines the sel ids and sel durations for all
+            # sel entries that overlap a freqband:
+            assignment = pd.DataFrame({'sel_id' : sel_ids_ser, 'sel_dur' : sel_durs_ser})
+            sel_id_assignments[grp_name] = assignment 
 
+        # Finally, add is_in_selection and sel_dur columns
+        # final_res_df:
+        for (bands_lower_bound, bands_upper_bound), sels_in_band in sel_id_assignments.items():
+            # Sels_in_band is a df with cols 'sel_id', and 'sel_dur'
+            involved_indexes = np.logical_and(final_res_df.freq_low  <= bands_lower_bound,
+                                              final_res_df.freq_high >= bands_upper_bound)
+            # Get only the index values for which the above logical_and is True:
+            # each involved_indexes row is the actual final_res_df's 
+            # index and a single column that says True or False: Filter
+            # out the rows that have True in that col, and then get
+            # a simple list of index numbers: 
+            affected_rows = involved_indexes[involved_indexes == True].index.to_numpy()
+            final_res_df.loc[affected_rows, ['is_in_selection', 'sel_dur']] = (str(sels_in_band.sel_id.values),
+                                                                               str(sels_in_band.sel_dur.values))
+
+        # The df has an extra column with an empty str as a
+        # name. Get rid of that. Try/Except in case it's not
+        # there after all:
+        try:
+            final_res_df.drop('', axis=1, inplace=True)
+        except Exception:
+            pass
         exp_key = f"significant_acorrs_{FileUtils.file_timestamp()}"
         self.experimenter.save(exp_key, final_res_df)
         
@@ -1237,6 +1247,6 @@ if __name__ == '__main__':
         )
     segmenter = AudioSegmenter(exp, settings)
     
-    acorrs = segmenter.compute_autocorrelations(settings)
-    #****res = segmenter.peak_positions('/Users/paepcke/EclipseWorkspacesNew/birds/experiments/SoundscapeSegmentation/ExpAM02_20190717_052958_AllData1/csv_files/significant_acorrs_2022-07-04T11_18_43.csv')
+    #*****acorrs = segmenter.compute_autocorrelations(settings)
+    res = segmenter.peak_positions('/Users/paepcke/EclipseWorkspacesNew/birds/experiments/SoundscapeSegmentation/ExpAM02_20190717_052958_AllData1/csv_files/significant_acorrs_2022-07-09T10_00_15.csv')
     print('Done')
