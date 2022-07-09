@@ -1106,6 +1106,56 @@ class Utils:
             return arr[idx]            
 
     #------------------------------------
+    # sparse_loc
+    #-------------------
+    
+    @classmethod
+    def sparse_loc(cls, df, index, columns, val):
+        """ Insert data in a DataFrame with SparseDtype format
+    
+        Only applicable for pandas version > 0.25
+    
+        Args
+        ----
+        df : DataFrame with series formatted with pd.SparseDtype
+        index: str, or list, or slice object
+            Same as one would use as first argument of .loc[]
+        columns: str, list, or slice
+            Same one would normally use as second argument of .loc[]
+        val: insert values
+    
+        Returns
+        -------
+        df: DataFrame
+            Modified DataFrame
+    
+        """
+    
+        # Save the original sparse format for reuse later
+        spdtypes = df.dtypes[columns]
+    
+        # Convert concerned Series to dense format
+        df[columns] = df[columns].sparse.to_dense()
+    
+        # Do a normal insertion with .loc[]
+        # But df.loc[[2,4], columns] gives key
+        # error if either of index 2 or 4 don't
+        # exist. However: df.loc[2, columns] = val
+        # will create the row:
+        if type(index) in (list, np.ndarray):
+            for idx in index:
+                df.loc[idx, columns] = val
+        else:
+            df.loc[index, columns] = val
+    
+        # Back to the original sparse format
+        df[columns] = df[columns].astype(spdtypes)
+    
+        return df 
+
+
+
+    #------------------------------------
     # set_seed  
     #-------------------
 
