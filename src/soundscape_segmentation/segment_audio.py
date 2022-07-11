@@ -13,12 +13,13 @@ from pathlib import Path
 
 #************
 import sys
+import argparse
 #print(sys.path)
 sys.path.insert(0,'/Users/paepcke/EclipseWorkspacesNew/birds/src')
 #************
 
 from birdsong.utils.utilities import FileUtils
-from data_augmentation.utils import RavenSelectionTable, Utils, Interval
+from data_augmentation.utils import RavenSelectionTable, Utils
 from experiment_manager.experiment_manager import ExperimentManager, \
     JsonDumpableMixin
 from logging_service import LoggingService
@@ -403,6 +404,14 @@ class AudioSegmenter:
         final_res_df.loc[final_res_df.time.isin(true_stop_times), 'is_sel_stop'] = True
         final_res_df.is_sel_start.fillna(False, inplace=True)
         final_res_df.is_sel_stop.fillna(False, inplace=True)
+        
+        # Two more cols: is_in_selection, and sel_dur, both
+        # filled with empty strings:
+        final_res_df = pd.concat([final_res_df,
+                                  pd.DataFrame({'is_in_selection' :['']*len(final_res_df),
+                                                'sel_dur'         :['']*len(final_res_df)})],
+                                           axis=1)
+        
                 
         bands_high_freqs = final_res_df.freq_high.unique()
         bands_high_freqs.sort()
@@ -479,8 +488,64 @@ class AudioSegmenter:
             # out the rows that have True in that col, and then get
             # a simple list of index numbers: 
             affected_rows = involved_indexes[involved_indexes == True].index.to_numpy()
-            final_res_df.loc[affected_rows, ['is_in_selection', 'sel_dur']] = (str(sels_in_band.sel_id.values),
-                                                                               str(sels_in_band.sel_dur.values))
+            
+            # For each row being updated, get current value, which
+            # looks like: '[16, 32, 33, 34]' or ''. And the same
+            # for the already existing sel durations, getting like:
+            #
+            #        is_in_selection            sel_dur
+            # index
+            #  11   '[16, 32, 33, 34]'  '[3.5, 2.1, 4.0, 6.2]'
+            #  102        ''                     ''
+            #  214       [35]                   [4.2]
+            
+            curr_sel_strs = pd.concat([final_res_df.loc[affected_rows, ['is_in_selection']],
+                                       final_res_df.loc[affected_rows, ['sel_dur']]
+                                       ], axis=1)
+            #**** check that index is initialized to affected_rows above
+            
+            # Get comma-separated lists of new sel ids and sel durations,
+            # collecting into df like:
+            #
+            #         is_in_selection              sel_dur
+            # index
+            # 11          '[32, 45]'              '[3.2, 7.4]'
+            # 102           ''                     ''
+            # 214         '[30]'                  '[6.4]'
+            
+            additional_sels = pd.DataFrame({'is_in_selection' : str(list(sels_in_band.sel_id.values)),
+                                            'sel_dur'         : str(list(sels_in_band.sel_dur.values))},
+                                            index = affected_rows)
+            
+            # Now append the new lists to the existing ones
+            # i.e. get for the first affected row something like:
+            #
+            #          is_in_selection                     sel_dur
+            #    '[16, 32, 33, 34, 32, 45]'     '[3.5, 2.1, 4.0, 6.2, 3.2, 7.4]'
+            #
+            # These values above are the new values for is_in_selection and sel_dur
+            # for the first affected row in this example.
+            new_is_in_sel = list(map(lambda cur_str, addnl_str :
+                                     (f"{cur_str[:-1]}{', ' if len(cur_str) > 0 else '[]'}"
+                                      f"{addnl_str[1:]}"),
+                                     curr_sel_strs.is_in_selection, additional_sels.is_in_selection
+                                     )
+                                )
+            
+            new_sel_dur   = list(map(lambda cur_str, addnl_str :
+                                     (f"{cur_str[:-1]}{', ' if len(cur_str) > 0 else '[]'}"
+                                      f"{addnl_str[1:]}"),
+                                     curr_sel_strs.sel_dur, additional_sels.sel_dur
+                                     )
+                                )
+            # Update cols is_in_selection and sel_dur 
+            # with the new values in the affected rows:
+            final_res_df.loc[affected_rows, ['is_in_selection', 'sel_dur']] = \
+                                            pd.DataFrame({'is_in_selection' : new_is_in_sel,
+                                                          'sel_dur'         : new_sel_dur},
+                                                          index=affected_rows)
+            
+            
 
         # The df has an extra column with an empty str as a
         # name. Get rid of that. Try/Except in case it's not
@@ -557,7 +622,11 @@ class AudioSegmenter:
         fband_sig_type_dfs = [data.reset_index() 
                               for _grp_key, data 
                               in df_grp]
-        self.log.info(f"Partitioning data into {self.num_freq_bands} bands...")
+        self.log.info(f"Done partitioning data into {self.num_freq_bands} bands...")
+        
+        # Remove the junk columns:
+        list(map(lambda df: df.drop(['level_0', '', 'index'], axis=1, inplace=True), 
+                 fband_sig_type_dfs))
         
         # For each extract, build acorr_df:
         #    peak_idx   measure_name   measure_val  freq_low  freq_high   peak_height  peak_width  prominence  
@@ -606,8 +675,19 @@ class AudioSegmenter:
             peaks_df['peak_height'] = peak_stats['peak_heights']
             peaks_df['plateau_width'] = peak_stats['plateau_sizes']
             peaks_df['prominence'] = peak_stats['prominences']
+
+            # All is_in_selection elements are strings, like
+            # '[29]' or '[34, 52, 1]', or the empty str.
+            # Turn the values that look like lists into real lists,
+            # and the empty values into np.nan:
+            peaks_df['is_in_selection'] = list(map(lambda lst_str: eval(lst_str) 
+                                                   if len(lst_str) > 0
+                                                   else np.nan, 
+                                                   peaks_df.is_in_selection)) 
+            peaks_df_exploded = peaks_df.explode('is_in_selection')
             
-            peaks_df_arr.append(peaks_df)
+            
+            peaks_df_arr.append(peaks_df_exploded)
             
         peaks_df = pd.concat(peaks_df_arr)
         # Flip the negative correlations to the top
@@ -1219,6 +1299,27 @@ class SoundSegmentationSetting(JsonDumpableMixin):
 
 # ------------------------ Main ------------
 if __name__ == '__main__':
+    
+    parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
+                                     formatter_class=argparse.RawTextHelpFormatter,
+                                     description="Compute signature autocorrelations and their peaks"
+                                     )
+
+    parser.add_argument('-c', '--command',
+                        choices=['acorrs', 'peaks'],
+                        required=True,
+                        help='Command to perform',
+                        )
+
+    # parser.add_argument('filename',
+    #                     type=str,
+    #                     help='Filename to process (audio for acorrs, acorrs result for peaks)',
+    #                     default=AUDIO_PATH
+    #                     )
+
+    args = parser.parse_args()
+    cmd = args.command
+
     #exp_root = os.path.join(EXP_ROOT, 'ExpAM02_20190717_052958_HalfSecondLags')
     exp_root = os.path.join(EXP_ROOT, 'ExpAM02_20190717_052958_AllData1')
     exp = ExperimentManager(exp_root)
@@ -1233,7 +1334,9 @@ if __name__ == '__main__':
     # At sr=31000: hop_len=256; timedelta~=8ms   ==> 6 lags at ~.8ms
     
     settings = SoundSegmentationSetting(
-        sig_types = ['flatness', 'continuity', 'pitch', 'freq_mod', 'energy_sum'],
+        #******sig_types = ['flatness', 'continuity', 'pitch', 'freq_mod', 'energy_sum'],
+        #******sig_types = ['continuity', 'energy_sum'],
+        sig_types = ['continuity', 'energy_sum'],
         sr = 32000, # sampling rate
         pattern_lookback_dur=0.5, # up to 500ms lookback
         pattern_lookback_dur_units=PatternLookbackDurationUnits.SECONDS,
@@ -1247,6 +1350,15 @@ if __name__ == '__main__':
         )
     segmenter = AudioSegmenter(exp, settings)
     
-    #*****acorrs = segmenter.compute_autocorrelations(settings)
-    res = segmenter.peak_positions('/Users/paepcke/EclipseWorkspacesNew/birds/experiments/SoundscapeSegmentation/ExpAM02_20190717_052958_AllData1/csv_files/significant_acorrs_2022-07-09T10_00_15.csv')
+    #*************
+    #cmd = 'peaks'
+    cmd = 'acorrs'
+    #*************
+    
+    if cmd == 'acorrs':
+        acorrs = segmenter.compute_autocorrelations(settings)
+    elif cmd == 'peaks':
+        res = segmenter.peak_positions('/Users/paepcke/EclipseWorkspacesNew/birds/experiments/SoundscapeSegmentation/ExpAM02_20190717_052958_AllData1/csv_files/significant_acorrs_2022-07-10T17_56_36.csv')
+    else:
+        print("Arg must be 'acorrs', or 'peaks'")
     print('Done')
