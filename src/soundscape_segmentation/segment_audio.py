@@ -525,16 +525,24 @@ class AudioSegmenter:
             #
             # These values above are the new values for is_in_selection and sel_dur
             # for the first affected row in this example.
+            # Four cases to consider in the lambda below. The non-empty
+            # entries in the matrix are examples; could be str of
+            # any list of selection IDs:
+            #
+            #                   cur_str        addnl_str
+            #     cur_str          ''           '[15]'
+            #     addnl_str    '[16, 17]'         ''
+            
             new_is_in_sel = list(map(lambda cur_str, addnl_str :
-                                     (f"{cur_str[:-1]}{', ' if len(cur_str) > 0 else '[]'}"
-                                      f"{addnl_str[1:]}"),
+                                     (f"{cur_str[:-1] + ', '  if len(cur_str) > 0 and len(addnl_str) > 0 else cur_str}"
+                                      f"{addnl_str[1:] if len(cur_str) > 0 else addnl_str}"),
                                      curr_sel_strs.is_in_selection, additional_sels.is_in_selection
                                      )
                                 )
             
             new_sel_dur   = list(map(lambda cur_str, addnl_str :
-                                     (f"{cur_str[:-1]}{', ' if len(cur_str) > 0 else '[]'}"
-                                      f"{addnl_str[1:]}"),
+                                     (f"{cur_str[:-1] + ', '  if len(cur_str) > 0 and len(addnl_str) > 0 else cur_str}"
+                                      f"{addnl_str[1:] if len(cur_str) > 0 else addnl_str}"),
                                      curr_sel_strs.sel_dur, additional_sels.sel_dur
                                      )
                                 )
@@ -1311,19 +1319,46 @@ if __name__ == '__main__':
                         help='Command to perform',
                         )
 
-    # parser.add_argument('filename',
-    #                     type=str,
-    #                     help='Filename to process (audio for acorrs, acorrs result for peaks)',
-    #                     default=AUDIO_PATH
-    #                     )
+    parser.add_argument('-s', '--selection_tbl',
+                        type=str,
+                        help=f"path to selection table default: {TEST_SEL_TBL}",
+                        default=TEST_SEL_TBL
+                        )
+
+    parser.add_argument('source_info',
+                        type=str,
+                        help='For acorrs: fname of audio or spectrogram;\n for peaks, either full fname to acorr result, or experiment manager key)',
+                        )
 
     args = parser.parse_args()
-    cmd = args.command
 
     #exp_root = os.path.join(EXP_ROOT, 'ExpAM02_20190717_052958_HalfSecondLags')
     exp_root = os.path.join(EXP_ROOT, 'ExpAM02_20190717_052958_AllData1')
     exp = ExperimentManager(exp_root)
     
+    cmd = args.command
+    
+    # Determine meaning of filename:
+    if cmd == 'acorrs':
+        # Filenam is either an audio file, or a 
+        # precomputed spectrogram file, which would
+        # be a csv file:
+        if args.source_info.endswith('.csv'):
+            # A spectrogram:
+            spectro_path = args.source_info
+            audio_path   = None 
+        else:
+            audio_path   = args.source_info
+            spectro_path = None
+            
+    elif cmd == 'peaks':
+        # Could be an experiment manager key, would
+        # not have a .csv extension, or a full name:
+        if args.source_info.endswith('.csv'):
+            acorrs_fname = args.source_info
+        else:
+            acorrs_fname = os.path.join(exp_root, f"csv_files/{args.source_info}.csv")
+
     # About number of lags: ~25ms and ~50ms seems to be a good times
     # for look-back. The number of corresponding lags depends on
     # the spectrogram timeframe width, which is correlated with
@@ -1343,7 +1378,7 @@ if __name__ == '__main__':
         spectro_path = SPECTRO_PATH,
         freq_split = (0,20000,500),
         audio_path = AUDIO_PATH,
-        selection_tbl_path=TEST_SEL_TBL,
+        selection_tbl_path=args.selection_tbl,
         recording_id = 'AM02_20190717_052958',
         round_to = AudioSegmenter.ROUND_TO,
         remove_long_selections = True
@@ -1352,13 +1387,13 @@ if __name__ == '__main__':
     
     #*************
     #cmd = 'peaks'
-    cmd = 'acorrs'
+    #cmd = 'acorrs'
     #*************
     
     if cmd == 'acorrs':
         acorrs = segmenter.compute_autocorrelations(settings)
     elif cmd == 'peaks':
-        res = segmenter.peak_positions('/Users/paepcke/EclipseWorkspacesNew/birds/experiments/SoundscapeSegmentation/ExpAM02_20190717_052958_AllData1/csv_files/significant_acorrs_2022-07-10T17_56_36.csv')
+        res = segmenter.peak_positions(acorrs_fname)
     else:
         print("Arg must be 'acorrs', or 'peaks'")
     print('Done')
