@@ -4,19 +4,14 @@ Created on May 30, 2022
 
 @author: paepcke
 '''
-import warnings
-
+import argparse
 from enum import Enum
 import json
 import os
 from pathlib import Path
-
-#************
+import re
 import sys
-import argparse
-#print(sys.path)
-sys.path.insert(0,'/Users/paepcke/EclipseWorkspacesNew/birds/src')
-#************
+import warnings
 
 from birdsong.utils.utilities import FileUtils
 from data_augmentation.utils import RavenSelectionTable, Utils
@@ -27,11 +22,19 @@ from powerflock.signal_analysis import SignalAnalyzer
 from powerflock.signatures import Signature
 from result_analysis.charting import Charter
 from scipy.signal import find_peaks
+from scipy.signal._peak_finding_utils import PeakPropertyWarning
 
 import multiprocessing as mp
 import numpy as np
 import pandas as pd
-from scipy.signal._peak_finding_utils import PeakPropertyWarning
+
+
+#************
+#print(sys.path)
+sys.path.insert(0,'/Users/paepcke/EclipseWorkspacesNew/birds/src')
+#************
+
+
 
 class PatternLookbackDurationUnits(str, Enum):
     '''
@@ -168,10 +171,10 @@ class AudioSegmenter:
             is_sel_stop  = pd.Series(np.nan, name='is_sel_stop', index=self.spectro_times)
             sel_duration = pd.Series(np.nan, name='sel_duration', index=self.spectro_times)
             
-            self.selections_df = pd.DataFrame({'true_sel_id'    : sel_id,
-                                               'true_sel_start' : is_sel_start,
-                                               'true_sel_stop'  : is_sel_stop,
-                                               'true_sel_dur'   : sel_duration
+            self.selections_df = pd.DataFrame({'sel_id'    : sel_id,
+                                               'labeled_sel_start' : is_sel_start,
+                                               'labeled_sel_stop'  : is_sel_stop,
+                                               'labeled_sel_dur'   : sel_duration
                                                }) 
 
         # Freq lookup tbl: human-marked freq to spectro freq
@@ -353,9 +356,9 @@ class AudioSegmenter:
         
         #*********
         # Uncomment to do one at a time without parallelism:
-        #acorr_by_slice = []
-        #for one_slice in slice_arr:
-        #    acorr_by_slice.append(self._process_one_freq_slice(one_slice, col_names, lookback_duration))
+        acorr_by_slice = []
+        for one_slice in slice_arr:
+            acorr_by_slice.append(self._process_one_freq_slice(one_slice, col_names, lookback_duration))
         #*********
 
         #********* Read DF INSTEAD OF COMPUTING IT
@@ -395,9 +398,11 @@ class AudioSegmenter:
         final_res_df = pd.concat(final_res_arrs_flat).reset_index()
         
         # Get all the true selection start times
-        # snapped to spectro timeframes:
-        true_start_times = self.selections_df[self.selections_df.true_sel_start].index.to_numpy(dtype=float)
-        true_stop_times  = self.selections_df[self.selections_df.true_sel_stop].index.to_numpy(dtype=float)
+        # snapped to spectro timeframes, i.e. the time 
+        # the was manually labeled, as opposed to the times
+        # snapped to the spectrogram times:
+        true_start_times = self.selections_df[self.selections_df.labeled_sel_start].index.to_numpy(dtype=float)
+        true_stop_times  = self.selections_df[self.selections_df.labeled_sel_stop].index.to_numpy(dtype=float)
         
         # Add boolean columns is_sel_start and is_sel_stop
         final_res_df.loc[final_res_df.time.isin(true_start_times), 'is_sel_start'] = True
@@ -859,7 +864,7 @@ class AudioSegmenter:
         #    [0.0460_434.12Hz_640.34Hz,    2],
         #         ...
         #    ]
-        res_df = pd.DataFrame()
+        res_arr = []
         
         stop_time = max(sig_measure.index)
         
@@ -889,11 +894,18 @@ class AudioSegmenter:
             # Get df w/ cols like 'flatness', 'is_significant':
             acorr_res = SignalAnalyzer.autocorrelation(measures, nlags=self.num_lags)
             
-            # Add a signature type column ('flatness' or 'pitch', etc.)
-            acorr_res.insert(1, 'sig_type', [sig_measure.name]*len(acorr_res))
+            # Ignore non-significant acorrs, and remove the is_significant col:
+            acorr_res_sig = acorr_res[acorr_res.is_significant].drop('is_significant', axis=1)
 
             # Append the new results:
-            res_df = pd.concat([res_df, acorr_res], axis=0)
+            res_arr.append(acorr_res_sig)
+
+        res_df = pd.concat(res_arr)
+        res_df.columns = ['time', 'lag', 'acorr', 'ci_low', 'ci_high']
+        res_df.index = res_df.time
+
+        # Add a signature type column ('flatness' or 'pitch', etc.)
+        res_df.insert(1, 'sig_type', [sig_measure.name]*len(res_df)) 
 
         return res_df
 
@@ -927,8 +939,28 @@ class AudioSegmenter:
                                ):
         '''
         Imports a Raven selection table and the time frames
-        in seconds of a spectrogram. Returns a two-column
-        boolean df with columns is_sel_start and is_sel_stop.
+        in seconds of a spectrogram. Creates df with information
+        about each selection (i.e. rectangle in Raven). The 
+        df has shape (<spectrogram_width>, 8), the columns describing
+        an aspect of the selection:
+           
+            snapped_start_time start time snapped to spectrogram timeframe
+            snapped_stop_time  stop time snapped to spectrogram timeframe
+            sel_id             Raven selection ID
+            sel_dur            duration of selection in fractional seconds 
+            is_sel_start       whether or not the respective time frame is a selection start
+            is_sel_stop        whether or not the respective time frame is a selection end
+            snapped_freq_low   low frequency bound snapped to spectrogram freq bands
+            snapped_freq_high  high frequency bound snapped to spectrogram freq bands
+
+        The dataframe is returned, but also saved to the experiment
+        under name 
+              'selections_info{rec_id}', 
+        where recording ID is parsed from the selection table file path 
+        if possible. Parser looks for the 'AM<recorderID>_<date><time>' 
+        pattern in this example:
+        
+             /foo/bar/DS_AM02_20190717_052958.Table.1.selections.txt
         
         :param spectro_times: times in seconds of spectrogram
             time frames
@@ -964,84 +996,132 @@ class AudioSegmenter:
         else:
             sel_entries = self.sel_tbl.entries
         
-        # Get list of true start/stop times from selection table,
+        # Get dicts of sel_id to labeled start/stop times from selection table,
         # rounded to our standard ROUND_TO decimal places:
         
-        true_start_times = pd.Series([np.round(sel_entry.start_time, self.round_to)
-                                 for sel_entry
-                                 in sel_entries], name='true_sel_starts')
-        true_stop_times = pd.Series([np.round(sel_entry.stop_time, self.round_to)
-                                for sel_entry
-                                in sel_entries], name='true_sel_stops')
-        
-        # Two Series with values all False, one False for each
-        # spectrogram time frame. One series for start, one
-        # for stop times: 
-        is_sel_start = pd.Series([False]*len(self.spectro_times), 
-                                 name='is_sel_start',
-                                 index=self.spectro_times)
-        is_sel_stop  = pd.Series([False]*len(self.spectro_times), 
-                                 name='is_sel_stop',
-                                 index=self.spectro_times)
-        
-        # Another two full-length columns, one for the selection ID,
-        # and one for the duration of each selection:
-        sel_id = pd.Series([np.nan]*len(self.spectro_times), 
-                           name='sel_id',
-                           index=self.spectro_times)
-        sel_duration = pd.Series([np.nan]*len(self.spectro_times), 
-                                 name='sel_duration',
-                                 index=self.spectro_times)
-        
-        
-        
-        for start_time in true_start_times:
+        labeled_start_times = {sel_entry.sel_id : np.round(sel_entry.start_time, 
+                                                           self.round_to)
+                                                           for sel_entry
+                                                           in sel_entries}
+        labeled_stop_times  = {sel_entry.sel_id : np.round(sel_entry.stop_time,
+                                                           self.round_to)
+                                                           for sel_entry
+                                                           in sel_entries}
+        sel_durs  = {sel_entry.sel_id : sel_entry.delta_time
+                     for sel_entry
+                     in sel_entries}
+
+
+        # Get dict: {sel_id : (snapped_start_time, snapped_stop_time)}:
+        snapped_times = {}
+        for sel_id, labeled_start_time, labeled_stop_time \
+            in zip(labeled_start_times.keys(),
+                   labeled_start_times.values(),
+                   labeled_stop_times.values()):
             # For this selection table start time,
             # find the nearest spectrogram time frame:
             snapped_start_time = Utils.nearest_in_array(spectro_times,
-                                                        start_time,
+                                                        labeled_start_time,
                                                         is_sorted=True)
-            # Indicate the time among all spectro timeframes
-            # that is a selection start:
-            is_sel_start.loc[snapped_start_time] = True
-            # Set corresponding selection ID
-            sel_id.loc[snapped_start_time] = \
-                int(next(filter(lambda entry, 
-                                start_time=start_time: round(entry.start_time,self.round_to) == start_time,
-                                sel_entries)).sel_id)
-            # Set corresponding length of selection:
-            sel_duration.loc[snapped_start_time] = \
-                next(filter(lambda entry, 
-                            start_time=start_time: round(entry.start_time, self.round_to) == start_time,
-                            sel_entries)).delta_time
-        for stop_time in true_stop_times:
-            # For this selection table stop time,
-            # find the nearest spectrogram time frame:
-            snapped_stop_time = Utils.nearest_in_array(spectro_times,
-                                                       stop_time,
-                                                       is_sorted=True)
-            # Indicate the time among all spectro timeframes
-            # that is a selection stop:
-            is_sel_stop.loc[snapped_stop_time] = True
-            
-            # Set corresponding selection ID
-            sel_id.loc[snapped_stop_time] = \
-                int(next(filter(lambda entry, 
-                                stop_time=stop_time: round(entry.stop_time,self.round_to) == stop_time,
-                                sel_entries)).sel_id)
-            # Set corresponding length of selection:
-            sel_duration.loc[snapped_stop_time] = \
-                next(filter(lambda entry, 
-                            stop_time=stop_time: round(entry.stop_time, self.round_to) == stop_time,
-                            sel_entries)).delta_time
+            snapped_stop_time  = Utils.nearest_in_array(spectro_times,
+                                                        labeled_stop_time,
+                                                        is_sorted=True)
+            snapped_times[sel_id] = (snapped_start_time, snapped_stop_time)
 
-        true_selections_df = pd.DataFrame({'true_sel_sel_id': sel_id,
-                                           'true_sel_start' : is_sel_start,
-                                           'true_sel_stop'  : is_sel_stop,
-                                           'true_sel_dur'   : sel_duration
-                                           })
+        # Analogously for frequency ranges:
         
-        return true_selections_df
+        labeled_freqs = {sel_entry.sel_id : (sel_entry.low_freq, sel_entry.high_freq)
+                                 for sel_entry
+                                 in sel_entries}
+        snapped_freqs = {}
+        for sel_id, (labeled_freq_low, labeled_freq_high) \
+            in zip(labeled_freqs.keys(),
+                   labeled_freqs.values()
+                   ):
+            # For this selection table's frequency bounds,
+            # find the nearest spectrogram freq band:
+            snapped_freq_low = Utils.nearest_in_array(self.spectro_freqs,
+                                                      labeled_freq_low,
+                                                      is_sorted=False)
+            snapped_freq_high  = Utils.nearest_in_array(self.spectro_freqs,
+                                                        labeled_freq_high,
+                                                        is_sorted=False)
+            snapped_freqs[sel_id] = (snapped_freq_low, snapped_freq_high)
+        
+        snapped_times_df = pd.DataFrame(snapped_times).transpose()
+        snapped_times_df.columns = ['snapped_start_time', 'snapped_stop_time']
+        snapped_times_df['sel_id'] = snapped_times_df.index
+        
+        sel_durs_df = pd.DataFrame(sel_durs.values(), 
+                                   index=sel_durs.keys(),
+                                   columns=['sel_dur'])
+        # We'll set the following two cols properly
+        # further down:
+        sel_durs_df['is_sel_start'] = False
+        sel_durs_df['is_sel_stop'] = False
+        sel_durs_df['sel_id'] = sel_durs_df.index
+        snapped_times_durs_df = snapped_times_df.merge(sel_durs_df, on='sel_id')
+        
+        snapped_freqs_df = pd.DataFrame(snapped_freqs).transpose()
+        snapped_freqs_df.columns = ['snapped_freq_low', 'snapped_freq_high']
+        snapped_freqs_df['sel_id'] = snapped_freqs_df.index
+        
+        snapped_time_freqs = snapped_times_durs_df.merge(snapped_freqs_df, on='sel_id')
+        snapped_time_freqs.index = snapped_time_freqs.snapped_start_time
+        
+        # Prepare a df: 
+        #      sel_id   snapped_start_time  snapped_stop_time snapped_freq_low snapped_freq_high
+        # time
+        #
+        # The df will have width spectrogram:
+        exploded_cols = list(map(lambda _idx, the_len=len(self.spectro_times): 
+                                 pd.Series([np.nan]*the_len, dtype=float), 
+                                 np.arange(len(snapped_time_freqs.columns))))
+        exploded_time_freqs = pd.concat(exploded_cols, axis=1)
+        exploded_time_freqs.columns = snapped_time_freqs.columns
+        exploded_time_freqs.index = spectro_times
+        # Set is_sel_start and is_sel_stop to False to start with:
+        exploded_time_freqs.loc[exploded_time_freqs.index, 'is_sel_start'] = False
+        exploded_time_freqs.loc[exploded_time_freqs.index, 'is_sel_stop'] = False
+        
+        # Fill in the 'border' times for the selections,
+        # i.e. freq bounds at the time bounds:
+        exploded_time_freqs.loc[snapped_time_freqs.snapped_start_time] = snapped_time_freqs
+        
+        # Fill in the (time) rows that are between the bounds.
+        # Ex: if row 2.0 sec and 2.5 seconds have high and low freqs
+        #     filled in because they are the start and stop of a selection, 
+        #     then fill the rows between 2.0 and 2.5 with duplicates of
+        #     the row at 2.0.
+        for start_time, stop_time in zip(snapped_time_freqs['snapped_start_time'].to_list(),
+                                         snapped_time_freqs['snapped_stop_time'].to_list()):
+            start_row = snapped_time_freqs[np.logical_and(snapped_time_freqs.snapped_start_time == start_time,
+                                                          snapped_time_freqs.snapped_stop_time == stop_time)].values
+            exploded_time_freqs.loc[np.logical_and(exploded_time_freqs.index >= start_time,
+                                                   exploded_time_freqs.index <= stop_time)] = start_row
+
+        # Finally, mark the selection start and stop times in
+        # the is_sel_start and is_sel_stop cols:
+        
+        exploded_time_freqs.loc[snapped_time_freqs['snapped_start_time'], 'is_sel_start'] = True
+        exploded_time_freqs.loc[snapped_time_freqs['snapped_stop_time'], 'is_sel_stop'] = True
+        
+        # Try to get the recording identifier from the Raven
+        # selection table name, which for us looks like:
+        #
+        #   DS_AM02_20190717_052958.Table.1.selections.txt
+        # usually embedded in a long filename:
+        pat = re.compile(r'.*(AM[0-9]{2}_[0-9]{8}_[0-9]*).*')
+        recorder_id_match = pat.match(selection_tbl_path)
+        if recorder_id_match is None:
+            rec_id = ''
+        else:
+            rec_id = recorder_id_match[1]
+
+        exp_key = f"selections_info{rec_id}"
+        self.experimenter.save(exp_key, exploded_time_freqs)
+
+        return exploded_time_freqs
     
     #------------------------------------
     # _nearest_spectro_times
