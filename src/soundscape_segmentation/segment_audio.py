@@ -4,13 +4,18 @@ Created on May 30, 2022
 
 @author: paepcke
 '''
+#************
+import sys
+#print(sys.path)
+sys.path.insert(0,'/Users/paepcke/EclipseWorkspacesNew/birds/src')
+#************
+
 import argparse
 from enum import Enum
 import json
 import os
 from pathlib import Path
 import re
-import sys
 import warnings
 
 from birdsong.utils.utilities import FileUtils
@@ -27,14 +32,6 @@ from scipy.signal._peak_finding_utils import PeakPropertyWarning
 import multiprocessing as mp
 import numpy as np
 import pandas as pd
-
-
-#************
-#print(sys.path)
-sys.path.insert(0,'/Users/paepcke/EclipseWorkspacesNew/birds/src')
-#************
-
-
 
 class PatternLookbackDurationUnits(str, Enum):
     '''
@@ -356,9 +353,9 @@ class AudioSegmenter:
         
         #*********
         # Uncomment to do one at a time without parallelism:
-        acorr_by_slice = []
-        for one_slice in slice_arr:
-            acorr_by_slice.append(self._process_one_freq_slice(one_slice, col_names, lookback_duration))
+        #acorr_by_slice = []
+        #for one_slice in slice_arr:
+        #    acorr_by_slice.append(self._process_one_freq_slice(one_slice, col_names, lookback_duration))
         #*********
 
         #********* Read DF INSTEAD OF COMPUTING IT
@@ -396,169 +393,6 @@ class AudioSegmenter:
         # # the index of the constituent correlation dfs, which
         # # is not useful; so reset the index to simple row nums:
         final_res_df = pd.concat(final_res_arrs_flat).reset_index()
-        
-        # Get all the true selection start times
-        # snapped to spectro timeframes, i.e. the time 
-        # the was manually labeled, as opposed to the times
-        # snapped to the spectrogram times:
-        true_start_times = self.selections_df[self.selections_df.labeled_sel_start].index.to_numpy(dtype=float)
-        true_stop_times  = self.selections_df[self.selections_df.labeled_sel_stop].index.to_numpy(dtype=float)
-        
-        # Add boolean columns is_sel_start and is_sel_stop
-        final_res_df.loc[final_res_df.time.isin(true_start_times), 'is_sel_start'] = True
-        final_res_df.loc[final_res_df.time.isin(true_stop_times), 'is_sel_stop'] = True
-        final_res_df.is_sel_start.fillna(False, inplace=True)
-        final_res_df.is_sel_stop.fillna(False, inplace=True)
-        
-        # Two more cols: is_in_selection, and sel_dur, both
-        # filled with empty strings:
-        final_res_df = pd.concat([final_res_df,
-                                  pd.DataFrame({'is_in_selection' :['']*len(final_res_df),
-                                                'sel_dur'         :['']*len(final_res_df)})],
-                                           axis=1)
-        
-                
-        bands_high_freqs = final_res_df.freq_high.unique()
-        bands_high_freqs.sort()
-        bands_low_freqs = final_res_df.freq_low.unique()
-        bands_low_freqs.sort()
-        
-        # Get selection table frequency bounds, and
-        # get final_res_df index values that designate
-        # rows with freq_low/freq_high ranges that include
-        # each sel tbl entry's freq range:
-        rows_to_update = []
-        for entry in self.sel_tbl.entries:
-            sel_low_freq  = entry.low_freq
-            sel_high_freq = entry.high_freq
-            # Selection freq bounds are hand drawn, so the
-            # freqs don't necessary collate with spectrogram
-            # freqs. Snap the bounds to the closest frequencies
-            # in the df:
-            bands_upper_bound = Utils.nearest_in_array(bands_high_freqs, sel_high_freq, is_sorted=True)
-            bands_lower_bound = Utils.nearest_in_array(bands_low_freqs,  sel_low_freq, is_sorted=True)
-            rows_to_update.append([bands_lower_bound,
-                                   bands_upper_bound,
-                                   int(entry.sel_id),
-                                   round(entry.delta_time,2)])
-        # [[low_freq, high_freq, sel_id, sel_dur], [], ...]
-        update_specs = pd.DataFrame(rows_to_update, columns=['bands_lower_bound',
-                                                             'bands_upper_bound',
-                                                             'sel_id',
-                                                             'sel_dur'])
-        
-        # For each selection, fill the is_in_selection and selection duration
-        # columns
-        # Use groupby to collect all selection entries for the
-        # same freq_low/freq_high in the result df:
-
-        update_freqs_grp = update_specs.groupby(by=['bands_lower_bound', 'bands_upper_bound'])
-
-        sel_id_assignments = {}
-        for grp_tuple in update_freqs_grp:
-            # grp_tuple looks like: 
-            #     bands_lower_bound  bands_upper_bound  sel_id  sel_dur
-            # 12          5492.1875          8992.1875      29     1.23
-            
-            grp_name = grp_tuple[0]
-            grp = update_freqs_grp.get_group(grp_name)
-            # Pull out sel_id and sel_dur for each group.
-            # There maybe be several such pairs, i.e. several
-            # selections overlapping each freqband:
-            sel_ids  = grp.sel_id.to_numpy()
-            sel_ids_ser = pd.Series(sel_ids, name='sel_ids')
-            sel_durs = grp.sel_dur.to_numpy()
-            sel_durs = grp.sel_dur.to_numpy()
-            sel_durs_ser = pd.Series(sel_durs, name='sel_durs')
-            
-            # Construct a df:
-            #     sel_id    sel_dur
-            #       2        3.09
-            #       6        0.7
-            #       32       3.2
-            # The df combines the sel ids and sel durations for all
-            # sel entries that overlap a freqband:
-            assignment = pd.DataFrame({'sel_id' : sel_ids_ser, 'sel_dur' : sel_durs_ser})
-            sel_id_assignments[grp_name] = assignment 
-
-        # Finally, add is_in_selection and sel_dur columns
-        # final_res_df:
-        for (bands_lower_bound, bands_upper_bound), sels_in_band in sel_id_assignments.items():
-            # Sels_in_band is a df with cols 'sel_id', and 'sel_dur'
-            involved_indexes = np.logical_and(final_res_df.freq_low  <= bands_lower_bound,
-                                              final_res_df.freq_high >= bands_upper_bound)
-            # Get only the index values for which the above logical_and is True:
-            # each involved_indexes row is the actual final_res_df's 
-            # index and a single column that says True or False: Filter
-            # out the rows that have True in that col, and then get
-            # a simple list of index numbers: 
-            affected_rows = involved_indexes[involved_indexes == True].index.to_numpy()
-            
-            # For each row being updated, get current value, which
-            # looks like: '[16, 32, 33, 34]' or ''. And the same
-            # for the already existing sel durations, getting like:
-            #
-            #        is_in_selection            sel_dur
-            # index
-            #  11   '[16, 32, 33, 34]'  '[3.5, 2.1, 4.0, 6.2]'
-            #  102        ''                     ''
-            #  214       [35]                   [4.2]
-            
-            curr_sel_strs = pd.concat([final_res_df.loc[affected_rows, ['is_in_selection']],
-                                       final_res_df.loc[affected_rows, ['sel_dur']]
-                                       ], axis=1)
-            #**** check that index is initialized to affected_rows above
-            
-            # Get comma-separated lists of new sel ids and sel durations,
-            # collecting into df like:
-            #
-            #         is_in_selection              sel_dur
-            # index
-            # 11          '[32, 45]'              '[3.2, 7.4]'
-            # 102           ''                     ''
-            # 214         '[30]'                  '[6.4]'
-            
-            additional_sels = pd.DataFrame({'is_in_selection' : str(list(sels_in_band.sel_id.values)),
-                                            'sel_dur'         : str(list(sels_in_band.sel_dur.values))},
-                                            index = affected_rows)
-            
-            # Now append the new lists to the existing ones
-            # i.e. get for the first affected row something like:
-            #
-            #          is_in_selection                     sel_dur
-            #    '[16, 32, 33, 34, 32, 45]'     '[3.5, 2.1, 4.0, 6.2, 3.2, 7.4]'
-            #
-            # These values above are the new values for is_in_selection and sel_dur
-            # for the first affected row in this example.
-            # Four cases to consider in the lambda below. The non-empty
-            # entries in the matrix are examples; could be str of
-            # any list of selection IDs:
-            #
-            #                   cur_str        addnl_str
-            #     cur_str          ''           '[15]'
-            #     addnl_str    '[16, 17]'         ''
-            
-            new_is_in_sel = list(map(lambda cur_str, addnl_str :
-                                     (f"{cur_str[:-1] + ', '  if len(cur_str) > 0 and len(addnl_str) > 0 else cur_str}"
-                                      f"{addnl_str[1:] if len(cur_str) > 0 else addnl_str}"),
-                                     curr_sel_strs.is_in_selection, additional_sels.is_in_selection
-                                     )
-                                )
-            
-            new_sel_dur   = list(map(lambda cur_str, addnl_str :
-                                     (f"{cur_str[:-1] + ', '  if len(cur_str) > 0 and len(addnl_str) > 0 else cur_str}"
-                                      f"{addnl_str[1:] if len(cur_str) > 0 else addnl_str}"),
-                                     curr_sel_strs.sel_dur, additional_sels.sel_dur
-                                     )
-                                )
-            # Update cols is_in_selection and sel_dur 
-            # with the new values in the affected rows:
-            final_res_df.loc[affected_rows, ['is_in_selection', 'sel_dur']] = \
-                                            pd.DataFrame({'is_in_selection' : new_is_in_sel,
-                                                          'sel_dur'         : new_sel_dur},
-                                                          index=affected_rows)
-            
-            
 
         # The df has an extra column with an empty str as a
         # name. Get rid of that. Try/Except in case it's not
@@ -897,8 +731,9 @@ class AudioSegmenter:
             # Ignore non-significant acorrs, and remove the is_significant col:
             acorr_res_sig = acorr_res[acorr_res.is_significant].drop('is_significant', axis=1)
 
-            # Append the new results:
-            res_arr.append(acorr_res_sig)
+            # Append the new results, but removing 
+            # autocorrelations of lag 0, which is trivially 1.0:
+            res_arr.append(acorr_res_sig[acorr_res_sig['lag'] > 0])
 
         res_df = pd.concat(res_arr)
         res_df.columns = ['time', 'lag', 'acorr', 'ci_low', 'ci_high']
