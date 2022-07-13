@@ -388,11 +388,14 @@ class AudioSegmenter:
         for several_res_dfs in final_res_arrs:
             final_res_arrs_flat.extend(several_res_dfs)
         #
-        # # Turn the list of dataframes into one large df.
-        # # The index of that big df will be repeating the
-        # # the index of the constituent correlation dfs, which
-        # # is not useful; so reset the index to simple row nums:
-        final_res_df = pd.concat(final_res_arrs_flat).reset_index()
+        # Turn the list of dataframes into one large df.
+        # The index of that big df will be repeating the
+        # the index of the constituent correlation dfs, which
+        # is not useful; so reset the index to simple row nums.
+        # The 'drop=True' is required b/c the index cols of the dfs
+        # are named 'Time', and there already is a 'Time' column.
+        # So: failure if trying to copy the index to a new col:
+        final_res_df = pd.concat(final_res_arrs_flat).reset_index(drop=True)
 
         # The df has an extra column with an empty str as a
         # name. Get rid of that. Try/Except in case it's not
@@ -426,14 +429,9 @@ class AudioSegmenter:
                              computed, 
           'freq_low'      low edge of frequency band
           'freq_high'     high edge of frequency band
-          'is_in_selection' whether or not the time is 
-                            within a Raven selection
           'lag'           lag value for which a row's autocorrelation
                              was computed
-          'sel_dur'       duration in seconds of the Raven selection 
           'acorr'         the autocorrelation value 
-          'peak_height'   the height of the peak in the same
-                          units as the autocorrelation acorr column
           'plateau_width' width of the detected plateau 
           'prominence'    prominence of the peak
         
@@ -472,11 +470,12 @@ class AudioSegmenter:
         self.log.info(f"Done partitioning data into {self.num_freq_bands} bands...")
         
         # Remove the junk columns:
-        list(map(lambda df: df.drop(['level_0', '', 'index'], axis=1, inplace=True), 
+        list(map(lambda df: df.drop(['', 'index'], axis=1, inplace=True), 
                  fband_sig_type_dfs))
         
         # For each extract, build acorr_df:
-        #    peak_idx   measure_name   measure_val  freq_low  freq_high   peak_height  peak_width  prominence  
+        #****** UPDATE COMMENT
+        #    peak_idx   measure_name   measure_val  freq_low  freq_high   peak_width  prominence  
         # time
         
         peaks_df_arr = []
@@ -485,14 +484,13 @@ class AudioSegmenter:
             # and are not the trivial value of 1 that occurs
             # with lag==0. Note: its index will be fragmented,
             # showing the chosen indexes of df_extract:
-            extract_acorrs = df_extract[np.logical_and(df_extract.is_significant, 
-                                                       df_extract.lag > 0)].acorr.abs()
+            df_extract.acorr = df_extract.acorr.abs()
             # Get the indexes in *extract_acorrs* (not directly
             # those in df_extract) that are peaks:
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", category=PeakPropertyWarning)
                 peak_idxs, peak_stats = find_peaks(
-                    extract_acorrs,
+                    df_extract.acorr,
                     height=(None, None), 
                     width=(None, None), 
                     prominence=(None, None), 
@@ -502,44 +500,18 @@ class AudioSegmenter:
             # that are peaks, first get the rows from extract_acorrs
             # that are peaks. Then get the index entries of those
             # rows. Those indexes point into df_extract:
-            df_extract_idxs = extract_acorrs.iloc[peak_idxs].index
-            peaks_df = df_extract.iloc[df_extract_idxs][['time', 
-                                                         'sig_type', 
-                                                         'freq_low', 
-                                                         'freq_high', 
-                                                         'is_in_selection', 
-                                                         'sel_dur',
-                                                         'is_sel_start',
-                                                         'is_sel_stop', 
-                                                         'lag', 
-                                                         'acorr']]
+            df_extract_idxs = df_extract.iloc[peak_idxs].index
+            # Need the copy, else peaks_df will be a view,
+            # and subsequent addition of columns will fail:
+            peaks_df = df_extract.iloc[df_extract_idxs].copy()
 
-            # Time column needs to match the significant-digits
-            # convention to match other dataframes:
-            peaks_df['time'] = peaks_df['time'].round(self.round_to)
-            
             # Add some of the find_peaks() stats:
-            peaks_df['peak_height'] = peak_stats['peak_heights']
             peaks_df['plateau_width'] = peak_stats['plateau_sizes']
             peaks_df['prominence'] = peak_stats['prominences']
 
-            # All is_in_selection elements are strings, like
-            # '[29]' or '[34, 52, 1]', or the empty str.
-            # Turn the values that look like lists into real lists,
-            # and the empty values into np.nan:
-            peaks_df['is_in_selection'] = list(map(lambda lst_str: eval(lst_str) 
-                                                   if len(lst_str) > 0
-                                                   else np.nan, 
-                                                   peaks_df.is_in_selection)) 
-            peaks_df_exploded = peaks_df.explode('is_in_selection')
-            
-            
-            peaks_df_arr.append(peaks_df_exploded)
+            peaks_df_arr.append(peaks_df)
             
         peaks_df = pd.concat(peaks_df_arr)
-        # Flip the negative correlations to the top
-        # of the acorr == 0 line:
-        peaks_df['acorr'] = np.abs(peaks_df['acorr'])
         
         if in_fname_timestamp is not None:
             # Match the input acorr_df's timestamp:
@@ -1287,6 +1259,7 @@ if __name__ == '__main__':
         #******sig_types = ['flatness', 'continuity', 'pitch', 'freq_mod', 'energy_sum'],
         #******sig_types = ['continuity', 'energy_sum'],
         sig_types = ['continuity', 'energy_sum'],
+        #******sig_types = ['continuity'],
         sr = 32000, # sampling rate
         pattern_lookback_dur=0.5, # up to 500ms lookback
         pattern_lookback_dur_units=PatternLookbackDurationUnits.SECONDS,
