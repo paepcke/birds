@@ -74,7 +74,7 @@ EXP_ROOT = os.path.join(PROJ_ROOT, 'experiments/SoundscapeSegmentation')
 
 #from data_augmentation.sound_processor import SoundProcessor 
 
-class AudioSegmenter:
+class SegmentationPreparer:
     '''
     
     '''
@@ -929,35 +929,6 @@ class AudioSegmenter:
         self.experimenter.save(exp_key, exploded_time_freqs)
 
         return exploded_time_freqs
-    
-    #------------------------------------
-    # _nearest_spectro_times
-    #-------------------
-    
-    def _nearest_spectro_times(self, arr_like):
-        '''
-        Given an array of time floats, look up for each
-        time the closest spectrogram time.
-        
-        Assumption: self.spectro_time is a sorted list of
-        spectrogram times.
-        
-        Returns an np array of new times the same length
-        as arr_like.
-        
-        :param arr_like: times for which to find closest
-            spectro times
-        :type arr_like: {[float] | pd.Series([float])
-        :return list of nearest spectrogram times
-        :rtype np.ndarray
-        '''
-        
-        spectro_times = []
-        for one_time in arr_like:
-            spectro_times.append(Utils.nearest_in_array(self.spectro_times,
-                                                        one_time,
-                                                        is_sorted=True))
-        return np.array(spectro_times)
 
 
 # ------------------------ Class SpectroSlice ----------
@@ -1018,7 +989,7 @@ class SoundSegmentationSetting(JsonDumpableMixin):
         seconds, or in a number of lags. The pattern_lookback_dur_units
         parameter must specify which it is. The spectrogram time frame
         times are used to convert from one to the other.
-        NOTE: the AudioSegmenter's __init__() adds two instances vars:
+        NOTE: the SegmentationPreparer's __init__() adds two instances vars:
               lookback_duration, and num_lags that disambiguate.
         
         Either spectrogram path or audio path may be specified. If
@@ -1237,7 +1208,7 @@ if __name__ == '__main__':
         else:
             audio_path   = args.source_info
             spectro_path = None
-            
+
     elif cmd == 'peaks':
         # Could be an experiment manager key, would
         # not have a .csv extension, or a full name:
@@ -1245,6 +1216,9 @@ if __name__ == '__main__':
             acorrs_fname = args.source_info
         else:
             acorrs_fname = os.path.join(exp_root, f"csv_files/{args.source_info}.csv")
+        if not os.path.exists(acorrs_fname):
+            print(f"Cannot find file {acorrs_fname}. If intending an experiment key, don't include '.csv'")
+            sys.exit(1)
 
     # About number of lags: ~25ms and ~50ms seems to be a good times
     # for look-back. The number of corresponding lags depends on
@@ -1258,7 +1232,7 @@ if __name__ == '__main__':
     settings = SoundSegmentationSetting(
         #******sig_types = ['flatness', 'continuity', 'pitch', 'freq_mod', 'energy_sum'],
         #******sig_types = ['continuity', 'energy_sum'],
-        sig_types = ['continuity', 'energy_sum'],
+        sig_types = ['continuity', 'energy_sum', 'pitch'],
         #******sig_types = ['continuity'],
         sr = 32000, # sampling rate
         pattern_lookback_dur=0.5, # up to 500ms lookback
@@ -1268,10 +1242,10 @@ if __name__ == '__main__':
         audio_path = AUDIO_PATH,
         selection_tbl_path=args.selection_tbl,
         recording_id = 'AM02_20190717_052958',
-        round_to = AudioSegmenter.ROUND_TO,
+        round_to = SegmentationPreparer.ROUND_TO,
         remove_long_selections = True
         )
-    segmenter = AudioSegmenter(exp, settings)
+    segmenter = SegmentationPreparer(exp, settings)
     
     #*************
     #cmd = 'peaks'
