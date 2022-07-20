@@ -18,7 +18,12 @@ import librosa
 from matplotlib import MatplotlibDeprecationWarning
 from natsort import natsorted
 from seaborn.matrix import heatmap
-from torch import cuda
+# May fail if cuda not installed on machine:
+try:
+    from torch import cuda
+    cuda_available = True
+except:
+    cuda_available = False
 import torch
 
 import matplotlib.pyplot as plt
@@ -1169,7 +1174,8 @@ class Utils:
         :type the_seed: int
         '''
         torch.manual_seed(the_seed)
-        cuda.manual_seed_all(the_seed)
+        if cuda_available:
+            cuda.manual_seed_all(the_seed)
         # Not totally sure what these two do!
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
