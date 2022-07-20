@@ -22,7 +22,7 @@ from seaborn.matrix import heatmap
 try:
     from torch import cuda
     cuda_available = True
-except:
+except Exception:
     cuda_available = False
 import torch
 
