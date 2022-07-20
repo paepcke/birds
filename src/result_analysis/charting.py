@@ -8,30 +8,30 @@ import argparse
 import copy
 import csv
 from enum import Enum
+from functools import partial
 import os
 import sys
 import warnings
 
-from functools import partial
-
 from logging_service.logging_service import LoggingService
 from matplotlib import cm as col_map
 from matplotlib import pyplot as plt
-import matplotlib.ticker as plticker
-
+from matplotlib.collections import PatchCollection
+from matplotlib.patches import Rectangle
 import sklearn
-from sklearn.metrics import confusion_matrix, precision_recall_curve
-#from sklearn.metrics._classification import precision_score, recall_score
 from sklearn.metrics import average_precision_score
+from sklearn.metrics import confusion_matrix, precision_recall_curve
 from sklearn.preprocessing._label import label_binarize
 import torch
 
 import matplotlib.ticker as mticker
+import matplotlib.ticker as plticker
 import numpy as np
 import pandas as pd
 import seaborn as sns
 
 
+#from sklearn.metrics._classification import precision_score, recall_score
 class CELL_LABELING(Enum):
 
     # The default for the number of species
@@ -1477,6 +1477,152 @@ class Charter:
         #       bunched all x labels on top of each other
         #       at x==0
         return ax
+
+    #------------------------------------
+    # rectangles
+    #-------------------
+    
+    @classmethod
+    def rectangles(cls, 
+                   data_input,
+                   xticks,
+                   yticks,
+                   edgecolor='black',
+                   facecolor='blue',
+                   linewidth=2,
+                   rotation=0,
+                   ylabel=None,
+                   xlabel=None,
+                   ax=None,
+                   title=None,
+                   round_labels=None
+                   ):
+        '''
+        Returns a matplotlib axes with one or more
+        rectangles drawn on it. 
+        
+        The data_input are either:
+        
+           o a Pandas dataframe columns x, y, width, height
+             If color_groups is provided, a fifth columns is
+             required: color
+           o a Pandas dataframe with a column that contains
+             matplotlib Rectangle objects, and an optional
+             color column.
+             
+        Colors are facecolor. Edges will always be black. 
+        
+        The axes used is the present matplotlib axes.
+        This may be the default axes that is implicitly
+        created by a simple:
+           
+           fig = plt.figure()
+
+        Method may be called multiple times, passing the same 
+        Axes instance each time. Additional rectangles will be added
+        to the chart.
+        
+        :param data_input: values to plot
+        :type data_input: {pd.Series | pd.DataFrame}
+        :param xticks: x-axis ticks
+        :type xticks: [float | int]
+        :param yticks: y-axis ticks
+        :type yticks: [float | int]
+        :param rotation: rotation of x labels in degrees; ex: 45
+        :type rotation: int
+        :param ylabel: y axis label; None is OK
+        :type ylabel: str
+        :param ax: optional axes already existing, and returned 
+            from earlier calls
+        :type ax: matplotlib.axes
+        :param title: title for the figure as a whole
+        :type title: {None | str}
+        :param round_labels: optional number of decimal places to which
+            x axis tick labels are rounded
+        :type round_labels: {None | int}
+        :return axes with chart
+        :rtype matplotlib.axes
+        '''
+
+
+        if type(data_input) != pd.DataFrame:
+            raise TypeError(f"Arg data_input must be a Pandas Series or DataFrame")
+
+        if ax is not None:
+            # Already have an axes, just
+            # add the new rectangles:
+            for _idx, (x,y,width,height) in data_input.iterrows():
+                rect = Rectangle((x, y), 
+                                 width, height, 
+                                 facecolor=facecolor,
+                                 edgecolor=edgecolor,
+                                 linewidth=linewidth)
+                ax.add_patch(rect)
+            return ax
+
+        _fig, ax = plt.subplots()
+
+        if round_labels is not None:
+            if type(round_labels) != int:
+                raise TypeError(f"Axis tick label rounding must be an int, not {type(round_labels)}")
+            # Are the index values of the data Series
+            # float-like?
+            if data_input.index.dtype not in (float, np.float64, np.float32):
+                raise TypeError(f"If round_labels is non-None, index of data must be floats, not {data_input.index.dtype}")
+
+            # Round the labels:
+            xtick_labels = []
+            for xlbl in xticks:
+                rounded_lbl = round(xlbl, round_labels)
+                if round_labels == 0:
+                    rounded_lbl = int(rounded_lbl)
+                xtick_labels.append(rounded_lbl)
+        else:
+            xtick_labels = xticks
+
+        plt.locator_params(axis='x', nbins=10)
+
+        # For too many ticks, place only every
+        # nth tick, where n = int(len(xticks) / 10
+        ax.set_xticks(xtick_labels[::int(len(xticks)/10)])
+        ax.set_yticks(yticks[::int(len(yticks)/10)])
+
+        # Distribute at least some of the labels
+        # along the x axis:
+        cls._place_xticklabels(ax, rotation)
+        
+        # A handler that recomputes and re-places the
+        # xtick labels when the chart window is enlarged:
+        resize_handler = partial(cls._onresize, \
+                                 ax=ax, 
+                                 rotation=rotation)
+        fig = ax.figure
+        fig.canvas.mpl_connect('resize_event', resize_handler)
+
+        if xlabel is not None:
+            ax.set_xlabel(xlabel)
+        if ylabel is not None:
+            ax.set_ylabel(ylabel)
+        
+        if title is not None:
+            ax.figure.suptitle(title)
+
+        # Make the rects
+        for _idx, (x,y,width,height) in data_input.iterrows():
+            rect = Rectangle((x, y), 
+                             width, height, 
+                             facecolor=facecolor,
+                             edgecolor=edgecolor,
+                             linewidth=linewidth)
+            ax.add_patch(rect)
+
+        fig.show()
+        
+        # Note: had ax.figure.tight_layout(), but that
+        #       bunched all x labels on top of each other
+        #       at x==0
+        return ax
+
 
     #------------------------------------
     # _place_xticklabels
