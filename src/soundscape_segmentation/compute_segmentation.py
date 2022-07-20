@@ -14,6 +14,15 @@ from logging_service.logging_service import LoggingService
 import numpy as np
 import pandas as pd
 
+from scipy.signal import savgol_filter
+import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
+from matplotlib.collections import PatchCollection
+
+from birdsong.utils.utilities import FileUtils
+from result_analysis.charting import Charter
+from powerflock.signal_analysis import SignalAnalyzer
+
 
 # ---------------------------------- Enums --------------
 class Bound(str, Enum):
@@ -42,6 +51,8 @@ class SegmentationComputer:
         #*******
         self.spectro_path = SPECTRO_PATH
         #*******
+
+        self.acorr_peaks_key = acorr_peaks_key
         
         self.log = LoggingService()
         self.exp = experiment
@@ -57,7 +68,9 @@ class SegmentationComputer:
                                    index_col='freq',
                                    header=0,
                                    engine='pyarrow'  # Faster csv reader
-                                   )        
+                                   )
+        # Make the string 'floats' into real floats:
+        self.spectro.columns = self.spectro.columns.values.astype(float)
 
     #------------------------------------
     # event_mask
@@ -67,42 +80,183 @@ class SegmentationComputer:
     
         if type(sig_types) != list:
             sig_types = [sig_types]
-            
+
+        #**************
+        ax = None # No plot of rects started yet
+        #**************
+
         # Only look at acorr peaks that were
         # computed on one of the requested sig types:
-        df = self.acorr_peaks[np.logical_and(self.acorr_peaks.sig_type.isin(sig_types), 
-                                             self.acorr_peaks.acorr >= peak_lower_limit)]\
-                                             [['time','acorr','freq_low', 'freq_high']]
-
-        time_axis = df.time.unique()
-        freq_axis = df.freq_low.unique()
+        peaks_df_for_sigs = self.acorr_peaks[self.acorr_peaks.sig_type.isin(sig_types)] \
+                                            [['time','acorr','freq_low', 'freq_high']]
+        # window size 2336 ~= 250msec, polynomial order 3
+        #**************
+        # peaks_smooth = peaks_df_for_sigs
+        # peaks_smooth   = pd.Series(savgol_filter(peaks_df_for_sigs.acorr, 2337, 3),
+        #                            index=peaks_df_for_sigs.index)
+        # peaks_df_for_sigs = peaks_df_for_sigs.assign(acorr = peaks_smooth)
+        #**************
         
+        # Limit to peaks >= peak_lower_limit:
+        high_peaks = peaks_df_for_sigs[peaks_df_for_sigs.acorr >= peak_lower_limit]
+         
+        # Create a df with same dimensions as spectrogram,
+        # initialized to all False. The df will be set to
+        # True selectively where acorr meets the peak_lower_limit:
         mask_height, mask_width = self.spectro.shape 
-        
         sels_mask = pd.DataFrame(np.array([False] * mask_height * mask_width).reshape((mask_height, mask_width)),
                                  index = self.spectro.index,
                                  columns=self.spectro.columns.astype(float))
         
+        # Get row numbers grouped be frequency band. 
+        # I.e. row numbers for band (1992.1875 to 2492.1875), 
+        # band (2492.1875 to 2992.1875), etc. Only the bands
+        # still at play after the above filter by peak_lower_level
+        # are included, not all 32 bands:
+        
+        freq_grps = high_peaks.groupby(by=['freq_low', 'freq_high'])
         spectro_freqs = pd.Series(sorted(self.spectro.index.values), name='spectro_freqs')
-        spectro_times = pd.Series(sorted(self.spectro.columns.values.astype(float)), name='spectro_times')
-        fband_bounds = sorted(set(zip(df.freq_low, df.freq_high)))
-        for fband_low, fband_high in fband_bounds:
-            spectro_idxs  = np.where((np.logical_and((spectro_freqs >= fband_low), 
-                                                     (spectro_freqs < fband_high))))
-            event_spectro_freqs = spectro_freqs.iloc[spectro_idxs]
-            coord_pairs = self.cartesian((event_spectro_freqs, time_axis))
-            for freq, time in coord_pairs:
-                sels_mask.at[freq, time] = True
-                
-            spectro_detail_freqs = self.spectro.iloc[spectro_idxs].index
-            fband_times = df[df.freq_low == fband_low].time
-            mask_row = pd.Series([False]*mask_width, index=sels_mask.columns)
-            mask_row.loc[fband_times] = True
-            #******* NEXT Set all sels_mask rows spectro_detail_freqs to mask_row
-            
-            
+        spectro_freqs_min = spectro_freqs.min()
+        spectro_freqs_max = spectro_freqs.max()
+        
+        spectro_times = pd.Series(self.spectro.columns, name='spectro_times', dtype=float)
+        
+        # Create a spectrogram-shaped mask of True/False, and
+        # a list of bounding rectangles that were found. We'll
+        # fill bounding_rects with tuples:
+        #    (freq_low_left, time_low_left, freq_high_right, time_high_right)
+        
+        bounding_rects = []
 
-        print(df)
+        # freq_grps.groups is a dict mapping freq_low/freq_high pairs
+        # to row numbers:
+        for fband_low, fband_high in freq_grps.groups.keys():
+            
+            # For now, don't include the freq band that covers
+            # the entire height of the spectro:
+            if (fband_low == spectro_freqs_min and fband_high == spectro_freqs_max):
+                continue 
+            
+            self.log.info(f"Analyzing band {fband_low}Hz to {fband_high}Hz")
+            
+            # Each freq band combines several frequency channels in 
+            # the original spectrogram. Get the set of those channels
+            # that comprise the fband under consideration in this round
+            # of the loop. The modulo len(spectro_freqs) accounts for
+            # each frequency band include rows with all spectro times:
+
+            spectro_freqs_to_mask = spectro_freqs[spectro_freqs.between(fband_low, fband_high)]
+            
+            # Get the series of times at which acorr values were above threshold that
+            # were detected in this loop's freq band. Some of these times will
+            # be contiguous spectro frame times. Separate events in the freq
+            # band will show as 'missing spectro frame times' in the time series
+            # (see follow-on comment below):
+            spectro_times_to_mask = high_peaks[np.logical_and(high_peaks.freq_low >= fband_low, 
+                                                              high_peaks.freq_high <= fband_high)].time
+                                                              
+            # We now have:
+            #         event times:       3,4,5,        10,11,12,13,       50,...
+            #  spectro timeframes: 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,...
+            # 
+            # We find each event start, and follow it along the spectro timeframes.
+            # an interruption is the end of one event.
+            # The event_start is the first in the sequences of rectangle (i.e. event) 
+            # start times:
+            event_start = spectro_times_to_mask.iloc[0]
+            # Pt to the corresponding spectro timeframe. The .index.values[0]
+            # turns the weird Pandas index-class number into a normal integer 
+            # row number. spectro_new_time_idx will be pointer along the timeframe
+            # seq:
+            spectro_new_time_idx = spectro_times[spectro_times == event_start].index.values[0]
+            spectro_start_event_time = spectro_times[spectro_new_time_idx]
+            # Pointer along the event times seq:
+            event_idx = 0
+            
+            # Actual times (i.e. dereference the pointers):
+            spectro_time = spectro_times.iloc[spectro_new_time_idx]
+            event_time   = spectro_times_to_mask.iloc[event_idx]
+            try:
+                while True:
+                    # Have we found a 'hole' in the event time seq?
+                    while spectro_time == event_time:
+                        spectro_new_time_idx += 1
+                        event_idx += 1
+                        spectro_time = spectro_times.iloc[spectro_new_time_idx]
+                        event_time   = spectro_times_to_mask.iloc[event_idx]
+                        
+                    # Found a rectangle righ-side time boundary (right bound non-inclusive):
+                    new_sel_rect = (spectro_start_event_time, fband_low, 
+                                    spectro_time, fband_high)
+                    bounding_rects.append(new_sel_rect)
+                    #***************
+                    # Add the rectangle to the evolving chart:
+                    ax = self.plot_rectangles(new_sel_rect, 
+                                              spectro_times, 
+                                              spectro_freqs, 
+                                              ax=ax)
+                    #***************
+                    # Get ready for feeling along the next rectangle:
+                    spectro_new_time_idx = \
+                       spectro_times[spectro_times == spectro_times_to_mask.iloc[event_idx]].index.values[0]
+                    spectro_start_event_time = spectro_times[spectro_new_time_idx]
+                    spectro_time = spectro_start_event_time
+            except IndexError:
+                # Accounted for all hypothesized selection regions:
+                pass
+            
+            # Set the mask areas of high acorrs to True:
+            sels_mask.loc[spectro_freqs_to_mask, spectro_times_to_mask] = True
+
+        self.plot_rectangles(bounding_rects, spectro_times, spectro_freqs)
+
+        # Reshape sels_mask from spectrogram dimensions
+        # (index is freq, columns are time frames) to 
+        # something easier to visualize:
+        #        time     in_selection
+        #  freq   
+        #  ...   0.008       True/False
+        #  ...    ...         ...
+        freq_time_coords = pd.melt(sels_mask, 
+                                   var_name='time', 
+                                   value_name='in_selection', 
+                                   ignore_index=False)
+        exp_key = f"spectral_events_{FileUtils.extract_file_timestamp(self.acorr_peaks_key)}"
+        self.exp.save(exp_key, freq_time_coords)
+
+        Charter.spectrogram_plot(sels_mask)
+        #print(sels_mask)
+
+    #------------------------------------
+    # plot_rectangles
+    #-------------------
+
+    def plot_rectangles(self, 
+                        rect_spec_list,
+                        spectro_times,
+                        spectro_freqs, 
+                        edgecolor='black', 
+                        facecolor='none',
+                        ax=None):
+
+        if rect_spec_list != pd.DataFrame:
+            if type(rect_spec_list) != list:
+                # Got just a tuple for a single rect:
+                rect_spec_list = [rect_spec_list]
+            data = pd.DataFrame(rect_spec_list, 
+                                columns=['x', 'y', 'width', 'height'])
+            
+        ax = Charter.rectangles(data,
+                                spectro_times,
+                                spectro_freqs,
+                                ylabel='Frequency (Hz)', 
+                                xlabel='Time (s)',
+                                edgecolor=edgecolor,
+                                facecolor=facecolor,
+                                ax=ax
+                                )
+        return ax
+
 
     #------------------------------------
     # find_next_labeled_selection
@@ -263,11 +417,12 @@ if __name__ == '__main__':
     exp_root = os.path.join(EXP_ROOT, 'ExpAM02_20190717_052958_AllData1')
     exp = ExperimentManager(exp_root)
 
-    acorr_peaks_key = 'significant_acorrs_2022-07-13T17_19_19'
+    #acorr_peaks_key = 'significant_acorrs_2022-07-13T17_19_19'
+    acorr_peaks_key = 'peaks_2022-07-13T17_19_19'
     sel_info_key    = 'selections_infoAM02_20190717_052958'
     seg_computer = SegmentationComputer(exp, acorr_peaks_key, sel_info_key)
     
-    seg_computer.event_mask(['energy_sum'])
+    seg_computer.event_mask(['continuity', 'energy_sum'], peak_lower_limit=0.95)
     
     ref_time = 19.0
     sel_excerpt = seg_computer._closest_labeled_sel_time_bound(ref_time, which_bound=Bound.START, direction=Direction.AHEAD)

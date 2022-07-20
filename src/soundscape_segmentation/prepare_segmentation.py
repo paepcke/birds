@@ -2,6 +2,24 @@
 '''
 Created on May 30, 2022
 
+Given a spectrogram, computes two files:
+   o significant_acorrs_<timestamp>.csv
+   o peaks_<timestamp>.csv
+   
+The two timestamps will match. The acorrs file is produced
+by calling compute_autocorrelations(), and contains:
+
+   time,sig_type,freq_low,freq_high,lag,acorr,ci_low,ci_high
+
+The sig_type is 'continuity', 'pitch', 'freq_mod', 'flatness', and 'energy_sum'
+   
+Calling peak_positions() then finds peaks among the autocorrelations.
+The peaks file contains:
+
+   time,sig_type,freq_low,freq_high,lag,acorr,ci_low,ci_high,plateau_width,prominence
+   
+All computations are done separately for 500Hz frequency bands.
+
 @author: paepcke
 '''
 #************
@@ -21,7 +39,7 @@ import warnings
 from birdsong.utils.utilities import FileUtils
 from data_augmentation.utils import RavenSelectionTable, Utils
 from experiment_manager.experiment_manager import ExperimentManager, \
-    JsonDumpableMixin
+    JsonDumpableMixin, Datatype
 from logging_service import LoggingService
 from powerflock.signal_analysis import SignalAnalyzer
 from powerflock.signatures import Signature
@@ -318,7 +336,9 @@ class SegmentationPreparer:
         Given a signature and a list of signature column names: ['flatness', 'pitch', ...],
         apply autocorrelation to each column up to number of lags equivalent
         to lookback_duration. This computation is done separately for each
-        frequency slice. 
+        frequency slice.
+        
+        Writes result to significant_acorrs_<timestamp>.csv 
         
         Return:
                    flatness_rho, flatness_sum_significant, pitch_rho, pitch_sum_significant, ...
@@ -329,6 +349,7 @@ class SegmentationPreparer:
                 
         Assumption: the settings instance contains a lookback_duration attribute
                     that specifies the length in seconds of the autocorrelations.
+
         
         :param col_names: name of measure(s) for which to compute autocorrelations
         :type col_names: {str | [str]}
@@ -613,14 +634,10 @@ class SegmentationPreparer:
     
     def _one_measure_acorr_significance(self, sig_measure, lookback_duration):
         '''
-        Return:
-                    time   flatness_sum_acorr_cnts
-            0    0.00000                         2
-            1    1.99692                         2
-            2    3.99383                         0
-                    
-        where xxx_sum_acorr_cnts is a count of statistically significant
-        autocorrelation values when repeatedly looking back up to lookback_duration seconds.
+        Return df with cols:
+        
+          'sig_type', 'time', 'lag', 'acorr', 'ci_low', 'ci_high'
+           
         The number of lags that correspond to lookback_duration are computed
         from the spectrogram timeframe width. The autocorrelation is computed
         repeatedly every lookback_duration seconds along the measure value
@@ -1230,9 +1247,9 @@ if __name__ == '__main__':
     # At sr=31000: hop_len=256; timedelta~=8ms   ==> 6 lags at ~.8ms
     
     settings = SoundSegmentationSetting(
-        #******sig_types = ['flatness', 'continuity', 'pitch', 'freq_mod', 'energy_sum'],
+        sig_types = ['flatness', 'continuity', 'pitch', 'freq_mod', 'energy_sum'],
         #******sig_types = ['continuity', 'energy_sum'],
-        sig_types = ['continuity', 'energy_sum', 'pitch'],
+        #******sig_types = ['continuity', 'energy_sum', 'pitch'],
         #******sig_types = ['continuity'],
         sr = 32000, # sampling rate
         pattern_lookback_dur=0.5, # up to 500ms lookback
@@ -1251,7 +1268,10 @@ if __name__ == '__main__':
     #cmd = 'peaks'
     #cmd = 'acorrs'
     #*************
-    
+    #**************
+    #df = segmenter.experimenter.read('significant_acorrs_2022-07-13T17_19_19', Datatype.tabular)
+    #df1 = segmenter.experimenter.read('significant_acorrs_2022-07-09T10_00_15', Datatype.tabular)
+    #**************
     if cmd == 'acorrs':
         acorrs = segmenter.compute_autocorrelations(settings)
     elif cmd == 'peaks':
