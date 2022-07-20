@@ -18,13 +18,14 @@ import librosa
 from matplotlib import MatplotlibDeprecationWarning
 from natsort import natsorted
 from seaborn.matrix import heatmap
-# May fail if cuda not installed on machine:
-try:
-    from torch import cuda
-    cuda_available = True
-except Exception:
-    cuda_available = False
+
 import torch
+# May fail if cuda not installed on machine:
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore",
+                            category=UserWarning
+                            )
+    from torch import cuda
 
 import matplotlib.pyplot as plt
 import multiprocessing as mp
@@ -1174,7 +1175,7 @@ class Utils:
         :type the_seed: int
         '''
         torch.manual_seed(the_seed)
-        if cuda_available:
+        if torch.cuda.is_available():
             cuda.manual_seed_all(the_seed)
         # Not totally sure what these two do!
         torch.backends.cudnn.deterministic = True
