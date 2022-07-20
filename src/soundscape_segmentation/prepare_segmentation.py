@@ -614,7 +614,7 @@ class SegmentationPreparer:
             
             #self.log.info(f"Autocorrelation for {col_name}")
             one_measure_res = self._one_measure_acorr_significance(sig_df[col_name],
-                                                                      lookback_duration)
+                                                                   lookback_duration)
             # Add cols for the current frequency low and high:
             one_measure_res.insert(2, 
                                       'freq_low', 
@@ -707,7 +707,8 @@ class SegmentationPreparer:
             # greater than that value, and grab the first:
             
             try:
-                spectro_end_time = sig_measure[sig_measure.index >= spectro_start_time + lookback_duration].index[0]
+                spectro_end_time = sig_measure[sig_measure.index >= float(spectro_start_time) +
+                                               lookback_duration].index[0]
             except IndexError:
                 # Went through the whole series:
                 break
