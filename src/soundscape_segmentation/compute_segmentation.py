@@ -45,12 +45,9 @@ class SegmentationComputer:
     # Constructor 
     #-------------------
 
-    def __init__(self, experiment, acorr_peaks_key, sel_tbl_key):
+    def __init__(self, experiment, acorr_peaks_key, sel_tbl_key, spectro_key_or_path):
         '''
         '''
-        #*******
-        self.spectro_path = SPECTRO_PATH
-        #*******
 
         self.acorr_peaks_key = acorr_peaks_key
         
@@ -64,11 +61,15 @@ class SegmentationComputer:
         self.sels = experiment.read(sel_tbl_key, Datatype.tabular)
         
         self.log.info("Reading spectrogram from .csv file...")
-        self.spectro = pd.read_csv(self.spectro_path,
-                                   index_col='freq',
-                                   header=0,
-                                   engine='pyarrow'  # Faster csv reader
-                                   )
+        if spectro_key_or_path.endswith('.csv'):
+            self.spectro = pd.read_csv(self.spectro_path,
+                                       index_col='freq',
+                                       header=0,
+                                       engine='pyarrow'  # Faster csv reader
+                                       )
+        else:
+            self.spectro = self.exp.read(self.spectro_key_or_path, Datatype.tabular)
+            
         # Make the string 'floats' into real floats:
         self.spectro.columns = self.spectro.columns.values.astype(float)
 
@@ -223,7 +224,7 @@ class SegmentationComputer:
                                    ignore_index=False)
         exp_key = f"spectral_events_{FileUtils.extract_file_timestamp(self.acorr_peaks_key)}"
         self.exp.save(exp_key, freq_time_coords)
-
+        
         Charter.spectrogram_plot(sels_mask)
         #print(sels_mask)
 
@@ -418,14 +419,16 @@ if __name__ == '__main__':
     exp = ExperimentManager(exp_root)
 
     #acorr_peaks_key = 'significant_acorrs_2022-07-13T17_19_19'
-    acorr_peaks_key = 'peaks_2022-07-13T17_19_19'
+    acorr_peaks_key = 'peaks_2022-07-20T10_47_48'
     sel_info_key    = 'selections_infoAM02_20190717_052958'
-    seg_computer = SegmentationComputer(exp, acorr_peaks_key, sel_info_key)
+    spectro_key     = 'am02_20190717_052958_spectro'
+    seg_computer = SegmentationComputer(exp, acorr_peaks_key, sel_info_key, spectro_key)
     
-    seg_computer.event_mask(['continuity', 'energy_sum'], peak_lower_limit=0.95)
-    
-    ref_time = 19.0
-    sel_excerpt = seg_computer._closest_labeled_sel_time_bound(ref_time, which_bound=Bound.START, direction=Direction.AHEAD)
-    
-    print(sel_excerpt)
+    #seg_computer.event_mask(['continuity', 'energy_sum'], peak_lower_limit=0.95)
+    seg_computer.event_mask(['flatness', 'continuity', 'pitch', 'freq_mod', 'energy_sum'],
+                            peak_lower_limit=0.95)
+    # ref_time = 19.0
+    # sel_excerpt = seg_computer._closest_labeled_sel_time_bound(ref_time, which_bound=Bound.START, direction=Direction.AHEAD)
+    #
+    # print(sel_excerpt)
     
