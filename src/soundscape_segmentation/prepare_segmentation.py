@@ -23,17 +23,14 @@ All computations are done separately for (modifiable) 500Hz frequency bands.
 @author: paepcke
 '''
 #************
-import sys
-#print(sys.path)
-sys.path.insert(0,'/Users/paepcke/EclipseWorkspacesNew/birds/src')
-#************
-
+from _functools import partial
 import argparse
 from enum import Enum
 import json
 import os
 from pathlib import Path
 import re
+import sys
 import warnings
 
 from birdsong.utils.utilities import FileUtils
@@ -50,6 +47,13 @@ from scipy.signal._peak_finding_utils import PeakPropertyWarning
 import multiprocessing as mp
 import numpy as np
 import pandas as pd
+
+#print(sys.path)
+sys.path.insert(0,'/Users/paepcke/EclipseWorkspacesNew/birds/src')
+#************
+
+
+
 
 class PatternLookbackDurationUnits(str, Enum):
     '''
@@ -120,15 +124,19 @@ class SegmentationPreparer:
         self.num_freq_bands = int(self.freq_high / self.band_height)
         raw_lookback_duration  = settings.pattern_lookback_dur
         remove_long_selections = settings.remove_long_selections
+        
+            
 
         self.log = LoggingService()
         
-            # Get the time for one autocorrelation lag.
+        # Get the time for one autocorrelation lag.
         # The extra_granularity doubles the frequency
         # range:
         self.lag_duration = SignalAnalyzer.spectro_timeframe_width(sample_rate=settings.sample_rate,
                                                                    extra_granularity=True
                                                                    )
+
+        self.compression_window_width = settings.compression_window_width // self.lag_duration
 
         # Need number of lags to compute for each autocorrelation.
         # The lag may be given in seconds, or directly in lags:
@@ -632,13 +640,17 @@ class SegmentationPreparer:
         
         # Get sorted list of new freq band boundaries, like:
         # [0.0, 492.1875, 992.1875, 1492.1875, ...]
-        band_upper_bounds = list(reversed(spectro.index[np.arange(0,num_channels,self.num_freq_bands)]))
+        band_upper_bounds = list(reversed(spectro.index[np.arange(0,num_channels,
+                                                                  self.num_freq_bands)]))
         
         # Get 2-tuples of (low_band_freq, high_band_freq):
         freq_bounds = list(zip(band_upper_bounds, band_upper_bounds[1:]))
-        
+
+        # MEAN COMPRESSION
+                
         # Create, and write to experiment both the mean-,
-        # and median-compressed versions:
+        # and median-compressed versions: the means/medians are 
+        # taken separately over the spectro channels of each freq band:
         
         self.log.info("Computing mean-compressed spectro...")
         spectro_compressed_mean   = self._band_energy_compression(spectro, 
@@ -674,6 +686,7 @@ class SegmentationPreparer:
                                compressed_mean_for_viz,
                                index_col='freq')
 
+        # MEDIAN COMPRESSION
         self.log.info("Computing median-compressed spectro...")        
         spectro_compressed_median = self._band_energy_compression(spectro, 
                                                                   band_upper_bounds, 
@@ -693,6 +706,17 @@ class SegmentationPreparer:
                                compressed_median_for_viz,
                                index_col='freq') 
 
+        # DISTANCE FROM MEAN (Z-SCORES)
+        
+        # This computation is over the already compressed 
+        # energy values. So the channels are already bundled
+        # into bands via mean.
+        # 
+        # The computation occurs across one freq band at a time. 
+        # Each energy value is replaced by the z-score of the value 
+        # relative to the mean over a sliding window whose width is 
+        # defined by self.compression_window_width:
+        
         self.log.info("Computing distances from mean (i.e. z-score)...")
         # Next: a df with fields being the distance in
         # standard deviations of each energy value from its band's mean
@@ -700,7 +724,7 @@ class SegmentationPreparer:
         
         compressed_distance_from_mean_for_viz = pd.melt(df_distance_from_mean, 
                                                         var_name='time', 
-                                                        value_name='mean_band', 
+                                                        value_name='mean_band_zscore', 
                                                         ignore_index=False)
          
         exp_compressed_key_zscores = f"{spectro_exp_key_root}_z_scores"
@@ -731,7 +755,6 @@ class SegmentationPreparer:
         :rtype pd.DataFrame
         '''
         pass
-        
 
     #------------------------------------
     # _distances_from_mean
@@ -753,20 +776,86 @@ class SegmentationPreparer:
         '''
 
         # Func to compute the distance of each 
-        # value in a row from the mean of the row,
-        # measured as (fractional) standard deviations.
+        # value in a row from the mean of a sliding window
+        # around the time of each energy value. The distance
+        # is measured in (fractional) standard deviations.
         # Returns a new Series with the z-scores:
-        def z_scores(row):
+        z_scores_func = partial(self._z_scores, win=self.compression_window_width)
+        
+        # Apply the func to each row,
+        # building a new df:
+        z_scores = df.apply(z_scores_func, axis=1)
+        return z_scores
+
+    #------------------------------------
+    # _z_scores
+    #-------------------
+    
+    def _z_scores(self, row, win):
+        '''
+        Given a Series of values, and a window width,
+        successively place the window centered over each value
+        in turn. Compute the mean and std just over the values 
+        within that window, and use the results to compute the 
+        value's z-score.
+        
+        A win of None uses the mean/std of the entire row
+        to compute the z-score.
+        
+        :param row: a sequence of values
+        :type row: pd.Series
+        :param win: width of window over which the z-score
+             means/stds are computed
+        :type win: int
+        :return a new Series in which values are replaced
+            by their windowed z-scores.
+        :rtype pd.Series
+        '''
+        
+        if win is None:
             row_mean = row.mean()
             row_std  = row.std()
             z_values = (row - row_mean) / row_std
             return z_values
         
-        # Apply the func to each row,
-        # building a new df:
-        z_scores = df.apply(z_scores, axis=1)
-        return z_scores
+        # Half the window will be on the left, the
+        # other half on the right of a value whose
+        # z score is being computed
+        hlf_win  = int(win//2)
+        
+        # In the map() below, the iterable has to 
+        # start 1/2 the window in, because else the
+        # left half of the window will have negative
+        # values for indexing into the row:
+        win_idxs = np.arange(hlf_win, len(row))
+         
+        # Get the means for all row values, except
+        # 1/2 window size worth of values on the left.
+        # The '+1' includes the right edge of the window:
+        means_tail = pd.Series(map(lambda i, row=row, hlf_win=hlf_win : 
+                                   row.iloc[i-hlf_win : i+hlf_win+1].mean(), 
+                                   win_idxs))
+        # Fill the means for the left-most values of the row
+        # that we skipped with the first mean that we did
+        # compute:
+        means_leader  = pd.Series([means_tail.iloc[0]]*hlf_win)
+        sliding_means = pd.concat([means_leader, means_tail])
 
+        # Set index to be same as what row has:
+        sliding_means.set_axis(row.index, inplace=True)
+
+        # Do the same for the standard deviation that we 
+        # just did for the mean:
+        stds_tail  = pd.Series(map(lambda i, row=row, hlf_win=hlf_win : 
+                                   row.iloc[i-hlf_win : i+hlf_win+1].std(), 
+                                   win_idxs))
+        stds_leader  = pd.Series([stds_tail.iloc[0]]*hlf_win)
+        sliding_stds = pd.concat([stds_leader, stds_tail])
+        sliding_stds.set_axis(row.index, inplace=True)
+        
+        # Finally: the z-scores for each member of the row:
+        z_values = (row - sliding_means) / sliding_stds
+        return z_values
 
     #------------------------------------
     # _band_energy_compression
@@ -1274,7 +1363,8 @@ class SoundSegmentationSetting(JsonDumpableMixin):
                  selection_tbl_path=None,
                  recording_id=None,
                  round_to=5,
-                 remove_long_selections=False
+                 remove_long_selections=False,
+                 compression_window_width=2 # seconds
                  ):
         '''
         Holds parameters for a soundscape segmentation run.
@@ -1322,6 +1412,9 @@ class SoundSegmentationSetting(JsonDumpableMixin):
         :param round_to: number of decimal places to which all time 
             measurements are to be rounded. 
         :type round_to: int
+        :param compression_window_width: width in seconds of sliding window
+            around each energy value when the value's z-score is computed.
+        :type compression_window_width: {None | int}
         '''
         self.sig_types = sig_types
         self.sample_rate = sr
@@ -1336,6 +1429,7 @@ class SoundSegmentationSetting(JsonDumpableMixin):
         self.recording_id = recording_id
         self.round_to = round_to
         self.remove_long_selections = remove_long_selections
+        self.compression_window_width = compression_window_width
 
     #------------------------------------
     # json_dumps
@@ -1565,7 +1659,8 @@ if __name__ == '__main__':
         selection_tbl_path=args.selection_tbl,
         recording_id = 'AM02_20190717_052958',
         round_to = SegmentationPreparer.ROUND_TO,
-        remove_long_selections = True
+        remove_long_selections = True,
+        compression_window_width = 2  # seconds: Sliding window width during compression.
         )
     segmenter = SegmentationPreparer(exp, settings)
     
