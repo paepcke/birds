@@ -45,7 +45,7 @@ class SegmentationComputer:
     # Constructor 
     #-------------------
 
-    def __init__(self, experiment, acorr_peaks_key, sel_tbl_key, spectro_key_or_path):
+    def __init__(self, experiment, sel_tbl_key, spectro_key_or_path):
         '''
         '''
 
@@ -53,11 +53,7 @@ class SegmentationComputer:
         
         self.log = LoggingService()
         self.exp = experiment
-        acorr_df_raw = experiment.read(acorr_peaks_key, Datatype.tabular)
 
-        # Pull out just the columns we need:
-        self.acorr_peaks = acorr_df_raw[acorr_df_raw.lag == 1][['time','sig_type', 'acorr','freq_low', 'freq_high']]
-        
         self.sels = experiment.read(sel_tbl_key, Datatype.tabular)
         
         self.log.info("Reading spectrogram from .csv file...")
@@ -73,14 +69,32 @@ class SegmentationComputer:
         # Make the string 'floats' into real floats:
         self.spectro.columns = self.spectro.columns.values.astype(float)
 
+        # Get the upper freq bands:: [0.0, 492.1875, 992.1875, 1492.1875, ... 15992.1875]
+        num_channels, _num_times = self.spectro.shape
+        
+        # Get sorted list of new freq band boundaries, like:
+        # [0.0, 492.1875, 992.1875, 1492.1875, ...]
+        band_upper_bounds = list(reversed(self.spectro.index[np.arange(0,num_channels,
+                                                                  self.num_freq_bands)]))
+        
+        # Get 2-tuples of (low_band_freq, high_band_freq):
+        self.freq_bounds = list(zip(band_upper_bounds, band_upper_bounds[1:]))
+        
+
     #------------------------------------
-    # event_mask
+    # event_mask_sigs
     #-------------------
 
-    def event_mask(self, sig_types, peak_lower_limit=0.9):
+    def event_mask_sigs(self, acorr_peaks_key, sig_types, peak_lower_limit=0.9):
     
         if type(sig_types) != list:
             sig_types = [sig_types]
+
+        self.acorr_peaks_key = acorr_peaks_key
+        acorr_df_raw = self.exp.read(acorr_peaks_key, Datatype.tabular)
+
+        # Pull out just the columns we need:
+        self.acorr_peaks = acorr_df_raw[acorr_df_raw.lag == 1][['time','sig_type', 'acorr','freq_low', 'freq_high']]
 
         #**************
         ax = None # No plot of rects started yet
@@ -227,6 +241,130 @@ class SegmentationComputer:
         
         Charter.spectrogram_plot(sels_mask)
         #print(sels_mask)
+
+    #------------------------------------
+    # def event_mask_z_scores
+    #-------------------
+    
+    def event_mask_z_scores(self, z_scores_key):
+
+        #**************
+        ax = None # No plot of rects started yet
+        #**************
+
+        self.log.info("Reading z-scores df...")
+        z_scores_df = self.exp(z_scores_key, Datatype.tabular) 
+
+        # The z_scores_df has columns:
+        #    freq, time, mean_band_zscore
+        #
+        # The freqs are upper bounds of the freq bands. Create
+        # two new columns: freq_low and freq_high:
+        z_scores_df[['freq_low', 'freq_high']] = self.freq_bounds
+
+        # Get row numbers grouped be frequency band. 
+        # I.e. row numbers for band (1992.1875 to 2492.1875), 
+        # band (2492.1875 to 2992.1875), etc. Only the bands
+        # still at play after the above filter by peak_lower_level
+        # are included, not all 32 bands:
+        
+        
+        freq_grps         = z_scores_df.groupby(by=['freq_low', 'freq_high'])
+        spectro_freqs     = pd.Series(sorted(self.spectro.index.values), 
+                                      name='spectro_freqs')
+        spectro_freqs_min = spectro_freqs.min()
+        spectro_freqs_max = spectro_freqs.max()
+        
+        spectro_times = pd.Series(self.spectro.columns, name='spectro_times', dtype=float)
+        
+        # Create a spectrogram-shaped mask of True/False, and
+        # a list of bounding rectangles that were found. We'll
+        # fill bounding_rects with tuples:
+        #    (freq_low_left, time_low_left, freq_high_right, time_high_right)
+        
+        bounding_rects = []
+
+        # freq_grps.groups is a dict mapping freq_low/freq_high pairs
+        # to row numbers:
+        for fband_low, fband_high in freq_grps.groups.keys():
+            
+            # For now, don't include the freq band that covers
+            # the entire height of the spectro:
+            if (fband_low == spectro_freqs_min and fband_high == spectro_freqs_max):
+                continue 
+            
+            self.log.info(f"Analyzing band {fband_low}Hz to {fband_high}Hz")
+            
+            # Each freq band combines several frequency channels in 
+            # the original spectrogram. Get the set of those channels
+            # that comprise the fband under consideration in this round
+            # of the loop. The modulo len(spectro_freqs) accounts for
+            # each frequency band include rows with all spectro times:
+
+            spectro_freqs_to_mask = spectro_freqs[spectro_freqs.between(fband_low, fband_high)]
+            
+            # Get the series of times at which acorr values were above threshold that
+            # were detected in this loop's freq band. Some of these times will
+            # be contiguous spectro frame times. Separate events in the freq
+            # band will show as 'missing spectro frame times' in the time series
+            # (see follow-on comment below):
+            spectro_times_to_mask = z_scores_df[np.logical_and(z_scores_df.freq_low >= fband_low, 
+                                                               z_scores_df.freq_high <= fband_high)].time
+                                                              
+            # We now have:
+            #         event times:       3,4,5,        10,11,12,13,       50,...
+            #  spectro timeframes: 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,...
+            # 
+            # We find each event start, and follow it along the spectro timeframes.
+            # an interruption is the end of one event.
+            # The event_start is the first in the sequences of rectangle (i.e. event) 
+            # start times:
+            event_start = spectro_times_to_mask.iloc[0]
+            # Pt to the corresponding spectro timeframe. The .index.values[0]
+            # turns the weird Pandas index-class number into a normal integer 
+            # row number. spectro_new_time_idx will be pointer along the timeframe
+            # seq:
+            spectro_new_time_idx = spectro_times[spectro_times == event_start].index.values[0]
+            spectro_start_event_time = spectro_times[spectro_new_time_idx]
+            # Pointer along the event times seq:
+            event_idx = 0
+            
+            # Actual times (i.e. dereference the pointers):
+            spectro_time = spectro_times.iloc[spectro_new_time_idx]
+            event_time   = spectro_times_to_mask.iloc[event_idx]
+            try:
+                while True:
+                    # Have we found a 'hole' in the event time seq?
+                    while spectro_time == event_time:
+                        spectro_new_time_idx += 1
+                        event_idx += 1
+                        spectro_time = spectro_times.iloc[spectro_new_time_idx]
+                        event_time   = spectro_times_to_mask.iloc[event_idx]
+                        
+                    # Found a rectangle righ-side time boundary (right bound non-inclusive):
+                    new_sel_rect = (spectro_start_event_time, fband_low, 
+                                    spectro_time, fband_high)
+                    bounding_rects.append(new_sel_rect)
+                    #***************
+                    # Add the rectangle to the evolving chart:
+                    ax = self.plot_rectangles(new_sel_rect, 
+                                              spectro_times, 
+                                              spectro_freqs, 
+                                              ax=ax)
+                    #***************
+                    # Get ready for feeling along the next rectangle:
+                    spectro_new_time_idx = \
+                       spectro_times[spectro_times == spectro_times_to_mask.iloc[event_idx]].index.values[0]
+                    spectro_start_event_time = spectro_times[spectro_new_time_idx]
+                    spectro_time = spectro_start_event_time
+            except IndexError:
+                # Accounted for all hypothesized selection regions:
+                pass
+            
+            # Set the mask areas of high acorrs to True:
+            #****sels_mask.loc[spectro_freqs_to_mask, spectro_times_to_mask] = True
+            print('foo')
+
 
     #------------------------------------
     # plot_rectangles
@@ -408,6 +546,133 @@ class SegmentationComputer:
                 out[j*m:(j+1)*m, 1:] = out[0:m, 1:]
         return out        
 
+# ----------------------- Class Rect ---------------
+
+class Rect:
+    
+    #------------------------------------
+    #  Constructor
+    #-------------------
+    
+    def __init__(self, ll=None, ur=None, width=None, height=None):
+
+        self._check_arguments(ll, ur, width, height)
+        
+    #------------------------------------
+    # intersection_over_union
+    #-------------------
+    
+    def intersection_over_union(self, other, epsilon=1e-5):
+        '''
+        Given two rectangles return Intersection over Union (IoU)
+        value. These values range from 0 (no overlap) to 1 (exact
+        overlap).
+        
+        Adapted from http://ronny.rest/tutorials/module/localization_001/iou/
+
+        :param other: the rectangle whose overlap with self is
+            to be computed
+        :type other: Rect
+        :param epsilon: small number to avoid division by zeor
+        :type epsilon: float
+        :return the IoU
+        :rtype float
+        '''
+
+        # I'm stealing this code from Ronny Restpro's blog. His function
+        # takes two four-tuples, one for the self-rect, the other for
+        # the other-rect. Each four tuple numbers are:
+        # where:
+        #     x1,y1 represent the upper left corner
+        #     x2,y2 represent the lower right corner
+        # To avoid having to think about converting that to our
+        # Rect class' lower-left, upper-right convention:
+        
+        a = np.array([self.ll_x, self.ur_y, self.ur_x, self.ll_y])
+        b = np.array([other.ll_x, other.ur_y, other.ur_x, other.ll_y])
+        
+        # COORDINATES OF THE INTERSECTION BOX
+        x1 = max(a[0], b[0])
+        y1 = max(a[1], b[1])
+        x2 = min(a[2], b[2])
+        y2 = min(a[3], b[3])
+
+        # AREA OF OVERLAP - Area where the boxes intersect
+        width  = (x2 - x1)
+        height = (y2 - y1)
+        # handle case where there is NO overlap
+        if (width<0) or (height <0):
+            return 0.0
+        area_overlap = width * height
+    
+        # COMBINED AREA
+        area_a = (a[2] - a[0]) * (a[3] - a[1])
+        area_b = (b[2] - b[0]) * (b[3] - b[1])
+        area_combined = area_a + area_b - area_overlap
+    
+        # RATIO OF AREA OF OVERLAP OVER COMBINED AREA
+        iou = area_overlap / (area_combined+epsilon)
+        return iou
+
+    #------------------------------------
+    # _check_arguments
+    #-------------------
+
+    def _check_arguments(self, ll, ur, width, height):
+        '''
+        Given a combination of lower-left, upper-right,
+        width and height, compute or initialize attributes
+        self.ll_x, self.ll_y, self.width, and self.height.
+        
+        :param ll:
+        :type ll:
+        :param ur:
+        :type ur:
+        :param width:
+        :type width:
+        :param height:
+        :type height:
+        '''
+
+        # Ensure we have a full spec:
+        # At least one of lower-left or upper-right must be provided
+        if ll is None and ur is None:
+            raise ValueError("Must provide lower-left or upper-right, or both")
+
+        # If only one of ll and ur is provided, then
+        # both width and height must be provided:
+        if ll is None or ur is None:
+            if width is None or height is None:
+                raise ValueError("With only one of lower-left and upper-right provided, both width and height are needed")
+
+        if ll is not None and ur is not None:
+            # Given lower-left and upper-right: compute width and height:
+            ll_x = ll[0]
+            ll_y = ll[1]
+            ur_x = ur[0]
+            ur_y = ur[1]
+            width  = ur_x - ll_x 
+            height = ur_y - ll_y
+        else:
+            # One of ll or ur is None:
+            if ll is not None:
+                ll_x = ll[0]
+                ll_y = ll[1]
+                ur_x = ll_x + width
+                ur_y = ll_y + height
+            else:
+                # ll is None, ur is not:
+                ur_x = ur[0]
+                ur_y = ur[1]
+                ll_x = ur_x - width
+                ll_y = ur_y - height
+
+        self.ll_x = ll_x
+        self.ll_y = ll_y
+        self.ur_x = ur_x
+        self.ur_y = ur_y
+        self.width  = width
+        self.height = height
 
 # ------------------------ Main ------------
 if __name__ == '__main__':
@@ -422,11 +687,17 @@ if __name__ == '__main__':
     acorr_peaks_key = 'peaks_2022-07-20T10_47_48'
     sel_info_key    = 'selections_infoAM02_20190717_052958'
     spectro_key     = 'am02_20190717_052958_spectro'
-    seg_computer = SegmentationComputer(exp, acorr_peaks_key, sel_info_key, spectro_key)
+    z_score_key     = 'am02_20190717_052958_spectro_z_scores'
+
+    seg_computer = SegmentationComputer(exp, sel_info_key, spectro_key)
     
-    #seg_computer.event_mask(['continuity', 'energy_sum'], peak_lower_limit=0.95)
-    seg_computer.event_mask(['flatness', 'continuity', 'pitch', 'freq_mod', 'energy_sum'],
-                            peak_lower_limit=0.95)
+    # OPTIONS:
+    #seg_computer.event_mask_sigs(['continuity', 'energy_sum'], peak_lower_limit=0.95)
+    #seg_computer.event_mask_sigs(['flatness', 'continuity', 'pitch', 'freq_mod', 'energy_sum'],
+    #                        peak_lower_limit=0.95)
+    seg_computer.event_mask_z_scores(z_score_key)
+    
+    
     # ref_time = 19.0
     # sel_excerpt = seg_computer._closest_labeled_sel_time_bound(ref_time, which_bound=Bound.START, direction=Direction.AHEAD)
     #
