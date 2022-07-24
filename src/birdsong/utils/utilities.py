@@ -736,6 +736,34 @@ class FileUtils:
         return the_match[1]
 
     #------------------------------------
+    # extract_audiomoth_id
+    #-------------------
+    
+    @classmethod
+    def extract_audiomoth_id(cls, fname):
+        '''
+        Given an audiomoth recording filename with
+        Kelley's recording convention somewhere in the
+        filename, return the identifier.
+        
+        Example:
+           given DS_AM02_20190717_052958_sw-start44_BANA.png
+          retrun 'AM02_20190717_052958'
+        
+        :param fname: recording path
+        :type fname: str
+        :return part of fname that is an audiomoth recording identifier.
+            None if not found
+        :rtype {None | str}
+        '''
+        pat = re.compile(r'.*(AM[\d]{2}_[\d]{8}_[\d]{6}).*')
+        match = pat.search(fname)
+        if match is not None:
+            return match[1]
+        else:
+            return None
+
+    #------------------------------------
     # load_preds_and_labels
     #-------------------
     
