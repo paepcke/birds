@@ -23,6 +23,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path, PosixPath
 
+import noisereduce 
 
 #from multitaper.multitaper_spectrogram_python import MultitaperSpectrogrammer
 ClipInfo = namedtuple("ClipInfo", "clip start_idx end_idx fname sr")
@@ -1051,7 +1052,12 @@ class SignalAnalyzer:
     #-------------------
     
     @classmethod
-    def raven_spectrogram(cls, audio, to_db=True, sr=22050, extra_granularity=False):
+    def raven_spectrogram(cls, 
+                          audio, 
+                          to_db=True, 
+                          sr=22050,
+                          noisereduce=False, 
+                          extra_granularity=False):
         '''
         Returns a spectrogram as the default settings in 
         the Raven program would generate. Same frequency
@@ -1070,6 +1076,10 @@ class SignalAnalyzer:
         If axes is already available:
         
             mesh = ax.pcolormesh(spectro.columns, list(spectro.index), spectro, cmap='jet', shading='flat')    
+        
+        If noisereduce is True, audio is first passed through a 
+        spectral gating noise reduction. See https://pypi.org/project/noisereduce/.
+        This very effectively removes noise, though it is pretty aggressive.
             
         If extra_granularity is True, the frequency granularity
         is doubled compared to the default raven spectrogram by 
@@ -1085,6 +1095,9 @@ class SignalAnalyzer:
             the default is True. But procedures such as spectral flatness
             computations need the absolute values.
         :type to_db: bool
+        :param noisereduce: whether or not to reduce noise in audio
+            before creating the spectrogram
+        :type noisereduce: bool
         :param extra_granularity: whether or not to double 
             resolution of the spectrogram
         :type extra_granularity: bool
@@ -1103,10 +1116,15 @@ class SignalAnalyzer:
         else:
             audio_arr = audio 
 
-        if extra_granularity:
-            spec = np.abs(librosa.stft(audio_arr, n_fft=2048, hop_length=hop_length, window='hann'))
+        if noisereduce:
+            final_aud_arr = noisereduce.reduce_noise(y=audio_arr, sr=sr)
         else:
-            spec = np.abs(librosa.stft(audio_arr, n_fft=512, hop_length=hop_length, window='hann'))
+            final_aud_arr = audio_arr
+
+        if extra_granularity:
+            spec = np.abs(librosa.stft(final_aud_arr, n_fft=2048, hop_length=hop_length, window='hann'))
+        else:
+            spec = np.abs(librosa.stft(final_aud_arr, n_fft=512, hop_length=hop_length, window='hann'))
         # Convert to dB readings
         if to_db:
             spec_values = librosa.amplitude_to_db(spec, ref=np.max)
