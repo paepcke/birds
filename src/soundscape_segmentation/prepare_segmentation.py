@@ -13,7 +13,7 @@ by calling compute_autocorrelations(), and contains:
 
 The sig_type is 'continuity', 'pitch', 'freq_mod', 'flatness', and 'energy_sum'
    
-Calling peak_positions() then finds peaks among the autocorrelations.
+Calling peak_positions_acorrs() then finds peaks among the autocorrelations.
 The peaks file contains:
 
    time,sig_type,freq_low,freq_high,lag,acorr,ci_low,ci_high,plateau_width,prominence
@@ -22,15 +22,18 @@ All computations are done separately for (modifiable) 500Hz frequency bands.
 
 @author: paepcke
 '''
+
 #************
+import sys
+sys.path.insert(0,'/Users/paepcke/EclipseWorkspacesNew/birds/src')
+#************
+
 from _functools import partial
 import argparse
 from enum import Enum
 import json
 import os
 from pathlib import Path
-import re
-import sys
 import warnings
 
 from birdsong.utils.utilities import FileUtils
@@ -47,13 +50,6 @@ from scipy.signal._peak_finding_utils import PeakPropertyWarning
 import multiprocessing as mp
 import numpy as np
 import pandas as pd
-
-#print(sys.path)
-sys.path.insert(0,'/Users/paepcke/EclipseWorkspacesNew/birds/src')
-#************
-
-
-
 
 class PatternLookbackDurationUnits(str, Enum):
     '''
@@ -123,9 +119,10 @@ class SegmentationPreparer:
         self.freq_low, self.freq_high, self.band_height = settings.freq_split
         self.num_freq_bands = int(self.freq_high / self.band_height)
         raw_lookback_duration  = settings.pattern_lookback_dur
+        # Whether to remove selections span most of the
+        # entire spectrogram:
         remove_long_selections = settings.remove_long_selections
-        
-            
+        do_noisereduce = settings.do_noisereduce
 
         self.log = LoggingService()
         
@@ -156,22 +153,19 @@ class SegmentationPreparer:
         # Save the settings of this run:
         experimenter.save('exp_settings', settings)
         
-        if not os.path.exists(self.spectro_path):
-            self.spectro = self.make_test_spectro(self.audio_path, sr=self.settings.sample_rate)
-            # Timestamp to be used in all experiment keys:
-            self.exp_timestamp = FileUtils.file_timestamp()
-        else:
-            self.log.info("Reading spectrogram from .csv file...")
-            self.spectro = pd.read_csv(self.spectro_path,
-                                       index_col='freq',
-                                       header=0,
-                                       engine='pyarrow'  # Faster csv reader
-                                       )
-            # Timestamp to be used in all experiment keys:
-            # first try to find the timestamp in the spectro fname:
-            self.exp_timestamp = Utils.timestamp_from_exp_path(self.spectro_path)
-            if self.exp_timestamp is None:
-                self.exp_timestamp = FileUtils.file_timestamp
+        # Figure out how caller pointed to spectrogram, if we are to
+        # use an existing one. Could be an experiment key, or
+        # an absolute file name, or None
+        
+        try:
+            # Read spectrogram csv into df, turning the 'freq' col
+            # into the index
+            self.spectro = experimenter.read(self.spectro_path, 
+                                             Datatype.tabular,
+                                             index_col='freq'
+                                             )
+        except (FileNotFoundError, TypeError):
+            self.spectro = self._obtain_spectrogram(do_noisereduce)
 
         # Get the spectrogram times as np array of rounded floats:
         spectro_times_rounded = self.spectro.columns.to_numpy(dtype=float).round(self.round_to)
@@ -194,7 +188,6 @@ class SegmentationPreparer:
             self.selections_df = self._process_selection_tbl(self.spectro_times, 
                                                              selection_tbl_path,
                                                              remove_long_selections)
-            experimenter.save('sel_tbl', self.sel_tbl)
         else:
             # No selection table available:
             sel_id  = pd.Series(np.nan, name='sel_id', index=self.spectro_times)
@@ -217,6 +210,54 @@ class SegmentationPreparer:
             
             self.freqs_sel2spectro[freq_low]  = Utils.nearest_in_array(self.spectro_freqs, freq_low)
             self.freqs_sel2spectro[freq_high] = Utils.nearest_in_array(self.spectro_freqs, freq_high)
+
+    #------------------------------------
+    # _obtain_spectrogram
+    #-------------------
+    
+    def _obtain_spectrogram(self, do_noisereduce):
+        if type(self.spectro_path) != str or not os.path.exists(self.spectro_path):
+            
+            # Read audio file and produce spectrogram. Audio
+            # will first be noise-reduced, if do_noisereduce 
+            # was True in settings. Save the spectrogram to the experiment.
+            
+            # First, create an experiment key for the new
+            # spectrogram:
+            
+            # Timestamp to be used in all experiment keys:
+            self.exp_timestamp = FileUtils.file_timestamp()
+
+            # Build a memorable experiment key for the
+            # new spectrogram. Something like:
+            #    AM02_20190717_052958_spectro_2022-07-24T11_44_28.csv
+            
+            audiomoth_id = FileUtils.extract_audiomoth_id(self.audio_path)
+            if audiomoth_id is None:
+                self.log.warn(f"No audiomoth ID found in fname '{self.audio_path}'")
+                audiomoth_id = ''
+
+            exp_spectro_key = f"{audiomoth_id}_spectro_{self.exp_timestamp}{'_noisereduced' if do_noisereduce else ''}"
+            
+            self.spectro = self.make_test_spectro(self.audio_path,
+                                                  sr=self.settings.sample_rate,
+                                                  dest_spectro_key=exp_spectro_key, 
+                                                  do_noisereduce=do_noisereduce)
+            
+        else:
+            self.log.info("Reading spectrogram from .csv file...")
+            self.spectro = pd.read_csv(self.spectro_path,
+                                       index_col='freq',
+                                       header=0,
+                                       engine='pyarrow'  # Faster csv reader
+                                       )
+            # Timestamp to be used in all experiment keys:
+            # first try to find the timestamp in the spectro fname:
+            self.exp_timestamp = Utils.timestamp_from_exp_path(self.spectro_path)
+            if self.exp_timestamp is None:
+                self.exp_timestamp = FileUtils.file_timestamp
+        
+        return self.spectro
 
     #------------------------------------
     # slice_spectro
@@ -452,10 +493,10 @@ class SegmentationPreparer:
         return final_res_df
 
     #------------------------------------
-    # peak_positions
+    # peak_positions_acorrs
     #-------------------
     
-    def peak_positions(self, df_or_path):
+    def peak_positions_acorrs(self, df_or_path):
         '''
         Given a acorr_df produced by compute_autocorrelations(), 
         find the peaks in each autocorrelation series. Of
@@ -557,13 +598,162 @@ class SegmentationPreparer:
         
         if in_fname_timestamp is not None:
             # Match the input acorr_df's timestamp:
-            exp_key = f"peaks_{in_fname_timestamp}"
+            exp_key = f"peaks_acorrs_{in_fname_timestamp}"
         else:
-            exp_key = f"peaks_{self.exp_timestamp}"
+            exp_key = f"peaks_acorrs_{self.exp_timestamp}"
         self.experimenter.save(exp_key, peaks_df)
 
         return peaks_df
 
+    #------------------------------------
+    # peak_positions_z_scores
+    #-------------------
+    
+    def peak_positions_z_scores(self, df_or_path):
+        '''
+        Given a z-score computation as produced by 
+        compressed_spectrograms(), find the peaks 
+        along time in each frequency band, and also
+        along freqs in each timeframe.  
+        
+        Uses scypi.signal.find_peak(), which considers prominence
+        relative to other peaks.
+        
+        Expected like:
+			 freq,    time,    z_left,      z_right,      z_centered
+			 492.1875 ,0.0,  -0.48808396, -0.48808396,   -0.48808396
+			 992.1875 ,0.0,  -0.5756462,  -0.5756462,    -0.5756462
+			 1492.1875,0.0,  -0.6076283,  -0.6076283,    -0.6076283
+			 1992.1875,0.0,  -0.6267458,  -0.6267458,    -0.6267458
+			         
+        
+        
+        Saves and returns a df that includes:
+        
+        :param df_or_path: either a zscores_df created by compute_autocorrelations(),
+            or the file path to such a zscores_df stored as csv
+        :type df_or_path: {pd.DataFrame | str}
+        :returns a new zscores_df with peaks computed for every
+            freqband/sig_type pair
+        :rtype pd.DataFrame
+        '''
+        
+        if type(df_or_path) == str:
+            fname = Path(df_or_path).name
+            self.log.info(f"Reading z-score values from {fname}...")
+            zscores_wide = pd.read_csv(df_or_path, engine='pyarrow') # pyarrow is a fast csv reader
+            self.log.info(f"Done reading z-score values from {fname}.")
+            in_fname_timestamp = FileUtils.extract_file_timestamp(df_or_path)
+        else:
+            zscores_wide = df_or_path
+            in_fname_timestamp = None
+        
+        # Now have zscores_df:
+        #             freq  time     z_left    z_right  z_centered
+        #     0   492.1875   0.0  -0.488084  -0.488084   -0.488084
+        #     1   992.1875   0.0  -0.575646  -0.575646   -0.575646
+        #     2  1492.1875   0.0  -0.607628  -0.607628   -0.607628
+        #
+        # Transform to:
+        #        freq    time      z_bias    z_score
+        #      492.1875   0.0      z_left  -0.488084
+        #      992.1875   0.0      z_left  -0.575646
+        #            ...
+        #      492.1875   0.008    z_left  -0.488084
+        #      992.1875   0.008    z_left  -0.575646
+        #            ...
+        #      492.1875   0.0      z_right  -0.626746
+        #      992.1875   0.0      z_right  -0.626904
+        #      492.1875   0.008    z_right  -0.488084
+        #      992.1875   0.008    z_right  -0.575646
+        #                   ...
+        #      492.1875  60.0      z_centered   1.112056
+        #      992.1875 60.0       z_centered   1.368559
+
+        z_scores = pd.melt(zscores_wide, 
+                           id_vars=['freq','time'], 
+                           value_vars=['z_left', 'z_right', 'z_centered'], 
+                           var_name='z_bias', 
+                           value_name='z_score') 
+
+        # Partition the zscores_df by z-score 'bias' (centered, left, or right)
+        # and frequency band. The number of z_scores extracted into the group:
+        #    num_z_score_weightings * num_freq_bands = 3 * 32
+        
+        df_grp = z_scores.groupby(by=['freq', 'z_bias'])
+        
+        # Get a list of dfs, each containing the original
+        # zscores_df rows for one combination sig_type/freq_band
+        # Each zscores_df in the arr will have some junk cols from 
+        # the group multiindex, but otherwise have the same
+        # cols as the original zscores_df. 
+        self.log.info(f"Partitioning data into {self.num_freq_bands} bands...")
+        fband_z_bias_dfs = [data.reset_index() 
+                              for _grp_key, data 
+                              in df_grp]
+        self.log.info(f"Done partitioning data into {self.num_freq_bands} bands...")
+        
+        # Remove the junk columns:
+        list(map(lambda df: df.drop(['index'], axis=1, inplace=True), 
+                 fband_z_bias_dfs))
+        
+        # For each extract, build zscores_df:
+        #    peak_idx   measure_name   measure_val  freq_low  freq_high   peak_width  prominence  
+        # time
+        
+        peaks_df_arr = []
+        for df_extract in fband_z_bias_dfs:
+            # Isolate the acorr values that are significant,
+            # and are not the trivial value of 1 that occurs
+            # with lag==0. Note: its index will be fragmented,
+            # showing the chosen indexes of df_extract:
+            df_extract.z_score = df_extract.z_score.abs()
+            # Get peaks. The (None,None) key values stand
+            # for 'min' and 'max' or the respective key. Must
+            # included them to have find_peaks() return corresponding
+            # result values:
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=PeakPropertyWarning)
+                peak_idxs, peak_stats = find_peaks(
+                    df_extract.z_score,
+                    height=(None, None), 
+                    width=(None, None), 
+                    prominence=(None, None), 
+                    plateau_size=(None,None),
+                    threshold=(None, None)
+                    )
+
+            # To get the indexes in the original df_extract,
+            # that are peaks, first get the rows from df_extract
+            # that are peaks. Then get the index entries of those
+            # rows. Those indexes point into df_extract:
+            df_extract_idxs = df_extract.iloc[peak_idxs].index
+            # Need the copy, else peaks_df will be a view,
+            # and subsequent addition of columns will fail:
+            peaks_df = df_extract.iloc[df_extract_idxs].copy()
+
+            # Add some of the find_peaks() stats:
+            peaks_df['plateau_width'] = peak_stats['plateau_sizes']
+            peaks_df['prominence']    = peak_stats['prominences']
+            peaks_df['peak_height']   = peak_stats['peak_heights']
+            peaks_df['left_edge']     = peak_stats['left_edges']
+            peaks_df['right_edge']     = peak_stats['right_edges']
+            peaks_df['height_above_left_neighbor']  = peak_stats['left_thresholds']
+            peaks_df['height_above_right_neighbor'] = peak_stats['right_thresholds']
+
+            peaks_df_arr.append(peaks_df)
+            
+        peaks_df = pd.concat(peaks_df_arr)
+        
+        # Create an experiment key:
+        if in_fname_timestamp is not None:
+            # Match the input zscores_df's timestamp:
+            exp_key = f"peaks_zscores_{in_fname_timestamp}"
+        else:
+            exp_key = f"peaks_zscores_{self.exp_timestamp}"
+        self.experimenter.save(exp_key, peaks_df)
+
+        return peaks_df
 
     #------------------------------------
     # compressed_spectrograms
@@ -663,7 +853,7 @@ class SegmentationPreparer:
             spectro_exp_key_root = Path(self.spectro_path).stem
         else:
             spectro_exp_key_root = self.spectro_path # Already is a key:
-        exp_compressed_key_mean = f"{spectro_exp_key_root}_compressed_mean"
+        exp_compressed_key_mean = f"{spectro_exp_key_root}_compressed_mean_{self.exp_timestamp}"
         
         
         # The saved version of the dfs are two columns and
@@ -698,7 +888,7 @@ class SegmentationPreparer:
                                           value_name='mean_band', 
                                           ignore_index=False) 
         
-        exp_compressed_key_median = f"{spectro_exp_key_root}_compressed_median"
+        exp_compressed_key_median = f"{spectro_exp_key_root}_compressed_median_{self.exp_timestamp}"
         self.log.info(f"Writing median_compressed spectro to experiment ({exp_compressed_key_median})")
         # Transpose makes df narrower: 32 (i.e. num_bands) wide, 
         # and one row per time. Makes examination with Tableau easier:
@@ -721,18 +911,13 @@ class SegmentationPreparer:
         # Next: a df with fields being the distance in
         # standard deviations of each energy value from its band's mean
         df_distance_from_mean = self._distances_from_mean(spectro_compressed_mean)
-        
-        compressed_distance_from_mean_for_viz = pd.melt(df_distance_from_mean, 
-                                                        var_name='time', 
-                                                        value_name='mean_band_zscore', 
-                                                        ignore_index=False)
-         
-        exp_compressed_key_zscores = f"{spectro_exp_key_root}_z_scores"
+
+        exp_compressed_key_zscores = f"{spectro_exp_key_root}_z_scores_{self.exp_timestamp}"
         self.log.info(f"Writing z-scores to experiment ({exp_compressed_key_zscores})")
         # Transpose makes df narrower: 32 (i.e. num_bands) wide, 
         # and one row per time. Makes examination with Tableau easier:
         self.experimenter.save(exp_compressed_key_zscores, 
-                               compressed_distance_from_mean_for_viz,
+                               df_distance_from_mean,
                                index_col='freq')
         
     #------------------------------------
@@ -763,10 +948,30 @@ class SegmentationPreparer:
     def _distances_from_mean(self, df):
         '''
         For each row, replace each value with its
-        distance from the mean of the row in standard
-        deviations.
+        distance from the mean over a window around
+        the value. This result is computed once for
+        the window 'sticking out' more on the left
+        of each value, once centered, and once sticking
+        out more on the right. 
         
-        Return a new df with all values replaced
+        The left side bias is best to discover starting
+        edges of calls. The right side bias is better
+        to find endings of call. The centered version will
+        tend to have z-score of 0 inside a call.
+        
+        Returns a df:
+        
+                        time     z_left    z_right  z_centered
+              freq
+            492.1875     0.0  -0.937635  -0.937635   -0.937635
+            992.1875     0.0  -1.011013  -1.011013   -1.011013
+            ...          ...        ...        ...         ...
+            13992.1875  60.0   1.092039   1.092039    1.092039
+            15992.1875  60.0  11.100916  11.100916   11.100916
+            
+            [240032 rows x 4 columns]
+        
+        Rows are one full time series for each frequency:
         
         :param df: dataframe of numbers
         :type df: pd.DataFrame
@@ -775,38 +980,99 @@ class SegmentationPreparer:
         :rtype pd.DataFrame
         '''
 
-        # Func to compute the distance of each 
-        # value in a row from the mean of a sliding window
-        # around the time of each energy value. The distance
-        # is measured in (fractional) standard deviations.
-        # Returns a new Series with the z-scores:
-        z_scores_func = partial(self._z_scores, win=self.compression_window_width)
+        for weighted_neighbors in ('left', 'right', None):
+            
+            self.log.info(f"Computing z scores with {weighted_neighbors} neighbors favored...")
+            
+            # Func to compute the distance of each 
+            # value in a row from the mean of a sliding window
+            # around the time of each energy value. The distance
+            # is measured in (fractional) standard deviations.
+            # Returns a new Series with the z-scores:
+            z_scores_func = partial(self._z_scores, 
+                                    win=self.compression_window_width,
+                                    weighted_neighbors=weighted_neighbors)
+            
+            # Apply the func to each row,
+            # building a new df:
+            if weighted_neighbors == 'left':
+                z_scores_left = df.apply(z_scores_func, axis=1)
+            elif weighted_neighbors == 'right':
+                z_scores_right = df.apply(z_scores_func, axis=1)
+            else:
+                z_scores_centered = df.apply(z_scores_func, axis=1)
+
+        z_left_melted = pd.melt(z_scores_left,
+                        var_name='time',
+                        value_name='z_left',
+                        ignore_index=False)
         
-        # Apply the func to each row,
-        # building a new df:
-        z_scores = df.apply(z_scores_func, axis=1)
+        z_centered_melted = pd.melt(z_scores_centered,
+                                    var_name='time',
+                                    value_name='z_centered',
+                                    ignore_index=False)
+        
+        z_right_melted = pd.melt(z_scores_right,
+                                 var_name='time',
+                                 value_name='z_right',
+                                 ignore_index=False)
+
+        # Combine scores into on df:
+        z_scores = z_left_melted
+        z_scores['z_right'] = z_right_melted.z_right
+        z_scores['z_centered'] = z_centered_melted.z_centered
+
+        z_scores.index.name = 'freq'
+        
         return z_scores
 
     #------------------------------------
     # _z_scores
     #-------------------
     
-    def _z_scores(self, row, win):
+    def _z_scores(self, row, win, weighted_neighbors):
         '''
-        Given a Series of values, and a window width,
-        successively place the window centered over each value
+        Given a Series of values, and a window width 'win',
+        successively place the window's weighted_neighbors over each value
         in turn. Compute the mean and std just over the values 
         within that window, and use the results to compute the 
-        value's z-score.
+        value's z-score. Return  series as long as row, but with
+        each value being the z-score (distance from mean in standard
+        units) of the original value.
+        
+        The weighted_neighbors is either 'left', 'center' or 'right'. 
+        If weighted_neighbors is 'left, the window will be placed on
+        each element 2/3 into the window. If set to 'right', placement
+        will be 1/3 into the window. If 'None', window is placed centered.
+        
+               |--------------|
+               |  el          | weighted_neighbors == 'right'
+               |--------------|
+
+               |--------------|
+               |      el      | weighted_neighbors == None
+               |--------------|
+
+               |--------------|
+               |          el  | weighted_neighbors == 'left'
+               |--------------|
+        
+        
+        A left weighted_neighbors will weight row elements to the left
+        of the element more heavily than elements on the reight.
+        Vice versa for right weighted_neighbors.
         
         A win of None uses the mean/std of the entire row
-        to compute the z-score.
+        to compute the z-score, and weighted_neighbors is ignored
         
         :param row: a sequence of values
         :type row: pd.Series
         :param win: width of window over which the z-score
              means/stds are computed
         :type win: int
+        :param weighted_neighbors: whether to favor neighbors on the left
+            or right more heavily for each element than other neighbors
+        :type weighted_neighbors: {None | 'left' | 'right'
         :return a new Series in which values are replaced
             by their windowed z-scores.
         :rtype pd.Series
@@ -818,39 +1084,53 @@ class SegmentationPreparer:
             z_values = (row - row_mean) / row_std
             return z_values
         
-        # Half the window will be on the left, the
-        # other half on the right of a value whose
-        # z score is being computed
-        hlf_win  = int(win//2)
+
+        if weighted_neighbors is None:
+            # Half the window will be on the left, the
+            # other half on the right of a value whose
+            # z score is being computed
+            win_left  = int(win//2)
+        elif weighted_neighbors == 'left':
+            win_left  = 2 * int(win // 3)
+        elif weighted_neighbors == 'right':
+            win_left  = int(win // 3)
+        else:
+            raise ValueError(f"Arg weighted_neighbor must be None, 'left', or 'right', not {weighted_neighbors}")
+
+        # Right 
+        win_right = int(win) - win_left
         
         # In the map() below, the iterable has to 
-        # start 1/2 the window in, because else the
-        # left half of the window will have negative
+        # start width of the left window side into 
+        # the window in, because else the
+        # left portion of the window will have negative
         # values for indexing into the row:
-        win_idxs = np.arange(hlf_win, len(row))
+        win_idxs = np.arange(win_left, len(row) - win_right)
          
         # Get the means for all row values, except
         # 1/2 window size worth of values on the left.
         # The '+1' includes the right edge of the window:
-        means_tail = pd.Series(map(lambda i, row=row, hlf_win=hlf_win : 
-                                   row.iloc[i-hlf_win : i+hlf_win+1].mean(), 
-                                   win_idxs))
+        means_center = pd.Series(map(lambda i, row=row, win_left=win_left, win_right=win_right : 
+                                     row.iloc[i-win_left : i+win_right+1].mean(), 
+                                     win_idxs))
         # Fill the means for the left-most values of the row
         # that we skipped with the first mean that we did
         # compute:
-        means_leader  = pd.Series([means_tail.iloc[0]]*hlf_win)
-        sliding_means = pd.concat([means_leader, means_tail])
+        means_leader  = pd.Series([means_center.iloc[0]]*win_left)
+        means_tail    = pd.Series([means_center.iloc[-1]]*win_right)
+        sliding_means = pd.concat([means_leader, means_center, means_tail])
 
         # Set index to be same as what row has:
         sliding_means.set_axis(row.index, inplace=True)
 
         # Do the same for the standard deviation that we 
         # just did for the mean:
-        stds_tail  = pd.Series(map(lambda i, row=row, hlf_win=hlf_win : 
-                                   row.iloc[i-hlf_win : i+hlf_win+1].std(), 
-                                   win_idxs))
-        stds_leader  = pd.Series([stds_tail.iloc[0]]*hlf_win)
-        sliding_stds = pd.concat([stds_leader, stds_tail])
+        stds_center  = pd.Series(map(lambda i, row=row, win_left=win_left, win_right=win_right : 
+                                     row.iloc[i-win_left : i+win_right+1].std(), 
+                                     win_idxs))
+        stds_leader  = pd.Series([stds_center.iloc[0]]*win_left)
+        stds_tail    = pd.Series([stds_center.iloc[-1]]*win_right)
+        sliding_stds = pd.concat([stds_leader, stds_center, stds_tail])
         sliding_stds.set_axis(row.index, inplace=True)
         
         # Finally: the z-scores for each member of the row:
@@ -1102,19 +1382,82 @@ class SegmentationPreparer:
     # make_test_spectro
     #-------------------
     
-    def make_test_spectro(self, test_audio, sr):
+    def make_test_spectro(self, 
+                          audio_path, 
+                          sr, 
+                          dest_spectro_key=None,
+                          dest_audio_key=None, 
+                          do_noisereduce=False):
+        '''
+        Create a spectrogram from an adio file. Sampling rate
+        is controlled by the 'sr' parameter. If do_noisereduce 
+        is True, then noise reduction will first be applied to
+        the audio.
         
-        self.log.info(f"Creating spectrogram for {test_audio}")
+        Returns the spectrogram.
         
-        spectro = SignalAnalyzer.raven_spectrogram(test_audio, 
-                                                   to_db=False,
-                                                   sr=sr,
-                                                   extra_granularity=True)
-        spectro.to_csv(self.spectro_path,
-                       header=spectro.columns,
-                       index=True,
-                       index_label='freq'
-                       )
+        If dest_spectro_key is a string, writes spectro to the experiment
+        under that key.
+        
+        If do_noisereduce is True, and dest_audio_key is a string,
+        the noise-reduced audio is also saved to the experiment. 
+        
+        :param audio_path: path to audio file
+        :type audio_path: str
+        :param dest_spectro_key: key under which new spectro is to
+            be saved in the experiment.
+        :type dest_spectro_key: str
+        :param dest_audio_key: key under which the noise-reduced
+            audio is to be saved in the experiment. Ignored if
+            do_noisereduce is False
+        :type dest_spectro_key: str
+        :param sr: desired sampling rate 
+        :type sr: int
+        :param do_noisereduce: whether or not to noise-reduce
+        :type do_noisereduce: bool
+        :return spectrogram
+        :rtype df
+        '''
+        
+        self.log.info(f"Creating spectrogram for {audio_path}")
+        
+        # The raven_spectrogram() method returns a spectrogram
+        # df AND the noise-reduced audio if noise reduction is
+        # requested. Else it only returns the spectro:
+        if do_noisereduce:
+            spectro, audio = SignalAnalyzer.raven_spectrogram(audio_path, 
+                                                              to_db=False,
+                                                              sr=sr,
+                                                              do_noisereduce=True,
+                                                              extra_granularity=True)
+        else:
+            spectro = SignalAnalyzer.raven_spectrogram(audio_path, 
+                                                       to_db=False,
+                                                       sr=sr,
+                                                       do_noisereduce=True,
+                                                       extra_granularity=True)
+
+        if dest_spectro_key is not None:
+            log_msg = f"Saving {'noise reduced ' if do_noisereduce else ''}spectrogram to {dest_spectro_key}..." 
+            self.log.info(log_msg)
+            self.experimenter.save(dest_spectro_key, spectro, index_col='freq')
+            self.log.info(f"Done: {log_msg}")
+        
+            # Get the actual path to the just-saved spectro,
+            # and init self.spectro_path:
+            
+            self.spectro_path = self.experimenter.abspath(dest_spectro_key, Datatype.tabular)
+
+        # If noisereduction, also save the noise-reduced audio:
+        
+        if do_noisereduce and type(dest_audio_key) == str:
+            log_msg = f"Saving noise-reduced audio to {dest_audio_key}..." 
+            self.log.info(log_msg)
+            self.experimenter.save(dest_audio_key, audio)
+            self.log.info(f"Done: {log_msg}")
+            
+            
+
         return spectro
 
     #------------------------------------
@@ -1150,6 +1493,10 @@ class SegmentationPreparer:
         pattern in this example:
         
              /foo/bar/DS_AM02_20190717_052958.Table.1.selections.txt
+
+        HOWEVER: some of the code depends on the selection table
+                 being a RavenSelectionTable instance. So the saved
+                 selection table df is of limited use. 
         
         :param spectro_times: times in seconds of spectrogram
             time frames
@@ -1163,7 +1510,7 @@ class SegmentationPreparer:
             end of a Raven selection.
         :rtype pd.DataFrame
         '''
-        
+
         self.log.info("Reading selection table from file...")
         self.sel_tbl = RavenSelectionTable(selection_tbl_path)
         
@@ -1297,15 +1644,7 @@ class SegmentationPreparer:
         
         # Try to get the recording identifier from the Raven
         # selection table name, which for us looks like:
-        #
-        #   DS_AM02_20190717_052958.Table.1.selections.txt
-        # usually embedded in a long filename:
-        pat = re.compile(r'.*(AM[0-9]{2}_[0-9]{8}_[0-9]*).*')
-        recorder_id_match = pat.match(selection_tbl_path)
-        if recorder_id_match is None:
-            rec_id = ''
-        else:
-            rec_id = recorder_id_match[1]
+        rec_id = FileUtils.extract_audiomoth_id(selection_tbl_path)
 
         exp_key = f"selections_info{rec_id}"
         self.experimenter.save(exp_key, exploded_time_freqs)
@@ -1364,7 +1703,8 @@ class SoundSegmentationSetting(JsonDumpableMixin):
                  recording_id=None,
                  round_to=5,
                  remove_long_selections=False,
-                 compression_window_width=2 # seconds
+                 compression_window_width=2, # seconds
+                 do_noisereduce=False
                  ):
         '''
         Holds parameters for a soundscape segmentation run.
@@ -1415,7 +1755,20 @@ class SoundSegmentationSetting(JsonDumpableMixin):
         :param compression_window_width: width in seconds of sliding window
             around each energy value when the value's z-score is computed.
         :type compression_window_width: {None | int}
+        :param do_noisereduce: whether or not to apply noise reduction
+            to audio file, if a new spectrogram is to be created.
+        :type do_noisereduce: bool
         '''
+        
+        # If no recording_id is provided, but an audio_path
+        # was passed in, try to extract the recording ID
+        # from the filename:
+        
+        if recording_id is None and audio_path is not None:
+            # Could still be None, if fname is non-standard;
+            # that's fine, at least we tried:
+            recording_id = FileUtils.extract_audiomoth_id(audio_path)
+        
         self.sig_types = sig_types
         self.sample_rate = sr
         self.pattern_lookback_dur = pattern_lookback_dur
@@ -1423,13 +1776,14 @@ class SoundSegmentationSetting(JsonDumpableMixin):
         self.freq_split = freq_split
         self.spectro_path = spectro_path
         # The experiment key for spectrogram: file name without .csv:
-        self.spectro_key  = Path(spectro_path).stem
+        self.spectro_key  = Path(spectro_path).stem if self.spectro_path is not None else None
         self.audio_path = audio_path
         self.selection_tbl_path = selection_tbl_path
         self.recording_id = recording_id
         self.round_to = round_to
         self.remove_long_selections = remove_long_selections
         self.compression_window_width = compression_window_width
+        self.do_noisereduce = do_noisereduce
 
     #------------------------------------
     # json_dumps
@@ -1555,6 +1909,51 @@ class SoundSegmentationSetting(JsonDumpableMixin):
 # ------------------------ Main ------------
 if __name__ == '__main__':
     
+    def expand_path_to_data_dir(source_info, experimenter):
+        '''
+        Checks whether given string is an absolute
+        path. If so, checks existence, and raises
+        FileNotFound if not found. If the absolute
+        path exists, it is returned.
+        
+        If the path is not absolute, construct a
+        path to the project root's 'data' subdirectory,
+        and see whether the given file is there. If so,
+        return the full path, else raise FileNotFound.
+        
+        :param source_info: absolute file name, or fname in
+            <proj-root>/data
+        :type source_info: str
+        :return absolute path
+        :rtype src
+        :raise FileNotFoundErr 
+        '''
+        if source_info is None:
+            return None
+        if os.path.isabs(source_info):
+            if os.path.exists(source_info):
+                return source_info
+            else:
+                raise FileNotFoundError(f"File {source_info} not found")
+
+        # Is either a file relative to <proj-root>/data,
+        # or an experiment key:
+        if Path(source_info).suffix in ('.csv', '.txt', '.wav'):
+            # It's a file name:
+            path = os.path.join(PROJ_ROOT, f"data/{source_info}")
+            if os.path.exists(path):
+                return path
+            else:
+                raise FileNotFoundError(f"Given relative path ({source_info}), but file {path} does not exist")
+        else:
+            # It's an experimenter key:
+            path = experimenter.abspath(source_info)
+            if os.path.exists(path):
+                # Return the key:
+                return source_info
+            else:
+                raise FileNotFoundError(f"Given experiment key ({source_info}), but file {path} does not exist")
+
     parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
                                      formatter_class=argparse.RawTextHelpFormatter,
                                      description="Compute signature autocorrelations and their peaks"
@@ -1568,15 +1967,21 @@ if __name__ == '__main__':
 
     parser.add_argument('-s', '--selection_tbl',
                         type=str,
-                        help=f"path to selection table default: {TEST_SEL_TBL}",
-                        default=TEST_SEL_TBL
+                        help=f"path to selection table; if not an absolute path, looks in <proj_root>/data",
+                        default=None
                         )
 
     parser.add_argument('-p', '--spectrogram',
                         type=str,
-                        help=(f"Only needed for cmd 'peaks': fname of audio or spectrogram;\n",
+                        help=(f"For peaks only: fname of audio or spectrogram;\n",
                               'or spectrogram experiment key') ,
-                        default=TEST_SEL_TBL
+                        default=None
+                        )
+        
+    parser.add_argument('-m', '--measures',
+                        choices=['acorrs', 'z_scores'],
+                        help='For peaks only: find peaks in autocorrelations, or z-scores',
+                        default=None
                         )
     
     parser.add_argument('source_info',
@@ -1591,8 +1996,15 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     #exp_root = os.path.join(EXP_ROOT, 'ExpAM02_20190717_052958_HalfSecondLags')
-    exp_root = os.path.join(EXP_ROOT, 'ExpAM02_20190717_052958_AllData1')
+    #exp_root = os.path.join(EXP_ROOT, 'ExpAM02_20190717_052958_AllData1')
+    exp_root = os.path.join(EXP_ROOT, 'ExpAM02_20190717_052958_NoiseReduced')
     exp = ExperimentManager(exp_root)
+    
+    # Process selection table argument:
+    if args.selection_tbl is not None:
+        selection_tbl = expand_path_to_data_dir(args.selection_tbl, exp)
+    else:
+        selection_tbl = None
     
     cmd = args.command
     
@@ -1603,38 +2015,46 @@ if __name__ == '__main__':
         # be a csv file:
         if args.source_info.endswith('.csv'):
             # A spectrogram:
-            spectro_path = args.source_info
+            spectro_path = expand_path_to_data_dir(args.source_info, exp)
             audio_path   = None 
         else:
-            audio_path   = args.source_info
+            audio_path   = expand_path_to_data_dir(args.source_info, exp)
             spectro_path = None
 
     elif cmd == 'peaks':
-        # Could be an experiment manager key, would
-        # not have a .csv extension, or a full name:
-        if args.source_info.endswith('.csv'):
-            acorrs_fname = args.source_info
-        else:
-            acorrs_fname = os.path.join(exp_root, f"csv_files/{args.source_info}.csv")
-        if not os.path.exists(acorrs_fname):
-            print(f"Cannot find file {acorrs_fname}. If intending an experiment key, don't include '.csv'")
+        
+        # Are the required options set?
+        if args.measures is None or args.spectrogram is None:
+            print("For 'peaks' command, both --measures and --spectrogram are required")
             sys.exit(1)
-        try:
-            spectro_path = args.spectrogram
-        except Exception:
-            print("The peaks command requires the --spectrogram option: path or experiment key to spectrogram")
-            sys.exit(1)
+        
+        audio_path   = None
+        
+        # Could be an experiment manager key, in which case it would
+        # not have a .csv extension:
+        measures_fname = expand_path_to_data_dir(args.source_info, exp)
+        spectro_path = expand_path_to_data_dir(args.spectrogram, exp)
 
     elif cmd == 'spectro_compression':
         # Could be an experiment manager key, would
-        # not have a .csv extension, or a full name:
+        # not have a .csv or .wav extension, or a full name:
         if args.source_info.endswith('.csv'):
             spectro_path = args.source_info
+            audio_path   = None
+            if not os.path.exists(spectro_path):
+                print(f"Cannot find spectrum file {spectro_path}. If intending an experiment key, don't include '.csv'")
+                sys.exit(1)
+        elif args.source_info.endswith('.wav'):
+            spectro_path = None
+            audio_path   = args.source_info
+            if not os.path.exists(audio_path):
+                print(f"Cannot find audio file {audio_path}. If intending an experiment key, don't include '.wav'")
+                sys.exit(1)
         else:
-            spectro_path = os.path.join(exp_root, f"csv_files/{args.source_info}.csv")
-        if not os.path.exists(spectro_path):
-            print(f"Cannot find spectrum file {spectro_path}. If intending an experiment key, don't include '.csv'")
-            sys.exit(1)
+            # Not a file path, but an experiment
+            # key to the spectrogram:
+            spectro_path = exp.abspath(args.source_info, Datatype.tabular)
+            audio_path   = None
 
     # About number of lags: ~25ms and ~50ms seems to be a good times
     # for look-back. The number of corresponding lags depends on
@@ -1646,7 +2066,8 @@ if __name__ == '__main__':
     # At sr=31000: hop_len=256; timedelta~=8ms   ==> 6 lags at ~.8ms
     
     settings = SoundSegmentationSetting(
-        sig_types = ['flatness', 'continuity', 'pitch', 'freq_mod', 'energy_sum'],
+        #****sig_types = ['flatness', 'continuity', 'pitch', 'freq_mod', 'energy_sum'],
+        sig_types = ['energy_sum'],
         #******sig_types = ['continuity', 'energy_sum'],
         #******sig_types = ['continuity', 'energy_sum', 'pitch'],
         #******sig_types = ['continuity'],
@@ -1655,19 +2076,20 @@ if __name__ == '__main__':
         pattern_lookback_dur_units=PatternLookbackDurationUnits.SECONDS,
         spectro_path = spectro_path,
         freq_split = (0,16000,500),  # Spectro frequency range, and freq band height
-        audio_path = AUDIO_PATH,
-        selection_tbl_path=args.selection_tbl,
+        audio_path = audio_path,
+        selection_tbl_path=selection_tbl,
         recording_id = 'AM02_20190717_052958',
         round_to = SegmentationPreparer.ROUND_TO,
         remove_long_selections = True,
-        compression_window_width = 2  # seconds: Sliding window width during compression.
+        compression_window_width = 2,  # seconds: Sliding window width during compression.
+        do_noisereduce=True # Only used if spectro_path is None, so that a new spectro is made
         )
     segmenter = SegmentationPreparer(exp, settings)
     
     #*************
     #cmd = 'peaks'
     #cmd = 'acorrs'
-    cmd = 'spectro_compression'
+    #cmd = 'spectro_compression'
     #*************
     #**************
     #df = segmenter.experimenter.read('significant_acorrs_2022-07-13T17_19_19', Datatype.tabular)
@@ -1676,7 +2098,10 @@ if __name__ == '__main__':
     if cmd == 'acorrs':
         acorrs = segmenter.compute_autocorrelations(settings)
     elif cmd == 'peaks':
-        res = segmenter.peak_positions(acorrs_fname)
+        if args.measures == 'acorrs':
+            res = segmenter.peak_positions_acorrs(measures_fname)
+        else:
+            res = segmenter.peak_positions_z_scores(measures_fname)
     elif cmd == 'spectro_compression':
         res = segmenter.compressed_spectrograms()
     else:
