@@ -151,3 +151,15 @@ src/data_augmentation/OLD/
 src/data_augmentation/remotePydevTest.py
 src/data_augmentation/remotePydevTest.py~
 world_map.json
+src/birdflock/tests*
+src/powerflock/tests*
+data*
+experiment_manager/*
+*.bak
+tableau/*
+train_export_root/*
+src/birdsong/utils/tests/first_dict
+LargeTests/*
+allInOneSegmentationExploration.twb
+src/birdsong/experiment_2021-08-25T14_41_00_train/*
+experiment/*
