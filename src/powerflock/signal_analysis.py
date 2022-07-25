@@ -1056,14 +1056,19 @@ class SignalAnalyzer:
                           audio, 
                           to_db=True, 
                           sr=22050,
-                          noisereduce=False, 
+                          do_noisereduce=False, 
                           extra_granularity=False):
         '''
         Returns a spectrogram as the default settings in 
         the Raven program would generate. Same frequency
         and time scales. The index will be frequencies at
         the centers of the fft frequency bands. The columns
-        will be time in seconds. 
+        will be time in seconds.
+        
+        Optionally applies noise reduction to audio before
+        the spectrogram creation. If noie reduction is requested,
+        returns a 2-tuple (spectrogram_df, reduced_noise_audio_array).
+        Else just returns the spectrogram df.
         
         To visualize the returned spectrogram:
         
@@ -1077,7 +1082,7 @@ class SignalAnalyzer:
         
             mesh = ax.pcolormesh(spectro.columns, list(spectro.index), spectro, cmap='jet', shading='flat')    
         
-        If noisereduce is True, audio is first passed through a 
+        If do_noisereduce is True, audio is first passed through a 
         spectral gating noise reduction. See https://pypi.org/project/noisereduce/.
         This very effectively removes noise, though it is pretty aggressive.
             
@@ -1095,16 +1100,17 @@ class SignalAnalyzer:
             the default is True. But procedures such as spectral flatness
             computations need the absolute values.
         :type to_db: bool
-        :param noisereduce: whether or not to reduce noise in audio
+        :param do_noisereduce: whether or not to reduce noise in audio
             before creating the spectrogram
-        :type noisereduce: bool
+        :type do_noisereduce: bool
         :param extra_granularity: whether or not to double 
             resolution of the spectrogram
         :type extra_granularity: bool
-        :return: dataframe with a spectrogram that reflects
-            what a Raven labeling software user would see
-            in its spectrogram display.
-        :rtype: pd.DataFrame
+        :return: If no noise reduction requested, dataframe with 
+            a spectrogram that reflects what a Raven labeling software 
+            user would see in its spectrogram display. If noise reduction
+            was requested, returns a 2-tuple: (spectrogram, noise_reduced_audio_arr)
+        :rtype: {pd.DataFrame | (pd.DataFrame, np.1Darray)
         '''
 
         if extra_granularity:
@@ -1112,15 +1118,20 @@ class SignalAnalyzer:
         else:
             hop_length = 512
         if type(audio) in [str, Path, PosixPath]:
+            cls.log.info(f"Reading audio from {audio}...")
             audio_arr, _aud_sr = librosa.load(audio, sr)
+            cls.log.info(f"Done reading audio from {audio}.")
         else:
             audio_arr = audio 
 
-        if noisereduce:
+        if do_noisereduce:
+            cls.log.info("Noise-reducing audio before making spectrogram...")
             final_aud_arr = noisereduce.reduce_noise(y=audio_arr, sr=sr)
+            cls.log.info("Done noise-reducing audio before making spectrogram.")
         else:
             final_aud_arr = audio_arr
 
+        cls.log.info("Creating spectrogram...")
         if extra_granularity:
             spec = np.abs(librosa.stft(final_aud_arr, n_fft=2048, hop_length=hop_length, window='hann'))
         else:
@@ -1130,6 +1141,7 @@ class SignalAnalyzer:
             spec_values = librosa.amplitude_to_db(spec, ref=np.max)
         else:
             spec_values = spec
+        cls.log.info("Done creating spectrogram.")
         num_rows, num_cols = spec_values.shape
         time_ticks = librosa.core.frames_to_time(np.arange(num_cols + 1), 
                                                  sr=sr, 
@@ -1142,8 +1154,13 @@ class SignalAnalyzer:
         
         # Normalize so that all intensity values are 
         # relative to the highest value in the spectrum:
-        
-        return spec_df
+
+        # If we applied noise reduction to the audio,
+        # return the noise-reduced audio with the spectro:
+        if do_noisereduce:
+            return (spec_df, final_aud_arr)
+        else:
+            return spec_df
 
     #------------------------------------
     # spectro_timeframe_width
