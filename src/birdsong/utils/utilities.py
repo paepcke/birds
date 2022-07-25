@@ -751,11 +751,13 @@ class FileUtils:
           retrun 'AM02_20190717_052958'
         
         :param fname: recording path
-        :type fname: str
+        :type fname: {str | Path}
         :return part of fname that is an audiomoth recording identifier.
             None if not found
         :rtype {None | str}
         '''
+        # In case a Path obj was passed in:
+        fname = str(fname)
         pat = re.compile(r'.*(AM[\d]{2}_[\d]{8}_[\d]{6}).*')
         match = pat.search(fname)
         if match is not None:
