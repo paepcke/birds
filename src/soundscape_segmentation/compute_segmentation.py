@@ -4,24 +4,24 @@ Created on Jul 13, 2022
 @author: paepcke
 '''
 
+import argparse
 from enum import Enum
 import os
-
-from data_augmentation.utils import Interval
-from experiment_manager.experiment_manager import Datatype, ExperimentManager
-from logging_service.logging_service import LoggingService
-
-import numpy as np
-import pandas as pd
-
-from scipy.signal import savgol_filter
-import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
-from matplotlib.collections import PatchCollection
+import sys
 
 from birdsong.utils.utilities import FileUtils
-from result_analysis.charting import Charter
+from data_augmentation.utils import Interval, Utils
+from experiment_manager.experiment_manager import Datatype, ExperimentManager
+from logging_service.logging_service import LoggingService
+from matplotlib.collections import PatchCollection
+from matplotlib.patches import Rectangle
 from powerflock.signal_analysis import SignalAnalyzer
+from result_analysis.charting import Charter
+from scipy.signal import savgol_filter
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 
 
 # ---------------------------------- Enums --------------
@@ -40,32 +40,37 @@ class SegmentationComputer:
     '''
     classdocs
     '''
+    CUR_DIR = os.path.dirname(__file__)
+    PROJ_ROOT  = os.path.abspath(os.path.join(CUR_DIR, '../../'))
+    EXP_ROOT = os.path.join(PROJ_ROOT, 'experiments/SoundscapeSegmentation')
 
     #------------------------------------
     # Constructor 
     #-------------------
 
-    def __init__(self, experiment, sel_tbl_key, spectro_key_or_path):
+    def __init__(self, experiment, sel_tbl_key, peaks_key, spectro_key_or_path):
         '''
         '''
 
-        self.acorr_peaks_key = acorr_peaks_key
+        self.peaks_key = peaks_key
         
         self.log = LoggingService()
         self.exp = experiment
 
         self.sels = experiment.read(sel_tbl_key, Datatype.tabular)
-        
-        self.log.info("Reading spectrogram from .csv file...")
-        if spectro_key_or_path.endswith('.csv'):
-            self.spectro = pd.read_csv(self.spectro_path,
-                                       index_col='freq',
-                                       header=0,
-                                       engine='pyarrow'  # Faster csv reader
-                                       )
-        else:
-            self.spectro = self.exp.read(self.spectro_key_or_path, Datatype.tabular)
+        if spectro_key_or_path is None:
+            self.spectro = None
+            self.exp_timestamp = FileUtils.file_timestamp()
+            return
             
+        self._obtain_spectrogram(spectro_key_or_path)
+        
+        # Timestamp to be used in all experiment keys:
+        # first try to find the timestamp in the spectro fname:
+        self.exp_timestamp = Utils.timestamp_from_exp_path(spectro_key_or_path)
+        if self.exp_timestamp is None:
+            self.exp_timestamp = FileUtils.file_timestamp()
+
         # Make the string 'floats' into real floats:
         self.spectro.columns = self.spectro.columns.values.astype(float)
 
@@ -76,10 +81,9 @@ class SegmentationComputer:
         # [0.0, 492.1875, 992.1875, 1492.1875, ...]
         band_upper_bounds = list(reversed(self.spectro.index[np.arange(0,num_channels,
                                                                   self.num_freq_bands)]))
-        
+
         # Get 2-tuples of (low_band_freq, high_band_freq):
         self.freq_bounds = list(zip(band_upper_bounds, band_upper_bounds[1:]))
-        
 
     #------------------------------------
     # event_mask_sigs
@@ -90,7 +94,7 @@ class SegmentationComputer:
         if type(sig_types) != list:
             sig_types = [sig_types]
 
-        self.acorr_peaks_key = acorr_peaks_key
+        self.peaks_key = acorr_peaks_key
         acorr_df_raw = self.exp.read(acorr_peaks_key, Datatype.tabular)
 
         # Pull out just the columns we need:
@@ -236,7 +240,7 @@ class SegmentationComputer:
                                    var_name='time', 
                                    value_name='in_selection', 
                                    ignore_index=False)
-        exp_key = f"spectral_events_{FileUtils.extract_file_timestamp(self.acorr_peaks_key)}"
+        exp_key = f"spectral_events_{FileUtils.extract_file_timestamp(self.peaks_key)}"
         self.exp.save(exp_key, freq_time_coords)
         
         Charter.spectrogram_plot(sels_mask)
@@ -301,7 +305,7 @@ class SegmentationComputer:
             # of the loop. The modulo len(spectro_freqs) accounts for
             # each frequency band include rows with all spectro times:
 
-            spectro_freqs_to_mask = spectro_freqs[spectro_freqs.between(fband_low, fband_high)]
+            #spectro_freqs_to_mask = spectro_freqs[spectro_freqs.between(fband_low, fband_high)]
             
             # Get the series of times at which acorr values were above threshold that
             # were detected in this loop's freq band. Some of these times will
@@ -365,6 +369,157 @@ class SegmentationComputer:
             #****sels_mask.loc[spectro_freqs_to_mask, spectro_times_to_mask] = True
             print('foo')
 
+    #------------------------------------
+    # event_mask_energy
+    #-------------------
+    
+    def event_mask_energy(self,
+                          energy_peaks_key,
+                          energy_thresholds=0.25,
+                          smoothing_win=3
+                          ):
+        
+        # Get df the following columns/index for each frequency:
+        #
+        #     freq                       : freq band upper-bound (in the index)
+        #     time                       : time into spectrogram
+        #     mean_band                  : one energy peak value mean-normalized
+        #     prominence                 : prominence of the peak
+        #     height_above_left_neighbor : difference between the peak & its left neighbor
+        #     height_above_right_neighbor: difference between the peak & its left neighbor
+
+        if type(smoothing_win) != list:
+            smoothing_win = [smoothing_win]
+            
+        if type(energy_thresholds) != list:
+            energy_thresholds = [energy_thresholds]
+            
+        peaks = self.exp.read(energy_peaks_key, Datatype.tabular, index_col='freq')
+        # Better name for the mean_band column:
+        peaks.rename({'mean_band' : 'energy'}, inplace=True, axis=1)
+        
+        # List of  threshold, window, start_time, stop_time dfs
+        events_arr = []
+        for thresh in thresholds:
+            for win_width in smoothing_win:
+                
+                # Place to collect rows of smoothed energy df
+                # that indicate a spectral event is happening:
+                events = []
+                
+                # Roll a window across the Series, taking the
+                # mean() over each:
+                smooth_energy_ser = peaks['energy'].rolling(win_width, center=True).mean()
+                
+                # Turn into a df with index (i.e. 'freq') moved
+                # to separate column, and index being default row nums:
+                smooth_energy = smooth_energy_ser.reset_index()
+                
+                # Depending on window size, there will be nan
+                # values at the start. Replace them with the first
+                # non-nan in the result:
+                first_valid_idx = smooth_energy.energy.first_valid_index() 
+                first_valid_val = smooth_energy.iloc[first_valid_idx]
+                smooth_energy[:first_valid_idx] = first_valid_val
+                
+                # Same with end of energies:
+                last_valid_idx = smooth_energy.energy.last_valid_index() 
+                last_valid_val = smooth_energy.iloc[last_valid_idx]
+                smooth_energy[last_valid_idx:] = last_valid_val
+                
+                
+                # Process each frequency band separately:
+                freq_grp = smooth_energy.groupby(by='freq')
+                # For each freq, get indices into smooth_energy whose
+                # energy value is >= thresh
+                meets_thresh = freq_grp.apply(lambda row, thresh=thresh : row.energy >= thresh)
+                
+                # Now have multiindexed Series; name the multiindex levels,
+                # and also name the bools column indicating whether thresh is
+                # met:
+                meets_thresh.index.rename(['freq', 'smooth_energy_idx'], inplace=True)
+                meets_thresh.name = 'above_thres'
+                
+                # Now have in meets_thresh something like:
+                # freq        smooth_energy_idx
+                # 492.1875    0                    False
+                #             1                    False
+                #             2                    True
+                #              ...                    ...  
+                # 15992.1875  27805                False
+                #             27806                True
+                #               ...
+                # Name: above_thres, Length: 27810, dtype: bool
+                
+                # Separate the below-thresh entries from the
+                # above-thresh. The ones above are part of a
+                # predicted spectral event; the others are not:
+                
+                event_idxs     = meets_thresh[meets_thresh].index.get_level_values('smooth_energy_idx')
+                non_event_idxs = meets_thresh[~meets_thresh].index.get_level_values('smooth_energy_idx')
+                
+                # Now have in event_idxs ( and non_event idxs):
+                # freq  smooth_energy_idx
+                # 400   1                    True  (False in non_event_idxs) 
+                # 600   3                    True
+                #       5                    True
+                # Name: above_thres, dtype: bool
+
+                # Get the indices 'column' (actually second level in multiindex)
+                # for both data structs. Those are indices into the original
+                # peaks df that has info about peaks:
+                above_thresh_idxs = event_idxs.get_level_values('smooth_energy_idx')
+                below_thresh_idxs = non_event_idxs.get_level_values('smooth_energy_idx')
+                
+                # We want start and stop times of events.
+                # A start time is when an event_idx comes right
+                # after a non_event_idx:
+                start_time_idxs = above_thresh_idxs[
+                    above_thresh_idxs.isin(below_thresh_idxs + 1)]
+                stop_time_idxs  = below_thresh_idxs[
+                    below_thresh_idxs.isin(above_thresh_idxs + 1)]
+                
+                # Number of rows in the result df:
+                num_rows = len(start_time_idxs)
+
+                # Buld result df...
+                events = pd.concat(
+                    {'freq'         : smooth_energy.iloc[start_time_idxs].reset_index().freq,
+                     'start_time'   : peaks.iloc[start_time_idxs].reset_index().time,
+                     'stop_time'    : peaks.iloc[stop_time_idxs].reset_index().time,
+                     'threshold'    : pd.Series([thresh]*num_rows),
+                     'win_width'    : pd.Series([win_width]*num_rows),
+                     'energy_smooth': smooth_energy.iloc[start_time_idxs].reset_index().energy,
+                     'energy_raw'   : peaks.iloc[start_time_idxs].reset_index().energy,
+                     'prominence'   : peaks.iloc[start_time_idxs].reset_index().prominence,
+                     'ht_abv_rght_neighbor' : peaks.iloc[start_time_idxs].reset_index().height_above_right_neighbor,
+                     'ht_abv_lft_neighbor'  : peaks.iloc[start_time_idxs].reset_index().height_above_left_neighbor
+                     }, axis=1)
+
+                events_arr.append(events)
+        # Done with all thresholds and window widths.
+        # Stitch the results of those settings into one
+        # df:
+
+        res = pd.concat(events_arr, ignore_index=True)
+        exp_key = f"spectral_events_{FileUtils.extract_file_timestamp(energy_peaks_key)}"
+        self.exp.save(exp_key, res)
+        return res
+
+    #------------------------------------
+    # plot_event_durations
+    #-------------------
+    
+    def plot_event_durations(self, events_df):
+        '''
+        Given a df with identified spectral event start/stop times,
+        plot lines that mirror the predicted start and stop times of
+        spectrogram events. X-axis is time, Y-axis is frequency
+         
+        :param events_df:
+        :type events_df:
+        '''
+        pass
 
     #------------------------------------
     # plot_rectangles
@@ -546,6 +701,36 @@ class SegmentationComputer:
                 out[j*m:(j+1)*m, 1:] = out[0:m, 1:]
         return out        
 
+    #------------------------------------
+    # _obtain_spectrogram
+    #-------------------
+    
+    def _obtain_spectrogram(self, fname_or_key):
+        if fname_or_key.endswith('.csv'):
+            # Filename, either absolute, or relative to
+            # <proj_root>/data: 
+            if not os.path.isabs(fname_or_key):
+                # Relative:
+                fname_or_key = os.path.join(SegmentationComputer.PROJ_ROOT,
+                                            f"data/{fname_or_key}")
+                if not os.path.exists(fname_or_key):
+                    raise FileNotFoundError(f"Spectram file {fname_or_key} not found")
+                
+                self.log.info("Reading spectrogram from .csv file...")
+                self.spectro = pd.read_csv(fname_or_key,
+                                           index_col='freq',
+                                           header=0,
+                                           engine='pyarrow'  # Faster csv reader
+                                           )
+                self.log.info("Done reading spectrogram from .csv file.")
+        else:
+            self.log.info(f"Reading spectrogram from experiment ({fname_or_key})...")
+            self.spectro = self.exp.read(fname_or_key, Datatype.tabular)
+            self.log.info(f"Done reading spectrogram from experiment ({fname_or_key}).")
+        
+        return self.spectro
+
+
 # ----------------------- Class Rect ---------------
 
 class Rect:
@@ -677,29 +862,100 @@ class Rect:
 # ------------------------ Main ------------
 if __name__ == '__main__':
     
-    CUR_DIR = os.path.dirname(__file__)
-    PROJ_ROOT  = os.path.abspath(os.path.join(CUR_DIR, '../../'))
-    EXP_ROOT = os.path.join(PROJ_ROOT, 'experiments/SoundscapeSegmentation')
-    exp_root = os.path.join(EXP_ROOT, 'ExpAM02_20190717_052958_AllData1')
+
+    parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
+                                     formatter_class=argparse.RawTextHelpFormatter,
+                                     description="Compute spectrogram event starts and stops"
+                                     )
+
+    parser.add_argument('-c', '--command',
+                        choices=['event_mask'],
+                        required=True,
+                        help='Command to perform',
+                        )
+
+    parser.add_argument('-e', '--experiment',
+                        required=True,
+                        help=f"Experiment root: subdir of {SegmentationComputer.EXP_ROOT}",
+                        )
+
+    parser.add_argument('-s', '--selection_tbl',
+                        type=str,
+                        help=f"path to selection table; if not an absolute path, looks in <proj_root>/data",
+                        default=None
+                        )
+
+    parser.add_argument('-p', '--spectrogram',
+                        type=str,
+                        help=(f"For peaks only: fname of audio or spectrogram;\n",
+                              'or spectrogram experiment key') ,
+                        default=None
+                        )
+        
+    parser.add_argument('-m', '--measures',
+                        choices=['sigs', 'z_scores', 'energy'],
+                        help='Which info to use for computing call times',
+                        default=None
+                        )
+    parser.add_argument('-t', '--thresholds',
+                        type=float,
+                        nargs='+',
+                        help='Repeatable: measure threshold above which event is concluded')
+
+    parser.add_argument('-w', '--window',
+                        type=int,
+                        help=(f"Width of smoothing window") ,
+                        default=None
+                        )
+
+    parser.add_argument('source_info',
+                        type=str,
+                        help='Filename or experiment key for signal peaks file to use'
+                        )
+    args = parser.parse_args()
+
+    # The root of the experiment where the .csv files are:
+    exp_root = os.path.join(SegmentationComputer.EXP_ROOT, args.experiment)
     exp = ExperimentManager(exp_root)
 
     #acorr_peaks_key = 'significant_acorrs_2022-07-13T17_19_19'
-    acorr_peaks_key = 'peaks_2022-07-20T10_47_48'
-    sel_info_key    = 'selections_infoAM02_20190717_052958'
-    spectro_key     = 'am02_20190717_052958_spectro'
-    z_score_key     = 'am02_20190717_052958_spectro_z_scores'
+    #acorr_peaks_key = 'peaks_2022-07-20T10_47_48'
+    #sel_info_key    = 'selections_infoAM02_20190717_052958'
+    #sel_info_key    = 'selections_infoAM02_20190717_052958'
+    #spectro_key     = 'am02_20190717_052958_spectro'
+    #spectro_key     = None
+    #z_score_key     = 'am02_20190717_052958_spectro_z_scores'
 
-    seg_computer = SegmentationComputer(exp, sel_info_key, spectro_key)
+    sel_info_key = args.selection_tbl
+    if args.spectrogram is None:
+        spectro_key = None
+        
+    smoothing_win = args.window
+    if smoothing_win is not None and type(smoothing_win) != int:
+        print(f"Window option must be an integer")
+        sys.exit(1)
+        
+    thresholds = args.thresholds
+    measures = args.measures
+
+    seg_computer = SegmentationComputer(exp, sel_info_key, args.source_info, spectro_key)
     
     # OPTIONS:
     #seg_computer.event_mask_sigs(['continuity', 'energy_sum'], peak_lower_limit=0.95)
     #seg_computer.event_mask_sigs(['flatness', 'continuity', 'pitch', 'freq_mod', 'energy_sum'],
     #                        peak_lower_limit=0.95)
-    seg_computer.event_mask_z_scores(z_score_key)
-    
-    
-    # ref_time = 19.0
-    # sel_excerpt = seg_computer._closest_labeled_sel_time_bound(ref_time, which_bound=Bound.START, direction=Direction.AHEAD)
-    #
-    # print(sel_excerpt)
-    
+    #seg_computer.event_mask_z_scores(z_score_key)
+
+    if args.command == 'event_mask':
+        if measures == 'energy':
+            seg_computer.event_mask_energy(args.source_info,
+                                           thresholds,
+                                           smoothing_win
+                                           )
+        elif measures == 'z_scores':
+            seg_computer.event_mask_z_scores(args.source_info)
+
+        elif measures == 'sigs':
+            #seg_computer.event_mask_sigs()
+            print("Signatures based even masking not implemented")
+    print('Done')
