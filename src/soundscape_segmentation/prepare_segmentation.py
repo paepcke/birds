@@ -255,7 +255,7 @@ class SegmentationPreparer:
             # first try to find the timestamp in the spectro fname:
             self.exp_timestamp = Utils.timestamp_from_exp_path(self.spectro_path)
             if self.exp_timestamp is None:
-                self.exp_timestamp = FileUtils.file_timestamp
+                self.exp_timestamp = FileUtils.file_timestamp()
         
         return self.spectro
 
@@ -525,17 +525,24 @@ class SegmentationPreparer:
             freqband/sig_type pair
         :rtype pd.DataFrame
         '''
-        
+
         if type(df_or_path) == str:
-            fname = Path(df_or_path).name
-            self.log.info(f"Reading autocorrelations values from {fname}...")
-            acorr_df = pd.read_csv(df_or_path, engine='pyarrow') # pyarrow is a fast csv reader
-            self.log.info(f"Done reading autocorrelations values from {fname}.")
+            # Was given a path or experiment key:
+            if df_or_path.endswith('.csv'):
+                fname = Path(df_or_path).name
+                self.log.info(f"Reading autocorrelations from {fname}...")
+                acorr_df = pd.read_csv(df_or_path, engine='pyarrow') # pyarrow is a fast csv reader
+                self.log.info(f"Done reading autocorrelations from {fname}.")
+            else:
+                self.log.info(f"Reading autocorrelations from experiment: {df_or_path}...")
+                acorr_df = self.experimenter.read(df_or_path, Datatype.tabular)
+                self.log.info(f"Done reading autocorrelations from experiment: {df_or_path}.")
             in_fname_timestamp = FileUtils.extract_file_timestamp(df_or_path)
         else:
+            # Was given a df:
             acorr_df = df_or_path
             in_fname_timestamp = None
-            
+
         # Partition the acorr_df by sig_type ('flatness', 'pitch' etc.),
         # and frequency band. The number of acorr_df extracts in the group:
         #    num_sig_types * num_freq_bands
@@ -557,10 +564,6 @@ class SegmentationPreparer:
                  fband_sig_type_dfs))
         
         # For each extract, build acorr_df:
-        #****** UPDATE COMMENT
-        #    peak_idx   measure_name   measure_val  freq_low  freq_high   peak_width  prominence  
-        # time
-        
         peaks_df_arr = []
         for df_extract in fband_sig_type_dfs:
             # Isolate the acorr values that are significant,
@@ -601,6 +604,7 @@ class SegmentationPreparer:
             exp_key = f"peaks_acorrs_{in_fname_timestamp}"
         else:
             exp_key = f"peaks_acorrs_{self.exp_timestamp}"
+        self.log.info(f"Saving autocorrelation peaks to experiment: {exp_key}")
         self.experimenter.save(exp_key, peaks_df)
 
         return peaks_df
@@ -637,14 +641,22 @@ class SegmentationPreparer:
             freqband/sig_type pair
         :rtype pd.DataFrame
         '''
-        
+
         if type(df_or_path) == str:
-            fname = Path(df_or_path).name
-            self.log.info(f"Reading z-score values from {fname}...")
-            zscores_wide = pd.read_csv(df_or_path, engine='pyarrow') # pyarrow is a fast csv reader
-            self.log.info(f"Done reading z-score values from {fname}.")
+            # Was given a path or experiment key:
+            if df_or_path.endswith('.csv'):
+                fname = Path(df_or_path).name
+                self.log.info(f"Reading z_score values from {fname}...")
+                zscores_wide = pd.read_csv(df_or_path, engine='pyarrow') # pyarrow is a fast csv reader
+                self.log.info(f"Done reading z_score values from {fname}.")
+            else:
+                # An experiment key:
+                self.log.info(f"Reading z_score values from experiment: {df_or_path}...")
+                zscores_wide = self.experimenter.read(df_or_path, Datatype.tabular)
+                self.log.info(f"Done reading z_score values from experiment: {df_or_path}.")
             in_fname_timestamp = FileUtils.extract_file_timestamp(df_or_path)
         else:
+            # Was given a df:
             zscores_wide = df_or_path
             in_fname_timestamp = None
         
@@ -751,15 +763,166 @@ class SegmentationPreparer:
             exp_key = f"peaks_zscores_{in_fname_timestamp}"
         else:
             exp_key = f"peaks_zscores_{self.exp_timestamp}"
+        self.log.info(f"Saving z-score peaks to experiment: {exp_key}")
         self.experimenter.save(exp_key, peaks_df)
 
         return peaks_df
 
     #------------------------------------
+    # peak_positions_energy
+    #-------------------
+    
+    def peak_positions_energy(self, df_or_path):
+        '''
+        Given a z-score computation as produced by 
+        compressed_spectrograms(), find the peaks 
+        along time in each frequency band, and also
+        along freqs in each timeframe.  
+        
+        Uses scypi.signal.find_peak(), which considers prominence
+        relative to other peaks.
+        
+        Expected like:
+			 freq,    time,    z_left,      z_right,      z_centered
+			 492.1875 ,0.0,  -0.48808396, -0.48808396,   -0.48808396
+			 992.1875 ,0.0,  -0.5756462,  -0.5756462,    -0.5756462
+			 1492.1875,0.0,  -0.6076283,  -0.6076283,    -0.6076283
+			 1992.1875,0.0,  -0.6267458,  -0.6267458,    -0.6267458
+			         
+        
+        
+        Saves and returns a df that includes:
+        
+        :param df_or_path: either a zscores_df created by compute_autocorrelations(),
+            or the file path to such a zscores_df stored as csv
+        :type df_or_path: {pd.DataFrame | str}
+        :returns a new zscores_df with peaks computed for every
+            freqband/sig_type pair
+        :rtype pd.DataFrame
+        '''
+        
+        if type(df_or_path) == str:
+            # Was given a path or experiment key:
+            if df_or_path.endswith('.csv'):
+                fname = Path(df_or_path).name
+                self.log.info(f"Reading freq/time energy values from {fname}...")
+                df_wide = pd.read_csv(df_or_path, engine='pyarrow') # pyarrow is a fast csv reader
+                self.log.info(f"Done reading freq/time energy values from {fname}.")
+            else:
+                # Get 
+                #        freq   time   mean_band
+                # index
+                #   1
+                #   2
+                self.log.info(f"Reading energy values from experiment: {df_or_path}...")
+                df_wide = self.experimenter.read(df_or_path, Datatype.tabular)
+                self.log.info(f"Done reading energy values from experiment: {df_or_path}.")
+            in_fname_timestamp = FileUtils.extract_file_timestamp(df_or_path)
+            
+        else:
+            # Was given a df:
+            df_wide = df_or_path
+            in_fname_timestamp = None
+        
+        # We now have:
+        #        freq          time  mean_band
+        # index
+        #   0      492.1875      0.0   0.029274
+        #   1      992.1875      0.0   0.018127
+        #   2      ...           ...     ...
+        #   ...    492.1875     60.0     ...
+        #          992.1875     60.0     ...
+        #         13992.1875   60.0   0.024160
+        #         14492.1875   60.0   0.021063        
+
+        # Partition the energy values by frequency band:
+        # This provides for each freq a list of index values
+        # in df_wide that relate to that frequency. Since the
+        # index is itself the freqs, that looks like:
+        #
+        #   {492.1875: [0, 32, 64,...], 992.1875: [1, 33, 65]}
+        #
+        #    num_freq_bands * num_of_timeframes, something like 32 * 7501
+        
+        df_grp = df_wide.groupby(by='freq')
+        
+        # Get a list of dfs, each containing the energy for each
+        # time at a single frequency:
+        #
+        #            index      freq    time  mean_band
+        #     0          0  492.1875   0.000   0.029274
+        #     1         32  492.1875   0.008   0.039264
+        #     2         64  492.1875   0.016   0.051820
+        #     ...      ...       ...     ...        ...
+        #     7496  239872  492.1875  59.968   0.025690        
+
+        self.log.info(f"Partitioning data into {self.num_freq_bands} bands...")
+        fband_energy_dfs = [data.reset_index() 
+                            for _grp_key, data 
+                            in df_grp]
+        self.log.info(f"Done partitioning data into {self.num_freq_bands} bands...")
+        
+        # Remove the 'index' column:
+        list(map(lambda df: df.drop(['index'], axis=1, inplace=True), 
+                 fband_energy_dfs))
+        
+        # For each single-freqency extract of the original df, build: 
+        #    peak_idx   measure_name   measure_val  freq   peak_width  prominence  
+        # time
+        
+        peaks_df_arr = []
+        for df_extract in fband_energy_dfs:
+
+            # Get peaks. The (None,None) key values stand
+            # for 'min' and 'max' or the respective key. Must
+            # included them to have find_peaks() return corresponding
+            # result values in the stats dict:
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=PeakPropertyWarning)
+                peak_idxs, peak_stats = find_peaks(
+                    df_extract.mean_band,
+                    height=(None, None), 
+                    width=(None, None), 
+                    prominence=(None, None), 
+                    plateau_size=(None,None), # all come out as 1
+                    threshold=(None, None)
+                    )
+
+            # To get the indexes in the original df_extract,
+            # that are peaks, first get the rows from df_extract
+            # that are peaks. Then get the index entries of those
+            # rows. Those indexes point into df_extract:
+            df_extract_idxs = df_extract.iloc[peak_idxs].index
+            # Need the copy, else peaks_df will be a view,
+            # and subsequent addition of columns will fail:
+            peaks_df = df_extract.iloc[df_extract_idxs].copy()
+
+            # Add some of the find_peaks() stats:
+            peaks_df['prominence']    = peak_stats['prominences']
+            peaks_df['height_above_left_neighbor']  = peak_stats['left_thresholds']
+            peaks_df['height_above_right_neighbor'] = peak_stats['right_thresholds']
+
+            peaks_df_arr.append(peaks_df)
+            
+        peaks_df = pd.concat(peaks_df_arr)
+        
+        # Create an experiment key:
+        if in_fname_timestamp is not None:
+            # Match the input energy's timestamp:
+            exp_key = f"peaks_energy_{in_fname_timestamp}"
+        else:
+            exp_key = f"peaks_energy_{self.exp_timestamp}"
+        self.log.info(f"Saving energy peaks to experiment: {exp_key}")
+        self.experimenter.save(exp_key, peaks_df)
+
+        return peaks_df
+
+
+    #------------------------------------
     # compressed_spectrograms
     #-------------------
 
-    def compressed_spectrograms(self, source_info=None):
+    def compressed_spectrograms(self, source_info=None, normalize=False):
         '''
         Creates four dfs with number of rows equal to number of freq bands:
         
@@ -767,10 +930,8 @@ class SegmentationPreparer:
               high channels are combined at each timeframe via mean. 
            2. A second spectro in which the combination is done by median.
            3. A third spectro in which energy values are replaced by the
-              distance of the energy from the band's mean across all times
-           4. A forth spectro in which energy values are replaced by the
-              membership of the energy in the 1st, 2nd, 3rd, or 4th quartile
-              of the band
+              distance of the energy from the band's mean across all times,
+              i.e. each value's z-scores.
 
         Exlanation of 1: A new spectrogram from the original audio file's 
         	self.spectro. The new df will combine self.band_height Hz channels into 
@@ -781,20 +942,24 @@ class SegmentationPreparer:
         	New rows will be the MEAN of the original channel energy values. 
         	The shape of the new spectrogram is (num_of_bands, width_of_original)
         
-        Explanation of 2: same as 1, but using median of band across time to
-           compute into which quartile a timeframe's value falls: 1,2,3,4 (0-25%,
-           25% to 50%, 50% to 75%, 75% to 100% 
+        Explanation of 2: same as 1, but using median of channels to compute 
+           the values for each band
         
         Explanation of 3: for each band, compute the mean along all timeframes.
            Each df cell will contain the distance in standard deviations from
-           that mean.
-           
-        Explanation of 4: for each band, compute the mean along all timeframes.
-           Each df cell will contain the distance in standard deviations from
-           that mean.
-           
+           that mean, i.e. the value's z-score: (band - band.mean()) / band.std()
+
+        Writes all three dfs to experiment, using the key of the form:
         
-        Writes all four dfs to experiment, using the key in self.spe
+            <filename-of-spectro>_compressed_mean_<exp_timestamp>
+            <filename-of-spectro>_compressed_median_<exp_timestamp>
+            <filename-of-spectro>_compressed_z_scores_<exp_timestamp>            
+
+        If normalize is True, the dataframe is mean-normalized before any other
+        action is taken. Normalization includes *all* df values, as if the
+        df was flattened to a series S. Then:
+        
+                (S - S.mean()) / S.std()
 
         Assumption: If source_info is None, then self.spectro contains 
              a dataframe of the original spectrogram.
@@ -803,6 +968,9 @@ class SegmentationPreparer:
             experiment key to it. If None, then self.spectro must
             have been initialized.
         :type source_info: {None | str|
+        :param normalize: whether or not to normalize the given spectrogram
+            before any action
+        :type normalize: bool
         :return compressed spectrogram
         :rtyp pd.Dataframe
         '''
@@ -825,6 +993,9 @@ class SegmentationPreparer:
                 # Experiment key:
                 spectro = self.experimenter.read(source_info, Datatype.tabular)
         
+        if normalize:
+            spectro = Utils.normalize_df(spectro, axis='all')
+        
         # Get the upper freq bands:: [0.0, 492.1875, 992.1875, 1492.1875, ... 15992.1875]
         num_channels, _num_times = spectro.shape
         
@@ -842,7 +1013,7 @@ class SegmentationPreparer:
         # and median-compressed versions: the means/medians are 
         # taken separately over the spectro channels of each freq band:
         
-        self.log.info("Computing mean-compressed spectro...")
+        self.log.info(f"Computing mean-compressed {'(normalized) ' if normalize else ''}spectro...")
         spectro_compressed_mean   = self._band_energy_compression(spectro, 
                                                                   band_upper_bounds, 
                                                                   freq_bounds, 
@@ -853,7 +1024,11 @@ class SegmentationPreparer:
             spectro_exp_key_root = Path(self.spectro_path).stem
         else:
             spectro_exp_key_root = self.spectro_path # Already is a key:
-        exp_compressed_key_mean = f"{spectro_exp_key_root}_compressed_mean_{self.exp_timestamp}"
+        
+        if normalize:
+            exp_compressed_key_mean = f"{spectro_exp_key_root}_normed_compressed_mean_{self.exp_timestamp}"
+        else:
+            exp_compressed_key_mean = f"{spectro_exp_key_root}_compressed_mean_{self.exp_timestamp}"
         
         
         # The saved version of the dfs are two columns and
@@ -871,13 +1046,13 @@ class SegmentationPreparer:
                                           value_name='mean_band', 
                                           ignore_index=False)
          
-        self.log.info(f"Writing mean_compressed spectro to experiment ({exp_compressed_key_mean})")
+        self.log.info(f"Writing mean_compressed {'(normalized) ' if normalize else ''}spectro to experiment ({exp_compressed_key_mean})")
         self.experimenter.save(exp_compressed_key_mean, 
                                compressed_mean_for_viz,
                                index_col='freq')
 
         # MEDIAN COMPRESSION
-        self.log.info("Computing median-compressed spectro...")        
+        self.log.info(f"Computing median-compressed {'(normalized) ' if normalize else ''}spectro...")        
         spectro_compressed_median = self._band_energy_compression(spectro, 
                                                                   band_upper_bounds, 
                                                                   freq_bounds, 
@@ -887,9 +1062,12 @@ class SegmentationPreparer:
                                           var_name='time', 
                                           value_name='mean_band', 
                                           ignore_index=False) 
-        
-        exp_compressed_key_median = f"{spectro_exp_key_root}_compressed_median_{self.exp_timestamp}"
-        self.log.info(f"Writing median_compressed spectro to experiment ({exp_compressed_key_median})")
+
+        if normalize:
+            exp_compressed_key_median = f"{spectro_exp_key_root}_normed_compressed_median_{self.exp_timestamp}"
+        else:
+            exp_compressed_key_median = f"{spectro_exp_key_root}_compressed_median_{self.exp_timestamp}"
+        self.log.info(f"Writing median_compressed {'(normalized) ' if normalize else ''}spectro to experiment ({exp_compressed_key_median})")
         # Transpose makes df narrower: 32 (i.e. num_bands) wide, 
         # and one row per time. Makes examination with Tableau easier:
         self.experimenter.save(exp_compressed_key_median, 
@@ -912,7 +1090,11 @@ class SegmentationPreparer:
         # standard deviations of each energy value from its band's mean
         df_distance_from_mean = self._distances_from_mean(spectro_compressed_mean)
 
-        exp_compressed_key_zscores = f"{spectro_exp_key_root}_z_scores_{self.exp_timestamp}"
+        if normalize:
+            exp_compressed_key_zscores = f"{spectro_exp_key_root}_normed_z_scores_{self.exp_timestamp}"
+        else:
+            exp_compressed_key_zscores = f"{spectro_exp_key_root}_normed_z_scores_{self.exp_timestamp}"
+            
         self.log.info(f"Writing z-scores to experiment ({exp_compressed_key_zscores})")
         # Transpose makes df narrower: 32 (i.e. num_bands) wide, 
         # and one row per time. Makes examination with Tableau easier:
@@ -1911,14 +2093,20 @@ if __name__ == '__main__':
     
     def expand_path_to_data_dir(source_info, experimenter):
         '''
-        Checks whether given string is an absolute
-        path. If so, checks existence, and raises
-        FileNotFound if not found. If the absolute
-        path exists, it is returned.
+        Checks whether the given string has a file extension,
+        such as .csv, .txt, etc. If not, assume source_info is
+        an experiment key. Check the corresponding file's existence.
+        If not there, raise FileNotFoundError. Else return the
+        key as it was passed in.
         
-        If the path is not absolute, construct a
-        path to the project root's 'data' subdirectory,
-        and see whether the given file is there. If so,
+        Checks whether given string is an absolute
+        path with a file extension. If so, checks 
+        existence, and raises FileNotFound if not 
+        found. If the absolute path exists, it is returned.
+        
+        If the path is not absolute (but does have and extension), 
+        construct a path to the project root's 'data' subdirectory,
+        and see whether the given relative file is there. If so,
         return the full path, else raise FileNotFound.
         
         :param source_info: absolute file name, or fname in
@@ -1947,7 +2135,7 @@ if __name__ == '__main__':
                 raise FileNotFoundError(f"Given relative path ({source_info}), but file {path} does not exist")
         else:
             # It's an experimenter key:
-            path = experimenter.abspath(source_info)
+            path = experimenter.abspath(source_info, Datatype.tabular)
             if os.path.exists(path):
                 # Return the key:
                 return source_info
@@ -1979,8 +2167,8 @@ if __name__ == '__main__':
                         )
         
     parser.add_argument('-m', '--measures',
-                        choices=['acorrs', 'z_scores'],
-                        help='For peaks only: find peaks in autocorrelations, or z-scores',
+                        choices=['acorrs', 'z_scores', 'energy'],
+                        help='For peaks only: find peaks in autocorrelations, z-scores, or energy',
                         default=None
                         )
     
@@ -2027,23 +2215,20 @@ if __name__ == '__main__':
         if args.measures is None or args.spectrogram is None:
             print("For 'peaks' command, both --measures and --spectrogram are required")
             sys.exit(1)
-        
+
         audio_path   = None
         
         # Could be an experiment manager key, in which case it would
         # not have a .csv extension:
-        measures_fname = expand_path_to_data_dir(args.source_info, exp)
+        measures_fname_or_key = expand_path_to_data_dir(args.source_info, exp)
         spectro_path = expand_path_to_data_dir(args.spectrogram, exp)
 
     elif cmd == 'spectro_compression':
         # Could be an experiment manager key, would
         # not have a .csv or .wav extension, or a full name:
         if args.source_info.endswith('.csv'):
-            spectro_path = args.source_info
+            spectro_path = expand_path_to_data_dir(args.source_info, exp)
             audio_path   = None
-            if not os.path.exists(spectro_path):
-                print(f"Cannot find spectrum file {spectro_path}. If intending an experiment key, don't include '.csv'")
-                sys.exit(1)
         elif args.source_info.endswith('.wav'):
             spectro_path = None
             audio_path   = args.source_info
@@ -2099,11 +2284,14 @@ if __name__ == '__main__':
         acorrs = segmenter.compute_autocorrelations(settings)
     elif cmd == 'peaks':
         if args.measures == 'acorrs':
-            res = segmenter.peak_positions_acorrs(measures_fname)
+            res = segmenter.peak_positions_acorrs(measures_fname_or_key)
+        elif args.measures == 'z_scores':
+            res = segmenter.peak_positions_z_scores(measures_fname_or_key)
         else:
-            res = segmenter.peak_positions_z_scores(measures_fname)
+            # 'energy':
+            res = segmenter.peak_positions_energy(measures_fname_or_key)
     elif cmd == 'spectro_compression':
-        res = segmenter.compressed_spectrograms()
+        res = segmenter.compressed_spectrograms(normalize=True)
     else:
         print("Arg must be 'acorrs', 'peaks', or 'spectro_compression")
     print('Done')
