@@ -1783,6 +1783,60 @@ class Utils:
                                                                      ignore_index=True)
         return new_series
 
+
+    #------------------------------------
+    # normalize_df
+    #-------------------
+
+    @classmethod
+    def normalize_df(cls, df, axis=0):
+        '''
+        Mean-normalize a dataframe. Options are
+            o normalize each row separately,
+            o normalize each column separately,
+            o normalize all values as if a flattened df
+            
+        In each case, normalization means
+           (x - x.mean()) / x.std()
+           
+        Returns new df with normalized values. Axis may
+        be one of:
+        
+             o 0 or 'rows'    for row-wise normalization
+             o 1 or 'columns' for column-wise normalization
+             o 'all'          for flattened-df normalization
+        
+        Default: normalize row-wise
+        
+        :param df: dataframe to normalize
+        :type df: pd.DataFrame
+        :param axis: the axis along which to normalize, or 'all' 
+        :type axis: {int | str}
+        :return new dataframe of same shape as df, with normalized values 
+        '''
+        
+        if axis in (0, 'rows'):
+            # Normalize each row separately
+            df_normed_rows = pd.DataFrame(map(lambda i_row_tuple : 
+                                              (i_row_tuple[1] - i_row_tuple[1].mean()) / i_row_tuple[1].std(),
+                                              df.iterrows()))
+            return df_normed_rows
+        elif axis in (1, 'columns'):
+            df_normed_cols = (df - df.mean()) / df.std()
+            return df_normed_cols
+        elif axis == 'all':
+            df_flat = df.to_numpy().flatten()
+            df_flat_normed = (df_flat - df_flat.mean()) / df_flat.std()
+            df_normed_all = pd.DataFrame(df_flat_normed.reshape(df.shape),
+                                         columns=df.columns,
+                                         index=df.index
+                                         )
+            return df_normed_all
+        else:
+            raise ValueError(f"Axis must be 0/'rows', 1/'columns', or 'all', not {axis}")
+
+
+
     #------------------------------------
     # df_eq
     #-------------------
